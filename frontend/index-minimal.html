@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>家肴记 - AI 家庭膳食助理</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;background:#E5E7EB;color:#1F2937;-webkit-tap-highlight-color:transparent;user-select:none;}
+/* ==================== 手机框架 ==================== */
+.phone-frame{max-width:430px;margin:0 auto;min-height:100vh;position:relative;overflow:hidden;background:#FFF7ED;border-radius:24px;}
+/* ==================== 首页 ==================== */
+.page-home{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px 24px;text-align:center;transition:transform .4s cubic-bezier(.4,0,.2,1),opacity .4s ease;background:linear-gradient(145deg,#F97316 0%,#FFF7ED 100%);border-radius:24px;}
+.page-home.slide-up{transform:translateY(-100%);opacity:0;pointer-events:none;position:absolute;inset:0;}
+.home-logo{font-size:72px;margin-bottom:16px;}
+.home-title{font-size:36px;font-weight:700;color:#1F2937;letter-spacing:2px;}
+.home-sub{font-size:16px;color:#4B5563;margin-top:8px;text-align:center;line-height:1.6;}
+/* 首页底部输入框融入渐变 */
+.page-home .input-bar{position:relative;left:auto;transform:none;width:100%;max-width:100%;background:transparent !important;border-top:none !important;padding:16px 0 0;margin-top:24px;}
+.page-home .input-bar input{background:rgba(249,115,22,0.18) !important;border:1px solid rgba(249,115,22,0.35) !important;color:#1F2937;}
+.page-home .input-bar input::placeholder{color:rgba(31,41,55,0.5);}
+.page-home .input-bar input:focus{background:rgba(255,255,255,0.7) !important;border-color:rgba(249,115,22,0.5) !important;}
+.page-home .btn-icon{color:#7C2D12;}
+.page-home .btn-icon:active{background:rgba(255,255,255,0.2);}
+.page-home .btn-send{background:linear-gradient(135deg,#EA580C,#C2410C);}
+/* ==================== 节气提示 ==================== */
+.solar-term-banner{background:linear-gradient(135deg,#F97316 0%,#FBBF24 100%);color:white;border-radius:16px;padding:12px 16px;margin-bottom:16px;max-width:380px;}
+.solar-term-banner .term-name{display:flex;align-items:center;justify-content:space-between;font-size:20px;font-weight:700;}
+.solar-term-banner .term-name span{flex:1;}
+.solar-term-link{border:1px solid rgba(255,255,255,0.65);background:rgba(255,255,255,0.16);color:white;border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;white-space:nowrap;flex-shrink:0;}
+.solar-term-banner .term-diet{font-size:14px;opacity:0.9;margin-top:4px;}
+.solar-term-banner .term-foods{font-size:13px;margin-top:4px;}
+/* ==================== 主界面 ==================== */
+.main-app{display:none;flex-direction:column;height:100vh;}
+.main-app.show{display:flex;}
+/* 顶部标题栏 */
+.topbar{display:flex;align-items:center;padding:0 12px;height:52px;background:linear-gradient(135deg,#F97316,#EA580C);color:white;flex-shrink:0;position:relative;}
+.topbar-left{display:flex;align-items:center;gap:8px;}
+.menu-btn{background:none;border:none;color:white;font-size:22px;cursor:pointer;padding:4px;}
+.clear-btn{background:none;border:none;color:white;font-size:20px;cursor:pointer;padding:4px;}
+.topbar-title{flex:1;text-align:center;font-size:16px;font-weight:600;}
+/* ==================== Tab 页面 ==================== */
+.tab-pages{flex:1;overflow:hidden;position:relative;}
+.tab-page{position:absolute;inset:0;overflow-y:auto;padding:16px;display:none;}
+.tab-page.active{display:block;}
+/* ==================== 底部导航 ==================== */
+.bottom-nav{display:flex;align-items:center;justify-content:space-around;height:56px;background:white;border-top:1px solid #F3F4F6;flex-shrink:0;padding-bottom:env(safe-area-inset-bottom);}
+.nav-item{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:#9CA3AF;cursor:pointer;transition:color .2s;}
+.nav-item.active{color:#F97316;}
+.nav-item .nav-icon{font-size:22px;}
+/* ==================== 输入框 ==================== */
+.input-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:white;border-top:1px solid #F3F4F6;display:flex;align-items:center;gap:8px;padding:8px 12px;padding-bottom:calc(8px + env(safe-area-inset-bottom));z-index:50;}
+.input-bar.hidden{display:none;}
+.input-bar input{flex:1;height:40px;border:1px solid #E5E7EB;border-radius:20px;padding:0 16px;font-size:14px;outline:none;background:#F9FAFB;}
+.input-bar input:focus{border-color:#F97316;background:white;}
+.btn-icon{background:none;border:none;font-size:22px;cursor:pointer;padding:4px 6px;border-radius:50%;transition:background .15s;}
+.btn-icon:active{background:#F3F4F6;}
+.btn-send{background:linear-gradient(135deg,#F97316,#EA580C);color:white;border:none;border-radius:50%;width:36px;height:36px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.btn-send:disabled{opacity:.4;cursor:default;}
+/* ==================== 食知（对话） ==================== */
+.chat-container{padding-bottom:16px;}
+.chat-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#9CA3AF;font-size:14px;gap:8px;}
+.chat-empty .empty-icon{font-size:48px;}
+.bubble{max-width:85%;padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.6;margin-bottom:10px;word-break:break-word;}
+.bubble-user{background:#F97316;color:white;margin-left:auto;border-bottom-right-radius:4px;}
+.bubble-ai{background:white;color:#1F2937;margin-right:auto;border-bottom-left-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+/* ==================== 食计（菜谱计划） ==================== */
+.plan-date-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.plan-date{font-size:16px;font-weight:700;}
+.plan-date button{background:none;border:1px solid #E5E7EB;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:14px;}
+.plan-meal-section{margin-top:12px;}
+.plan-meal-label{font-weight:600;font-size:15px;margin-bottom:8px;}
+.plan-empty{text-align:center;color:#9CA3AF;font-size:14px;margin-top:40px;}
+/* ==================== 食录（三餐实录） ==================== */
+.record-date-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.record-date{font-size:16px;font-weight:700;}
+.record-date button{background:none;border:1px solid #E5E7EB;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:14px;}
+.record-card{background:white;border-radius:12px;padding:12px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.record-card .rc-header{display:flex;justify-content:space-between;align-items:center;}
+.record-card .rc-name{font-weight:600;font-size:15px;}
+.record-card .rc-time{font-size:12px;color:#6B7280;}
+.record-card .rc-type{font-size:12px;color:#F97316;margin-top:4px;}
+.record-empty{text-align:center;color:#9CA3AF;font-size:14px;margin-top:40px;}
+/* ==================== 我家 ==================== */
+.section-title{font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
+.add-btn{background:linear-gradient(135deg,#F97316,#EA580C);color:white;border:none;border-radius:10px;padding:6px 14px;font-size:13px;cursor:pointer;}
+.member-card{background:white;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.member-card .mc-name{font-weight:700;font-size:15px;}
+.member-card .mc-info{font-size:13px;color:#4B5563;margin-top:4px;line-height:1.5;}
+.member-card .mc-actions{display:flex;gap:8px;margin-top:8px;justify-content:flex-end;}
+.mc-actions button{background:none;border:1px solid #E5E7EB;border-radius:8px;padding:4px 12px;font-size:12px;cursor:pointer;}
+.mc-actions .del-btn{border-color:#FCA5A5;color:#DC2626;}
+/* 就餐组 */
+.group-card{background:white;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer;transition:box-shadow .15s;}
+.group-card:active{box-shadow:0 2px 8px rgba(0,0,0,.12);}
+.group-card .gc-name{font-weight:700;font-size:15px;}
+.group-card .gc-info{font-size:13px;color:#4B5563;margin-top:4px;}
+.group-card .gc-actions{display:flex;gap:8px;margin-top:8px;justify-content:flex-end;}
+/* ==================== 遮罩 ==================== */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:90;}
+.overlay.show{display:block;}
+/* 历史记录面板 */
+.history-panel{position:fixed;top:0;right:-320px;width:300px;max-width:80vw;height:100%;background:white;z-index:100;transition:right .3s ease;padding:16px;overflow-y:auto;}
+.history-panel.show{right:0;}
+.history-panel .hp-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #F3F4F6;}
+.history-panel .hp-close{background:none;border:none;font-size:20px;cursor:pointer;}
+.history-section{margin-bottom:16px;}
+.history-section .hs-title{font-weight:600;font-size:14px;color:#6B7280;margin-bottom:6px;}
+.history-section .hs-item{font-size:13px;color:#4B5563;padding:4px 0;border-bottom:1px solid #F9FAFB;}
+/* ==================== 滚动条 ==================== */
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-thumb{background:#D1D5DB;border-radius:4px;}
+</style>
+</head>
+<body>
+<div class="phone-frame" id="app">
+<!-- ====== 首页 ====== -->
+<div class="page-home" id="pageHome">
+    <div class="solar-term-banner" id="homeSolarBanner">
+        <div class="term-name"><span id="homeSolarName">🌞 今日节气</span><button class="solar-term-link" id="homeSolarBtn">查看节气菜谱 →</button></div>
+        <div class="term-diet" id="homeSolarDiet">顺时而养，不时不食</div>
+        <div class="term-foods" id="homeSolarFoods">推荐食材：按当季节气智能推荐</div>
+    </div>
+    <div class="home-logo">🍳</div>
+    <div class="home-title">家肴记</div>
+    <div class="home-sub">AI 家庭膳食助理<br>用心记住每一口</div>
+</div>
+
+<!-- ====== 主界面 ====== -->
+<div class="main-app" id="mainApp">
+    <div class="topbar">
+        <div class="topbar-left">
+            <button class="menu-btn" id="menuBtn">☰</button>
+        </div>
+        <div class="topbar-title" id="topbarTitle">📚 食知</div>
+        <button class="clear-btn" id="clearBtn" title="清空对话">✕</button>
+    </div>
+    <div class="tab-pages" id="tabPages">
+        <div class="tab-page active" id="tabKnowledge">
+            <div class="chat-container" id="chatContainer">
+                <div class="chat-empty"><div class="empty-icon">💬</div>发送消息开始对话</div>
+            </div>
+        </div>
+        <div class="tab-page" id="tabPlan">
+            <div class="plan-date-bar">
+                <div class="plan-date" id="planDate">今日菜谱计划</div>
+            </div>
+            <div id="planList"><div class="plan-empty">暂无菜谱计划</div></div>
+        </div>
+        <div class="tab-page" id="tabRecord">
+            <div class="record-date-bar">
+                <div class="record-date" id="recordDate">今日三餐实录</div>
+            </div>
+            <div id="recordList"><div class="record-empty">暂无三餐实录</div></div>
+        </div>
+        <div class="tab-page" id="tabFamily">
+            <div class="section-title">👤 家庭成员 <button class="add-btn" id="addMemberBtn">＋添加</button></div>
+            <div id="memberList"></div>
+            <div class="section-title" style="margin-top:24px;">🍽️ 就餐组 <button class="add-btn" id="addGroupBtn">＋添加</button></div>
+            <div id="groupList"></div>
+        </div>
+    </div>
+    <div class="bottom-nav" id="bottomNav">
+        <div class="nav-item active" data-tab="tabKnowledge"><span class="nav-icon">📚</span><span>食知</span></div>
+        <div class="nav-item" data-tab="tabPlan"><span class="nav-icon">📋</span><span>食计</span></div>
+        <div class="nav-item" data-tab="tabRecord"><span class="nav-icon">📸</span><span>食录</span></div>
+        <div class="nav-item" data-tab="tabFamily"><span class="nav-icon">🏠</span><span>我家</span></div>
+    </div>
+    <div class="input-bar" id="mainInputBar" style="position:relative;max-width:100%;">
+        <input id="mainInput" placeholder="发消息或按住说话" autocomplete="off">
+        <button class="btn-icon" title="附件">⨁</button>
+        <button class="btn-icon" id="voiceBtn" title="语音">🎤</button>
+        <button class="btn-icon" id="keyboardBtn" title="键盘" disabled>⌨️</button>
+        <button class="btn-send" id="sendBtn">➤</button>
+    </div>
+</div>
+</div>
+
+<!-- 遮罩 -->
+<div class="overlay" id="overlay"></div>
+<!-- 历史记录面板 -->
+<div class="history-panel" id="historyPanel">
+    <div class="hp-header"><span>历史记录</span><button class="hp-close" id="closeHistory">✕</button></div>
+    <div class="history-section"><div class="hs-title">AI 对话</div><div class="hs-item">暂无记录</div></div>
+    <div class="history-section"><div class="hs-title">菜谱计划</div><div class="hs-item">暂无记录</div></div>
+    <div class="history-section"><div class="hs-title">三餐实录</div><div class="hs-item">暂无记录</div></div>
+</div>
+
+<script>
+// ============================================================
+// 二十四节气数据
+// ============================================================
+const SOLAR_TERMS_2026 = {
+    '01-05': { name: '小寒', season: '冬', diet: '温补', foods: ['羊肉','核桃','红枣','姜'], dishes: ['羊肉汤','核桃粥'], tip: '天气寒冷，注意温补' },
+    '01-20': { name: '大寒', season: '冬', diet: '温补', foods: ['牛肉','韭菜','糯米','桂圆'], dishes: ['牛肉炖萝卜','八宝饭'], tip: '大寒过后就是立春，注意养阳' },
+    '02-04': { name: '立春', season: '春', diet: '养肝护阳', foods: ['韭菜','豆芽','春笋','菠菜'], dishes: ['韭菜炒蛋','春笋炒肉','菠菜猪肝汤'], tip: '宜吃辛甘发散之物' },
+    '02-19': { name: '雨水', season: '春', diet: '健脾祛湿', foods: ['山药','薏米','赤小豆','鲫鱼'], dishes: ['山药排骨汤','薏米粥','鲫鱼豆腐汤'], tip: '雨水增多，注意健脾祛湿' },
+    '03-05': { name: '惊蛰', season: '春', diet: '养肝润燥', foods: ['梨','银耳','百合','枸杞'], dishes: ['冰糖雪梨','银耳羹'], tip: '惊蛰前后，易口干舌燥，宜润肺' },
+    '03-20': { name: '春分', season: '春', diet: '阴阳平衡', foods: ['荠菜','春笋','鸡蛋','胡萝卜'], dishes: ['荠菜饺子','春笋炒肉'], tip: '春分时节，饮食宜清淡' },
+    '04-05': { name: '清明', season: '春', diet: '清肝明目', foods: ['荠菜','菊花','枸杞','猪肝'], dishes: ['菊花茶','猪肝枸杞汤'], tip: '清明养肝，宜清淡' },
+    '04-20': { name: '谷雨', season: '春', diet: '健脾祛湿', foods: ['薏米','赤小豆','冬瓜','鲫鱼'], dishes: ['薏米红豆粥','鲫鱼汤'], tip: '谷雨时节，注意祛湿' },
+    '05-05': { name: '立夏', season: '夏', diet: '养心清热', foods: ['莲子','百合','苦瓜','绿豆'], dishes: ['莲子百合粥','绿豆汤'], tip: '立夏养心，宜吃苦味' },
+    '05-21': { name: '小满', season: '夏', diet: '清热祛湿', foods: ['苦瓜','冬瓜','绿豆','薏米'], dishes: ['苦瓜炒蛋','冬瓜汤'], tip: '小满节气，注意清热' },
+    '06-05': { name: '芒种', season: '夏', diet: '消暑祛湿', foods: ['黄瓜','西瓜','绿豆','丝瓜'], dishes: ['凉拌黄瓜','绿豆汤'], tip: '芒种时节，注意消暑' },
+    '06-21': { name: '夏至', season: '夏', diet: '清热消暑', foods: ['苦瓜','冬瓜','荷叶','绿豆'], dishes: ['荷叶粥','苦瓜炒肉'], tip: '夏至过后，天气最热' },
+    '07-07': { name: '小暑', season: '夏', diet: '清热解暑', foods: ['绿豆','冬瓜','苦瓜','莲藕','鲫鱼'], dishes: ['绿豆汤','冬瓜排骨汤','苦瓜炒蛋','莲藕排骨汤'], tip: '小暑时节，饮食宜清淡' },
+    '07-23': { name: '大暑', season: '夏', diet: '清热祛湿', foods: ['西瓜','苦瓜','薏米','赤小豆'], dishes: ['西瓜汁','薏米粥'], tip: '大暑是一年中最热的节气' },
+    '08-07': { name: '立秋', season: '秋', diet: '滋阴润燥', foods: ['梨','银耳','莲藕','百合'], dishes: ['冰糖雪梨','莲藕排骨汤'], tip: '立秋过后，天气转凉' },
+    '08-23': { name: '处暑', season: '秋', diet: '滋阴润燥', foods: ['银耳','百合','莲子','蜂蜜'], dishes: ['银耳羹','蜂蜜水'], tip: '处暑过后，暑气消退' },
+    '09-07': { name: '白露', season: '秋', diet: '润肺养阴', foods: ['梨','银耳','百合','山药'], dishes: ['冰糖雪梨','山药粥'], tip: '白露时节，注意保暖' },
+    '09-23': { name: '秋分', season: '秋', diet: '阴阳平衡', foods: ['莲藕','山药','银耳','梨'], dishes: ['莲藕排骨汤','银耳羹'], tip: '秋分过后，昼夜平分' },
+    '10-08': { name: '寒露', season: '秋', diet: '养阴润燥', foods: ['芝麻','核桃','银耳','蜂蜜'], dishes: ['芝麻糊','银耳羹'], tip: '寒露时节，注意养阴' },
+    '10-23': { name: '霜降', season: '秋', diet: '温补健脾', foods: ['山药','牛肉','萝卜','大枣'], dishes: ['山药炖牛肉','萝卜汤'], tip: '霜降过后，天气渐冷' },
+    '11-07': { name: '立冬', season: '冬', diet: '温阳补肾', foods: ['羊肉','牛肉','核桃','黑芝麻'], dishes: ['羊肉汤','核桃粥'], tip: '立冬过后，进入冬天' },
+    '11-22': { name: '小雪', season: '冬', diet: '温补养肾', foods: ['羊肉','黑豆','核桃','桂圆'], dishes: ['羊肉汤','黑豆粥'], tip: '小雪时节，注意防寒' },
+    '12-07': { name: '大雪', season: '冬', diet: '温补肾阳', foods: ['羊肉','牛肉','韭菜','核桃'], dishes: ['羊肉炖萝卜','核桃粥'], tip: '大雪时节，天气寒冷' },
+    '12-22': { name: '冬至', season: '冬', diet: '温补养阳', foods: ['羊肉','饺子','汤圆','糯米'], dishes: ['羊肉汤','饺子','汤圆'], tip: '冬至是一年中夜晚最长的一天' }
+};
+
+function getSolarTermEntries() {
+    return Object.entries(SOLAR_TERMS_2026)
+        .map(([md, data]) => { const [month, day] = md.split('-').map(Number); return { md, month, day, ...data }; })
+        .sort((a, b) => a.month === b.month ? a.day - b.day : a.month - b.month);
+}
+
+function getSolarTermForDate(date = new Date()) {
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const entries = getSolarTermEntries();
+    let current = entries[entries.length - 1];
+    for (const term of entries) {
+        if (month > term.month || (month === term.month && day >= term.day)) { current = term; } else { break; }
+    }
+    return current;
+}
+
+// ============================================================
+// 数据初始化
+// ============================================================
+const DEFAULT_FAMILY = [
+    { id: 1, name: '我', age: 50, gender: '女', relation: '本人', hometown: '武汉', currentCity: '武汉', taste: '微辣', dietaryPreference: '喜欢吃牛肉，不吃葱姜' },
+    { id: 2, name: '老公', age: 57, gender: '男', relation: '配偶', hometown: '武汉', currentCity: '武汉', taste: '清淡', dietaryPreference: '喜欢家常菜，少油' },
+    { id: 3, name: '儿子', age: 16, gender: '男', relation: '儿子', hometown: '武汉', currentCity: '武汉', taste: '酸甜口', dietaryPreference: '喜欢酸甜口，不吃太辣' },
+    { id: 4, name: '妈妈', age: 75, gender: '女', relation: '母亲', hometown: '武汉', currentCity: '武汉', taste: '清淡软烂', dietaryPreference: '牙口不好，适合软烂少盐' }
+];
+
+let familyMembers = JSON.parse(localStorage.getItem('familyMembers')) || [...DEFAULT_FAMILY];
+let diningGroups = JSON.parse(localStorage.getItem('diningGroups')) || [
+    { id: 1, name: '三口之家', members: ['我', '老公', '儿子'], type: 'core', isDefault: true },
+    { id: 2, name: '女方家族聚餐', members: ['我', '老公', '儿子', '妈妈', '舅舅', '表姐'], type: 'extended', isDefault: false },
+    { id: 3, name: '男方家族聚餐', members: ['我', '老公', '儿子', '公公', '婆婆', '大伯'], type: 'extended', isDefault: false }
+];
+
+function saveFamily() { localStorage.setItem('familyMembers', JSON.stringify(familyMembers)); }
+function saveGroups() { localStorage.setItem('diningGroups', JSON.stringify(diningGroups)); }
+let nextMemberId = Math.max(0, ...familyMembers.map(m => m.id)) + 1;
+let nextGroupId = Math.max(0, ...diningGroups.map(g => g.id)) + 1;
+
+// ============================================================
+// DOM 引用
+// ============================================================
+const pageHome = document.getElementById('pageHome');
+const mainApp = document.getElementById('mainApp');
+const homeInput = document.getElementById('homeInput');
+const mainInput = document.getElementById('mainInput');
+const bottomNav = document.getElementById('bottomNav');
+const topbarTitle = document.getElementById('topbarTitle');
+const chatContainer = document.getElementById('chatContainer');
+const overlay = document.getElementById('overlay');
+const historyPanel = document.getElementById('historyPanel');
+
+// ============================================================
+// 首页进入逻辑：仅在输入框发送时进入主界面
+// ============================================================
+// 首页底部输入框
+const homeInputBar = document.createElement('div');
+homeInputBar.className = 'input-bar';
+homeInputBar.innerHTML = '<input id="homeInput" placeholder="发消息或按住说话" autocomplete="off"><button class="btn-icon" title="附件">⨁</button><button class="btn-icon" title="语音">🎤</button><button class="btn-icon" title="键盘" disabled>⌨️</button><button class="btn-send" id="homeSendBtn">➤</button>';
+document.getElementById('pageHome').appendChild(homeInputBar);
+
+const homeInputEl = document.getElementById('homeInput');
+const homeSendBtn = document.getElementById('homeSendBtn');
+const mainInput = document.getElementById('mainInput');
+const mainSendBtn = document.getElementById('sendBtn');
+
+homeSendBtn.addEventListener('click', () => {
+    const text = homeInputEl.value.trim();
+    if (text) enterMainApp(text);
+});
+
+homeInputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && homeInputEl.value.trim()) {
+        enterMainApp(homeInputEl.value.trim());
+    }
+});
+
+function enterMainApp(firstMessage) {
+    homeInputBar.classList.add('hidden');
+    pageHome.classList.add('slide-up');
+    mainApp.classList.add('show');
+    if (firstMessage) {
+        addChatMessage('user', firstMessage);
+    }
+    renderChat();
+}
+
+// ============================================================
+// Tab 切换
+// ============================================================
+const TAB_TITLES = { tabKnowledge: '📚 食知', tabPlan: '📋 食计', tabRecord: '📸 食录', tabFamily: '🏠 我家' };
+const TAB_INPUT_SHOW = { tabKnowledge: true, tabPlan: false, tabRecord: false, tabFamily: false };
+
+bottomNav.addEventListener('click', (e) => {
+    const item = e.target.closest('.nav-item');
+    if (!item) return;
+    const tabId = item.dataset.tab;
+    switchTab(tabId);
+});
+
+function switchTab(tabId) {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.tab === tabId));
+    document.querySelectorAll('.tab-page').forEach(p => p.classList.toggle('active', p.id === tabId));
+    topbarTitle.textContent = TAB_TITLES[tabId] || '';
+    // 只在食知Tab显示输入框
+    document.getElementById('mainInputBar').style.display = TAB_INPUT_SHOW[tabId] ? 'flex' : 'none';
+    document.getElementById('bottomNav').style.marginBottom = TAB_INPUT_SHOW[tabId] ? '60px' : '0';
+}
+
+// ============================================================
+// AI 对话（食知）
+// ============================================================
+let chatHistory = [];
+
+function addChatMessage(role, content) {
+    chatHistory.push({ role, content, time: Date.now() });
+    renderChat();
+}
+
+function renderChat() {
+    if (chatHistory.length === 0) {
+        chatContainer.innerHTML = '<div class="chat-empty"><div class="empty-icon">💬</div>发送消息开始对话</div>';
+        return;
+    }
+    chatContainer.innerHTML = chatHistory.map(msg => {
+        const cls = msg.role === 'user' ? 'bubble-user' : 'bubble-ai';
+        return `<div class="bubble ${cls}">${escapeHtml(msg.content)}</div>`;
+    }).join('');
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function escapeHtml(t) {
+    const d = document.createElement('div');
+    d.textContent = t;
+    return d.innerHTML;
+}
+
+mainSendBtn.addEventListener('click', () => {
+    const text = mainInput.value.trim();
+    if (!text) return;
+    addChatMessage('user', text);
+    mainInput.value = '';
+    setTimeout(() => {
+        addChatMessage('assistant', `收到！您说"${text}"，我正在学习中，后续会为您推荐合适的菜谱。`);
+    }, 600);
+});
+
+mainInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && mainInput.value.trim()) {
+        const text = mainInput.value.trim();
+        addChatMessage('user', text);
+        mainInput.value = '';
+        setTimeout(() => {
+            addChatMessage('assistant', `收到！您说"${text}"，我正在学习中，后续会为您推荐合适的菜谱。`);
+        }, 600);
+    }
+});
+
+mainInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && mainInput.value.trim()) {
+        mainSendBtn.click();
+    }
+});
+
+// ============================================================
+// 清空对话
+// ============================================================
+document.getElementById('clearBtn').addEventListener('click', () => {
+    if (chatHistory.length === 0) return;
+    if (confirm('确定清空所有对话记录吗？')) {
+        chatHistory = [];
+        renderChat();
+    }
+});
+
+// ============================================================
+// 历史记录面板
+// ============================================================
+document.getElementById('menuBtn').addEventListener('click', () => {
+    overlay.classList.add('show');
+    historyPanel.classList.add('show');
+});
+document.getElementById('closeHistory').addEventListener('click', closeHistory);
+overlay.addEventListener('click', closeHistory);
+
+function closeHistory() {
+    overlay.classList.remove('show');
+    historyPanel.classList.remove('show');
+}
+
+// ============================================================
+// 我家 - 家庭成员 CRUD
+// ============================================================
+document.getElementById('addMemberBtn').addEventListener('click', addMember);
+
+function renderMembers() {
+    const list = document.getElementById('memberList');
+    if (familyMembers.length === 0) {
+        list.innerHTML = '<div style="text-align:center;color:#9CA3AF;padding:20px;">暂无家庭成员</div>';
+        return;
+    }
+    list.innerHTML = familyMembers.map(m => `
+        <div class="member-card">
+            <div class="mc-name">${escapeHtml(m.name)} · ${m.age}岁 · ${m.gender === '男' ? '♂' : '♀'}</div>
+            <div class="mc-info">关系：${escapeHtml(m.relation)} · 籍贯：${escapeHtml(m.hometown)} · 现住：${escapeHtml(m.currentCity)}</div>
+            <div class="mc-info">口味：${escapeHtml(m.taste)} ｜ 饮食要求：${escapeHtml(m.dietaryPreference)}</div>
+            <div class="mc-actions">
+                <button onclick="editMember(${m.id})">✎ 编辑</button>
+                <button class="del-btn" onclick="deleteMember(${m.id})">🗑 删除</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function addMember() {
+    const name = prompt('姓名：');
+    if (!name || !name.trim()) return;
+    const age = parseInt(prompt('年龄：', '30')) || 30;
+    const gender = prompt('性别（男/女）：', '女') || '女';
+    const relation = prompt('关系（本人/配偶/儿子/女儿/母亲/父亲等）：', '家人') || '家人';
+    const hometown = prompt('籍贯：', '武汉') || '武汉';
+    const currentCity = prompt('现住城市：', '武汉') || '武汉';
+    const taste = prompt('口味偏好：', '清淡') || '清淡';
+    const dietaryPreference = prompt('饮食要求：', '') || '';
+    familyMembers.push({ id: nextMemberId++, name: name.trim(), age, gender: gender.trim(), relation: relation.trim(), hometown: hometown.trim(), currentCity: currentCity.trim(), taste: taste.trim(), dietaryPreference: dietaryPreference.trim() });
+    saveFamily();
+    renderMembers();
+}
+
+function editMember(id) {
+    const m = familyMembers.find(x => x.id === id);
+    if (!m) return;
+    const name = prompt('姓名：', m.name);
+    if (name !== null) m.name = name.trim() || m.name;
+    const age = prompt('年龄：', m.age);
+    if (age !== null) m.age = parseInt(age) || m.age;
+    const gender = prompt('性别（男/女）：', m.gender);
+    if (gender !== null) m.gender = gender.trim() || m.gender;
+    const relation = prompt('关系：', m.relation);
+    if (relation !== null) m.relation = relation.trim() || m.relation;
+    const hometown = prompt('籍贯：', m.hometown);
+    if (hometown !== null) m.hometown = hometown.trim() || m.hometown;
+    const currentCity = prompt('现住城市：', m.currentCity);
+    if (currentCity !== null) m.currentCity = currentCity.trim() || m.currentCity;
+    const taste = prompt('口味偏好：', m.taste);
+    if (taste !== null) m.taste = taste.trim() || m.taste;
+    const dietaryPreference = prompt('饮食要求：', m.dietaryPreference);
+    if (dietaryPreference !== null) m.dietaryPreference = dietaryPreference.trim();
+    saveFamily();
+    renderMembers();
+}
+
+function deleteMember(id) {
+    const m = familyMembers.find(x => x.id === id);
+    if (!m) return;
+    if (confirm(`确定删除「${m.name}」吗？`)) {
+        familyMembers = familyMembers.filter(x => x.id !== id);
+        saveFamily();
+        renderMembers();
+    }
+}
+
+// ============================================================
+// 我家 - 就餐组 CRUD
+// ============================================================
+document.getElementById('addGroupBtn').addEventListener('click', addGroup);
+
+function renderGroups() {
+    const list = document.getElementById('groupList');
+    if (diningGroups.length === 0) {
+        list.innerHTML = '<div style="text-align:center;color:#9CA3AF;padding:20px;">暂无就餐组</div>';
+        return;
+    }
+    list.innerHTML = diningGroups.map(g => `
+        <div class="group-card">
+            <div class="gc-name">${g.isDefault ? '⭐ ' : ''}${escapeHtml(g.name)}${g.type === 'core' ? ' 👨‍👩‍👦' : ' 👨‍👩‍👧‍👦'}</div>
+            <div class="gc-info">成员：${g.members.map(m => escapeHtml(m)).join('、')}</div>
+            <div class="gc-actions">
+                <button onclick="editGroup(${g.id})">✎ 编辑</button>
+                ${!g.isDefault ? `<button class="del-btn" onclick="deleteGroup(${g.id})">🗑 删除</button>` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+function addGroup() {
+    const name = prompt('就餐组名称：');
+    if (!name || !name.trim()) return;
+    const members = prompt('成员名单（用顿号或逗号分隔）：', '我、老公、儿子');
+    if (members === null) return;
+    const type = prompt('类型：core=核心家庭，extended=家族聚餐', 'core');
+    if (!type || !['core', 'extended'].includes(type.trim())) return;
+    diningGroups.push({ id: nextGroupId++, name: name.trim(), members: members.split(/[、,，]/).map(s => s.trim()).filter(Boolean), type: type.trim(), isDefault: false });
+    saveGroups();
+    renderGroups();
+}
+
+function editGroup(id) {
+    const g = diningGroups.find(x => x.id === id);
+    if (!g) return;
+    const name = prompt('就餐组名称：', g.name);
+    if (name !== null) g.name = name.trim() || g.name;
+    const members = prompt('成员名单（用顿号或逗号分隔）：', g.members.join('、'));
+    if (members !== null) g.members = members.split(/[、,，]/).map(s => s.trim()).filter(Boolean);
+    const type = prompt('类型：core=核心家庭，extended=家族聚餐', g.type);
+    if (type !== null && ['core', 'extended'].includes(type.trim())) g.type = type.trim();
+    saveGroups();
+    renderGroups();
+}
+
+function deleteGroup(id) {
+    const g = diningGroups.find(x => x.id === id);
+    if (!g || g.isDefault) return;
+    if (confirm(`确定删除「${g.name}」吗？`)) {
+        diningGroups = diningGroups.filter(x => x.id !== id);
+        saveGroups();
+        renderGroups();
+    }
+}
+
+// ============================================================
+// 初始化
+// ============================================================
+renderMembers();
+renderGroups();
+
+// 节气首页渲染
+function renderHomeSolarTerm() {
+    const term = getSolarTermForDate(new Date());
+    document.getElementById('homeSolarName').textContent = `🌞 今日${term.name} · ${term.diet}`;
+    document.getElementById('homeSolarDiet').textContent = term.tip;
+    document.getElementById('homeSolarFoods').textContent = `推荐食材：${term.foods.join('、')}`;
+}
+renderHomeSolarTerm();
+
+// 点击"查看节气菜谱"按钮，自动带入节气问题进入主界面
+document.getElementById('homeSolarBtn').addEventListener('click', () => {
+    const term = getSolarTermForDate(new Date());
+    const msg = `${term.name}吃什么`;
+    enterMainApp(msg);
+});
+</script>
+</body>
+</html>
