@@ -29,7 +29,10 @@ from pydantic import BaseModel, Field
 
 # ========== 阿里云通义千问配置 ==========
 # 临时测试直接硬编码 API Key；正式发布建议改回环境变量配置
-ALIYUN_API_KEY = "sk-d59f96e872d54e23ba692fd7d09eee1c"
+import os
+ALIYUN_API_KEY = os.getenv("ALIYUN_API_KEY", "")
+if not ALIYUN_API_KEY:
+    raise ValueError("ALIYUN_API_KEY 未设置，请检查环境变量")
 ALIYUN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
 ALIYUN_MODEL = "qwen-turbo"  # 可选 qwen-plus, qwen-max, qwen-turbo（免费额度多）
 # ========================================
