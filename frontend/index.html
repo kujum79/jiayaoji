@@ -14325,6 +14325,31 @@ function showToast(msg) {
 function sendMessage(inputEl) {
     const text = inputEl.value.trim();
     if (!text) return;
+
+    // 先尝试解析为加菜指令（首页和AI对话页面都支持）
+    const planResult = tryParseMealPlanCommand(text);
+    if (planResult) {
+        const { dateKey, mealType, dishName, targetDate, dateMatched } = planResult;
+        const existing = getMealData(dateKey, mealType);
+        const existingDishes = (existing.plan && existing.plan.dishes) ? existing.plan.dishes : [];
+
+        if (existingDishes.includes(dishName)) {
+            showToast(`⚠️ "${dishName}"已在计划中`);
+            inputEl.value = '';
+            return;
+        }
+
+        const merged = [...existingDishes, dishName];
+        updateMealPlan(dateKey, mealType, { dishes: merged, note: '' });
+
+        const mealNames = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
+        const dateLabel = dateMatched ? formatDateShort(targetDate) : '今天';
+        showToast(`✅ 已添加"${dishName}"到${dateLabel}${mealNames[mealType]}计划`);
+        inputEl.value = '';
+        return;
+    }
+
+    // 非加菜指令，走原有聊天逻辑
     if (!homePage.classList.contains('slide-up')) {
         homePage.classList.add('slide-up');
         mainApp.style.display = 'flex';
@@ -14406,88 +14431,10 @@ function handleDiaryInput(inputEl) {
     const text = inputEl.value.trim();
     if (!text) return;
 
-    // 1. 识别日期
-    let targetDate = new Date(currentDiaryDate);
-    const dateKeywords = [
-        { keys: ['大后天', '大後天'], offset: 3 },
-        { keys: ['后天', '後天'], offset: 2 },
-        { keys: ['明天', '明日'], offset: 1 },
-        { keys: ['今天', '今日'], offset: 0 }
-    ];
-    let dateMatched = false;
-    for (const dk of dateKeywords) {
-        for (const key of dk.keys) {
-            if (text.includes(key)) {
-                targetDate = new Date();
-                targetDate.setDate(targetDate.getDate() + dk.offset);
-                dateMatched = true;
-                break;
-            }
-        }
-        if (dateMatched) break;
-    }
-    // 如果没有匹配到日期关键词，默认使用当前显示的日期
-    const dateKey = dateToKey(targetDate);
-
-    // 2. 识别餐次
-    let mealType = null;
-    const mealKeywords = {
-        breakfast: ['早餐', '早饭', '早点'],
-        lunch: ['午餐', '午饭', '中午', '午餐'],
-        dinner: ['晚餐', '晚饭', '晚上']
-    };
-    for (const [type, keywords] of Object.entries(mealKeywords)) {
-        for (const key of keywords) {
-            if (text.includes(key)) {
-                mealType = type;
-                break;
-            }
-        }
-        if (mealType) break;
-    }
-
-    // 3. 判断是否为咨询类问题（问句），如果是则跳过菜品识别，直接交给AI回答
-    const questionIndicators = ['什么', '怎么', '如何', '哪些', '哪道', '哪个', '为什么', '是不是', '能不能', '可以吗', '吗？', '吗?', '好不好', '推荐什么', '有什么'];
-    const isQuestion = questionIndicators.some(q => text.includes(q));
-
-    // 4. 提取菜品名称（仅在非问句时执行）
-    let dishName = null;
-
-    if (!isQuestion) {
-        // 模式1: "想吃XX"、"想吃 XX"、"吃XX"
-        const wantPatterns = [
-            /(?:想|要|准备|打算)\s*吃\s*(.+?)(?:[，,。！!；;]|$)/,
-            /(?:来|上|做|煮|炒|烧|炖)\s*(?:个|份|碗|盘)?\s*(.+?)(?:[，,。！!；;]|$)/,
-            /(?:加|添|增加|加上)\s*(?:个|份|碗|盘)?\s*(.+?)(?:[，,。！!；;]|$)/
-        ];
-        for (const pattern of wantPatterns) {
-            const match = text.match(pattern);
-            if (match && match[1]) {
-                dishName = match[1].trim();
-                break;
-            }
-        }
-
-        // 模式2: 如果上面的模式没匹配到，尝试提取"XX面"、"XX饭"、"XX汤"、"XX粥"等
-        if (!dishName) {
-            const dishPatterns = [
-                /([^，,。！!；;\s]{2,}(?:面|饭|汤|粥|粉|饺|包|饼|糕|寿司|汉堡|披萨))/,
-                /([^，,。！!；;\s]{2,}(?:炒|烧|炖|煮|蒸|烤|煎|炸)[^，,。！!；;\s]*)/,
-                /([^，,。！!；;\s]{2,}(?:肉|鱼|虾|蛋|豆腐|蔬菜|菜))/,
-                /番茄[^，,。！!；;\s]*蛋[^，,。！!；;\s]*/  // 特殊处理番茄炒蛋、番茄鸡蛋面等
-            ];
-            for (const pattern of dishPatterns) {
-                const match = text.match(pattern);
-                if (match && match[1]) {
-                    dishName = match[1].trim();
-                    break;
-                }
-            }
-        }
-    }
-
-    // 4. 如果识别到餐次和菜品，更新计划
-    if (mealType && dishName) {
+    // 先尝试解析为加菜指令
+    const planResult = tryParseMealPlanCommand(text);
+    if (planResult) {
+        const { dateKey, mealType, dishName, targetDate, dateMatched } = planResult;
         const existing = getMealData(dateKey, mealType);
         const existingDishes = (existing.plan && existing.plan.dishes) ? existing.plan.dishes : [];
 
@@ -14514,14 +14461,7 @@ function handleDiaryInput(inputEl) {
         return;
     }
 
-    // 5. 如果没有识别到餐次但识别到菜品，提示用户指定餐次
-    if (!mealType && dishName) {
-        showToast(`💡 识别到菜品"${dishName}"，请指定餐次（早餐/午餐/晚餐）`);
-        inputEl.value = '';
-        return;
-    }
-
-    // 6. 无法识别为加菜指令，调用阿里云通义千问AI回答用户的烹饪/饮食咨询
+    // 无法识别为加菜指令，调用阿里云通义千问AI回答用户的烹饪/饮食咨询
     chatHistory.push({ role: 'user', content: text });
     // 在三餐计划页面显示"思考中"状态
     const aiReplyEl = document.getElementById('diaryAiReply');
@@ -14568,6 +14508,93 @@ function handleDiaryInput(inputEl) {
         renderKnowledgeChat();
     })();
     inputEl.value = '';
+}
+
+// 解析加菜指令：识别日期、餐次、菜品名称。成功返回 {dateKey, mealType, dishName, targetDate, dateMatched}，失败返回 null
+function tryParseMealPlanCommand(text) {
+    // 1. 识别日期
+    let targetDate = new Date();
+    const dateKeywords = [
+        { keys: ['大后天', '大後天'], offset: 3 },
+        { keys: ['后天', '後天'], offset: 2 },
+        { keys: ['明天', '明日'], offset: 1 },
+        { keys: ['今天', '今日'], offset: 0 }
+    ];
+    let dateMatched = false;
+    for (const dk of dateKeywords) {
+        for (const key of dk.keys) {
+            if (text.includes(key)) {
+                targetDate = new Date();
+                targetDate.setDate(targetDate.getDate() + dk.offset);
+                dateMatched = true;
+                break;
+            }
+        }
+        if (dateMatched) break;
+    }
+    const dateKey = dateToKey(targetDate);
+
+    // 2. 识别餐次
+    let mealType = null;
+    const mealKeywords = {
+        breakfast: ['早餐', '早饭', '早点', '早上', '清早', '早晨'],
+        lunch: ['午餐', '午饭', '中午', '上午'],
+        dinner: ['晚餐', '晚饭', '晚上', '下午', '傍晚', '夜里', '今晚']
+    };
+    for (const [type, keywords] of Object.entries(mealKeywords)) {
+        for (const key of keywords) {
+            if (text.includes(key)) {
+                mealType = type;
+                break;
+            }
+        }
+        if (mealType) break;
+    }
+
+    // 3. 判断是否为咨询类问题（问句），如果是则跳过菜品识别
+    const questionIndicators = ['什么', '怎么', '如何', '哪些', '哪道', '哪个', '为什么', '是不是', '能不能', '可以吗', '吗？', '吗?', '好不好', '推荐什么', '有什么'];
+    const isQuestion = questionIndicators.some(q => text.includes(q));
+
+    if (isQuestion) return null;
+
+    // 4. 提取菜品名称
+    let dishName = null;
+
+    // 模式1: "想吃XX"、"想吃 XX"、"吃XX"
+    const wantPatterns = [
+        /(?:想|要|准备|打算)\s*吃\s*(.+?)(?:[，,。！!；;]|$)/,
+        /(?:来|上|做|煮|炒|烧|炖)\s*(?:个|份|碗|盘)?\s*(.+?)(?:[，,。！!；;]|$)/,
+        /(?:加|添|增加|加上)\s*(?:个|份|碗|盘)?\s*(.+?)(?:[，,。！!；;]|$)/
+    ];
+    for (const pattern of wantPatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+            dishName = match[1].trim();
+            break;
+        }
+    }
+
+    // 模式2: 如果上面的模式没匹配到，尝试提取"XX面"、"XX饭"、"XX汤"、"XX粥"等
+    if (!dishName) {
+        const dishPatterns = [
+            /([^，,。！!；;\s]{2,}(?:面|饭|汤|粥|粉|饺|包|饼|糕|寿司|汉堡|披萨))/,
+            /([^，,。！!；;\s]{2,}(?:炒|烧|炖|煮|蒸|烤|煎|炸)[^，,。！!；;\s]*)/,
+            /([^，,。！!；;\s]{2,}(?:肉|鱼|虾|蛋|豆腐|蔬菜|菜))/,
+            /番茄[^，,。！!；;\s]*蛋[^，,。！!；;\s]*/  // 特殊处理番茄炒蛋、番茄鸡蛋面等
+        ];
+        for (const pattern of dishPatterns) {
+            const match = text.match(pattern);
+            if (match && match[1]) {
+                dishName = match[1].trim();
+                break;
+            }
+        }
+    }
+
+    // 必须同时识别到餐次和菜品才算加菜指令
+    if (!mealType || !dishName) return null;
+
+    return { dateKey, mealType, dishName, targetDate, dateMatched };
 }
 
 // ==================== 膳食日记 ====================
@@ -15599,19 +15626,14 @@ function proceedToPlanTomorrow() {
     current.setHours(0,0,0,0);
 
     let autoSwitched = false;
-    // 18:00后默认规划明天
+    // 仅18:00后默认规划明天
     if (now.getHours() >= 18) {
         currentDiaryDate = new Date();
         currentDiaryDate.setDate(currentDiaryDate.getDate() + 1);
         renderDiary();
         autoSwitched = true;
-    } else if (current.getTime() === today.getTime()) {
-        // 18:00前且查看今天，也切换到明天
-        currentDiaryDate = new Date();
-        currentDiaryDate.setDate(currentDiaryDate.getDate() + 1);
-        renderDiary();
-        autoSwitched = true;
     }
+    // 18:00前保持当前显示的日期，不自动切换
 
     // 弹出规划选项
     const overlay = document.createElement('div');
