@@ -1891,12 +1891,12 @@
     .diary-claim-btn { background:#F59E0B; color:white; border:none; border-radius:6px; padding:3px 10px; font-size:11px; cursor:pointer; }
     .diary-claim-btn:hover { background:#D97706; }
         .diary-meal-card {
-            background: white;
+            background: transparent;
             border-radius: 14px;
-            padding: 14px;
-            margin-bottom: 12px;
-            border: 1px solid #F3F4F6;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            padding: 2px;
+            margin-bottom: 2px;
+            border: none;
+            box-shadow: none;
         }
         .diary-meal-header {
             display: flex;
@@ -1931,17 +1931,17 @@
         }
         .diary-section-plan {
             background: #F0FDF4;
-            border-left: 3px solid #22C55E;
+            border-left: none;
             color: #166534;
         }
         .diary-section-actual {
             background: #EFF6FF;
-            border-left: 3px solid #3B82F6;
+            border-left: none;
             color: #1E40AF;
         }
         .diary-section-empty {
             background: #F9FAFB;
-            border-left: 3px solid #E5E7EB;
+            border-left: none;
             color: #9CA3AF;
             font-style: italic;
         }
@@ -1952,7 +1952,7 @@
         .diary-feedback {
             font-size: 12px;
             background: #FFF7ED;
-            border-left: 3px solid #F97316;
+            border-left: none;
             color: #9A3412;
             padding: 8px 10px;
             border-radius: 8px;
@@ -2386,7 +2386,6 @@
                         <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;">
                             <div style="display:flex;align-items:center;gap:6px;">
                                 <span id="diaryTodayDuty" class="diary-duty-inline" style="font-size:12px;color:#1E40AF;"></span>
-                                <button class="diary-nav-link" style="margin:0;" onclick="showDiaryTodaySummary()">复盘</button>
                             </div>
                             <div style="display:flex;align-items:center;gap:6px;">
                                 <span id="diaryTomorrowDuty" class="diary-duty-inline" style="font-size:12px;color:#1E40AF;"></span>
@@ -2395,6 +2394,8 @@
                     </div>
                     <!-- 餐次卡片容器 -->
                     <div id="diaryMeals"></div>
+                    <!-- AI回复显示区域 -->
+                    <div id="diaryAiReply" style="display:none;margin:0 7px 10px;padding:12px 14px;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;font-size:13px;color:#0C4A6E;line-height:1.6;white-space:pre-wrap;word-break:break-word;"></div>
                 </div>
                 <!-- 底部输入框 -->
                 <div class="diary-input-area">
@@ -4121,7 +4122,8 @@ function generateWeekRecommendation() {
     }
 
     // 辅助：根据家中食材主动推荐某餐次的菜品（食材优先）
-    function recommendDishesForMeal(mealType, excludeNames) {
+    // excludeNames: 完全排除的菜品；deprioritizeNames: 降权但不排除的菜品（跨天去重）
+    function recommendDishesForMeal(mealType, excludeNames, deprioritizeNames) {
         const candidates = [];
         for (const [dishName, info] of Object.entries(DISH_INGREDIENTS)) {
             if (excludeNames && excludeNames.has(dishName)) continue;
@@ -4134,17 +4136,24 @@ function generateWeekRecommendation() {
             candidates.push(analyzeDish(dishName, info.ingredients));
         }
 
-        // 排序：全部有的优先，其次按拥有食材数量降序
+        // 排序：全部有的优先，其次按拥有食材数量降序，最后避免跨天重复
         candidates.sort((a, b) => {
             const aOk = a.ingredients.filter(i => i.status === 'ok').length;
             const bOk = b.ingredients.filter(i => i.status === 'ok').length;
             if (a.status === 'ok' && b.status !== 'ok') return -1;
             if (a.status !== 'ok' && b.status === 'ok') return 1;
+            // 同等食材匹配度下，未在前几天用过的优先
+            const aUsed = deprioritizeNames && deprioritizeNames.has(a.name) ? 1 : 0;
+            const bUsed = deprioritizeNames && deprioritizeNames.has(b.name) ? 1 : 0;
+            if (aUsed !== bUsed) return aUsed - bUsed;
             return bOk - aOk;
         });
 
         return candidates.slice(0, 3);
     }
+
+    // 跨天去重：记录前几天已推荐的菜品，避免一周内重复
+    const weekUsedNames = new Set();
 
     for (let d = 0; d < 7; d++) {
         const date = new Date(today);
@@ -4174,12 +4183,13 @@ function generateWeekRecommendation() {
                     const dishName = dish.name || dish;
                     const ingList = dish.ingredients || getDishIngredients(dishName) || [];
                     dayUsedNames.add(dishName);
+                    weekUsedNames.add(dishName);
                     return analyzeDish(dishName, ingList);
                 });
             } else {
-                // 无膳食计划：食材优先主动推荐
-                const recs = recommendDishesForMeal(meal, dayUsedNames);
-                recs.forEach(r => dayUsedNames.add(r.name));
+                // 无膳食计划：食材优先主动推荐（传入跨天去重集合，避免一周内重复）
+                const recs = recommendDishesForMeal(meal, dayUsedNames, weekUsedNames);
+                recs.forEach(r => { dayUsedNames.add(r.name); weekUsedNames.add(r.name); });
                 dayMeals[meal] = recs;
             }
         });
@@ -4492,17 +4502,20 @@ function renderFridgeRecView() {
     });
     html += `</div>`;
 
-    // 日期选择器：◀ YYYY年MM月DD日 星期X ▶ [今天]
+    // 日期选择器：◀ YYYY年MM月DD日 星期X ▶ [今天/明天]
     const selDate = getRecSelectedDate();
-    const today = new Date(); today.setHours(0,0,0,0);
-    const isTodaySelected = dateToKey(selDate) === dateToKey(today);
+    const nowHour = new Date().getHours();
+    const isAfter18 = nowHour >= 18;
+    const defaultDate = getRecDefaultDate();
+    const isDefaultSelected = dateToKey(selDate) === dateToKey(defaultDate);
+    const defaultLabel = isAfter18 ? '明天' : '今天';
     html += `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin:0 10px 4px;">
         <button onclick="shiftRecSelectedDate(-1)" style="background:none;border:none;font-size:18px;color:#6B7280;cursor:pointer;padding:4px 8px;">◀</button>
         <span style="font-size:14px;font-weight:600;color:#374151;display:flex;flex-direction:column;line-height:1.4;align-items:flex-start;">
             <span>${selDate.getFullYear()}年${String(selDate.getMonth()+1).padStart(2,'0')}月${String(selDate.getDate()).padStart(2,'0')}日</span>
             <span style="display:flex;align-items:center;justify-content:space-between;width:100%;">
                 <span style="font-size:12px;font-weight:400;color:#6B7280;">${['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][selDate.getDay()]}</span>
-                <button onclick="resetRecSelectedDate()" style="background:${isTodaySelected ? '#F3F4F6' : '#FFF7ED'};color:${isTodaySelected ? '#9CA3AF' : '#F97316'};border:1px solid ${isTodaySelected ? '#E5E7EB' : '#FED7AA'};border-radius:8px;padding:2px 10px;font-size:11px;cursor:pointer;margin-left:8px;">${isTodaySelected ? '今天' : '回今天'}</button>
+                <button onclick="resetRecSelectedDate()" style="background:${isDefaultSelected ? '#F3F4F6' : '#FFF7ED'};color:${isDefaultSelected ? '#9CA3AF' : '#F97316'};border:1px solid ${isDefaultSelected ? '#E5E7EB' : '#FED7AA'};border-radius:8px;padding:2px 10px;font-size:11px;cursor:pointer;margin-left:8px;">${isDefaultSelected ? defaultLabel : '回' + defaultLabel}</button>
             </span>
         </span>
         <button onclick="shiftRecSelectedDate(1)" style="background:none;border:none;font-size:18px;color:#6B7280;cursor:pointer;padding:4px 8px;">▶</button>
@@ -10119,6 +10132,7 @@ const INGREDIENT_TO_DISH = {
     '鱼': ['清蒸鲈鱼', '水煮鱼', '红烧鱼', '酸菜鱼'],
     '豆腐': ['麻婆豆腐', '家常豆腐', '豆腐汤', '鱼香豆腐'],
     '猪肉': ['红烧肉', '回锅肉', '鱼香肉丝', '青椒肉丝'],
+    '五花肉': ['红烧肉', '回锅肉', '梅菜扣肉', '蒜泥白肉'],
     '虾': ['白灼虾', '油焖大虾', '虾仁炒蛋', '虾仁汤'],
     '青菜': ['清炒时蔬', '蒜蓉青菜', '上汤青菜'],
     '茄子': ['鱼香茄子', '红烧茄子', '蒜蓉茄子', '肉末茄子', '烤茄子', '凉拌茄子'],
@@ -10167,7 +10181,11 @@ function isHowToQuestion(text) {
     return text.includes('怎么做') || text.includes('如何做') || text.includes('做法') || 
            text.includes('怎么烧') || text.includes('怎么炒') || text.includes('怎么炖') ||
            text.includes('怎么煮') || text.includes('怎么蒸') || text.includes('怎么炸') ||
-           text.includes('怎么弄') || text.includes('怎么处理') || text.includes('怎么做好吃');
+           text.includes('怎么弄') || text.includes('怎么处理') || text.includes('怎么做好吃') ||
+           text.includes('什么菜好吃') || text.includes('什么菜好') || text.includes('做什么菜') ||
+           text.includes('烧什么') || text.includes('炒什么') || text.includes('炖什么') ||
+           text.includes('煮什么') || text.includes('配什么') || text.includes('搭配什么') ||
+           text.includes('怎么搭配') || text.includes('怎么配');
 }
 
 function getAllKnownDishes() {
@@ -10876,7 +10894,9 @@ function generateAIResponse(text) {
 
     // 评价/记录：轻量回应，不在对话中展开家庭档案适配
     const evalKeywords = ['做了', '吃了', '评价', '好吃', '太咸', '太淡', '太少', '太多', '太辣', '太甜', '太油', '太腻', '不错', '一般', '还行', '难吃', '不够', '有点'];
-    const isEvaluation = evalKeywords.some(kw => cleanText.includes(kw));
+    const questionIndicators = ['什么', '怎么', '如何', '哪些', '哪道', '哪个', '为什么', '是不是', '能不能', '可以吗', '好不好'];
+    const isQuestionInput = questionIndicators.some(q => cleanText.includes(q));
+    const isEvaluation = evalKeywords.some(kw => cleanText.includes(kw)) && !isQuestionInput;
 
     // ==================== 检查"日期规划"（优先于评价，避免"好吃"误触发评价） ====================
     const hasDateWord = cleanText.includes('明天') || cleanText.includes('后天') || cleanText.includes('大后天') ||
@@ -13515,7 +13535,7 @@ async function generateMultiDayRecommendation(days) {
         + '③ 饮食知识库：当季饮食指南（食知提供的节气饮食原则和食材推荐）\n'
         + '④ 家中食材：已有食材清单，优先使用现有食材\n'
         + '⑤ 历史记录：过去7天的饮食记录，避免重复菜品，关注偏好\n'
-        + '要求：推荐贴近家庭实际，优先使用家中现有食材，结合节气养生知识，避免与近7天记录重复。每天的三餐要有变化，一周内不要重复同样的菜品。';
+        + '要求：推荐贴近家庭实际，优先使用家中现有食材，结合节气养生知识，避免与近7天记录重复。每天的三餐要有变化，一周内不要重复同样的菜品。特别注意：早餐、午餐、晚餐各自在7天内都必须有变化，绝对不能连续多天出现相同的早餐或其他餐次。';
 
     let userMessage = `请为以下${days}天推荐三餐食谱：${weekDatesStr}。\n\n`;
     userMessage += `【维度③ 食知-当季饮食指南】\n${guideSummary}\n`;
@@ -13548,6 +13568,25 @@ async function generateMultiDayRecommendation(days) {
     if (!aiResponse || !aiResponse.days || !Array.isArray(aiResponse.days)) {
         throw new Error('AI返回数据格式异常，缺少days字段');
     }
+
+    // 跨天去重：同一餐型在不同天不重复同一道菜（AI可能返回重复菜品）
+    const mealUsedDishes = { breakfast: new Set(), lunch: new Set(), dinner: new Set() };
+    aiResponse.days.forEach(day => {
+        const meals = day.meals || {};
+        ['breakfast', 'lunch', 'dinner'].forEach(mealType => {
+            const meal = meals[mealType];
+            if (meal && meal.dishes) {
+                const dishes = Array.isArray(meal.dishes) ? meal.dishes : [meal.dishes];
+                const filtered = dishes.filter(d => !mealUsedDishes[mealType].has(d));
+                if (filtered.length === 0 && dishes.length > 0) {
+                    // 全部重复时至少保留第一道，避免空餐
+                    filtered.push(dishes[0]);
+                }
+                filtered.forEach(d => mealUsedDishes[mealType].add(d));
+                meal.dishes = filtered;
+            }
+        });
+    });
 
     let successCount = 0;
     aiResponse.days.forEach((day, idx) => {
@@ -14041,7 +14080,7 @@ async function generateWeeklyAiMealRecommendation() {
             + '③ 饮食知识库：当季饮食指南（食知提供的节气饮食原则和食材推荐）\n'
             + '④ 家中食材：已有食材清单，优先使用现有食材\n'
             + '⑤ 历史记录：过去14天的饮食记录，避免重复菜品，关注偏好\n'
-            + '要求：推荐贴近家庭实际，优先使用家中现有食材，结合节气养生知识，避免与近14天记录重复。每天的三餐要有变化，一周内不要重复同样的菜品。';
+            + '要求：推荐贴近家庭实际，优先使用家中现有食材，结合节气养生知识，避免与近14天记录重复。每天的三餐要有变化，一周内不要重复同样的菜品。特别注意：早餐、午餐、晚餐各自在7天内都必须有变化，绝对不能连续多天出现相同的早餐或其他餐次。';
 
         // 构建用户消息（五维信息）
         let userMessage = `请为以下7天推荐三餐食谱：${weekDatesStr}。\n\n`;
@@ -14079,6 +14118,22 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates) {
 
     let days = recommendation.days || [];
     let summary = recommendation.summary || recommendation.rawText || '';
+
+    // 跨天去重：同一餐型在不同天不重复同一道菜（预览时也去重）
+    const mealUsedDishes = { breakfast: new Set(), lunch: new Set(), dinner: new Set() };
+    days.forEach(day => {
+        const meals = day.meals || {};
+        ['breakfast', 'lunch', 'dinner'].forEach(mealType => {
+            const meal = meals[mealType];
+            if (meal && meal.dishes) {
+                const allDishes = Array.isArray(meal.dishes) ? meal.dishes : [meal.dishes];
+                const filtered = allDishes.filter(d => !mealUsedDishes[mealType].has(d));
+                if (filtered.length === 0 && allDishes.length > 0) filtered.push(allDishes[0]);
+                filtered.forEach(d => mealUsedDishes[mealType].add(d));
+                meal.dishes = filtered;
+            }
+        });
+    });
 
     const mealLabels = { breakfast: '🌅 早餐', lunch: '☀️ 午餐', dinner: '🌙 晚餐' };
 
@@ -14159,6 +14214,9 @@ function confirmWeeklyAiRecommendation() {
     const days = recommendation.days || [];
     const mealTypes = ['breakfast', 'lunch', 'dinner'];
 
+    // 跨天去重：同一餐型在不同天不重复同一道菜
+    const mealUsedDishes = { breakfast: new Set(), lunch: new Set(), dinner: new Set() };
+
     let totalAdded = 0;
     let filledDays = 0;
 
@@ -14170,7 +14228,11 @@ function confirmWeeklyAiRecommendation() {
         mealTypes.forEach(mealType => {
             const meal = day.meals && day.meals[mealType];
             if (meal && meal.dishes) {
-                const dishes = Array.isArray(meal.dishes) ? meal.dishes : [meal.dishes];
+                const allDishes = Array.isArray(meal.dishes) ? meal.dishes : [meal.dishes];
+                // 过滤掉前几天已用的菜品
+                const dishes = allDishes.filter(d => !mealUsedDishes[mealType].has(d));
+                if (dishes.length === 0 && allDishes.length > 0) dishes.push(allDishes[0]);
+                dishes.forEach(d => mealUsedDishes[mealType].add(d));
                 // 读取已有计划，合并新菜品
                 const existing = getMealData(targetDateKey, mealType);
                 const existingDishes = (existing.plan && existing.plan.dishes) ? existing.plan.dishes : [];
@@ -14270,9 +14332,7 @@ function sendMessage(inputEl) {
         chatHistory.push({ role: 'user', content: text });
         setTimeout(() => {
             const reply = generateAIResponse(text);
-            chatHistory.push({ role: 'assistant', content: reply });
-            renderChat();
-            renderKnowledgeChat();
+            handleAiReply(text, reply);
             topTitle.textContent = extractTitle(text);
         }, 300);
         renderFamily();
@@ -14288,13 +14348,226 @@ function sendMessage(inputEl) {
     renderKnowledgeChat();
     setTimeout(() => {
         const reply = generateAIResponse(text);
-        chatHistory.push({ role: 'assistant', content: reply });
-        renderChat();
-        renderKnowledgeChat();
+        handleAiReply(text, reply);
         topTitle.textContent = extractTitle(text);
     }, 500);
     inputEl.value = '';
     inputEl.focus();
+}
+
+// 处理AI回复：如果模板回复无法回答用户问题，调用通义千问API获取真实回复
+function handleAiReply(userText, templateReply) {
+    // 检测模板回复是否为默认/兜底回复（无法真正回答用户问题）
+    const isFallback = templateReply.includes('请告诉我具体想做什么菜') ||
+                       templateReply.includes('我明白了。你可以直接问我') ||
+                       templateReply.includes('请告诉我具体想做什么菜，比如');
+    
+    if (isFallback) {
+        // 调用通义千问API获取真实回复
+        showToast('🤔 正在思考...');
+        (async () => {
+            try {
+                const apiKey = 'sk-d59f96e872d54e23ba692fd7d09eee1c';
+                const apiUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+                const systemPrompt = '你是"家肴记"的AI膳食助手，擅长解答家庭烹饪、食材搭配、菜谱推荐等问题。回答简洁实用，控制在200字以内。';
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+                    body: JSON.stringify({
+                        model: 'qwen-turbo',
+                        messages: [
+                            { role: 'system', content: systemPrompt },
+                            { role: 'user', content: userText }
+                        ],
+                        temperature: 0.7
+                    })
+                });
+                if (!response.ok) throw new Error('API请求失败(' + response.status + ')');
+                const data = await response.json();
+                const aiReply = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+                if (!aiReply) throw new Error('API返回内容为空');
+                chatHistory.push({ role: 'assistant', content: aiReply });
+            } catch (err) {
+                chatHistory.push({ role: 'assistant', content: templateReply });
+            }
+            renderChat();
+            renderKnowledgeChat();
+        })();
+    } else {
+        // 模板回复可以回答用户问题，直接使用
+        chatHistory.push({ role: 'assistant', content: templateReply });
+        renderChat();
+        renderKnowledgeChat();
+    }
+}
+
+// 处理三餐计划页面的输入：解析用户输入并更新对应餐次计划
+function handleDiaryInput(inputEl) {
+    const text = inputEl.value.trim();
+    if (!text) return;
+
+    // 1. 识别日期
+    let targetDate = new Date(currentDiaryDate);
+    const dateKeywords = [
+        { keys: ['大后天', '大後天'], offset: 3 },
+        { keys: ['后天', '後天'], offset: 2 },
+        { keys: ['明天', '明日'], offset: 1 },
+        { keys: ['今天', '今日'], offset: 0 }
+    ];
+    let dateMatched = false;
+    for (const dk of dateKeywords) {
+        for (const key of dk.keys) {
+            if (text.includes(key)) {
+                targetDate = new Date();
+                targetDate.setDate(targetDate.getDate() + dk.offset);
+                dateMatched = true;
+                break;
+            }
+        }
+        if (dateMatched) break;
+    }
+    // 如果没有匹配到日期关键词，默认使用当前显示的日期
+    const dateKey = dateToKey(targetDate);
+
+    // 2. 识别餐次
+    let mealType = null;
+    const mealKeywords = {
+        breakfast: ['早餐', '早饭', '早点'],
+        lunch: ['午餐', '午饭', '中午', '午餐'],
+        dinner: ['晚餐', '晚饭', '晚上']
+    };
+    for (const [type, keywords] of Object.entries(mealKeywords)) {
+        for (const key of keywords) {
+            if (text.includes(key)) {
+                mealType = type;
+                break;
+            }
+        }
+        if (mealType) break;
+    }
+
+    // 3. 判断是否为咨询类问题（问句），如果是则跳过菜品识别，直接交给AI回答
+    const questionIndicators = ['什么', '怎么', '如何', '哪些', '哪道', '哪个', '为什么', '是不是', '能不能', '可以吗', '吗？', '吗?', '好不好', '推荐什么', '有什么'];
+    const isQuestion = questionIndicators.some(q => text.includes(q));
+
+    // 4. 提取菜品名称（仅在非问句时执行）
+    let dishName = null;
+
+    if (!isQuestion) {
+        // 模式1: "想吃XX"、"想吃 XX"、"吃XX"
+        const wantPatterns = [
+            /(?:想|要|准备|打算)\s*吃\s*(.+?)(?:[，,。！!；;]|$)/,
+            /(?:来|上|做|煮|炒|烧|炖)\s*(?:个|份|碗|盘)?\s*(.+?)(?:[，,。！!；;]|$)/,
+            /(?:加|添|增加|加上)\s*(?:个|份|碗|盘)?\s*(.+?)(?:[，,。！!；;]|$)/
+        ];
+        for (const pattern of wantPatterns) {
+            const match = text.match(pattern);
+            if (match && match[1]) {
+                dishName = match[1].trim();
+                break;
+            }
+        }
+
+        // 模式2: 如果上面的模式没匹配到，尝试提取"XX面"、"XX饭"、"XX汤"、"XX粥"等
+        if (!dishName) {
+            const dishPatterns = [
+                /([^，,。！!；;\s]{2,}(?:面|饭|汤|粥|粉|饺|包|饼|糕|寿司|汉堡|披萨))/,
+                /([^，,。！!；;\s]{2,}(?:炒|烧|炖|煮|蒸|烤|煎|炸)[^，,。！!；;\s]*)/,
+                /([^，,。！!；;\s]{2,}(?:肉|鱼|虾|蛋|豆腐|蔬菜|菜))/,
+                /番茄[^，,。！!；;\s]*蛋[^，,。！!；;\s]*/  // 特殊处理番茄炒蛋、番茄鸡蛋面等
+            ];
+            for (const pattern of dishPatterns) {
+                const match = text.match(pattern);
+                if (match && match[1]) {
+                    dishName = match[1].trim();
+                    break;
+                }
+            }
+        }
+    }
+
+    // 4. 如果识别到餐次和菜品，更新计划
+    if (mealType && dishName) {
+        const existing = getMealData(dateKey, mealType);
+        const existingDishes = (existing.plan && existing.plan.dishes) ? existing.plan.dishes : [];
+
+        if (existingDishes.includes(dishName)) {
+            showToast(`⚠️ "${dishName}"已在计划中`);
+            inputEl.value = '';
+            return;
+        }
+
+        const merged = [...existingDishes, dishName];
+        updateMealPlan(dateKey, mealType, { dishes: merged, note: '' });
+
+        // 如果目标日期与当前显示日期不同，切换到目标日期
+        const currentKey = dateToKey(currentDiaryDate);
+        if (dateKey !== currentKey) {
+            currentDiaryDate = new Date(targetDate);
+        }
+        renderDiary();
+
+        const mealNames = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
+        const dateLabel = dateMatched ? formatDateShort(targetDate) : '当前日期';
+        showToast(`✅ 已添加"${dishName}"到${dateLabel}${mealNames[mealType]}计划`);
+        inputEl.value = '';
+        return;
+    }
+
+    // 5. 如果没有识别到餐次但识别到菜品，提示用户指定餐次
+    if (!mealType && dishName) {
+        showToast(`💡 识别到菜品"${dishName}"，请指定餐次（早餐/午餐/晚餐）`);
+        inputEl.value = '';
+        return;
+    }
+
+    // 6. 无法识别为加菜指令，调用阿里云通义千问AI回答用户的烹饪/饮食咨询
+    chatHistory.push({ role: 'user', content: text });
+    // 在三餐计划页面显示"思考中"状态
+    const aiReplyEl = document.getElementById('diaryAiReply');
+    if (aiReplyEl) {
+        aiReplyEl.style.display = 'block';
+        aiReplyEl.innerHTML = '🤔 正在思考...';
+        aiReplyEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+    showToast('🤔 正在思考...');
+    (async () => {
+        let reply = '';
+        try {
+            const apiKey = 'sk-d59f96e872d54e23ba692fd7d09eee1c';
+            const apiUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+            const systemPrompt = '你是"家肴记"的AI膳食助手，擅长解答家庭烹饪、食材搭配、菜谱推荐等问题。回答简洁实用，控制在200字以内。';
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+                body: JSON.stringify({
+                    model: 'qwen-turbo',
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: text }
+                    ],
+                    temperature: 0.7
+                })
+            });
+            if (!response.ok) throw new Error('API请求失败(' + response.status + ')');
+            const data = await response.json();
+            reply = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+            if (!reply) throw new Error('API返回内容为空');
+        } catch (err) {
+            reply = generateAIResponse(text);
+        }
+        // 显示AI回复到三餐计划页面
+        if (aiReplyEl) {
+            aiReplyEl.style.display = 'block';
+            aiReplyEl.innerHTML = '🤖 <b>AI回复：</b><br>' + escapeHtml(reply).replace(/\n/g, '<br>');
+            aiReplyEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+        // 同时记录到聊天历史
+        chatHistory.push({ role: 'assistant', content: reply });
+        renderChat();
+        renderKnowledgeChat();
+    })();
+    inputEl.value = '';
 }
 
 // ==================== 膳食日记 ====================
@@ -14334,7 +14607,7 @@ function renderDiary() {
             if (todayDuty.claimed) {
                 todayDutyEl.innerHTML = `<b>${escapeHtml(todayDuty.memberName)}</b> 已认领争分日`;
             } else {
-                todayDutyEl.innerHTML = `<button class="diary-claim-btn" onclick="showClaimContestModal()">-认领值班日-</button>`;
+                todayDutyEl.innerHTML = `<button class="diary-claim-btn" onclick="showClaimContestModal()">认领值班日</button>`;
             }
         } else if (todayDuty.type === 'claimable') {
             // 周六认领值班日：显示"今日值班：儿子"（或认领人）
@@ -14352,7 +14625,7 @@ function renderDiary() {
             if (todayDuty.claimed) {
                 tomorrowDutyEl.innerHTML = `<span style="font-size:12px;color:#16A34A;">${escapeHtml(todayDuty.memberName)} 已认领</span>`;
             } else {
-                tomorrowDutyEl.innerHTML = `<button class="diary-claim-btn" onclick="showClaimContestModal()">-认领值班日-</button>`;
+                tomorrowDutyEl.innerHTML = `<button class="diary-claim-btn" onclick="showClaimContestModal()">认领值班日</button>`;
             }
         } else if (tomorrowDuty.memberName) {
             tomorrowDutyEl.innerHTML = `明日值班：<b>${escapeHtml(tomorrowDuty.memberName)}</b>${tomorrowDuty.type === 'contest' ? '（争分日）' : ''}`;
@@ -14454,7 +14727,7 @@ function renderDiary() {
         else if (!hasPlan && hasActual) statusBadge = '<span class="diary-status-badge diary-status-planned">📝 已记录</span>';
         else statusBadge = '<span class="diary-status-badge diary-status-empty">⚪ 未安排</span>';
         
-        html += `<div class="diary-meal-card">
+        html += `<div class="diary-meal-card" style="border:none !important;box-shadow:none !important;background:transparent !important;">
             <div class="diary-meal-header">
                 <div><span class="diary-meal-label">${meal.icon} ${meal.name}</span>${statusBadge}</div>
                 <div class="diary-meal-actions">
@@ -14471,23 +14744,28 @@ function renderDiary() {
                 </div>
             </div>
             ${isDiningOut ? `
-                <div class="diary-section ${outStatus === 'completed' ? 'diary-section-actual' : 'diary-section-plan'}">
+                <div class="diary-section ${outStatus === 'completed' ? 'diary-section-actual' : 'diary-section-plan'}" style="border:none !important;">
                     <div class="diary-section-label">🍽️ 外出就餐 · ${outStatus === 'planning' ? '规划中' : outStatus === 'confirmed' ? '已确定' : '已完成'}${data.actual.restaurantName ? ' · 📍 ' + escapeHtml(data.actual.restaurantName) : ''}</div>
                     <div>${hasActual ? actualText : '（暂无菜品）'}${actualEmoji}</div>
                     ${data.actual.restaurantName ? `<div style="font-size:11px;color:#6B7280;margin-top:2px;">📍 ${escapeHtml(data.actual.restaurantName)}${data.actual.totalCost ? ' · 实付' + data.actual.totalCost + '元' : ''}${data.actual.avgCost ? ' · 人均' + data.actual.avgCost + '元' : ''}</div>` : ''}
-                    ${data.actual.photos && data.actual.photos.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${data.actual.photos.slice(0,4).map(p => `<img src="${p}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;">`).join('')}</div>` : ''}
+                    ${data.actual.photos && data.actual.photos.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${data.actual.photos.slice(0,4).map(p => `<img src="${p}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">`).join('')}</div>` : ''}
                 </div>
             ` : `
-                <div class="diary-section ${planClass}">
+                <div class="diary-section ${planClass}" style="border:none !important;">
                     <div><span class="diary-section-label">计划：</span>${planText}${planConfirmed ? ' <span style="font-size:11px;color:#1E40AF;">✓已确认</span>' : ''}</div>
                 </div>
-                <div class="diary-section ${actualClass}">
+                <div class="diary-section ${actualClass}" style="border:none !important;">
                     <div><span class="diary-section-label">实际：</span>${actualText}${actualEmoji}</div>
-                    ${hasActual && data.actual.photos && data.actual.photos.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${data.actual.photos.slice(0,4).map(p => `<img src="${p}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;">`).join('')}</div>` : ''}
+                    ${hasActual && data.actual.photos && data.actual.photos.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${data.actual.photos.slice(0,4).map(p => `<img src="${p}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">`).join('')}</div>` : ''}
                 </div>
             `}
         </div>`;
     });
+
+    // 晚餐卡片下方右对齐的复盘按钮
+    html += `<div style="display:flex;justify-content:flex-end;padding:0 7px;margin-bottom:10px;">
+        <button onclick="showDiaryTodaySummary()" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;border-radius:8px;padding:5px 16px;font-size:13px;font-weight:600;cursor:pointer;">📊 复盘</button>
+    </div>`;
     
     document.getElementById('diaryMeals').innerHTML = html;
 }
@@ -16448,7 +16726,11 @@ function sendFromInput(scope) {
         updateInputButtons(scope);
         return;
     }
-    sendMessage(input);
+    if (scope === 'diary') {
+        handleDiaryInput(input);
+    } else {
+        sendMessage(input);
+    }
     resetVoiceMode(scope);
     updateInputButtons(scope);
     if (scope === 'home') {
