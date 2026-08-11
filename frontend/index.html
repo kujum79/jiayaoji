@@ -2008,6 +2008,14 @@
     .fridge-confirm-card .msg { font-size:15px; color:#1F2937; margin-bottom:20px; line-height:1.6; }
     .fridge-confirm-card .btns { display:flex; gap:10px; }
     .fridge-confirm-card .btns button { flex:1; padding:10px; border-radius:10px; font-size:14px; cursor:pointer; border:none; }
+    .rec-shop-input-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); display:none; justify-content:center; align-items:center; z-index:9999; padding:16px; }
+    .rec-shop-input-overlay.show { display:flex; }
+    .rec-shop-input-card { background:#fff; border-radius:16px; padding:24px 20px; max-width:320px; width:100%; }
+    .rec-shop-input-card .title { font-size:16px; font-weight:700; text-align:center; margin-bottom:16px; color:#1F2937; }
+    .rec-shop-input-card input { width:100%; padding:10px 12px; border:1px solid #D1D5DB; border-radius:10px; font-size:14px; margin-bottom:16px; box-sizing:border-box; }
+    .rec-shop-input-card input:focus { outline:none; border-color:#EA580C; }
+    .rec-shop-input-card .btns { display:flex; gap:10px; }
+    .rec-shop-input-card .btns button { flex:1; padding:10px; border-radius:10px; font-size:14px; cursor:pointer; border:none; }
     .fridge-detail-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); display:none; justify-content:center; align-items:flex-end; z-index:210; }
     .fridge-detail-overlay.show { display:flex; }
     .fridge-detail-content { background:#fff; width:100%; max-width:430px; border-radius:16px 16px 0 0; padding:20px 16px; max-height:80vh; overflow-y:auto; }
@@ -2030,13 +2038,89 @@
     .fridge-view-tab.active { background:#F97316; color:#fff; }
     .fridge-section-title { padding:8px 16px 4px; font-size:13px; font-weight:600; color:#9A3412; }
     .fridge-empty-state { text-align:center; padding:40px 16px; color:#9CA3AF; }
+
+    /* ===== 食材语音管理浮动按钮 ===== */
+    .fridge-voice-fab {
+        position: absolute; bottom: 64px; right: 16px;
+        width: 40px; height: 40px; border-radius: 50%;
+        background: rgba(249, 115, 22, 0.35);
+        backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        border: 1.5px solid rgba(249, 115, 22, 0.4);
+        color: #F97316; font-size: 20px; cursor: pointer;
+        display: none; align-items: center; justify-content: center;
+        z-index: 95; transition: all 0.3s ease;
+        box-shadow: 0 2px 12px rgba(249, 115, 22, 0.15);
+    }
+    .fridge-voice-fab.show { display: flex; }
+    .fridge-voice-fab:hover {
+        background: rgba(249, 115, 22, 0.5);
+        box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+    }
+    .fridge-voice-fab.recording {
+        background: rgba(239, 68, 68, 0.4);
+        border-color: rgba(239, 68, 68, 0.6);
+        color: #DC2626;
+        animation: fridgeVoicePulse 1.2s infinite;
+    }
+    @keyframes fridgeVoicePulse {
+        0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+        50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .fridge-voice-tip {
+        position: absolute; bottom: 124px; right: 16px;
+        background: rgba(31, 41, 55, 0.85); backdrop-filter: blur(8px);
+        color: #fff; padding: 8px 14px; border-radius: 12px;
+        font-size: 12px; max-width: 200px; z-index: 96;
+        display: none; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        white-space: pre-line; line-height: 1.5;
+    }
+    .fridge-voice-tip.show { display: block; animation: fadeInUp 0.3s ease; }
+
+    /* ===== 食记语音管理浮动按钮 ===== */
+    .diary-voice-fab {
+        position: absolute; bottom: 64px; right: 16px;
+        width: 40px; height: 40px; border-radius: 50%;
+        background: rgba(34, 197, 94, 0.35);
+        backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        border: 1.5px solid rgba(34, 197, 94, 0.4);
+        color: #16A34A; font-size: 20px; cursor: pointer;
+        display: none; align-items: center; justify-content: center;
+        z-index: 95; transition: all 0.3s ease;
+        box-shadow: 0 2px 12px rgba(34, 197, 94, 0.15);
+    }
+    .diary-voice-fab.show { display: flex; }
+    .diary-voice-fab:hover {
+        background: rgba(34, 197, 94, 0.5);
+        box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
+    }
+    .diary-voice-fab.recording {
+        background: rgba(239, 68, 68, 0.4);
+        border-color: rgba(239, 68, 68, 0.6);
+        color: #DC2626;
+        animation: diaryVoicePulse 1.2s infinite;
+    }
+    @keyframes diaryVoicePulse {
+        0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+        50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .diary-voice-tip {
+        position: absolute; bottom: 124px; right: 16px;
+        background: rgba(31, 41, 55, 0.85); backdrop-filter: blur(8px);
+        color: #fff; padding: 8px 14px; border-radius: 12px;
+        font-size: 12px; max-width: 220px; z-index: 96;
+        display: none; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        white-space: pre-line; line-height: 1.5;
+    }
+    .diary-voice-tip.show { display: block; animation: fadeInUp 0.3s ease; }
+
     /* ===== 食记页面 ===== */
     .diary-top-bar { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:#fff; border-bottom:1px solid #F3F4F6; flex-shrink:0; }
     .diary-bar-btn { background:none; border:none; font-size:18px; cursor:pointer; padding:6px 8px; border-radius:8px; color:#374151; transition:background .15s; }
     .diary-bar-btn:hover { background:#F3F4F6; }
     .diary-bar-title { font-size:16px; font-weight:700; color:#1F2937; }
     .diary-scroll { flex:1; min-height:0; overflow-y:auto; padding:12px 16px 16px; }
-    .diary-input-area { flex-shrink:0; background:#F9FAFB; border-top:1px solid #F3F4F6; z-index:10; padding-bottom:4px; }
     .diary-date-nav { display:flex; align-items:center; justify-content:flex-start; margin-bottom:10px; gap:8px; }
     .diary-nav-btn { background:none; border:1px solid #E5E7EB; border-radius:10px; padding:4px 10px; font-size:14px; cursor:pointer; color:#374151; transition:all .15s; }
     .diary-nav-btn:hover { background:#F9FAFB; border-color:#D1D5DB; }
@@ -2609,21 +2693,7 @@
                     <!-- AI回复显示区域 -->
                     <div id="diaryAiReply" style="display:none;margin:0 7px 10px;padding:12px 14px;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;font-size:13px;color:#0C4A6E;line-height:1.6;white-space:pre-wrap;word-break:break-word;"></div>
                 </div>
-                <!-- 底部输入框 -->
-                <div class="diary-input-area">
-                    <div class="input-row">
-                        <input type="text" id="diaryInput" placeholder="📎 发消息或按住说话" style="background:#fff;" />
-                        <button class="btn-icon" id="diarySendBtn">⌨️</button>
-                        <button class="btn-icon voice-btn" id="diaryVoiceBtn">🎤</button>
-                        <button class="btn-icon" id="diaryAttachBtn" style="font-size:18px;">＋</button>
-                    </div>
-                    <div class="voice-panel" id="diaryVoicePanel">正在听你说话…</div>
-                    <div class="attach-bar" id="diaryAttachBar">
-                        <button class="attach-item" data-type="camera"><span class="icon">📷</span>拍照</button>
-                        <button class="attach-item" data-type="album"><span class="icon">🖼️</span>相册</button>
-                        <button class="attach-item" data-type="file"><span class="icon">📄</span>文件</button>
-                    </div>
-                </div>
+
             </div>
             <!-- 食材导航小面板（浮动在☰下方） -->
             <div class="fridge-nav-overlay" id="fridgeNavOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.15); z-index:999;">
@@ -2743,6 +2813,12 @@
             <button class="tab-item" data-tab="diary"><span class="tab-icon">📖</span>食记</button>
             <button class="tab-item" data-tab="family"><span class="tab-icon">🏠</span>我家</button>
         </div>
+        <!-- 食材语音管理浮动按钮（phone-frame直接子元素，使用absolute定位） -->
+        <button class="fridge-voice-fab" id="fridgeVoiceFab" onclick="startFridgeVoiceManagement()" title="语音管理食材">🎤</button>
+        <div class="fridge-voice-tip" id="fridgeVoiceTip"></div>
+        <!-- 食记语音管理浮动按钮 -->
+        <button class="diary-voice-fab" id="diaryVoiceFab" onclick="startDiaryVoiceManagement()" title="语音管理食谱">🎤</button>
+        <div class="diary-voice-tip" id="diaryVoiceTip"></div>
     </div>
     <div class="toast" id="toast"></div>
 
@@ -2925,6 +3001,17 @@
             <div class="btns">
                 <button class="fridge-btn-secondary" id="fridgeConfirmNo">否</button>
                 <button class="fridge-btn-primary" id="fridgeConfirmYes">是</button>
+            </div>
+        </div>
+    </div>
+    <!-- 采购计划：输入食材名称弹窗 -->
+    <div class="rec-shop-input-overlay" id="recShopInputOverlay">
+        <div class="rec-shop-input-card">
+            <div class="title">🛒 添加食材到采购清单</div>
+            <input type="text" id="recShopInputName" placeholder="请输入食材名称" autocomplete="off">
+            <div class="btns">
+                <button class="fridge-btn-secondary" id="recShopInputCancel">取消</button>
+                <button class="fridge-btn-primary" id="recShopInputConfirm">添加</button>
             </div>
         </div>
     </div>
@@ -3916,12 +4003,6 @@ const mainAttachBtn = document.getElementById('mainAttachBtn');
 const mainAttachBar = document.getElementById('mainAttachBar');
 const mainVoiceBtn = document.getElementById('mainVoiceBtn');
 const mainVoicePanel = document.getElementById('mainVoicePanel');
-const diaryInput = document.getElementById('diaryInput');
-const diarySendBtn = document.getElementById('diarySendBtn');
-const diaryAttachBtn = document.getElementById('diaryAttachBtn');
-const diaryAttachBar = document.getElementById('diaryAttachBar');
-const diaryVoiceBtn = document.getElementById('diaryVoiceBtn');
-const diaryVoicePanel = document.getElementById('diaryVoicePanel');
 const menuBtn = document.getElementById('menuBtn');
 const clearBtn = document.getElementById('clearBtn');
 const historyOverlay = document.getElementById('historyOverlay');
@@ -3944,8 +4025,7 @@ const recordDateDisplay = document.getElementById('recordDateDisplay');
 
 const inputStates = {
     home: { mode: 'keyboard', voiceStatus: 'idle', timer: null },
-    main: { mode: 'keyboard', voiceStatus: 'idle', timer: null },
-    diary: { mode: 'keyboard', voiceStatus: 'idle', timer: null }
+    main: { mode: 'keyboard', voiceStatus: 'idle', timer: null }
 };
 
 // ============================================================
@@ -4878,12 +4958,21 @@ function renderFridgeRecView() {
 }
 
 // ====== 采购计划（推荐首页） ======
-let recShopRange = '3days'; // '3days' | 'week'
+let recShopDateOffset = 0; // 0=今天, 1=明天, 2=后天, 3=大后天
+let _recShopDateDropdownOpen = false;
+// 全局存储：所有需购食材（供勾选用）和默认价格表
+window._recShopAllIngs = {};   // { 食材名: { name, category, isExpiring } }
+window._recShopDefaultPrices = {};
+window._recShopSelected = {};   // { 食材名: true }  用户勾选的食材
+window._recShopBuyItems = [];   // 采购清单数据（初始为空，由勾选驱动）
 
 function openRecShoppingPlan() {
     document.getElementById('fridgeRecView').style.display = 'none';
     document.getElementById('fridgeRecShopView').style.display = 'block';
     topTitle.textContent = '采购计划';
+    recShopDateOffset = 0; // 默认今天
+    window._recShopSelected = {}; // 清空勾选
+    window._recShopBuyItems = []; // 清空采购清单
     renderRecShopPlan();
 }
 
@@ -4893,203 +4982,217 @@ function closeRecShopPlan() {
     topTitle.textContent = '食材推荐';
 }
 
-function switchRecShopRange(range) {
-    recShopRange = range;
-    if (range === 'weekStats' || range === 'monthStats') {
-        renderRecShopStats(range);
-    } else {
-        renderRecShopPlan();
-    }
+function switchRecShopDate(offset) {
+    recShopDateOffset = offset;
+    _recShopDateDropdownOpen = false;
+    window._recShopSelected = {}; // 切换日期时清空勾选
+    window._recShopBuyItems = []; // 切换日期时清空采购清单
+    renderRecShopPlan();
+}
+
+function toggleRecShopDateDropdown() {
+    _recShopDateDropdownOpen = !_recShopDateDropdownOpen;
+    renderRecShopPlan();
+}
+
+function getRecShopDateLabel(offset) {
+    const labels = ['今天', '明天', '后天', '大后天'];
+    return labels[offset] || '今天';
+}
+
+function getRecShopDate(offset) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const date = new Date(today);
+    date.setDate(date.getDate() + offset);
+    return date;
 }
 
 function renderRecShopPlan() {
     const container = document.getElementById('recShopContent');
     if (!container) return;
 
-    // 如果当前是统计视图，转交给统计渲染
-    if (recShopRange === 'weekStats' || recShopRange === 'monthStats') {
-        renderRecShopStats(recShopRange);
-        return;
-    }
-
-    const calendar = getDietCalendar(); // 从 dietCalendar 读取计划
+    const calendar = getDietCalendar();
     const fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
     const fridgeNames = buildFridgeNamesDict(fridgeItems);
 
-    const today = new Date(); today.setHours(0,0,0,0);
-    const days = recShopRange === '3days' ? 3 : 7;
-    const dateList = [];
-    for (let d = 0; d < days; d++) {
-        const date = new Date(today);
-        date.setDate(date.getDate() + d);
-        dateList.push({
-            dateKey: formatDateKey(date),
-            label: (date.getMonth()+1) + '/' + date.getDate() + ' ' + WEEKDAYS[date.getDay()] + (d === 0 ? '，今天' : ''),
-            isToday: d === 0
-        });
-    }
+    // 计算选中日期
+    const selectedDate = getRecShopDate(recShopDateOffset);
+    const dateKey = formatDateKey(selectedDate);
+    const dateLabel = getRecShopDateLabel(recShopDateOffset);
+    const dateStr = `${dateKey} ${WEEKDAYS[selectedDate.getDay()]}`;
 
-    let hasAnyConfirmed = false;
+    // 遍历选中日期的餐次，收集食谱和所需食材
+    const dayCalendar = calendar[dateKey] || {};
+    const meals = [];
+    const allNeedBuy = {}; // 所有需购食材（冰箱没有或即将过期）
 
-    // 遍历日期和餐次，收集食谱和所需食材
-    const dayData = [];
-    const buyList = {}; // { 食材名: { name, count, from: [日期+餐次+菜名] } }
+    MEAL_TYPES.forEach(meal => {
+        const mealData = dayCalendar[meal] || {};
+        const actualData = mealData.actual || null;
+        if (actualData && actualData.diningType === '外出就餐') return;
+        const planData = mealData.plan || null;
+        const dishes = (planData && planData.dishes) ? planData.dishes : [];
+        if (dishes.length === 0) return;
 
-    dateList.forEach(dayInfo => {
-        const dayCalendar = calendar[dayInfo.dateKey] || {};
-        const meals = [];
+        const mealLabel = MEAL_LABELS[meal].replace(/^[^\u4e00-\u9fa5]+/, '');
+        const dishList = [];
 
-        MEAL_TYPES.forEach(meal => {
-            const mealData = dayCalendar[meal] || {};
-            const actualData = mealData.actual || null;
-            // 排除外出就餐
-            if (actualData && actualData.diningType === '外出就餐') return;
-            const planData = mealData.plan || null;
-            const dishes = (planData && planData.dishes) ? planData.dishes : [];
-            const planState = planData ? (planData.state || (planData.confirmed ? 'confirmed' : 'pending')) : null;
-            if (dishes.length === 0) return;
+        dishes.forEach(dish => {
+            const dishName = dish.name || dish;
+            const ingList = dish.ingredients || getDishIngredients(dishName) || [];
+            const ingDetails = [];
 
-            // 标记是否有已确认/已完成的计划
-            if (planState === 'confirmed' || planState === 'completed') {
-                hasAnyConfirmed = true;
-            }
+            ingList.forEach(ing => {
+                const stdName = normalizeIngredientName(ing);
+                const fItem = fridgeNames[stdName] || fridgeNames[ing];
+                const have = !!fItem;
+                let isExpiring = false;
+                if (have && fItem.expiryDate) {
+                    const daysLeft = daysUntilExpiry(fItem.expiryDate);
+                    isExpiring = daysLeft <= 3;
+                }
+                ingDetails.push({ name: stdName, have, isExpiring });
 
-            const mealLabel = MEAL_LABELS[meal].replace(/^[^\u4e00-\u9fa5]+/, '');
-            const dishList = [];
-
-            dishes.forEach(dish => {
-                const dishName = dish.name || dish;
-                const ingList = dish.ingredients || getDishIngredients(dishName) || [];
-                const ingDetails = [];
-
-                ingList.forEach(ing => {
-                    // 标准化食材名称（如"蒜末"→"大蒜"、"生抽"→"酱油"）
-                    const stdName = normalizeIngredientName(ing);
-                    const fItem = fridgeNames[stdName] || fridgeNames[ing];
-                    const have = !!fItem;
-                    let isExpiring = false;
-                    if (have && fItem.expiryDate) {
-                        const daysLeft = daysUntilExpiry(fItem.expiryDate);
-                        isExpiring = daysLeft <= 3;
+                // 收集所有需关注的食材（冰箱没有 或 即将过期）
+                if (!fItem || isExpiring) {
+                    if (!allNeedBuy[stdName]) {
+                        allNeedBuy[stdName] = { name: stdName, category: guessFoodCategory(stdName), isExpiring: isExpiring };
                     }
-                    ingDetails.push({
-                        name: stdName,
-                        have: have,
-                        isExpiring: isExpiring
-                    });
-
-                    // 冰箱中没有的食材（含调料）加入采购清单
-                    if (!fItem) {
-                        if (!buyList[stdName]) {
-                            buyList[stdName] = { name: stdName, count: 1, sources: [], category: guessFoodCategory(stdName) };
-                        } else {
-                            buyList[stdName].count++;
-                        }
-                        buyList[stdName].sources.push(`${dayInfo.label} ${mealLabel} ${dishName}`);
-                    }
-                });
-
-                dishList.push({ name: dishName, ingredients: ingDetails });
+                }
             });
 
-            if (dishList.length > 0) {
-                meals.push({ label: mealLabel, dishes: dishList, planState });
-            }
+            dishList.push({ name: dishName, ingredients: ingDetails });
         });
 
-        dayData.push({ ...dayInfo, meals });
+        if (dishList.length > 0) {
+            meals.push({ label: mealLabel, dishes: dishList });
+        }
     });
 
-    // 简单估算价格（默认单价）
+    // 存储全局数据供勾选使用
+    window._recShopAllIngs = allNeedBuy;
+
+    // 默认单价（元/份，按市场常见价估算）
     const defaultPrices = {
         // 蔬菜
-        '番茄': 4, '菠菜': 5, '豆腐': 4, '土豆': 4, '生菜': 4, '南瓜': 4,
-        '大蒜': 6, '葱': 3, '大葱': 3, '生姜': 8, '香菜': 3,
+        '番茄': 4, '西红柿': 4, '菠菜': 5, '豆腐': 4, '土豆': 4, '生菜': 4, '南瓜': 4,
+        '大蒜': 6, '蒜苗': 8, '葱': 3, '大葱': 3, '小葱': 3, '生姜': 8, '香菜': 3,
+        '白菜': 3, '大白菜': 3, '小白菜': 4, '油菜': 4, '芹菜': 5, '韭菜': 5,
+        '胡萝卜': 3, '白萝卜': 3, '萝卜': 3, '黄瓜': 4, '茄子': 5, '青椒': 5,
+        '柿子椒': 5, '彩椒': 10, '西兰花': 7, '花菜': 6, '菜花': 6,
+        '洋葱': 3, '莲藕': 8, '藕': 8, '莴笋': 5, '竹笋': 12, '冬笋': 15,
+        '豆芽': 3, '黄豆芽': 3, '绿豆芽': 3, '木耳': 15, '黑木耳': 15,
+        '蘑菇': 10, '香菇': 12, '金针菇': 8, '杏鲍菇': 10, '平菇': 8,
+        '红薯': 3, '紫薯': 5, '山药': 10, '玉米': 5, '豌豆': 8, '毛豆': 6,
+        '苦瓜': 5, '丝瓜': 5, '冬瓜': 4, '葫芦': 4, '茭白': 10,
         // 肉蛋奶
-        '鸡蛋': 1.5, '牛肉': 45, '猪肉': 20, '排骨': 30, '牛腩': 45, '五花肉': 25,
-        '鸡肉': 15, '牛奶': 8, '牛肉末': 40,
+        '鸡蛋': 1.5, '鸭蛋': 2, '鹌鹑蛋': 1,
+        '牛肉': 45, '猪肉': 20, '排骨': 30, '牛腩': 45, '五花肉': 25,
+        '鸡肉': 15, '鸡腿': 18, '鸡胸肉': 20, '鸡翅': 25, '鸭肉': 20,
+        '牛奶': 8, '酸奶': 8, '奶酪': 25, '黄油': 30,
+        '牛肉末': 40, '猪肉末': 22, '肉末': 22, '腊肉': 35, '火腿': 30,
+        '猪肝': 15, '猪心': 18, '猪腰': 20, '鸡肝': 10, '鸡胗': 15,
         // 水产
-        '鱼': 25, '虾': 30,
-        // 主粮
+        '鱼': 25, '虾': 30, '虾仁': 40,
+        '鲈鱼': 35, '鲫鱼': 15, '草鱼': 18, '鲤鱼': 15, '鳕鱼': 40,
+        '带鱼': 25, '黄鱼': 30, '鲳鱼': 28, '武昌鱼': 22, '黑鱼': 30,
+        '三文鱼': 60, '金枪鱼': 80, '龙利鱼': 25, '巴沙鱼': 20,
+        '螃蟹': 50, '大闸蟹': 60, '蟹': 50,
+        '蛤蜊': 15, '花蛤': 12, '扇贝': 20, '生蚝': 25, '牡蛎': 25,
+        '鱿鱼': 25, '章鱼': 30, '墨鱼': 25, '海带': 8, '紫菜': 10,
+        '小龙虾': 35, '龙虾': 120, '基围虾': 35, '明虾': 30,
+        // 主食
         '大米': 5, '面条': 6, '面粉': 5, '小米': 8, '燕麦': 8,
+        '糯米': 8, '糙米': 8, '年糕': 8, '粉丝': 6, '米粉': 6,
+        '馄饨皮': 5, '饺子皮': 5, '吐司': 10, '面包': 10,
         // 调料
-        '盐': 2, '酱油': 8, '醋': 6, '料酒': 10, '糖': 6, '冰糖': 10,
-        '八角': 2, '花椒': 5, '花椒粉': 5, '香油': 12, '食用油': 15,
+        '盐': 2, '酱油': 8, '生抽': 8, '老抽': 8, '醋': 6, '料酒': 10,
+        '糖': 6, '冰糖': 10, '白糖': 6, '红糖': 8,
+        '八角': 2, '花椒': 5, '花椒粉': 5, '香油': 12, '芝麻油': 12,
+        '食用油': 15, '花生油': 18, '橄榄油': 30, '菜籽油': 15,
         '豆瓣酱': 8, '蒸鱼豉油': 10, '沙拉酱': 12, '淀粉': 3,
-        // 干货
-        '银耳': 20, '红枣': 15, '枸杞': 15,
+        '蚝油': 10, '味精': 5, '鸡精': 6, '五香粉': 3, '辣椒粉': 5,
+        '孜然': 5, '孜然粉': 5, '辣椒': 8, '干辣椒': 8, '小米辣': 10,
+        '豆豉': 8, '甜面酱': 8, '番茄酱': 8, '芝麻酱': 15, '花生酱': 15,
+        // 干货药材
+        '银耳': 20, '红枣': 15, '枸杞': 15, '桂圆': 20, '莲子': 18,
+        '百合': 25, '核桃': 25, '花生': 10, '杏仁': 25, '腰果': 35,
+        '木耳': 15, '黄花菜': 15, '腐竹': 15, '粉丝': 6,
+        '陈皮': 10, '党参': 30, '黄芪': 25, '当归': 30,
         // 水果
-        '苹果': 8
+        '苹果': 8, '香蕉': 5, '橙子': 8, '橘子': 6, '柠檬': 6,
+        '梨': 7, '葡萄': 12, '草莓': 20, '蓝莓': 25, '西瓜': 5,
+        '芒果': 15, '猕猴桃': 12, '火龙果': 15, '榴莲': 50, '荔枝': 15,
+        '桃子': 8, '樱桃': 30, '菠萝': 8, '柚子': 10, '哈密瓜': 10
     };
+    window._recShopDefaultPrices = defaultPrices;
 
-    // 渲染
+    // 根据勾选状态同步采购清单（初始为空，仅含用户已勾选的食材）
+    rebuildRecShopBuyItems();
+
     let html = '';
 
-    // 头部 + Tab
-    html += `<div class="rec-shop-header" style="display:flex;align-items:center;gap:8px;">
-        <button class="rec-shop-back-btn" onclick="closeRecShopPlan()" style="background:none;border:none;font-size:20px;color:#6B7280;cursor:pointer;padding:4px 8px;">＜</button>
-        <div class="rec-shop-tab ${recShopRange==='3days'?'active':''}" onclick="switchRecShopRange('3days')" style="margin-left:4px;">未来3天</div>
-        <div class="rec-shop-tab ${recShopRange==='week'?'active':''}" onclick="switchRecShopRange('week')">本周</div>
-        <div class="rec-shop-tab ${recShopRange==='weekStats'?'active':''}" onclick="switchRecShopRange('weekStats')">周统计</div>
-        <div class="rec-shop-tab ${recShopRange==='monthStats'?'active':''}" onclick="switchRecShopRange('monthStats')">月统计</div>
-    </div>`;
-
-    // 如果没有任何膳食计划
-    const totalDishes = dayData.reduce((sum, d) => sum + d.meals.reduce((s, m) => s + m.dishes.length, 0), 0);
-    if (totalDishes === 0) {
-        html += `<div style="text-align:center;padding:40px 20px;color:#9CA3AF;">
-            <div style="font-size:40px;margin-bottom:12px;">📝</div>
-            <div style="font-size:14px;">暂无膳食计划</div>
-            <div style="font-size:12px;margin-top:6px;">请先在"食记"中添加膳食计划</div>
-            <button onclick="closeRecShopPlan();" style="margin-top:12px;padding:8px 20px;border:1px solid #DC2626;border-radius:8px;background:transparent;color:#DC2626;font-size:13px;cursor:pointer;">返回</button>
+    // 头部：返回按钮 + 日期选择器
+    const dateOptions = [0, 1, 2, 3];
+    html += `<div class="rec-shop-header" style="display:flex;align-items:center;justify-content:flex-start;gap:0;padding:12px 12px 4px;position:relative;">
+        <button class="rec-shop-back-btn" onclick="closeRecShopPlan()" style="background:none;border:none;font-size:20px;color:#6B7280;cursor:pointer;padding:4px 0 4px 8px;">＜</button>
+        <div onclick="toggleRecShopDateDropdown()" style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px 6px 8px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;cursor:pointer;font-size:13px;color:#EA580C;font-weight:500;margin-left:0;">
+            📅 ${dateStr} ${dateLabel} ▼
         </div>`;
-        container.innerHTML = html;
-        return;
+    if (_recShopDateDropdownOpen) {
+        html += `<div style="position:absolute;top:42px;left:28px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:100;overflow:hidden;min-width:200px;">`;
+        dateOptions.forEach(opt => {
+            const optDate = getRecShopDate(opt);
+            const optKey = formatDateKey(optDate);
+            const optLabel = getRecShopDateLabel(opt);
+            const optStr = `${optKey} ${WEEKDAYS[optDate.getDay()]}`;
+            const isActive = opt === recShopDateOffset;
+            html += `<div onclick="switchRecShopDate(${opt})" style="padding:10px 16px;font-size:13px;cursor:pointer;${isActive ? 'background:#FFF7ED;color:#EA580C;font-weight:600;' : 'color:#374151;'}border-bottom:1px solid #F3F4F6;">
+                ${isActive ? '✅ ' : ''}📅 ${optStr} ${optLabel}
+            </div>`;
+        });
+        html += `</div>`;
     }
+    html += `</div>`;
 
-    // 按日期展示食谱
-    dayData.forEach(day => {
-        if (day.meals.length === 0) return;
-        html += `<div class="rec-shop-day">`;
-        html += `<div class="rec-shop-day-header">${day.label}需购食材：</div>`;
-        day.meals.forEach(meal => {
-            // 收集该餐次需采购和即将到期的食材（不显示已有且未过期的食材）
+    // 需购食材（按餐次展示，带勾选框）
+    if (meals.length === 0) {
+        html += `<div style="text-align:center;padding:30px 20px;color:#9CA3AF;">
+            <div style="font-size:36px;margin-bottom:10px;">📝</div>
+            <div style="font-size:14px;">${dateLabel}暂无膳食计划</div>
+            <div style="font-size:12px;margin-top:6px;">请先在"食记"中添加膳食计划</div>
+        </div>`;
+    } else {
+        html += `<div class="rec-shop-day" style="margin:0 12px 8px;">`;
+        meals.forEach(meal => {
             const allIngs = [];
             meal.dishes.forEach(dish => {
                 dish.ingredients.forEach(ing => {
                     if (!ing.have) {
-                        // 冰箱没有 → 需采购
                         allIngs.push({ name: ing.name, have: false, isExpiring: false, label: '' });
                     } else if (ing.isExpiring) {
-                        // 冰箱有但即将过期 → 提醒
                         allIngs.push({ name: ing.name, have: true, isExpiring: true, label: '⚠️' });
                     }
-                    // 已有且未过期 → 不显示
                 });
             });
-            // 去重：同一食材只保留一个
             const seen = {};
             const uniqueIngs = [];
             allIngs.forEach(ing => {
-                if (!seen[ing.name]) {
-                    seen[ing.name] = true;
-                    uniqueIngs.push(ing);
-                }
+                if (!seen[ing.name]) { seen[ing.name] = true; uniqueIngs.push(ing); }
             });
-            // 去重后如果该餐次没有需要关注的食材，跳过
             if (uniqueIngs.length === 0) return;
             const ingStr = uniqueIngs.map(ing => {
                 const cls = ing.isExpiring ? 'rec-shop-ing-expiring' : 'rec-shop-ing-buy';
-                return `<span class="rec-shop-ing ${cls}" style="margin:0 2px;">${ing.label}${escapeHtml(ing.name)}</span>`;
+                const checked = window._recShopSelected[ing.name] ? '☑' : '☐';
+                return `<span class="rec-shop-ing ${cls} rec-shop-ing-toggle" data-name="${escapeHtml(ing.name)}" data-expiring="${ing.isExpiring ? '1' : '0'}" style="margin:0 2px;cursor:pointer;" onclick="toggleRecShopIng('${escapeHtml(ing.name)}')">${checked} ${ing.label}${escapeHtml(ing.name)}</span>`;
             }).join('');
             html += `<div class="rec-shop-meal" style="display:flex;align-items:baseline;"><span style="flex-shrink:0;width:42px;">${meal.label}</span><div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px;flex:1;">${ingStr}</div></div>`;
         });
         html += `</div>`;
-    });
+    }
 
-    // 汇总采购清单（按分类排序）
-    const buyItems = Object.values(buyList);
-    // 按 FOOD_CATEGORIES 顺序分组
+    // 采购清单仅显示用户已勾选的食材（初始为空）
+    const buyItems = (window._recShopBuyItems || []).filter(it => it !== null);
     const categoryOrder = FOOD_CATEGORIES;
     buyItems.sort((a, b) => {
         const ai = categoryOrder.indexOf(a.category);
@@ -5097,32 +5200,22 @@ function renderRecShopPlan() {
         return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
     });
 
-    if (buyItems.length === 0) {
-        html += `<div style="text-align:center;padding:30px 20px;color:#16A34A;">
-            <div style="font-size:32px;margin-bottom:8px;">✅</div>
-            <div style="font-size:14px;">所有食材家中已齐备，无需采购</div>
-        </div>`;
-        // 即使无需采购，也允许手动添加食材
-        window._recShopBuyItems = [];
-        html += `<div class="rec-shop-summary">`;
-        html += `<div class="rec-shop-summary-title">🛒 需采购清单（0种）</div>`;
-        html += `<button class="rec-shop-add-btn" onclick="addRecShopItem()">＋ 添加食材</button>`;
-        html += `</div>`;
-        html += `<div class="rec-shop-total" style="display:none;">
-            <span>预估总价</span>
-            <span class="rec-shop-total-price" id="recShopTotal">≈¥0.0</span>
-        </div>`;
-    } else {
-        let totalPrice = 0;
-        html += `<div class="rec-shop-summary">`;
-        html += `<div class="rec-shop-summary-title">🛒 需采购清单（${buyItems.length}种）</div>`;
+    let totalPrice = 0;
+    html += `<div class="rec-shop-summary">`;
+    html += `<div class="rec-shop-summary-title" style="display:flex;align-items:center;justify-content:space-between;">🛒 需采购清单（${buyItems.length}种）<button class="rec-shop-add-btn" onclick="addRecShopItem()">＋ 添加食材</button></div>`;
 
+    if (buyItems.length === 0) {
+        html += `<div id="recShopEmptyMsg" style="text-align:center;padding:16px 0;color:#9CA3AF;font-size:13px;">📋 请勾选上方需购食材，加入采购清单</div>`;
+        // 即使为空也渲染表格结构，以便添加食材时能正确更新
+        html += `<table class="rec-shop-table"><thead><tr>
+            <th>食材</th><th>数量</th><th>单价(元)</th><th>小计</th><th></th>
+        </tr></thead><tbody id="recShopTableBody"></tbody></table>`;
+    } else {
         // 表格头
         html += `<table class="rec-shop-table"><thead><tr>
             <th>食材</th><th>数量</th><th>单价(元)</th><th>小计</th><th></th>
         </tr></thead><tbody id="recShopTableBody">`;
 
-        // 按分类分组渲染
         let currentCat = null;
         buyItems.forEach((item, idx) => {
             if (item.category !== currentCat) {
@@ -5130,7 +5223,7 @@ function renderRecShopPlan() {
                 const catIcon = FOOD_ICONS[currentCat] || '🍽️';
                 html += `<tr class="rec-shop-cat-row" data-cat="${escapeHtml(currentCat)}"><td colspan="5">${catIcon} ${currentCat}</td></tr>`;
             }
-            const unitPrice = defaultPrices[item.name] || 5;
+            const unitPrice = item.unitPrice || defaultPrices[item.name] || 5;
             const price = unitPrice * item.count;
             totalPrice += price;
             const fishHint = item.name === '鱼' ? ' <span style="font-size:11px;color:#9CA3AF;">(建议:鲈鱼/鲫鱼/草鱼)</span>' : '';
@@ -5143,28 +5236,70 @@ function renderRecShopPlan() {
             </tr>`;
         });
         html += `</tbody></table>`;
-        html += `<div class="rec-shop-total">
-            <span>预估总价</span>
-            <span class="rec-shop-total-price" id="recShopTotal">≈¥${totalPrice.toFixed(1)}</span>
-            <button class="rec-shop-add-btn" onclick="addRecShopItem()">＋ 添加食材</button>
-        </div>`;
-        html += `</div>`;
-
-        // 存储当前采购数据供输入更新使用
-        window._recShopBuyItems = buyItems.map(item => ({
-            name: item.name,
-            count: item.count,
-            unitPrice: defaultPrices[item.name] || 5
-        }));
-
-        // 操作按钮
-        html += `<div class="rec-shop-actions">
-            <button class="rec-shop-back-btn" onclick="closeRecShopPlan();">返回</button>
-            <button class="rec-shop-confirm-btn" onclick="confirmRecShopping()">确认采购</button>
-        </div>`;
     }
 
+    // 预估总价 + 确认采购按钮
+    html += `<div class="rec-shop-total">
+        <span>预估总价</span>
+        <span class="rec-shop-total-price" id="recShopTotal">≈¥${totalPrice.toFixed(1)}</span>
+        <button class="rec-shop-confirm-btn" onclick="confirmRecShopping()" style="margin-left:auto;">确认采购</button>
+    </div>`;
+    html += `</div>`;
+
     container.innerHTML = html;
+}
+
+// 勾选/取消勾选需购食材，加入/移出采购清单
+function toggleRecShopIng(name) {
+    if (window._recShopSelected[name]) {
+        delete window._recShopSelected[name];
+    } else {
+        window._recShopSelected[name] = true;
+    }
+    // 同步 _recShopBuyItems
+    rebuildRecShopBuyItems();
+    // 重新渲染勾选状态和采购清单表格
+    renderRecShopIngCheckboxes();
+    reRenderRecShopTable();
+}
+
+// 根据勾选状态重建 _recShopBuyItems（保留用户已修改的数量和单价）
+function rebuildRecShopBuyItems() {
+    const prices = window._recShopDefaultPrices || {};
+    const allIngs = window._recShopAllIngs || {};
+    // 保留已存在项的用户修改（数量、单价）
+    const existing = {};
+    (window._recShopBuyItems || []).forEach(it => {
+        if (it && it.name) existing[it.name] = it;
+    });
+    window._recShopBuyItems = Object.keys(window._recShopSelected).map(name => {
+        const info = allIngs[name] || {};
+        const prev = existing[name];
+        return {
+            name: name,
+            count: prev ? prev.count : 1,
+            unitPrice: prev ? prev.unitPrice : (prices[name] || 5),
+            category: info.category || guessFoodCategory(name)
+        };
+    });
+}
+
+// 仅更新勾选框显示（不重渲染整个页面）
+function renderRecShopIngCheckboxes() {
+    document.querySelectorAll('.rec-shop-ing-toggle').forEach(el => {
+        const name = el.getAttribute('data-name');
+        const isExpiring = el.getAttribute('data-expiring') === '1';
+        const label = isExpiring ? '⚠️' : '';
+        const checked = !!window._recShopSelected[name];
+        el.textContent = (checked ? '☑ ' : '☐ ') + label + name;
+        if (checked) {
+            el.style.background = '#FEF2F2';
+            el.style.color = '#DC2626';
+        } else {
+            el.style.background = isExpiring ? '#FFF7ED' : '#FEF2F2';
+            el.style.color = isExpiring ? '#EA580C' : '#DC2626';
+        }
+    });
 }
 
 // 更新采购清单某行的小计和总价
@@ -5185,11 +5320,15 @@ function updateRecShopRow(idx, value, field) {
     if (totalEl) totalEl.textContent = '≈¥' + total.toFixed(1);
 }
 
-// 删除采购清单某行
+// 删除采购清单某行（同步取消勾选状态）
 function deleteRecShopItem(idx) {
     if (!window._recShopBuyItems || !window._recShopBuyItems[idx]) return;
     const item = window._recShopBuyItems[idx];
     showConfirmDialog('确认删除「' + item.name + '」？', function() {
+        // 同步取消勾选状态
+        delete window._recShopSelected[item.name];
+        renderRecShopIngCheckboxes();
+        // 从采购清单移除
         const row = document.getElementById('recShopRow_' + idx);
         if (row) row.remove();
         window._recShopBuyItems[idx] = null;
@@ -5197,11 +5336,11 @@ function deleteRecShopItem(idx) {
         const total = window._recShopBuyItems.reduce((sum, it) => sum + (it ? it.count * it.unitPrice : 0), 0);
         const totalEl = document.getElementById('recShopTotal');
         if (totalEl) totalEl.textContent = '≈¥' + total.toFixed(1);
-        // 更新标题数量
+        // 更新标题数量（保留添加按钮）
         const titleEl = document.querySelector('.rec-shop-summary-title');
         if (titleEl) {
             const remaining = window._recShopBuyItems.filter(it => it !== null).length;
-            titleEl.textContent = '🛒 需采购清单（' + remaining + '种）';
+            titleEl.innerHTML = '🛒 需采购清单（' + remaining + '种）<button class="rec-shop-add-btn" onclick="addRecShopItem()">＋ 添加食材</button>';
         }
         // 如果全部删完，重新渲染显示空状态+添加按钮
         if (window._recShopBuyItems.every(it => it === null)) {
@@ -5210,27 +5349,32 @@ function deleteRecShopItem(idx) {
     });
 }
 
-// 添加食材到采购清单
+// 添加食材到采购清单（使用自定义输入弹窗，同步勾选状态）
+let _recShopInputCallback = null;
 function addRecShopItem() {
-    const name = prompt('请输入食材名称：');
-    if (!name || !name.trim()) return;
-    const trimName = name.trim();
-    // 检查是否已存在
-    const existing = window._recShopBuyItems.findIndex(it => it && it.name === trimName);
-    if (existing !== -1) {
-        showToast('⚠️ 「' + trimName + '」已在采购清单中');
-        return;
-    }
-    // 找到第一个空位或追加
-    let idx = window._recShopBuyItems.findIndex(it => it === null);
-    if (idx === -1) {
-        idx = window._recShopBuyItems.length;
-        window._recShopBuyItems.push({ name: trimName, count: 1, unitPrice: 5 });
-    } else {
-        window._recShopBuyItems[idx] = { name: trimName, count: 1, unitPrice: 5 };
-    }
-    // 重新渲染表格
-    reRenderRecShopTable();
+    const overlay = document.getElementById('recShopInputOverlay');
+    const input = document.getElementById('recShopInputName');
+    if (!overlay || !input) return;
+    input.value = '';
+    overlay.classList.add('show');
+    setTimeout(() => { input.focus(); }, 100);
+    _recShopInputCallback = function() {
+        const trimName = input.value.trim();
+        if (!trimName) return;
+        // 检查是否已存在
+        const existing = window._recShopBuyItems.findIndex(it => it && it.name === trimName);
+        if (existing !== -1) {
+            showToast('⚠️ 「' + trimName + '」已在采购清单中');
+            return;
+        }
+        // 同步勾选状态，确保重新渲染时不会丢失
+        window._recShopSelected[trimName] = true;
+        // 重建采购清单（保留已有项的修改）
+        rebuildRecShopBuyItems();
+        // 重新渲染表格
+        reRenderRecShopTable();
+        showToast('✅ 已添加「' + trimName + '」到采购清单');
+    };
 }
 
 // 重新渲染采购表格（保留当前数据）
@@ -5274,10 +5418,14 @@ function reRenderRecShopTable() {
     });
     tbody.innerHTML = html;
 
-    // 更新标题数量
+    // 有食材时隐藏"已齐备"提示
+    const emptyMsg = document.getElementById('recShopEmptyMsg');
+    if (emptyMsg) emptyMsg.style.display = items.length > 0 ? 'none' : 'block';
+
+    // 更新标题数量（保留添加按钮）
     const titleEl = document.querySelector('.rec-shop-summary-title');
     if (titleEl) {
-        titleEl.textContent = '🛒 需采购清单（' + items.length + '种）';
+        titleEl.innerHTML = '🛒 需采购清单（' + items.length + '种）<button class="rec-shop-add-btn" onclick="addRecShopItem()">＋ 添加食材</button>';
     }
     // 更新总价
     const total = window._recShopBuyItems.reduce((sum, it) => sum + (it ? it.count * it.unitPrice : 0), 0);
@@ -5664,14 +5812,11 @@ function renderRecShopStats(range) {
     const endStr = formatDateKey(endDate);
     const records = purchaseHistory.filter(r => r.date >= startStr && r.date <= endStr);
 
-    // 头部 + Tab
+    // 头部 + 返回按钮
     let html = '';
     html += `<div class="rec-shop-header" style="display:flex;align-items:center;gap:8px;">
         <button class="rec-shop-back-btn" onclick="closeRecShopPlan()" style="background:none;border:none;font-size:20px;color:#6B7280;cursor:pointer;padding:4px 8px;">＜</button>
-        <div class="rec-shop-tab ${recShopRange==='3days'?'active':''}" onclick="switchRecShopRange('3days')" style="margin-left:4px;">未来3天</div>
-        <div class="rec-shop-tab ${recShopRange==='week'?'active':''}" onclick="switchRecShopRange('week')">本周</div>
-        <div class="rec-shop-tab ${recShopRange==='weekStats'?'active':''}" onclick="switchRecShopRange('weekStats')">周统计</div>
-        <div class="rec-shop-tab ${recShopRange==='monthStats'?'active':''}" onclick="switchRecShopRange('monthStats')">月统计</div>
+        <span style="font-size:14px;font-weight:600;color:#1F2937;">${periodLabel}采购统计</span>
     </div>`;
 
     // 时间范围显示
@@ -6321,6 +6466,960 @@ function showFridgeQuickMenu() {
     document.body.appendChild(menu);
 }
 
+// ============================================================
+// ====== 食材语音管理（浮动按钮） ======
+// ============================================================
+
+let _fridgeVoiceRecognition = null;
+let _fridgeVoiceRecording = false;
+
+// 中文数字转阿拉伯数字
+function chineseToNumber(text) {
+    const cnNumMap = { '零':0, '一':1, '两':2, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9, '十':10 };
+    // 先处理"十"开头的：十二 → 12, 十 → 10
+    let result = text;
+    // 处理"十X" → 1X
+    result = result.replace(/十([零一二三四五六七八九])/g, (m, d) => '1' + cnNumMap[d]);
+    // 处理"X十Y" → XY
+    result = result.replace(/([一二三四五六七八九])十([零一二三四五六七八九])/g, (m, a, b) => cnNumMap[a] + '' + cnNumMap[b]);
+    // 处理"X十" → X0
+    result = result.replace(/([一二三四五六七八九])十/g, (m, a) => cnNumMap[a] + '0');
+    // 处理单独的"十" → 10
+    result = result.replace(/十/g, '10');
+    // 处理单独的中文数字
+    result = result.replace(/[零一二三四五六七八九]/g, d => cnNumMap[d] !== undefined ? cnNumMap[d] : d);
+    return result;
+}
+
+// 模糊匹配食材名称
+function findFridgeItemByName(name) {
+    if (!name) return null;
+    fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    // 精确匹配
+    let match = fridgeItems.find(item => item.name === name);
+    if (match) return match;
+    // 包含匹配（食材名包含指令中的名称，或指令中的名称包含食材名）
+    match = fridgeItems.find(item => item.name.includes(name) || name.includes(item.name));
+    if (match) return match;
+    // 去掉常见后缀后匹配
+    const cleanName = name.replace(/(儿|子|们)$/g, '');
+    match = fridgeItems.find(item => item.name.includes(cleanName) || cleanName.includes(item.name));
+    return match || null;
+}
+
+// 从语音文本中提取食材名称和数量
+function extractNameAndQuantity(text) {
+    // 统一中文数字
+    const normalized = chineseToNumber(text);
+    // 提取数量+单位
+    const qtyMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(克|g|千克|kg|斤|两|个|只|条|瓶|包|袋|盒|把|根|块|颗|头|片|张|罐|桶|箱|份|升|毫升|ml|l)?/i);
+    let quantity = 0;
+    let unit = '个';
+    if (qtyMatch) {
+        quantity = parseFloat(qtyMatch[1]);
+        if (qtyMatch[2]) unit = qtyMatch[2];
+    }
+    // 提取食材名称：去掉数字和单位，去掉常见动词
+    let name = normalized
+        .replace(/(\d+(?:\.\d+)?)\s*(克|g|千克|kg|斤|两|个|只|条|瓶|包|袋|盒|把|根|块|颗|头|片|张|罐|桶|箱|份|升|毫升|ml|l)?/gi, '')
+        .replace(/(加|增加|添|再加|多加|用掉|用了|用|减少|减|扣|消耗|改成|设为|设置|改成|换成|还有多少|剩多少|还有|剩|多少|不用买了|不用买|清空|用完了|没了|吃完|没)/g, '')
+        .replace(/[，。、！？啊呢吧的了]/g, '')
+        .trim();
+    return { name, quantity, unit };
+}
+
+// 语音播报
+function fridgeVoiceSpeak(text) {
+    if ('speechSynthesis' in window) {
+        speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = 'zh-CN';
+        utter.rate = 1.0;
+        speechSynthesis.speak(utter);
+    }
+}
+
+// 显示语音提示
+function showFridgeVoiceTip(text, duration) {
+    const tip = document.getElementById('fridgeVoiceTip');
+    if (!tip) return;
+    tip.textContent = text;
+    tip.classList.add('show');
+    if (duration) {
+        setTimeout(() => tip.classList.remove('show'), duration);
+    }
+}
+
+function hideFridgeVoiceTip() {
+    const tip = document.getElementById('fridgeVoiceTip');
+    if (tip) tip.classList.remove('show');
+}
+
+// ============================================================
+// ====== 统一语音指令解析（调用后端 /parse_voice 接口） ======
+// ============================================================
+
+/**
+ * 调用后端 /parse_voice 接口解析语音指令
+ * @param {string} text - 语音转文字内容
+ * @param {string} context - "食材" 或 "食记"
+ * @returns {Promise<Object|null>} 解析结果，失败返回 null
+ */
+async function parseVoiceViaApi(text, context) {
+    try {
+        const response = await fetch('http://localhost:8000/parse_voice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: text, context: context })
+        });
+        if (!response.ok) {
+            console.warn('[parse_voice] 接口返回非200:', response.status);
+            return null;
+        }
+        const result = await response.json();
+        if (!result || !result.action || result.action === 'unknown') {
+            console.warn('[parse_voice] 未识别到有效指令:', result);
+            return null;
+        }
+        return result;
+    } catch (err) {
+        console.warn('[parse_voice] 接口调用失败，将降级为本地解析:', err.message);
+        return null;
+    }
+}
+
+/**
+ * 将后端食材场景的API返回映射为前端 executeFridgeVoiceCommand 期望的格式
+ */
+function mapFridgeApiCommand(apiResult) {
+    if (!apiResult) return null;
+    // 后端 view_shopping 对应前端 shopping_plan
+    const actionMap = {
+        'increase': 'increase',
+        'decrease': 'decrease',
+        'set': 'set',
+        'clear': 'clear',
+        'query': 'query',
+        'view_shopping': 'shopping_plan',
+        'confirm_shopping': 'confirm_shopping',
+        'remove_shopping': 'remove_shopping'
+    };
+    const action = actionMap[apiResult.action] || apiResult.action;
+    return {
+        action: action,
+        name: apiResult.name || '',
+        quantity: apiResult.quantity || 0,
+        unit: apiResult.unit || '个'
+    };
+}
+
+/**
+ * 将后端食记场景的API返回映射为前端 executeDiaryVoiceCommand 期望的格式
+ */
+function mapDiaryApiCommand(apiResult) {
+    if (!apiResult) return null;
+    // 后端 action 映射到前端 action
+    const actionMap = {
+        'add_plan': 'add_dish',
+        'replace_plan': 'replace_meal',
+        'delete_plan': 'delete_dish',
+        'clear_plan': 'clear_meal',
+        'confirm_plan': 'confirm_plan',
+        'record_actual': 'record_actual'
+    };
+    const action = actionMap[apiResult.action] || apiResult.action;
+
+    // 日期字符串转 Date 对象
+    let dateObj = new Date(currentDiaryDate);
+    const dateStr = apiResult.date || '今天';
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (/今天|今日/.test(dateStr)) dateObj = new Date(today);
+    else if (/明天|明日/.test(dateStr)) { dateObj = new Date(today); dateObj.setDate(dateObj.getDate() + 1); }
+    else if (/昨天/.test(dateStr)) { dateObj = new Date(today); dateObj.setDate(dateObj.getDate() - 1); }
+    else if (/后天/.test(dateStr)) { dateObj = new Date(today); dateObj.setDate(dateObj.getDate() + 2); }
+    else if (/大后天/.test(dateStr)) { dateObj = new Date(today); dateObj.setDate(dateObj.getDate() + 3); }
+
+    // rating 表情转文字评价
+    const ratingToComment = { '😋': '好吃', '🙂': '不错', '😐': '一般', '😞': '不好吃' };
+    const comment = ratingToComment[apiResult.rating] || apiResult.rating || '';
+
+    return {
+        action: action,
+        date: dateObj,
+        meal: apiResult.meal || '',
+        dishName: apiResult.dish || '',
+        comment: comment
+    };
+}
+
+// 解析语音指令
+function parseFridgeVoiceCommand(text) {
+    if (!text || !text.trim()) return null;
+    const t = text.trim();
+
+    // 1. 采购计划 - "看看要买什么"、"采购计划"、"要买什么"
+    if (/看看要买什么|采购计划|要买什么|生成采购|看采购/.test(t)) {
+        return { action: 'shopping_plan' };
+    }
+
+    // 2. 确认采购 - "就按这个买"、"确认采购"、"按这个买"
+    if (/就按这个买|确认采购|按这个买|确认买|就买这些/.test(t)) {
+        return { action: 'confirm_shopping' };
+    }
+
+    // 3. 移除采购项 - "番茄不用买了"、"番茄不用买"
+    let m = t.match(/(.+?)不用买/)
+    if (m) {
+        const name = m[1].replace(/(了|的|啊|呢)/g, '').trim();
+        return { action: 'remove_shopping', name };
+    }
+
+    // 4. 清空 - "鸡蛋用完了"、"鸡蛋没了"、"鸡蛋清空"
+    m = t.match(/(.+?)(用完了|没了|清空|吃完了|用光)/);
+    if (m) {
+        const { name } = extractNameAndQuantity(m[1]);
+        return { action: 'clear', name };
+    }
+
+    // 5. 查询 - "还有多少番茄"、"番茄还有多少"、"番茄剩多少"
+    m = t.match(/(.+?)(还有多少|剩多少|还有多少个|还有|剩|有多少)/);
+    if (m && !/(加|减|改成|设为|设置|用掉|用了)/.test(m[1])) {
+        const { name } = extractNameAndQuantity(m[1]);
+        if (name && name.length > 0) {
+            return { action: 'query', name };
+        }
+    }
+    // 反向查询："番茄还有多少"
+    m = t.match(/^(\S+?)\s*(还有多少|剩多少|还有|剩|有多少)/);
+    if (m) {
+        const { name } = extractNameAndQuantity(m[1]);
+        if (name && name.length > 0) {
+            return { action: 'query', name };
+        }
+    }
+
+    // 6. 设置 - "牛肉改成500克"、"牛肉设为500克"、"牛肉设置500克"
+    m = t.match(/(.+?)(改成|设为|设置|换成|改为|调整成|调为)(.+)/);
+    if (m) {
+        const { name } = extractNameAndQuantity(m[1]);
+        const { quantity, unit } = extractNameAndQuantity(m[3]);
+        if (name && quantity > 0) {
+            return { action: 'set', name, quantity, unit };
+        }
+    }
+
+    // 7. 减少 - "鸡蛋用掉3个"、"鸡蛋减少3个"、"用了3个鸡蛋"
+    m = t.match(/(.+?)(用掉|减少|减掉|用了|消耗|扣|用去)(.+)/);
+    if (m) {
+        const { name: name1 } = extractNameAndQuantity(m[1]);
+        const { name: name2, quantity, unit } = extractNameAndQuantity(m[3]);
+        // 优先取非空名称
+        const name = name1.length >= name2.length ? name1 : (name2 || name1);
+        if (name && quantity > 0) {
+            return { action: 'decrease', name, quantity, unit };
+        }
+    }
+    // "用了3个鸡蛋" 格式
+    m = t.match(/^(用了|用掉|消耗了?|减了?)(.+)/);
+    if (m) {
+        const { name, quantity, unit } = extractNameAndQuantity(m[2]);
+        if (name && quantity > 0) {
+            return { action: 'decrease', name, quantity, unit };
+        }
+    }
+
+    // 8. 增加 - "番茄加2个"、"番茄增加2个"、"再加2个番茄"
+    m = t.match(/(.+?)(加|增加|添|多加|再加)(.+)/);
+    if (m) {
+        const { name: name1 } = extractNameAndQuantity(m[1]);
+        const { name: name2, quantity, unit } = extractNameAndQuantity(m[3]);
+        const name = name1.length >= name2.length ? name1 : (name2 || name1);
+        if (name && quantity > 0) {
+            return { action: 'increase', name, quantity, unit };
+        }
+    }
+    // "加2个番茄" 格式
+    m = t.match(/^(加|增加|添|再加|多加)(.+)/);
+    if (m) {
+        const { name, quantity, unit } = extractNameAndQuantity(m[2]);
+        if (name && quantity > 0) {
+            return { action: 'increase', name, quantity, unit };
+        }
+    }
+
+    return null;
+}
+
+// 执行语音指令
+function executeFridgeVoiceCommand(command) {
+    if (!command) {
+        showFridgeVoiceTip('未识别到有效指令，请重试', 3000);
+        fridgeVoiceSpeak('未识别到有效指令');
+        return;
+    }
+
+    fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+
+    switch (command.action) {
+        case 'increase': {
+            const item = findFridgeItemByName(command.name);
+            if (!item) {
+                // 食材不存在，自动添加
+                const cat = guessFoodCategory(command.name) || '其他';
+                const newItem = {
+                    id: Date.now(),
+                    name: command.name,
+                    category: cat,
+                    quantity: command.quantity + (command.unit || '个'),
+                    quantityValue: command.quantity,
+                    quantityUnit: command.unit || '个',
+                    storage: FOOD_PRESERVATION_KNOWLEDGE[command.name] ? FOOD_PRESERVATION_KNOWLEDGE[command.name].storage : '冷藏',
+                    expiryDate: getDefaultExpiryDate(cat, command.name),
+                    status: 'normal',
+                    reserved: 0,
+                    icon: FOOD_ICONS[cat] || '🍽️',
+                    addedAt: Date.now()
+                };
+                fridgeItems.push(newItem);
+                saveFridgeItems();
+                renderFridge();
+                const msg = `✅ ${command.name}已添加${command.quantity}${command.unit}`;
+                showToast(msg);
+                fridgeVoiceSpeak(`${command.name}已添加${command.quantity}${command.unit}`);
+            } else {
+                item.quantityValue = (item.quantityValue || 0) + command.quantity;
+                item.quantityUnit = command.unit || item.quantityUnit || '个';
+                item.quantity = item.quantityValue + item.quantityUnit;
+                if (item.status === 'used_up') item.status = 'normal';
+                saveFridgeItems();
+                renderFridge();
+                const msg = `✅ ${item.name}已增加${command.quantity}${command.unit}，现有${item.quantityValue}${item.quantityUnit}`;
+                showToast(msg);
+                fridgeVoiceSpeak(`${item.name}已增加${command.quantity}${command.unit}，现有${item.quantityValue}${item.quantityUnit}`);
+            }
+            break;
+        }
+
+        case 'decrease': {
+            const item = findFridgeItemByName(command.name);
+            if (!item) {
+                showToast(`未找到食材：${command.name}`);
+                fridgeVoiceSpeak(`未找到${command.name}`);
+                return;
+            }
+            const oldVal = item.quantityValue || 0;
+            item.quantityValue = Math.max(0, oldVal - command.quantity);
+            item.quantity = item.quantityValue + (item.quantityUnit || '个');
+            if (item.quantityValue === 0) {
+                item.status = 'used_up';
+            }
+            saveFridgeItems();
+            renderFridge();
+            const msg = item.quantityValue === 0
+                ? `✅ ${item.name}已减少${command.quantity}${command.unit}，已用完`
+                : `✅ ${item.name}已减少${command.quantity}${command.unit}，剩余${item.quantityValue}${item.quantityUnit}`;
+            showToast(msg);
+            fridgeVoiceSpeak(item.quantityValue === 0
+                ? `${item.name}已用完`
+                : `${item.name}已减少${command.quantity}${command.unit}，剩余${item.quantityValue}${item.quantityUnit}`);
+            break;
+        }
+
+        case 'set': {
+            const item = findFridgeItemByName(command.name);
+            if (!item) {
+                showToast(`未找到食材：${command.name}`);
+                fridgeVoiceSpeak(`未找到${command.name}`);
+                return;
+            }
+            item.quantityValue = command.quantity;
+            item.quantityUnit = command.unit || item.quantityUnit || '个';
+            item.quantity = item.quantityValue + item.quantityUnit;
+            item.status = item.quantityValue === 0 ? 'used_up' : 'normal';
+            saveFridgeItems();
+            renderFridge();
+            const msg = `✅ ${item.name}已设为${command.quantity}${command.unit}`;
+            showToast(msg);
+            fridgeVoiceSpeak(`${item.name}已设为${command.quantity}${command.unit}`);
+            break;
+        }
+
+        case 'clear': {
+            const item = findFridgeItemByName(command.name);
+            if (!item) {
+                showToast(`未找到食材：${command.name}`);
+                fridgeVoiceSpeak(`未找到${command.name}`);
+                return;
+            }
+            item.quantityValue = 0;
+            item.quantity = '0' + (item.quantityUnit || '个');
+            item.status = 'used_up';
+            saveFridgeItems();
+            renderFridge();
+            const msg = `✅ ${item.name}已清空，标记为用完`;
+            showToast(msg);
+            fridgeVoiceSpeak(`${item.name}已清空，标记为用完`);
+            break;
+        }
+
+        case 'query': {
+            const item = findFridgeItemByName(command.name);
+            if (!item) {
+                const msg = `未找到食材：${command.name}`;
+                showToast(msg);
+                fridgeVoiceSpeak(`没有找到${command.name}`);
+                return;
+            }
+            const statusText = item.status === 'used_up' ? '，已用完' : '';
+            const msg = `${item.name}剩余${item.quantityValue || 0}${item.quantityUnit || '个'}${statusText}`;
+            showToast(`📊 ${msg}`);
+            fridgeVoiceSpeak(msg);
+            break;
+        }
+
+        case 'shopping_plan': {
+            showToast('🛒 正在生成采购计划...');
+            fridgeVoiceSpeak('正在生成采购计划');
+            setTimeout(() => {
+                generateShoppingPlan();
+                fridgeVoiceSpeak('采购计划已生成');
+            }, 500);
+            break;
+        }
+
+        case 'confirm_shopping': {
+            let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+            const unpurchased = shoppingPlans.filter(s => !s.purchased);
+            if (unpurchased.length === 0) {
+                showToast('暂无待确认的采购计划');
+                fridgeVoiceSpeak('暂无待确认的采购计划');
+                return;
+            }
+            unpurchased.forEach(s => { s.purchased = true; s.purchasedAt = Date.now(); });
+            localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+            renderFridge();
+            const msg = `✅ 已确认${unpurchased.length}项采购计划`;
+            showToast(msg);
+            fridgeVoiceSpeak(`已确认${unpurchased.length}项采购计划`);
+            break;
+        }
+
+        case 'remove_shopping': {
+            let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+            const before = shoppingPlans.length;
+            shoppingPlans = shoppingPlans.filter(s => {
+                if (s.purchased) return true;
+                return !(s.name === command.name || s.name.includes(command.name) || command.name.includes(s.name));
+            });
+            const removed = before - shoppingPlans.length;
+            if (removed === 0) {
+                showToast(`采购计划中未找到：${command.name}`);
+                fridgeVoiceSpeak(`采购计划中未找到${command.name}`);
+                return;
+            }
+            localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+            renderFridge();
+            const msg = `✅ 已从采购计划移除${command.name}`;
+            showToast(msg);
+            fridgeVoiceSpeak(`已从采购计划移除${command.name}`);
+            break;
+        }
+
+        default:
+            showFridgeVoiceTip('未识别到有效指令', 3000);
+            fridgeVoiceSpeak('未识别到有效指令');
+    }
+}
+
+// 获取默认过期日期
+function getDefaultExpiryDate(category, name) {
+    const now = new Date();
+    // 查知识库
+    if (FOOD_PRESERVATION_KNOWLEDGE[name]) {
+        const shelfLife = FOOD_PRESERVATION_KNOWLEDGE[name].shelfLife || '';
+        const dayMatch = shelfLife.match(/(\d+)\s*天/);
+        if (dayMatch) {
+            now.setDate(now.getDate() + parseInt(dayMatch[1]));
+            return now.toISOString().split('T')[0];
+        }
+        const monthMatch = shelfLife.match(/(\d+)\s*个?月/);
+        if (monthMatch) {
+            now.setMonth(now.getMonth() + parseInt(monthMatch[1]));
+            return now.toISOString().split('T')[0];
+        }
+    }
+    // 按分类给默认过期天数
+    const defaultDays = { '蔬菜': 5, '水果': 7, '肉蛋奶': 3, '水产': 2, '主粮': 180, '调料': 365, '干货药材': 365, '饮料零食': 180, '方便食品': 180 };
+    now.setDate(now.getDate() + (defaultDays[category] || 7));
+    return now.toISOString().split('T')[0];
+}
+
+// 启动/停止语音管理
+function startFridgeVoiceManagement() {
+    if (_fridgeVoiceRecording && _fridgeVoiceRecognition) {
+        _fridgeVoiceRecognition.stop();
+        return;
+    }
+
+    const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    if (!isSecure) {
+        showToast('语音识别需要 HTTPS 或 localhost 环境');
+        return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        showToast('当前浏览器不支持语音识别，请使用 Chrome 或 Edge');
+        return;
+    }
+
+    const fab = document.getElementById('fridgeVoiceFab');
+    _fridgeVoiceRecognition = new SpeechRecognition();
+    _fridgeVoiceRecognition.lang = 'zh-CN';
+    _fridgeVoiceRecognition.continuous = false;
+    _fridgeVoiceRecognition.interimResults = true;
+    _fridgeVoiceRecognition.maxAlternatives = 1;
+
+    _fridgeVoiceRecognition.onstart = () => {
+        _fridgeVoiceRecording = true;
+        if (fab) fab.classList.add('recording');
+        showFridgeVoiceTip('🎤 正在听，请说出食材指令...\n如：番茄加2个 / 鸡蛋用掉3个 / 牛肉改成500克');
+    };
+
+    _fridgeVoiceRecognition.onspeechstart = () => {
+        showFridgeVoiceTip('🎤 已检测到语音，正在识别...');
+    };
+
+    _fridgeVoiceRecognition.onresult = (event) => {
+        let finalText = '';
+        let interimText = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript || '';
+            if (event.results[i].isFinal) {
+                finalText += transcript;
+            } else {
+                interimText += transcript;
+            }
+        }
+        if (interimText) {
+            showFridgeVoiceTip(`🎤 ${interimText}`);
+        }
+        if (finalText) {
+            showFridgeVoiceTip(`✅ 识别结果：${finalText}`, 2000);
+            // 优先调用后端 /parse_voice 接口解析，失败时降级为本地解析
+            (async () => {
+                let command = mapFridgeApiCommand(await parseVoiceViaApi(finalText, '食材'));
+                if (!command) {
+                    // 降级为本地解析
+                    command = parseFridgeVoiceCommand(finalText);
+                }
+                executeFridgeVoiceCommand(command);
+            })();
+        }
+    };
+
+    _fridgeVoiceRecognition.onerror = (event) => {
+        _fridgeVoiceRecording = false;
+        if (fab) fab.classList.remove('recording');
+        let errMsg = '语音识别失败';
+        if (event.error === 'no-speech') errMsg = '未检测到语音，请重试';
+        else if (event.error === 'not-allowed') errMsg = '麦克风权限被拒绝';
+        else if (event.error === 'aborted') errMsg = '';
+        if (errMsg) {
+            showToast(errMsg);
+            showFridgeVoiceTip(errMsg, 2000);
+        } else {
+            hideFridgeVoiceTip();
+        }
+    };
+
+    _fridgeVoiceRecognition.onend = () => {
+        _fridgeVoiceRecording = false;
+        if (fab) fab.classList.remove('recording');
+        // 延迟隐藏提示
+        setTimeout(() => hideFridgeVoiceTip(), 2000);
+    };
+
+    _fridgeVoiceRecognition.start();
+}
+
+// ============================================================
+// ====== 食记语音管理（浮动按钮） ======
+// ============================================================
+
+let _diaryVoiceRecognition = null;
+let _diaryVoiceRecording = false;
+
+// 语音播报（复用）
+function diaryVoiceSpeak(text) {
+    if ('speechSynthesis' in window) {
+        speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = 'zh-CN';
+        utter.rate = 1.0;
+        speechSynthesis.speak(utter);
+    }
+}
+
+// 显示/隐藏食记语音提示
+function showDiaryVoiceTip(text, duration) {
+    const tip = document.getElementById('diaryVoiceTip');
+    if (!tip) return;
+    tip.textContent = text;
+    tip.classList.add('show');
+    if (duration) setTimeout(() => tip.classList.remove('show'), duration);
+}
+function hideDiaryVoiceTip() {
+    const tip = document.getElementById('diaryVoiceTip');
+    if (tip) tip.classList.remove('show');
+}
+
+// 从语音文本中解析日期
+function parseDateFromText(text) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    if (/今天|今日/.test(text)) return new Date(today);
+    if (/明天|明日/.test(text)) { const d = new Date(today); d.setDate(d.getDate()+1); return d; }
+    if (/昨天/.test(text)) { const d = new Date(today); d.setDate(d.getDate()-1); return d; }
+    if (/后天/.test(text)) { const d = new Date(today); d.setDate(d.getDate()+2); return d; }
+    if (/大后天/.test(text)) { const d = new Date(today); d.setDate(d.getDate()+3); return d; }
+    // 没有明确日期，用当前食记选中日期
+    return new Date(currentDiaryDate);
+}
+
+// 从语音文本中解析餐次
+function parseMealFromText(text) {
+    if (/早餐|早饭|早上/.test(text)) return 'breakfast';
+    if (/午餐|午饭|中午/.test(text)) return 'lunch';
+    if (/晚餐|晚饭|晚上/.test(text)) return 'dinner';
+    return null;
+}
+
+// 从语音文本中提取菜品名称
+function extractDishName(text) {
+    let name = text
+        .replace(/(明天|今日|今天|昨天|后天|大后天|早餐|早饭|早上|午餐|午饭|中午|晚餐|晚饭|晚上|加个|加一道|加|改成|换成|改为|替换成|替换|删掉|删除|去掉|移除|不要了|清空|确认|记录|吃了|吃|的|，|,|。|！|！|好吃|不好吃|味道不错|很香|不错|赞|棒)/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    // 去掉常见量词和修饰词
+    name = name.replace(/(一个|一道|一份|一些|点|些)/g, '').trim();
+    return name;
+}
+
+// 解析食记语音指令
+function parseDiaryVoiceCommand(text) {
+    if (!text || !text.trim()) return null;
+    const t = text.trim();
+
+    // 6. 记录实际 - "今天午餐吃了红烧肉，好吃"
+    let m = t.match(/(.+?)吃了(.+)/);
+    if (m) {
+        const date = parseDateFromText(m[1]);
+        const meal = parseMealFromText(m[1]);
+        const dishAndComment = m[2].split(/[,，]/);
+        const dishName = extractDishName(dishAndComment[0]);
+        const comment = dishAndComment.slice(1).join(',').trim() || '';
+        if (dishName && meal) {
+            return { action: 'record_actual', date, meal, dishName, comment };
+        }
+    }
+
+    // 5. 确认计划 - "确认明天的午餐"
+    m = t.match(/确认(.+)/);
+    if (m) {
+        const date = parseDateFromText(m[1]);
+        const meal = parseMealFromText(m[1]);
+        if (meal) {
+            return { action: 'confirm_plan', date, meal };
+        }
+    }
+
+    // 4. 清空餐次 - "明天午餐不要了"
+    m = t.match(/(.+?)(不要了|清空|取消|去掉)/);
+    if (m) {
+        const date = parseDateFromText(m[1]);
+        const meal = parseMealFromText(m[1]);
+        if (meal) {
+            return { action: 'clear_meal', date, meal };
+        }
+    }
+
+    // 3. 删除菜谱 - "删掉明天早餐的鸡蛋"
+    m = t.match(/(?:删掉|删除|去掉|移除)(.+?)的(.+)/);
+    if (m) {
+        const date = parseDateFromText(m[1]);
+        const meal = parseMealFromText(m[1]);
+        const dishName = extractDishName(m[2]);
+        if (meal && dishName) {
+            return { action: 'delete_dish', date, meal, dishName };
+        }
+    }
+
+    // 2. 替换菜谱 - "明天午餐改成番茄炒蛋"
+    m = t.match(/(.+?)(?:改成|换成|改为|替换成)(.+)/);
+    if (m) {
+        const date = parseDateFromText(m[1]);
+        const meal = parseMealFromText(m[1]);
+        const dishName = extractDishName(m[2]);
+        if (meal && dishName) {
+            return { action: 'replace_meal', date, meal, dishName };
+        }
+    }
+
+    // 1. 增加菜谱 - "明天晚餐加个紫菜蛋花汤"
+    m = t.match(/(.+?)(?:加个|加一道|加一份|加)(.+)/);
+    if (m) {
+        const date = parseDateFromText(m[1]);
+        const meal = parseMealFromText(m[1]);
+        const dishName = extractDishName(m[2]);
+        if (meal && dishName) {
+            return { action: 'add_dish', date, meal, dishName };
+        }
+    }
+
+    return null;
+}
+
+// 执行食记语音指令
+function executeDiaryVoiceCommand(command) {
+    if (!command) {
+        showDiaryVoiceTip('未识别到有效指令，请重试', 3000);
+        diaryVoiceSpeak('未识别到有效指令');
+        return;
+    }
+
+    const dateKey = dateToKey(command.date);
+    const mealLabel = getMealLabel(command.meal);
+
+    switch (command.action) {
+        case 'add_dish': {
+            const data = getMealData(dateKey, command.meal);
+            const existingDishes = (data.plan && data.plan.dishes) ? data.plan.dishes : [];
+            if (existingDishes.includes(command.dishName)) {
+                showToast(`⚠️ ${command.dishName}已在${mealLabel}计划中`);
+                diaryVoiceSpeak(`${command.dishName}已在${mealLabel}计划中`);
+                return;
+            }
+            const merged = [...existingDishes, command.dishName];
+            const planData = { dishes: merged, note: '' };
+            // 保留已有dishMeta
+            if (data.plan && data.plan.dishMeta) planData.dishMeta = data.plan.dishMeta;
+            updateMealPlan(dateKey, command.meal, planData);
+            // 切换到对应日期并刷新
+            currentDiaryDate = new Date(command.date);
+            renderDiary();
+            const msg = `✅ 已在${mealLabel}添加：${command.dishName}`;
+            showToast(msg);
+            diaryVoiceSpeak(`已在${mealLabel}添加${command.dishName}`);
+            break;
+        }
+
+        case 'replace_meal': {
+            const planData = { dishes: [command.dishName], note: '' };
+            updateMealPlan(dateKey, command.meal, planData);
+            currentDiaryDate = new Date(command.date);
+            renderDiary();
+            const msg = `✅ ${mealLabel}已替换为：${command.dishName}`;
+            showToast(msg);
+            diaryVoiceSpeak(`${mealLabel}已替换为${command.dishName}`);
+            break;
+        }
+
+        case 'delete_dish': {
+            const data = getMealData(dateKey, command.meal);
+            if (!data.plan || !data.plan.dishes || data.plan.dishes.length === 0) {
+                showToast(`${mealLabel}暂无计划`);
+                diaryVoiceSpeak(`${mealLabel}暂无计划`);
+                return;
+            }
+            // 模糊匹配菜品名
+            const dishIndex = data.plan.dishes.findIndex(d =>
+                d === command.dishName || d.includes(command.dishName) || command.dishName.includes(d)
+            );
+            if (dishIndex === -1) {
+                showToast(`未在${mealLabel}找到：${command.dishName}`);
+                diaryVoiceSpeak(`未在${mealLabel}找到${command.dishName}`);
+                return;
+            }
+            const removedName = data.plan.dishes[dishIndex];
+            data.plan.dishes.splice(dishIndex, 1);
+            // 同步删除dishMeta
+            if (data.plan.dishMeta) {
+                delete data.plan.dishMeta[removedName];
+            }
+            updateMealPlan(dateKey, command.meal, data.plan);
+            currentDiaryDate = new Date(command.date);
+            renderDiary();
+            const msg = `✅ 已从${mealLabel}删除：${removedName}`;
+            showToast(msg);
+            diaryVoiceSpeak(`已从${mealLabel}删除${removedName}`);
+            break;
+        }
+
+        case 'clear_meal': {
+            const calendar = getDietCalendar();
+            if (calendar[dateKey] && calendar[dateKey][command.meal]) {
+                calendar[dateKey][command.meal].plan = null;
+                saveDietCalendar(calendar);
+            }
+            currentDiaryDate = new Date(command.date);
+            renderDiary();
+            const msg = `✅ ${mealLabel}计划已清空`;
+            showToast(msg);
+            diaryVoiceSpeak(`${mealLabel}计划已清空`);
+            break;
+        }
+
+        case 'confirm_plan': {
+            const data = getMealData(dateKey, command.meal);
+            if (!data.plan || !data.plan.dishes || data.plan.dishes.length === 0) {
+                showToast(`${mealLabel}暂无计划，无法确认`);
+                diaryVoiceSpeak(`${mealLabel}暂无计划，无法确认`);
+                return;
+            }
+            if (data.actual && data.actual.dishes && data.actual.dishes.length > 0) {
+                showToast(`${mealLabel}已有记录，无需确认`);
+                diaryVoiceSpeak(`${mealLabel}已有记录，无需确认`);
+                return;
+            }
+            data.plan.confirmed = true;
+            data.plan.state = 'confirmed';
+            data.plan.confirmTime = new Date().toISOString();
+            updateMealPlan(dateKey, command.meal, data.plan);
+            currentDiaryDate = new Date(command.date);
+            renderDiary();
+            const msg = `✅ ${mealLabel}计划已确认`;
+            showToast(msg);
+            diaryVoiceSpeak(`${mealLabel}计划已确认`);
+            break;
+        }
+
+        case 'record_actual': {
+            const solarTerm = getSolarTermForDate(command.date);
+            const actualData = {
+                dishes: [{
+                    id: Date.now() + Math.random(),
+                    name: command.dishName,
+                    userComment: command.comment,
+                    aiFeedback: ''
+                }],
+                overallComment: command.comment,
+                diningType: '在家做饭',
+                solarTerm: solarTerm.name,
+                photos: []
+            };
+            // 生成AI复盘
+            if (command.comment) {
+                actualData.dishes[0].aiFeedback = generateMealRecordFeedback({
+                    dishName: command.dishName,
+                    userComment: command.comment,
+                    solarTerm: solarTerm.name,
+                    diningType: '在家做饭'
+                });
+            }
+            updateMealActual(dateKey, command.meal, actualData);
+            currentDiaryDate = new Date(command.date);
+            renderDiary();
+            const hasFeedback = actualData.dishes.some(d => d.aiFeedback);
+            const msg = `✅ 已记录${mealLabel}：${command.dishName}` + (hasFeedback ? '，AI复盘已生成' : '');
+            showToast(msg);
+            diaryVoiceSpeak(`已记录${mealLabel}：${command.dishName}` + (hasFeedback ? '，AI复盘已生成' : ''));
+            break;
+        }
+
+        default:
+            showDiaryVoiceTip('未识别到有效指令', 3000);
+            diaryVoiceSpeak('未识别到有效指令');
+    }
+}
+
+// 启动/停止食记语音管理
+function startDiaryVoiceManagement() {
+    if (_diaryVoiceRecording && _diaryVoiceRecognition) {
+        _diaryVoiceRecognition.stop();
+        return;
+    }
+
+    const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    if (!isSecure) {
+        showToast('语音识别需要 HTTPS 或 localhost 环境');
+        return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        showToast('当前浏览器不支持语音识别，请使用 Chrome 或 Edge');
+        return;
+    }
+
+    const fab = document.getElementById('diaryVoiceFab');
+    _diaryVoiceRecognition = new SpeechRecognition();
+    _diaryVoiceRecognition.lang = 'zh-CN';
+    _diaryVoiceRecognition.continuous = false;
+    _diaryVoiceRecognition.interimResults = true;
+    _diaryVoiceRecognition.maxAlternatives = 1;
+
+    _diaryVoiceRecognition.onstart = () => {
+        _diaryVoiceRecording = true;
+        if (fab) fab.classList.add('recording');
+        showDiaryVoiceTip('🎤 正在听，请说出食谱指令...\n如：明天晚餐加个紫菜蛋花汤 / 确认明天的午餐 / 今天午餐吃了红烧肉好吃');
+    };
+
+    _diaryVoiceRecognition.onspeechstart = () => {
+        showDiaryVoiceTip('🎤 已检测到语音，正在识别...');
+    };
+
+    _diaryVoiceRecognition.onresult = (event) => {
+        let finalText = '';
+        let interimText = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript || '';
+            if (event.results[i].isFinal) {
+                finalText += transcript;
+            } else {
+                interimText += transcript;
+            }
+        }
+        if (interimText) {
+            showDiaryVoiceTip(`🎤 ${interimText}`);
+        }
+        if (finalText) {
+            showDiaryVoiceTip(`✅ 识别结果：${finalText}`, 2000);
+            // 优先调用后端 /parse_voice 接口解析，失败时降级为本地解析
+            (async () => {
+                let command = mapDiaryApiCommand(await parseVoiceViaApi(finalText, '食记'));
+                if (!command) {
+                    // 降级为本地解析
+                    command = parseDiaryVoiceCommand(finalText);
+                }
+                executeDiaryVoiceCommand(command);
+            })();
+        }
+    };
+
+    _diaryVoiceRecognition.onerror = (event) => {
+        _diaryVoiceRecording = false;
+        if (fab) fab.classList.remove('recording');
+        let errMsg = '语音识别失败';
+        if (event.error === 'no-speech') errMsg = '未检测到语音，请重试';
+        else if (event.error === 'not-allowed') errMsg = '麦克风权限被拒绝';
+        else if (event.error === 'aborted') errMsg = '';
+        if (errMsg) {
+            showToast(errMsg);
+            showDiaryVoiceTip(errMsg, 2000);
+        } else {
+            hideDiaryVoiceTip();
+        }
+    };
+
+    _diaryVoiceRecognition.onend = () => {
+        _diaryVoiceRecording = false;
+        if (fab) fab.classList.remove('recording');
+        setTimeout(() => hideDiaryVoiceTip(), 2000);
+    };
+
+    _diaryVoiceRecognition.start();
+}
+
 function generateFridgeMealPlan() {
     fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
     if (fridgeItems.length === 0) { showToast('冰箱是空的，先添加食材吧'); return; }
@@ -6766,6 +7865,30 @@ document.addEventListener('DOMContentLoaded', function() {
         if (_confirmNoCallback) _confirmNoCallback();
         _confirmYesCallback = null; _confirmNoCallback = null;
     };
+});
+
+// ==================== 采购计划：输入弹窗事件绑定 ====================
+document.addEventListener('DOMContentLoaded', function() {
+    const inputOverlay = document.getElementById('recShopInputOverlay');
+    const inputConfirm = document.getElementById('recShopInputConfirm');
+    const inputCancel = document.getElementById('recShopInputCancel');
+    const inputField = document.getElementById('recShopInputName');
+    if (inputConfirm) inputConfirm.onclick = function() {
+        if (inputOverlay) inputOverlay.classList.remove('show');
+        if (_recShopInputCallback) _recShopInputCallback();
+        _recShopInputCallback = null;
+    };
+    if (inputCancel) inputCancel.onclick = function() {
+        if (inputOverlay) inputOverlay.classList.remove('show');
+        _recShopInputCallback = null;
+    };
+    if (inputField) inputField.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            if (inputOverlay) inputOverlay.classList.remove('show');
+            if (_recShopInputCallback) _recShopInputCallback();
+            _recShopInputCallback = null;
+        }
+    });
 });
 
 // ==================== 标记已用完 ====================
@@ -14961,165 +16084,11 @@ function removeKnowledgeImage(idx) {
     showToast('图片已删除');
 }
 
-// ====== 批量导入功能 ======
-let batchParsedItems = [];
-
-function onBatchMainCategoryChange() {
-    const mainCat = document.getElementById('batchMainCategory').value;
-    const subSel = document.getElementById('batchSubCategory');
-    const subs = SUB_CATEGORY_MAP[mainCat] || [];
-    let html = '<option value="">请选择子分类（可选）</option>';
-    subs.forEach(s => { html += `<option value="${s}">${s}</option>`; });
-    subSel.innerHTML = html;
-}
-
-// 网文链接分类联动
-function onWebLinkCategoryChange() {
-    const mainCat = document.getElementById('webLinkMainCategory').value;
-    const subSel = document.getElementById('webLinkSubCategory');
-    const subs = SUB_CATEGORY_MAP[mainCat] || [];
-    let html = '<option value="">请选择子分类</option>';
-    subs.forEach(s => { html += `<option value="${s}">${s}</option>`; });
-    subSel.innerHTML = html;
-}
-
-// 视频链接分类联动
-function onVideoLinkCategoryChange() {
-    const mainCat = document.getElementById('videoLinkMainCategory').value;
-    const subSel = document.getElementById('videoLinkSubCategory');
-    const subs = SUB_CATEGORY_MAP[mainCat] || [];
-    let html = '<option value="">请选择子分类</option>';
-    subs.forEach(s => { html += `<option value="${s}">${s}</option>`; });
-    subSel.innerHTML = html;
-}
-
-function loadBatchSample() {
-    const sample = [
-        { title: '绿豆的功效与做法', content: '绿豆性凉味甘，有清热解毒、消暑利水之功效。夏季常食绿豆汤可预防中暑。', tags: ['清热', '夏季', '主食'], subCategory: '主粮' },
-        { title: '苦瓜的食用价值', content: '苦瓜含有苦瓜甙和苦味素，能增进食欲、健脾开胃。苦瓜性寒，脾胃虚寒者不宜多食。', tags: ['清热', '蔬菜'], subCategory: '蔬菜' },
-        { title: '西瓜的养生知识', content: '西瓜又称"天生白虎汤"，是夏令消暑佳品。西瓜性寒，不宜过量食用，尤其空腹不宜吃太多。', tags: ['消暑', '水果'] }
-    ];
-    document.getElementById('batchJsonInput').value = JSON.stringify(sample, null, 2);
-    showToast('已加载示例数据，点击"预览"查看');
-}
-
-function previewBatchImport() {
-    const jsonStr = document.getElementById('batchJsonInput').value.trim();
-    if (!jsonStr) { showToast('请粘贴 JSON 数据'); return; }
-
-    try {
-        let items = JSON.parse(jsonStr);
-        if (!Array.isArray(items)) items = [items];
-
-        const mainCat = document.getElementById('batchMainCategory').value;
-        const subCat = document.getElementById('batchSubCategory').value;
-        const globalSource = document.getElementById('batchSource').value.trim();
-
-        // 验证并规范化
-        batchParsedItems = items.map((item, idx) => {
-            if (!item.title || !item.content) {
-                return { valid: false, index: idx + 1, title: item.title || '(无标题)', error: '缺少 title 或 content' };
-            }
-            return {
-                valid: true,
-                index: idx + 1,
-                title: item.title,
-                content: item.content,
-                tags: item.tags || [],
-                sceneTags: [],
-                mainCategory: mainCat,
-                subCategory: item.subCategory || subCat || null,
-                source: item.source || globalSource || '批量导入'
-            };
-        });
-
-        const invalidCount = batchParsedItems.filter(i => !i.valid).length;
-        const validItems = batchParsedItems.filter(i => i.valid);
-
-        // 渲染预览
-        const previewEl = document.getElementById('batchPreview');
-        const listEl = document.getElementById('batchPreviewList');
-        const countEl = document.getElementById('batchPreviewCount');
-
-        countEl.textContent = validItems.length + ' 条' + (invalidCount > 0 ? '，' + invalidCount + ' 条无效' : '');
-
-        let html = '';
-        batchParsedItems.forEach(item => {
-            if (item.valid) {
-                html += `<div style="padding:6px 0;border-bottom:1px solid #F3F4F6;font-size:12px;">
-                    <div style="font-weight:600;color:#374151;">${item.index}. ${escapeHtml(item.title)}</div>
-                    <div style="color:#6B7280;margin-top:2px;max-height:30px;overflow:hidden;">${escapeHtml(item.content.substring(0, 80))}${item.content.length > 80 ? '...' : ''}</div>
-                    <div style="color:#9CA3AF;margin-top:2px;">${item.subCategory ? '分类: ' + item.subCategory : ''} ${item.source ? '| 来源: ' + item.source : ''}</div>
-                </div>`;
-            } else {
-                html += `<div style="padding:6px 0;border-bottom:1px solid #F3F4F6;font-size:12px;color:#EF4444;">
-                    ⚠️ 第${item.index}条无效：${item.error}
-                </div>`;
-            }
-        });
-        listEl.innerHTML = html;
-        previewEl.style.display = validItems.length > 0 ? 'block' : 'none';
-
-        if (validItems.length === 0) showToast('没有有效的知识条目');
-    } catch (e) {
-        showToast('JSON 格式错误，请检查数据格式');
-    }
-}
-
-function executeBatchImport() {
-    const validItems = batchParsedItems.filter(i => i.valid);
-    if (validItems.length === 0) { showToast('没有可导入的数据'); return; }
-
-    const catMap = { ingredient: 'ingredient', recipe: 'recipe', solar: 'solar', 'food-therapy': 'food-therapy', symptom: 'food-therapy' };
-
-    validItems.forEach(item => {
-        const newItem = {
-            id: nextKnowledgeId++,
-            type: catMap[item.mainCategory] || 'ingredient',
-            title: item.title,
-            content: item.content,
-            source: item.source || '批量导入',
-            cuisine: '',
-            ingredient: '',
-            method: '',
-            occasion: '',
-            efficacy: '',
-            difficulty: '',
-            cookingTime: '',
-            tags: item.tags || [],
-            sceneTags: [],
-            createdAt: Date.now(),
-            sourceType: 'batch',
-            sourceUrl: '',
-            mainCategory: item.mainCategory,
-            subCategory: item.subCategory || null,
-            visibility: document.getElementById('newKnowledgeVisibility') ? document.getElementById('newKnowledgeVisibility').value : 'public'
-        };
-        dietKnowledge.unshift(newItem);
-    });
-
-    saveDietKnowledge();
-    updateVisibilityCounts();
-    batchParsedItems = [];
-    document.getElementById('batchPreview').style.display = 'none';
-    closeAddKnowledgeModal();
-    renderDietKnowledge();
-    showToast('成功导入 ' + validItems.length + ' 条知识！');
-}
-
 function openAddKnowledgeModal() {
     const overlay = document.getElementById('knowledgeModalOverlay');
     if (overlay) overlay.classList.add('show');
     // 初始化子分类下拉
     onMainCategoryChange();
-    onBatchMainCategoryChange();
-    // 初始化网文链接和视频链接的分类下拉
-    // 如果当前在某个分类页面，预选该分类
-    const presetCat = currentKnowledgeMainCategory || 'ingredient';
-    const webLinkMain = document.getElementById('webLinkMainCategory');
-    const videoLinkMain = document.getElementById('videoLinkMainCategory');
-    if (webLinkMain) { webLinkMain.value = presetCat; onWebLinkCategoryChange(); }
-    if (videoLinkMain) { videoLinkMain.value = presetCat; onVideoLinkCategoryChange(); }
     // 初始化场景标签按钮
     initSceneTags();
     // 初始化常用标签按钮
@@ -15218,22 +16187,12 @@ function closeAddKnowledgeModal() {
     if (overlay) overlay.classList.remove('show');
     // 清空表单
     const fields = ['newKnowledgeTitle','newKnowledgeContent','newKnowledgeSource',
-                    'newKnowledgeMainCategory','newKnowledgeSubCategory','newKnowledgeTags',
-                    'batchJsonInput','batchSource',
-                    'webLinkInput','webLinkTitle','webLinkContent',
-                    'videoLinkInput','videoLinkTitle','videoLinkContent'];
+                    'newKnowledgeMainCategory','newKnowledgeSubCategory','newKnowledgeTags'];
     fields.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
     });
     onMainCategoryChange();
-    onBatchMainCategoryChange();
-    onWebLinkCategoryChange();
-    onVideoLinkCategoryChange();
-    // 清空批量预览
-    batchParsedItems = [];
-    const previewEl = document.getElementById('batchPreview');
-    if (previewEl) previewEl.style.display = 'none';
     window._knowledgeImage = null;
     window._knowledgeImages = [];
     // 清除图片预览
@@ -15251,172 +16210,11 @@ function closeAddKnowledgeModal() {
     });
 }
 
-// ---- 知识来源Tab切换逻辑 ----
-(function() {
-    const sourceTabs = document.getElementById('knowledgeSourceTabs');
-    const forms = {
-        manual: document.getElementById('sourceManual'),
-        web_link: document.getElementById('sourceWebLink'),
-        video_link: document.getElementById('sourceVideoLink'),
-        batch: document.getElementById('sourceBatch')
-    };
-
-    if (!sourceTabs) return;
-
-    sourceTabs.addEventListener('click', function(e) {
-        const tab = e.target.closest('.knowledge-source-tab');
-        if (!tab) return;
-        const source = tab.dataset.source;
-        // 切换Tab高亮
-        sourceTabs.querySelectorAll('.knowledge-source-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        // 切换表单显示
-        Object.keys(forms).forEach(key => {
-            if (forms[key]) forms[key].classList.toggle('active', key === source);
-        });
-    });
-
-    // 网文链接解析按钮
-    var webParseBtn = document.getElementById('webLinkParseBtn');
-    if (webParseBtn) {
-        webParseBtn.addEventListener('click', async function() {
-            var linkInput = document.getElementById('webLinkInput');
-            if (!linkInput.value.trim()) { showToast('请输入链接'); return; }
-            webParseBtn.textContent = '解析中...';
-            webParseBtn.disabled = true;
-            try {
-                // 尝试fetch网页获取og:image
-                var ogImage = '';
-                try {
-                    var resp = await fetch(linkInput.value.trim(), { mode: 'cors' });
-                    if (resp.ok) {
-                        var html = await resp.text();
-                        var match = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i);
-                        if (match) ogImage = match[1];
-                        if (!ogImage) {
-                            match = html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
-                            if (match) ogImage = match[1];
-                        }
-                    }
-                } catch(e) {
-                    // CORS阻止，无法自动抓取图片
-                }
-                if (ogImage) {
-                    // 尝试将图片转为base64
-                    try {
-                        var imgResp = await fetch(ogImage, { mode: 'cors' });
-                        if (imgResp.ok) {
-                            var imgBlob = await imgResp.blob();
-                            ogImage = await new Promise(function(resolve) {
-                                var reader = new FileReader();
-                                reader.onloadend = function() { resolve(reader.result); };
-                                reader.readAsDataURL(imgBlob);
-                            });
-                        }
-                    } catch(e2) {
-                        ogImage = '';
-                    }
-                }
-                document.getElementById('webLinkTitle').value = '夏季养生饮食指南';
-                document.getElementById('webLinkContent').value = '夏季天气炎热，应以清淡、易消化的食物为主。推荐食用绿豆汤、冬瓜汤等清热解暑的食品，多食时令蔬菜水果，少食辛辣油腻。';
-                if (ogImage) {
-                    window._knowledgeImage = ogImage;
-                    showToast('解析完成，已自动抓取封面图');
-                } else {
-                    window._knowledgeImage = '';
-                    showToast('解析完成（封面图未能自动获取，可手动上传）');
-                }
-            } catch(e) {
-                document.getElementById('webLinkTitle').value = '夏季养生饮食指南';
-                document.getElementById('webLinkContent').value = '夏季天气炎热，应以清淡、易消化的食物为主。推荐食用绿豆汤、冬瓜汤等清热解暑的食品，多食时令蔬菜水果，少食辛辣油腻。';
-                showToast('解析完成');
-            }
-            webParseBtn.textContent = '🔗 解析';
-            webParseBtn.disabled = false;
-        });
-    }
-
-    // 视频链接解析按钮
-    var videoParseBtn = document.getElementById('videoLinkParseBtn');
-    if (videoParseBtn) {
-        videoParseBtn.addEventListener('click', async function() {
-            var linkInput = document.getElementById('videoLinkInput');
-            if (!linkInput.value.trim()) { showToast('请输入链接'); return; }
-            videoParseBtn.textContent = '解析中...';
-            videoParseBtn.disabled = true;
-            try {
-                var ogImage = '';
-                try {
-                    var resp = await fetch(linkInput.value.trim(), { mode: 'cors' });
-                    if (resp.ok) {
-                        var html = await resp.text();
-                        var match = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i);
-                        if (match) ogImage = match[1];
-                        if (!ogImage) {
-                            match = html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
-                            if (match) ogImage = match[1];
-                        }
-                    }
-                } catch(e) {
-                    // CORS阻止
-                }
-                if (ogImage) {
-                    try {
-                        var imgResp = await fetch(ogImage, { mode: 'cors' });
-                        if (imgResp.ok) {
-                            var imgBlob = await imgResp.blob();
-                            ogImage = await new Promise(function(resolve) {
-                                var reader = new FileReader();
-                                reader.onloadend = function() { resolve(reader.result); };
-                                reader.readAsDataURL(imgBlob);
-                            });
-                        }
-                    } catch(e2) {
-                        ogImage = '';
-                    }
-                }
-                document.getElementById('videoLinkTitle').value = '三伏天食疗养生方法';
-                document.getElementById('videoLinkContent').value = '三伏天是一年中最热的时期，中医认为此时应"冬病夏治"。可适当食用生姜、羊肉等温性食物驱寒，同时配合清热解暑的绿豆、莲子等食材。';
-                if (ogImage) {
-                    window._knowledgeImage = ogImage;
-                    showToast('解析完成，已自动抓取封面图');
-                } else {
-                    window._knowledgeImage = '';
-                    showToast('解析完成（封面图未能自动获取，可手动上传）');
-                }
-            } catch(e) {
-                document.getElementById('videoLinkTitle').value = '三伏天食疗养生方法';
-                document.getElementById('videoLinkContent').value = '三伏天是一年中最热的时期，中医认为此时应"冬病夏治"。可适当食用生姜、羊肉等温性食物驱寒，同时配合清热解暑的绿豆、莲子等食材。';
-                showToast('解析完成');
-            }
-            videoParseBtn.textContent = '🔗 解析';
-            videoParseBtn.disabled = false;
-        });
-    }
-})();
+// ---- 知识来源Tab切换逻辑（仅手动录入，无需切换） ----
 
 function saveNewKnowledge() {
-    // 确定当前来源类型
-    const activeTab = document.querySelector('#knowledgeSourceTabs .knowledge-source-tab.active');
-    const currentSource = activeTab ? activeTab.dataset.source : 'manual';
-
-    let title = '';
-    let content = '';
-    let sourceUrl = '';
-
-    if (currentSource === 'manual') {
-        title = document.getElementById('newKnowledgeTitle').value.trim();
-        content = document.getElementById('newKnowledgeContent').value.trim();
-        sourceUrl = '';
-    } else if (currentSource === 'web_link') {
-        title = document.getElementById('webLinkTitle').value.trim();
-        content = document.getElementById('webLinkContent').value.trim();
-        sourceUrl = document.getElementById('webLinkInput').value.trim();
-    } else if (currentSource === 'video_link') {
-        title = document.getElementById('videoLinkTitle').value.trim();
-        content = document.getElementById('videoLinkContent').value.trim();
-        sourceUrl = document.getElementById('videoLinkInput').value.trim();
-    }
+    const title = document.getElementById('newKnowledgeTitle').value.trim();
+    const content = document.getElementById('newKnowledgeContent').value.trim();
 
     if (!title) {
         showToast('请输入标题');
@@ -15427,27 +16225,14 @@ function saveNewKnowledge() {
         return;
     }
 
-    // 根据来源类型获取分类
-    let mainCat, subCat;
-    if (currentSource === 'manual') {
-        mainCat = document.getElementById('newKnowledgeMainCategory').value;
-        subCat = document.getElementById('newKnowledgeSubCategory').value || null;
-    } else if (currentSource === 'web_link') {
-        mainCat = document.getElementById('webLinkMainCategory').value;
-        subCat = document.getElementById('webLinkSubCategory').value || null;
-    } else if (currentSource === 'video_link') {
-        mainCat = document.getElementById('videoLinkMainCategory').value;
-        subCat = document.getElementById('videoLinkSubCategory').value || null;
-    } else {
-        mainCat = currentKnowledgeMainCategory || 'ingredient';
-        subCat = currentKnowledgeSubCategory || null;
-    }
+    const mainCat = document.getElementById('newKnowledgeMainCategory').value;
+    const subCat = document.getElementById('newKnowledgeSubCategory').value || null;
     const images = window._knowledgeImages || (window._knowledgeImage ? [window._knowledgeImage] : []);
     const newItem = {
         id: nextKnowledgeId++,
         type: mainCat === 'recipe' ? 'recipe' : (mainCat === 'solar' ? 'solar' : (mainCat === 'food-therapy' ? 'food-therapy' : (mainCat === 'symptom' ? 'food-therapy' : (mainCat === 'cooking' ? 'article' : 'ingredient')))),
         title: title,
-        source: currentSource === 'manual' ? (document.getElementById('newKnowledgeSource').value.trim() || '用户添加') : '',
+        source: document.getElementById('newKnowledgeSource').value.trim() || '用户添加',
         content: content || '[图片]',
         image: images[0] || '',
         images: images,
@@ -15458,11 +16243,11 @@ function saveNewKnowledge() {
         efficacy: '',
         difficulty: '',
         cookingTime: '',
-        tags: currentSource === 'manual' ? document.getElementById('newKnowledgeTags').value.split(/[、,，]/).map(s => s.trim()).filter(Boolean) : [],
-        sceneTags: currentSource === 'manual' ? (document.getElementById('newKnowledgeSceneTags').value || '').split(',').filter(Boolean) : [],
+        tags: document.getElementById('newKnowledgeTags').value.split(/[、,，]/).map(s => s.trim()).filter(Boolean),
+        sceneTags: (document.getElementById('newKnowledgeSceneTags').value || '').split(',').filter(Boolean),
         createdAt: Date.now(),
-        sourceType: currentSource,
-        sourceUrl: sourceUrl,
+        sourceType: 'manual',
+        sourceUrl: '',
         mainCategory: mainCat,
         subCategory: subCat,
         visibility: document.getElementById('newKnowledgeVisibility') ? document.getElementById('newKnowledgeVisibility').value : 'public'
@@ -16061,58 +16846,12 @@ function showKnowledgeAppliedNotice(termName) {
 
 // 多天推荐：一次性调用API生成未来N天食谱（避免多次调用导致频率限制）
 async function generateMultiDayRecommendation(days) {
-    const solarTerm = getSolarTermForDate(new Date());
-    const termGuide = SOLAR_TERM_GUIDE[solarTerm.name] || DEFAULT_TERM_GUIDE;
-    const termFoods = SOLAR_TERM_FOODS[solarTerm.name] || DEFAULT_SOLAR_FOODS;
-
-    // 采集五维信息（只采集一次）
-    // 维度②：使用食记中选择的就餐人（而非全部家庭成员）
-    const diningInfo = (typeof buildDiaryDiningInfoStr === 'function') ? buildDiaryDiningInfoStr() : null;
-    const familyInfo = diningInfo ? diningInfo.info : '';
-    const servings = diningInfo ? diningInfo.servings : 0;
-
-    const fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
-    const fridgeNames = fridgeItems.map(i => i.name + (i.quantity ? `(${i.quantity})` : '')).join('、');
-
-    const browseHistory = JSON.parse(localStorage.getItem('knowledgeBrowseHistory')) || [];
-    const favorited = dietKnowledge.filter(k => k.favorited);
-    const browsed = browseHistory.map(id => dietKnowledge.find(k => k.id === id)).filter(Boolean);
-    const knowledgeContext = [];
-    const seenIds = new Set();
-    [...favorited, ...browsed].forEach(k => {
-        if (!seenIds.has(k.id)) { seenIds.add(k.id); knowledgeContext.push(k); }
-    });
-    const topKnowledge = knowledgeContext.slice(0, 10);
-
-    // 历史记录
-    const calendar = getDietCalendar();
-    const today = new Date();
-    const history = [];
-    for (let i = 1; i <= 7; i++) {
-        const d = new Date(today); d.setDate(d.getDate() - i);
-        const key = dateToKey(d);
-        if (calendar[key]) history.push({ date: key, data: calendar[key] });
-    }
-    const historySummary = generateHistorySummary(history);
-
-    // 构建食知指南摘要
-    let guideSummary = `节气：${solarTerm.name}\n饮食原则：${termGuide.principle}\n`;
-    if (termGuide.meats) {
-        if (termGuide.meats.recommend) guideSummary += `推荐肉类：${termGuide.meats.recommend.map(m => m.name).join('、')}\n`;
-        if (termGuide.meats.limit) guideSummary += `少食肉类：${termGuide.meats.limit.map(m => m.name).join('、')}\n`;
-    }
-    if (termFoods.vegetables) guideSummary += `当季蔬菜：${termFoods.vegetables.map(v => v.name).join('、')}\n`;
-    if (termFoods.fruits) guideSummary += `当季水果：${termFoods.fruits.map(f => f.name).join('、')}\n`;
-
-    const knowledgeSummary = topKnowledge.map(k => {
-        let parts = [k.title];
-        if (k.ingredient) parts.push(`食材:${k.ingredient}`);
-        if (k.efficacy) parts.push(`功效:${k.efficacy}`);
-        if (k.content) parts.push(`内容:${k.content.substring(0, 80)}`);
-        return parts.join(' | ');
-    }).join('\n');
+    // ========== 九维数据收集 ==========
+    const recData = collectRecommendationData();
+    const solarTerm = recData.solarTerm;
 
     // 构建未来N天的日期列表
+    const today = new Date();
     const weekDates = [];
     const weekDateKeys = [];
     const weekDays = ['周日','周一','周二','周三','周四','周五','周六'];
@@ -16124,26 +16863,24 @@ async function generateMultiDayRecommendation(days) {
     }
     const weekDatesStr = weekDates.map(d => `${formatDateShort(d)}（${weekDays[d.getDay()]}）`).join('、');
 
-    // 构建系统提示词（五维融合，一次性生成全部天数）
-    const systemPrompt = '你是一个专业的家庭饮食顾问AI。请综合以下五个维度信息，生成一份合理的未来一周（7天）三餐推荐方案：\n'
-        + '① AI推理：你具备专业营养学和烹饪知识\n'
-        + '② 就餐人情况：家庭成员的口味、年龄、体质\n'
-        + '③ 饮食知识库：当季饮食指南（食知提供的节气饮食原则和食材推荐）\n'
-        + '④ 家中食材：已有食材清单，优先使用现有食材\n'
-        + '⑤ 历史记录：过去7天的饮食记录，避免重复菜品，关注偏好\n'
-        + '要求：推荐贴近家庭实际，优先使用家中现有食材，结合节气养生知识，避免与近7天记录重复。每天的三餐要有变化，一周内不要重复同样的菜品。特别注意：早餐、午餐、晚餐各自在7天内都必须有变化，绝对不能连续多天出现相同的早餐或其他餐次。';
+    // 构建结构化Prompt（九维融合）
+    const userMessage = buildRecommendationPrompt(recData, weekDatesStr);
 
-    let userMessage = `请为以下${days}天推荐三餐食谱：${weekDatesStr}。\n\n`;
-    userMessage += `【维度③ 食知-当季饮食指南】\n${guideSummary}\n`;
-    userMessage += `【维度④ 家中食材】${fridgeNames || '暂无'}\n`;
-    if (familyInfo) userMessage += `【维度② 就餐人情况】${familyInfo}\n`;
-    if (servings > 0) userMessage += `【用餐人数】${servings}人，请按此人数推荐菜品分量和食材用量\n`;
-    if (historySummary) userMessage += `【维度⑤ 历史记录（近7天）】\n${historySummary}\n`;
-    if (knowledgeSummary) userMessage += `【维度③ 食知-用户浏览/收藏知识】\n${knowledgeSummary}\n`;
-    userMessage += `\n请严格按照以下JSON格式返回推荐方案，不要添加任何其他文字。每一天包含早餐、午餐、晚餐的菜品列表（含食材用量）和推荐理由。\n**重要：每一道菜品都必须包含ingredients字段，列出该菜品所需的所有食材及其按用餐人数计算的用量，不可省略任何菜品的食材信息。**\n`;
-    userMessage += `{"days":[{"date":"日期","weekDay":"周几","meals":{"breakfast":{"dishes":[{"name":"菜品名","ingredients":[{"name":"食材名","quantity":2,"unit":"个"}]}],"reason":"推荐理由"},"lunch":{"dishes":[{"name":"菜品名","ingredients":[{"name":"食材名","quantity":300,"unit":"克"}]}],"reason":"推荐理由"},"dinner":{"dishes":[{"name":"菜品名","ingredients":[{"name":"食材名","quantity":1,"unit":"把"}]}],"reason":"推荐理由"}}}],"summary":"综合推荐说明"}`;
+    // 系统提示词（九维融合）
+    const systemPrompt = '你是"家肴记"的专业家庭饮食顾问AI。请综合九个维度的优先级信息，生成一份合理的未来一周（7天）三餐推荐方案。\n'
+        + '九个维度按优先级顺序：\n'
+        + '第1优先级：用户当前指令/约束\n'
+        + '第2优先级：历史对话中用户关心的内容\n'
+        + '第3优先级：当前就餐人员（人数、年龄、口味）\n'
+        + '第4优先级：家中已有食材（优先使用，特别关注即将过期的）\n'
+        + '第5优先级：家庭成员口味偏好/禁忌\n'
+        + '第6优先级：四季/时节因素（节气饮食原则）\n'
+        + '第7优先级：知识库内容（个人→家庭→公共）\n'
+        + '第8优先级：自家历史实际食谱（避免重复、强化偏好）\n'
+        + '第9优先级：AI综合推理（你的专业营养学和烹饪知识）\n\n'
+        + '要求：推荐贴近家庭实际，优先使用家中现有食材，结合节气养生知识，避免与近7天记录重复。每天三餐有变化，一周内不重复同样菜品。每道菜必须包含ingredients字段和推荐理由reason。';
 
-    showToast(`🤖 AI正在一次性生成${days}天食谱推荐...`);
+    showToast(`🤖 AI正在按九个维度生成${days}天食谱推荐...`);
 
     // 添加重试机制（最多3次）
     let aiResponse = null;
@@ -16177,9 +16914,9 @@ async function generateMultiDayRecommendation(days) {
                 const rawDishes = Array.isArray(meal.dishes) ? meal.dishes : [meal.dishes];
                 // 统一转为 {name, ingredients} 格式
                 const normalized = rawDishes.map(d => {
-                    if (typeof d === 'string') return { name: d, ingredients: null };
-                    if (d && d.name) return { name: d.name, ingredients: d.ingredients || null };
-                    return { name: String(d), ingredients: null };
+                    if (typeof d === 'string') return { name: d, ingredients: null, reason: '' };
+                    if (d && d.name) return { name: d.name, ingredients: d.ingredients || null, reason: d.reason || '' };
+                    return { name: String(d), ingredients: null, reason: '' };
                 });
                 const filtered = normalized.filter(d => !mealUsedDishes[mealType].has(d.name));
                 if (filtered.length === 0 && normalized.length > 0) {
@@ -16670,59 +17407,295 @@ function confirmAiRecommendation() {
 }
 
 // ============================================================
+// 九维数据收集 & Prompt构建
+// ============================================================
+
+/**
+ * 提取chatHistory中用户最近关心的关键词
+ * 维度2：历史对话中用户最近关心的内容
+ */
+function extractChatKeywords() {
+    const recent = chatHistory.slice(-10).filter(m => m.role === 'user').map(m => m.content);
+    if (recent.length === 0) return '';
+
+    // 菜名/食材关键词库（常见食材和菜品）
+    const foodKeywords = [
+        '牛肉','猪肉','鸡肉','鸭肉','鱼','虾','蟹','豆腐','鸡蛋','番茄','土豆','白菜',
+        '菠菜','芹菜','萝卜','莲藕','冬瓜','苦瓜','丝瓜','豆角','茄子','青椒','蘑菇',
+        '羊肉','排骨','面条','米饭','粥','饺子','包子','馒头','炒饭','汤','火锅',
+        '红烧','清蒸','煎','炒','炖','凉拌','麻辣','清淡','辣','甜','酸',
+        '减肥','养生','营养','补钙','补血','清热','暖胃','消食'
+    ];
+
+    const matched = [];
+    recent.forEach(text => {
+        foodKeywords.forEach(kw => {
+            if (text.includes(kw) && !matched.includes(kw)) {
+                matched.push(kw);
+            }
+        });
+    });
+
+    if (matched.length === 0) {
+        // 如果没有匹配到具体关键词，返回最近用户消息摘要
+        const lastMsg = recent[recent.length - 1];
+        if (lastMsg && lastMsg.length < 50) return lastMsg;
+        return '';
+    }
+    return matched.join('、');
+}
+
+/**
+ * 汇总家庭成员口味偏好和禁忌
+ * 维度5：家庭成员口味偏好/禁忌
+ */
+function aggregateFamilyTasteConstraints() {
+    const members = getDiaryDiningMembersInfo();
+    if (members.length === 0) return '';
+
+    const tastes = [];
+    const restrictions = new Set();
+    const healthConcerns = new Set();
+
+    members.forEach(m => {
+        if (m.taste && m.taste !== '无特殊偏好' && m.taste !== '未知') {
+            tastes.push(`${m.name}：${m.taste}`);
+        }
+        if (m.dietaryPreference && m.dietaryPreference !== '无特殊要求' && m.dietaryPreference !== '未知') {
+            // 提取忌口信息
+            const pref = m.dietaryPreference;
+            if (pref.includes('不吃') || pref.includes('忌口') || pref.includes('忌')) {
+                restrictions.add(pref);
+            }
+            tastes.push(`${m.name}偏好：${pref}`);
+        }
+        if (m.healthConcerns && m.healthConcerns !== '未知' && m.healthConcerns !== '无') {
+            healthConcerns.add(m.healthConcerns);
+        }
+    });
+
+    let result = '';
+    if (tastes.length > 0) result += `口味偏好：${tastes.join('；')}\n`;
+    if (restrictions.size > 0) result += `忌口：${[...restrictions].join('、')}\n`;
+    if (healthConcerns.size > 0) result += `健康关注：${[...healthConcerns].join('、')}\n`;
+    return result;
+}
+
+/**
+ * 收集家中食材信息，标注即将过期的
+ * 维度4：家中已有食材
+ */
+function collectFridgeItemsInfo() {
+    const items = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    if (items.length === 0) return { list: '', expiring: '' };
+
+    const categoryMap = {};
+    const expiring = [];
+
+    items.forEach(item => {
+        const cat = item.category || '其他';
+        if (!categoryMap[cat]) categoryMap[cat] = [];
+        categoryMap[cat].push(`${item.name}(${item.quantity || '适量'})`);
+
+        // 检查是否3天内过期
+        if (item.expiryDate) {
+            const days = daysUntilExpiry(item.expiryDate);
+            if (days <= 3 && days >= 0) {
+                expiring.push(`${item.name}(${days === 0 ? '今天' : days + '天后'}过期)`);
+            }
+        }
+    });
+
+    let list = '';
+    Object.entries(categoryMap).forEach(([cat, items]) => {
+        list += `${cat}：${items.join('、')}\n`;
+    });
+
+    return {
+        list: list.trim(),
+        expiring: expiring.length > 0 ? expiring.join('、') : ''
+    };
+}
+
+/**
+ * 获取知识库相关条目
+ * 维度7：知识库内容（个人 → 家庭 → 公共）
+ */
+function collectKnowledgeContext() {
+    const solarTerm = getSolarTermForDate(new Date());
+    const results = [];
+
+    // 按可见性优先级排序：个人 → 家庭 → 公共
+    const sorted = [...dietKnowledge].sort((a, b) => {
+        const order = { 'private': 0, 'family': 1, 'public': 2 };
+        return (order[a.visibility] || 2) - (order[b.visibility] || 2);
+    });
+
+    // 筛选与当前季节/节气/食材相关的条目
+    sorted.forEach(k => {
+        if (results.length >= 5) return;
+        const text = (k.title + ' ' + (k.content || '') + ' ' + (k.tags || []).join(' ') + ' ' + (k.ingredient || '')).toLowerCase();
+        const matchSolar = solarTerm && (text.includes(solarTerm.name) || text.includes(solarTerm.season));
+        const matchFridge = fridgeItems.some(f => text.includes(f.name.toLowerCase()));
+        if (matchSolar || matchFridge || k.favorited) {
+            results.push({
+                title: k.title,
+                content: k.content ? k.content.substring(0, 100) : '',
+                visibility: k.visibility || 'public'
+            });
+        }
+    });
+
+    if (results.length === 0) return '';
+    return results.map(k => `- ${k.title}（${k.visibility === 'private' ? '个人' : k.visibility === 'family' ? '家庭' : '公共'}）：${k.content}`).join('\n');
+}
+
+/**
+ * 获取用户当前指令/约束
+ * 维度1：用户当前具体指令/约束
+ */
+function getUserInstruction() {
+    // 优先从chatHistory最后一条用户消息获取
+    const lastUserMsg = chatHistory.filter(m => m.role === 'user').slice(-1)[0];
+    if (lastUserMsg && lastUserMsg.content) {
+        const content = lastUserMsg.content.trim();
+        // 排除纯加菜指令（如"明天午餐吃红烧肉"）
+        if (!tryParseMealPlanCommand(content) && content.length > 2 && content.length < 100) {
+            return content;
+        }
+    }
+    return '';
+}
+
+/**
+ * 九维数据收集主函数
+ */
+function collectRecommendationData() {
+    const today = new Date(currentDiaryDate);
+
+    // 维度1：用户当前指令
+    const userInstruction = getUserInstruction();
+
+    // 维度2：历史对话关键词
+    const chatKeywords = extractChatKeywords();
+
+    // 维度3：当前就餐人员
+    const diningInfo = (typeof buildDiaryDiningInfoStr === 'function') ? buildDiaryDiningInfoStr() : null;
+    const familyInfo = diningInfo ? diningInfo.info : '';
+    const servings = diningInfo ? diningInfo.servings : 0;
+    const members = diningInfo ? diningInfo.members : [];
+
+    // 维度4：家中食材
+    const fridgeInfo = collectFridgeItemsInfo();
+
+    // 维度5：口味偏好/禁忌
+    const tasteConstraints = aggregateFamilyTasteConstraints();
+
+    // 维度6：时节因素
+    const solarTerm = getSolarTermForDate(today);
+    const termGuide = SOLAR_TERM_GUIDE[solarTerm.name] || DEFAULT_TERM_GUIDE;
+    const termFoods = SOLAR_TERM_FOODS[solarTerm.name] || DEFAULT_SOLAR_FOODS;
+    let seasonInfo = `当前季节：${solarTerm.season}\n当前节气：${solarTerm.name}\n饮食原则：${termGuide.principle || solarTerm.diet}\n`;
+    if (termGuide.meats && termGuide.meats.recommend) {
+        seasonInfo += `推荐肉类：${termGuide.meats.recommend.map(m => m.name).join('、')}\n`;
+    }
+    if (termFoods.vegetables) {
+        seasonInfo += `当季蔬菜：${termFoods.vegetables.map(v => v.name).join('、')}\n`;
+    }
+
+    // 维度7：知识库
+    const knowledgeContext = collectKnowledgeContext();
+
+    // 维度8：历史实际食谱
+    const calendar = getDietCalendar();
+    const history = [];
+    for (let i = 1; i <= 7; i++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const key = dateToKey(d);
+        if (calendar[key]) {
+            history.push({ date: key, data: calendar[key] });
+        }
+    }
+    const historySummary = generateHistorySummary(history);
+
+    return {
+        userInstruction,
+        chatKeywords,
+        familyInfo,
+        servings,
+        members,
+        fridgeList: fridgeInfo.list,
+        fridgeExpiring: fridgeInfo.expiring,
+        tasteConstraints,
+        seasonInfo,
+        knowledgeContext,
+        historySummary,
+        solarTerm
+    };
+}
+
+/**
+ * 构建结构化Prompt
+ */
+function buildRecommendationPrompt(data, weekDatesStr) {
+    let prompt = `请为以下7天推荐三餐食谱：${weekDatesStr}。\n\n`;
+
+    if (data.userInstruction) {
+        prompt += `【第1优先级 当前指令】\n用户说：${data.userInstruction}\n\n`;
+    }
+    if (data.chatKeywords) {
+        prompt += `【第2优先级 历史对话关注】\n最近讨论的关键词：${data.chatKeywords}\n\n`;
+    }
+    if (data.familyInfo) {
+        prompt += `【第3优先级 当前就餐人员】\n${data.familyInfo}\n共${data.servings}人\n\n`;
+    }
+    if (data.fridgeList) {
+        prompt += `【第4优先级 家中已有食材】\n${data.fridgeList}\n`;
+        if (data.fridgeExpiring) {
+            prompt += `即将过期：${data.fridgeExpiring}\n`;
+        }
+        prompt += '\n';
+    }
+    if (data.tasteConstraints) {
+        prompt += `【第5优先级 口味约束】\n${data.tasteConstraints}\n`;
+    }
+    prompt += `【第6优先级 时节因素】\n${data.seasonInfo}\n`;
+    if (data.knowledgeContext) {
+        prompt += `【第7优先级 知识库参考】\n${data.knowledgeContext}\n\n`;
+    }
+    if (data.historySummary) {
+        prompt += `【第8优先级 历史实际食谱】\n${data.historySummary}\n\n`;
+    }
+
+    prompt += `【第9优先级 AI综合推理】\n`;
+    prompt += `请综合以上所有维度数据，生成一周三餐推荐方案。要求：\n`;
+    prompt += `1. 优先使用家中现有食材，特别是即将过期的食材\n`;
+    prompt += `2. 严格遵守口味约束和忌口\n`;
+    prompt += `3. 结合时节因素推荐当季食材\n`;
+    prompt += `4. 避免与近7天历史记录重复\n`;
+    prompt += `5. 每天三餐有变化，一周内不重复同样菜品\n`;
+    prompt += `6. 每道菜必须标注推荐理由（如"基于家中食材推荐"、"基于季节推荐"等）\n`;
+    if (data.servings > 0) {
+        prompt += `7. 按${data.servings}人份推荐菜品分量和食材用量\n`;
+    }
+    prompt += `\n请严格按照以下JSON格式返回，不要添加任何其他文字：\n`;
+    prompt += `{"days":[{"date":"日期","weekDay":"周几","meals":{"breakfast":{"dishes":[{"name":"菜品名","ingredients":[{"name":"食材名","quantity":2,"unit":"个"}],"reason":"推荐理由"}],"reason":"本餐推荐理由"},"lunch":{"dishes":[{"name":"菜品名","ingredients":[{"name":"食材名","quantity":300,"unit":"克"}],"reason":"推荐理由"}],"reason":"本餐推荐理由"},"dinner":{"dishes":[{"name":"菜品名","ingredients":[{"name":"食材名","quantity":1,"unit":"把"}],"reason":"推荐理由"}],"reason":"本餐推荐理由"}}}],"summary":"综合推荐说明"}`;
+
+    return prompt;
+}
+
+// ============================================================
 // AI一周食谱推荐（自动触发）
 // ============================================================
 
 let weeklyRecommendationCache = null;
 
 async function generateWeeklyAiMealRecommendation() {
-    showToast('🤖 AI正在分析并生成一周食谱推荐...');
+    showToast('🤖 AI正在按九个维度分析并生成一周食谱推荐...');
 
     try {
-        // ========== 维度①：AI大模型（通义千问）==========
-
-        // ========== 维度②：就餐人情况（使用食记中选择的就餐人）==========
-        const diningInfo3 = (typeof buildDiaryDiningInfoStr === 'function') ? buildDiaryDiningInfoStr() : null;
-        const familyInfo = diningInfo3 ? diningInfo3.info : '';
-        const servings3 = diningInfo3 ? diningInfo3.servings : 0;
-
-        // ========== 维度③：饮食知识库（食知 - 当季饮食指南）==========
         const today = new Date(currentDiaryDate);
-        const solarTerm = getSolarTermForDate(today);
-        const termGuide = SOLAR_TERM_GUIDE[solarTerm.name] || DEFAULT_TERM_GUIDE;
-        const termFoods = SOLAR_TERM_FOODS[solarTerm.name] || DEFAULT_SOLAR_FOODS;
-
-        // 采集食知中浏览/收藏的知识
-        const browseHistory = JSON.parse(localStorage.getItem('knowledgeBrowseHistory')) || [];
-        const favorited = dietKnowledge.filter(k => k.favorited);
-        const browsed = browseHistory.map(id => dietKnowledge.find(k => k.id === id)).filter(Boolean);
-        const knowledgeContext = [];
-        const seenIds = new Set();
-        [...favorited, ...browsed].forEach(k => {
-            if (!seenIds.has(k.id)) {
-                seenIds.add(k.id);
-                knowledgeContext.push(k);
-            }
-        });
-        const topKnowledge = knowledgeContext.slice(0, 10);
-
-        // ========== 维度④：家中食材（食材）==========
-        const fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
-        const fridgeNames = fridgeItems.map(i => i.name + (i.quantity ? `(${i.quantity})` : '')).join('、');
-
-        // ========== 维度⑤：历史记录（食记 - 偏好/重复/不吃）==========
-        const calendar = getDietCalendar();
-        const history = [];
-        // 获取过去14天的记录（一周推荐需要更长的历史来避免重复）
-        for (let i = 1; i <= 14; i++) {
-            const d = new Date(today);
-            d.setDate(d.getDate() - i);
-            const key = dateToKey(d);
-            if (calendar[key]) {
-                history.push({ date: key, data: calendar[key] });
-            }
-        }
-        const historySummary = generateHistorySummary(history);
 
         // 构建未来7天的日期列表
         const weekDates = [];
@@ -16732,68 +17705,40 @@ async function generateWeeklyAiMealRecommendation() {
             weekDates.push(d);
         }
 
-        // 构建食知当季指南摘要
-        let guideSummary = `节气：${solarTerm.name}\n`;
-        guideSummary += `饮食原则：${termGuide.principle}\n`;
-        if (termGuide.meats) {
-            if (termGuide.meats.recommend) {
-                guideSummary += `推荐肉类：${termGuide.meats.recommend.map(m => m.name).join('、')}\n`;
-            }
-            if (termGuide.meats.limit) {
-                guideSummary += `少食肉类：${termGuide.meats.limit.map(m => m.name).join('、')}\n`;
-            }
-        }
-        if (termFoods.vegetables) {
-            guideSummary += `当季蔬菜：${termFoods.vegetables.map(v => v.name).join('、')}\n`;
-        }
-        if (termFoods.fruits) {
-            guideSummary += `当季水果：${termFoods.fruits.map(f => f.name).join('、')}\n`;
-        }
-
-        // 构建用户浏览/收藏知识摘要
-        const knowledgeSummary = topKnowledge.map(k => {
-            let parts = [k.title];
-            if (k.ingredient) parts.push(`食材:${k.ingredient}`);
-            if (k.efficacy) parts.push(`功效:${k.efficacy}`);
-            if (k.content) parts.push(`内容:${k.content.substring(0, 80)}`);
-            return parts.join(' | ');
-        }).join('\n');
-
         // 构建日期信息
         const weekDatesStr = weekDates.map((d, idx) => {
             const weekDays = ['周日','周一','周二','周三','周四','周五','周六'];
             return `${formatDateShort(d)}（${weekDays[d.getDay()]}）`;
         }).join('、');
 
-        // 构建系统提示词（五维融合）
-        const systemPrompt = '你是一个专业的家庭饮食顾问AI。请综合以下五个维度信息，生成一份合理的未来一周（7天）三餐推荐方案：\n'
-            + '① AI推理：你具备专业营养学和烹饪知识\n'
-            + '② 就餐人情况：家庭成员的口味、年龄、体质\n'
-            + '③ 饮食知识库：当季饮食指南（食知提供的节气饮食原则和食材推荐）\n'
-            + '④ 家中食材：已有食材清单，优先使用现有食材\n'
-            + '⑤ 历史记录：过去14天的饮食记录，避免重复菜品，关注偏好\n'
-            + '要求：推荐贴近家庭实际，优先使用家中现有食材，结合节气养生知识，避免与近14天记录重复。每天的三餐要有变化，一周内不要重复同样的菜品。特别注意：早餐、午餐、晚餐各自在7天内都必须有变化，绝对不能连续多天出现相同的早餐或其他餐次。';
+        // ========== 九维数据收集 ==========
+        const recData = collectRecommendationData();
 
-        // 构建用户消息（五维信息）
-        let userMessage = `请为以下7天推荐三餐食谱：${weekDatesStr}。\n\n`;
-        userMessage += `【维度③ 食知-当季饮食指南】\n${guideSummary}\n`;
-        userMessage += `【维度④ 家中食材】${fridgeNames || '暂无'}\n`;
-        if (familyInfo) {
-            userMessage += `【维度② 就餐人情况】${familyInfo}\n`;
-        }
-        if (servings3 > 0) {
-            userMessage += `【用餐人数】${servings3}人，请按此人数推荐菜品分量和食材用量\n`;
-        }
-        if (historySummary) {
-            userMessage += `【维度⑤ 历史记录（近14天）】\n${historySummary}\n`;
-        }
-        if (knowledgeSummary) {
-            userMessage += `【维度③ 食知-用户浏览/收藏知识】\n${knowledgeSummary}\n`;
-        }
-        userMessage += `\n请严格按照以下JSON格式返回推荐方案，不要添加任何其他文字。每一天包含早餐、午餐、晚餐的菜品列表（含食材用量）和推荐理由，以及整周的综合说明。\n**重要：每一道菜品都必须包含ingredients字段，列出该菜品所需的所有食材及其按用餐人数计算的用量，不可省略任何菜品的食材信息。**\n`;
-        userMessage += `{"days":[{"date":"日期","weekDay":"周几","meals":{"breakfast":{"dishes":[{"name":"菜品名","ingredients":[{"name":"食材名","quantity":2,"unit":"个"}]}],"reason":"推荐理由"},"lunch":{"dishes":[{"name":"菜品名","ingredients":[{"name":"食材名","quantity":300,"unit":"克"}]}],"reason":"推荐理由"},"dinner":{"dishes":[{"name":"菜品名","ingredients":[{"name":"食材名","quantity":1,"unit":"把"}]}],"reason":"推荐理由"}}}],"summary":"综合推荐说明"}`;
+        // ========== 构建结构化Prompt ==========
+        const userMessage = buildRecommendationPrompt(recData, weekDatesStr);
 
-        // 调用 Aliyun Qwen API（维度①：AI大模型）
+        // 系统提示词（九维融合）
+        const systemPrompt = '你是"家肴记"的专业家庭饮食顾问AI。请综合九个维度的优先级信息，生成一份合理的未来一周（7天）三餐推荐方案。\n'
+            + '九个维度按优先级顺序：\n'
+            + '第1优先级：用户当前指令/约束\n'
+            + '第2优先级：历史对话中用户关心的内容\n'
+            + '第3优先级：当前就餐人员（人数、年龄、口味）\n'
+            + '第4优先级：家中已有食材（优先使用，特别关注即将过期的）\n'
+            + '第5优先级：家庭成员口味偏好/禁忌\n'
+            + '第6优先级：四季/时节因素（节气饮食原则）\n'
+            + '第7优先级：知识库内容（个人→家庭→公共）\n'
+            + '第8优先级：自家历史实际食谱（避免重复、强化偏好）\n'
+            + '第9优先级：AI综合推理（你的专业营养学和烹饪知识）\n\n'
+            + '要求：\n'
+            + '1. 推荐贴近家庭实际，优先使用家中现有食材\n'
+            + '2. 严格遵守口味约束和忌口，尊重用户当前指令\n'
+            + '3. 结合节气养生知识推荐当季食材\n'
+            + '4. 避免与近7天历史记录重复，关注家庭偏好\n'
+            + '5. 每天三餐有变化，一周内不重复同样菜品\n'
+            + '6. 每道菜必须包含ingredients字段和推荐理由reason\n'
+            + '7. 特别注意：早餐、午餐、晚餐各自在7天内都必须有变化';
+
+        // 调用 Aliyun Qwen API（维度9：AI大模型综合推理）
         const aiResponse = await callAliyunQwenApi(systemPrompt, userMessage);
 
         // 解析并展示推荐结果
@@ -16823,9 +17768,9 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates) {
             if (meal && meal.dishes) {
                 const rawDishes = Array.isArray(meal.dishes) ? meal.dishes : [meal.dishes];
                 const normalized = rawDishes.map(d => {
-                    if (typeof d === 'string') return { name: d, ingredients: null };
-                    if (d && d.name) return { name: d.name, ingredients: d.ingredients || null };
-                    return { name: String(d), ingredients: null };
+                    if (typeof d === 'string') return { name: d, ingredients: null, reason: '' };
+                    if (d && d.name) return { name: d.name, ingredients: d.ingredients || null, reason: d.reason || '' };
+                    return { name: String(d), ingredients: null, reason: '' };
                 });
                 const filtered = normalized.filter(d => !mealUsedDishes[mealType].has(d.name));
                 if (filtered.length === 0 && normalized.length > 0) filtered.push(normalized[0]);
@@ -16847,9 +17792,10 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates) {
         ['breakfast', 'lunch', 'dinner'].forEach(mealType => {
             const meal = day.meals && day.meals[mealType];
             if (meal) {
-                const dishList = meal._normalizedDishes || (Array.isArray(meal.dishes) ? meal.dishes.map(d => typeof d === 'string' ? {name:d,ingredients:null} : d) : []);
+                const dishList = meal._normalizedDishes || (Array.isArray(meal.dishes) ? meal.dishes.map(d => typeof d === 'string' ? {name:d,ingredients:null,reason:''} : {...d, reason: d.reason || ''}) : []);
                 const dishNamesStr = dishList.map(d => escapeHtml(d.name)).join('、');
                 let ingredientsHtml = '';
+                let dishReasonsHtml = '';
                 const wModalServings = (typeof getDiaryDiningGroup === 'function' && getDiaryDiningGroup()) ? getDiaryDiningGroup().members.length : 1;
                 dishList.forEach(d => {
                     const dName = (d.name || '').trim();
@@ -16864,11 +17810,15 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates) {
                             ingredientsHtml += `<div style="font-size:10px;color:#9A3412;margin-top:1px;">🥘 ${escapeHtml(d.name)}：${ingStr}</div>`;
                         }
                     }
+                    if (d.reason) {
+                        dishReasonsHtml += `<div style="font-size:10px;color:#6B7280;margin-top:1px;">📌 ${escapeHtml(d.name)}：${escapeHtml(d.reason)}</div>`;
+                    }
                 });
                 mealsHtml += `<div style="background:#FFF7ED;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
                     <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:3px;">${mealLabels[mealType]}</div>
                     <div style="font-size:12px;color:#4B5563;">${dishNamesStr}</div>
                     ${ingredientsHtml}
+                    ${dishReasonsHtml}
                     ${meal.reason ? `<div style="font-size:11px;color:#9A3412;margin-top:2px;">💡 ${escapeHtml(meal.reason)}</div>` : ''}
                 </div>`;
             }
@@ -16890,7 +17840,7 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates) {
                 <div style="display:flex;align-items:center;justify-content:space-between;">
                     <div>
                         <div style="font-size:16px;font-weight:700;">🤖 AI一周智能推荐</div>
-                        <div style="font-size:12px;opacity:0.9;margin-top:2px;">共7天 · 融合五维信息</div>
+                        <div style="font-size:12px;opacity:0.9;margin-top:2px;">共7天 · 融合九维信息</div>
                     </div>
                     <button onclick="closeWeeklyAiRecommendationModal()" style="background:rgba(255,255,255,0.2);border:none;color:white;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer;">✕</button>
                 </div>
@@ -16949,9 +17899,9 @@ function confirmWeeklyAiRecommendation() {
                 const rawDishes = Array.isArray(meal.dishes) ? meal.dishes : [meal.dishes];
                 // 规范化菜品数据
                 const normalized = rawDishes.map(d => {
-                    if (typeof d === 'string') return { name: d, ingredients: null };
-                    if (d && d.name) return { name: d.name, ingredients: d.ingredients || null };
-                    return { name: String(d), ingredients: null };
+                    if (typeof d === 'string') return { name: d, ingredients: null, reason: '' };
+                    if (d && d.name) return { name: d.name, ingredients: d.ingredients || null, reason: d.reason || '' };
+                    return { name: String(d), ingredients: null, reason: '' };
                 });
                 // 过滤掉前几天已用的菜品
                 const dishes = normalized.filter(d => !mealUsedDishes[mealType].has(d.name));
@@ -16975,6 +17925,11 @@ function confirmWeeklyAiRecommendation() {
                             if (calcIngs && calcIngs.length > 0) {
                                 mergedMeta[d.name] = { ingredients: calcIngs, source: 'database' };
                             }
+                        }
+                        // 保存推荐理由
+                        if (d.reason) {
+                            if (!mergedMeta[d.name]) mergedMeta[d.name] = {};
+                            mergedMeta[d.name].reason = d.reason;
                         }
                     }
                 });
@@ -17888,9 +18843,8 @@ function renderDiary() {
         </div>`;
     });
 
-    // 晚餐卡片下方右对齐的复盘和补录按钮
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:0 7px;margin-bottom:10px;">
-        <button onclick="openDiaryBackfillModal()" style="background:#EFF6FF;color:#2563EB;border:1px solid #BFDBFE;border-radius:8px;padding:5px 16px;font-size:13px;font-weight:600;cursor:pointer;">📝 补录</button>
+    // 晚餐卡片下方左对齐的复盘按钮
+    html += `<div style="display:flex;justify-content:flex-start;align-items:center;padding:0 7px;margin-bottom:10px;">
         <button onclick="showDiaryTodaySummary()" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;border-radius:8px;padding:5px 16px;font-size:13px;font-weight:600;cursor:pointer;">📊 复盘</button>
     </div>`;
     
@@ -20071,6 +21025,36 @@ function switchTab(tab) {
     if (tab === 'fridge') {
         switchFridgeView('rec');
     }
+
+    // 食材语音管理浮动按钮：仅在食材页面显示
+    const fridgeVoiceFab = document.getElementById('fridgeVoiceFab');
+    if (fridgeVoiceFab) {
+        if (tab === 'fridge') {
+            fridgeVoiceFab.classList.add('show');
+        } else {
+            fridgeVoiceFab.classList.remove('show');
+            // 离开食材页面时停止录音
+            if (_fridgeVoiceRecording && _fridgeVoiceRecognition) {
+                _fridgeVoiceRecognition.stop();
+            }
+            hideFridgeVoiceTip();
+        }
+    }
+
+    // 食记语音管理浮动按钮：仅在食记页面显示
+    const diaryVoiceFab = document.getElementById('diaryVoiceFab');
+    if (diaryVoiceFab) {
+        if (tab === 'diary') {
+            diaryVoiceFab.classList.add('show');
+        } else {
+            diaryVoiceFab.classList.remove('show');
+            // 离开食记页面时停止录音
+            if (_diaryVoiceRecording && _diaryVoiceRecognition) {
+                _diaryVoiceRecognition.stop();
+            }
+            hideDiaryVoiceTip();
+        }
+    }
 }
 
 function toggleAttach(attachBar, btn) {
@@ -20081,7 +21065,6 @@ function toggleAttach(attachBar, btn) {
 
 function getInputControls(scope) {
     if (scope === 'home') return { input: homeInput, keyboardBtn: homeSend, attachBtn: homeAttachBtn, attachBar: homeAttachBar, voiceBtn: homeVoiceBtn, voicePanel: homeVoicePanel, state: inputStates.home };
-    if (scope === 'diary') return { input: diaryInput, keyboardBtn: diarySendBtn, attachBtn: diaryAttachBtn, attachBar: diaryAttachBar, voiceBtn: diaryVoiceBtn, voicePanel: diaryVoicePanel, state: inputStates.diary };
     return { input: mainInput, keyboardBtn: mainSend, attachBtn: mainAttachBtn, attachBar: mainAttachBar, voiceBtn: mainVoiceBtn, voicePanel: mainVoicePanel, state: inputStates.main };
 }
 
@@ -20135,11 +21118,7 @@ function sendFromInput(scope) {
         updateInputButtons(scope);
         return;
     }
-    if (scope === 'diary') {
-        handleDiaryInput(input);
-    } else {
-        sendMessage(input);
-    }
+    sendMessage(input);
     resetVoiceMode(scope);
     updateInputButtons(scope);
     if (scope === 'home') {
@@ -20342,10 +21321,8 @@ function handleVoiceClick(scope) {
 // ============================================================
 homeSend.addEventListener('click', () => sendFromInput('home'));
 mainSend.addEventListener('click', () => sendFromInput('main'));
-diarySendBtn.addEventListener('click', () => sendFromInput('diary'));
 homeInput.addEventListener('input', () => updateInputButtons('home'));
 mainInput.addEventListener('input', () => updateInputButtons('main'));
-diaryInput.addEventListener('input', () => updateInputButtons('diary'));
 homeInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
         e.preventDefault();
@@ -20358,16 +21335,9 @@ mainInput.addEventListener('keydown', e => {
         sendFromInput('main');
     }
 });
-diaryInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-        e.preventDefault();
-        sendFromInput('diary');
-    }
-});
 
 homeAttachBtn.addEventListener('click', () => toggleAttach(homeAttachBar, homeAttachBtn));
 mainAttachBtn.addEventListener('click', () => toggleAttach(mainAttachBar, mainAttachBtn));
-diaryAttachBtn.addEventListener('click', () => toggleAttach(diaryAttachBar, diaryAttachBtn));
 
 document.querySelectorAll('.attach-item').forEach(item => {
     item.addEventListener('click', function() {
@@ -20385,7 +21355,6 @@ document.querySelectorAll('.attach-item').forEach(item => {
 
 homeVoiceBtn.addEventListener('click', function() { handleVoiceClick('home'); });
 mainVoiceBtn.addEventListener('click', function() { handleVoiceClick('main'); });
-diaryVoiceBtn.addEventListener('click', function() { handleVoiceClick('diary'); });
 homeSolarBtn.addEventListener('click', function() {
     // 进入主应用界面
     if (!homePage.classList.contains('slide-up')) {
@@ -21156,9 +22125,6 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
             <!-- 内容来源选择 -->
             <div class="knowledge-source-tabs" id="knowledgeSourceTabs">
                 <button class="knowledge-source-tab active" data-source="manual">手动录入</button>
-                <button class="knowledge-source-tab" data-source="web_link">网文链接</button>
-                <button class="knowledge-source-tab" data-source="video_link">视频链接</button>
-                <button class="knowledge-source-tab" data-source="batch">批量导入</button>
             </div>
 
             <!-- 手动录入表单 -->
@@ -21195,7 +22161,7 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
                         <div id="knowledgeImagePreviewGrid" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
                     </div>
                 </div>
-                <p class="km-tip">💡 可从电子书、网文、笔记中复制粘贴内容。支持上传多张图片，可在内容中用[图片1]、[图片2]标记图片位置。如需导入多个条目，建议使用"批量导入"。</p>
+                <p class="km-tip">💡 可从电子书、网文、笔记中复制粘贴内容。支持上传多张图片，可在内容中用[图片1]、[图片2]标记图片位置。</p>
                 <label>标签（可手动多选或输入）</label>
                 <input type="text" id="newKnowledgeTags" placeholder="例如：清热、夏季、绿豆" />
                 <div id="commonTagsContainer" style="display:flex;flex-wrap:wrap;gap:6px;padding:6px 0;"></div>
@@ -21227,92 +22193,6 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
                     <option value="黄帝内经"></option>
                     <option value="用户原创"></option>
                 </datalist>
-            </div>
-
-            <!-- 网文链接表单 -->
-            <div class="knowledge-source-form" id="sourceWebLink">
-                <label>知识分类 *</label>
-                <select id="webLinkMainCategory" onchange="onWebLinkCategoryChange()">
-                    <option value="ingredient">🥬 食材</option>
-                    <option value="recipe">📖 食谱</option>
-                    <option value="solar">🌿 节气</option>
-                    <option value="food-therapy">🍎 食疗</option>
-                    <option value="symptom">💊 对症</option>
-                    <option value="cooking">🍳 烹饪</option>
-                </select>
-                <label>子分类</label>
-                <select id="webLinkSubCategory">
-                    <!-- 动态填充 -->
-                </select>
-                <label>网文链接</label>
-                <div class="knowledge-parse-row">
-                    <input type="text" id="webLinkInput" placeholder="请粘贴文章链接..." />
-                    <button class="knowledge-parse-btn" id="webLinkParseBtn">🔗 解析</button>
-                </div>
-                <label>标题 *</label>
-                <input type="text" id="webLinkTitle" placeholder="解析后自动填充标题..." />
-                <label>内容 *</label>
-                <textarea id="webLinkContent" placeholder="解析后自动填充内容..."></textarea>
-            </div>
-
-            <!-- 视频链接表单 -->
-            <div class="knowledge-source-form" id="sourceVideoLink">
-                <label>知识分类 *</label>
-                <select id="videoLinkMainCategory" onchange="onVideoLinkCategoryChange()">
-                    <option value="ingredient">🥬 食材</option>
-                    <option value="recipe">📖 食谱</option>
-                    <option value="solar">🌿 节气</option>
-                    <option value="food-therapy">🍎 食疗</option>
-                    <option value="symptom">💊 对症</option>
-                    <option value="cooking">🍳 烹饪</option>
-                </select>
-                <label>子分类</label>
-                <select id="videoLinkSubCategory">
-                    <!-- 动态填充 -->
-                </select>
-                <label>视频链接</label>
-                <div class="knowledge-parse-row">
-                    <input type="text" id="videoLinkInput" placeholder="请粘贴视频链接..." />
-                    <button class="knowledge-parse-btn" id="videoLinkParseBtn">🔗 解析</button>
-                </div>
-                <label>标题 *</label>
-                <input type="text" id="videoLinkTitle" placeholder="解析后自动填充标题..." />
-                <label>内容 *</label>
-                <textarea id="videoLinkContent" placeholder="解析后自动填充内容..."></textarea>
-            </div>
-
-            <!-- 批量导入表单 -->
-            <div class="knowledge-source-form" id="sourceBatch">
-                <label>知识分类 *</label>
-                <select id="batchMainCategory" onchange="onBatchMainCategoryChange()">
-                    <option value="ingredient">🥬 食材</option>
-                    <option value="recipe">📖 食谱</option>
-                    <option value="solar">🌿 节气</option>
-                    <option value="food-therapy">🍎 食疗</option>
-                    <option value="symptom">💊 对症</option>
-                    <option value="cooking">🍳 烹饪</option>
-                </select>
-                <label>子分类</label>
-                <select id="batchSubCategory">
-                    <!-- 动态填充 -->
-                </select>
-                <label>来源（可选，统一标注）</label>
-                <input type="text" id="batchSource" placeholder="例如：《中国食疗大全》" />
-                <p class="km-tip">💡 请按以下 JSON 格式粘贴多条知识。每条包含 title（标题）和 content（内容），可选 tags（标签数组）、subCategory（子分类）、source（单条来源）。</p>
-                <label>JSON 数据 *</label>
-                <textarea id="batchJsonInput" rows="6" placeholder='[
-  {"title":"绿豆的功效","content":"清热解毒，消暑利水","tags":["清热","夏季"],"subCategory":"主粮"},
-  {"title":"苦瓜的作用","content":"清热祛暑，明目解毒","tags":["清热","蔬菜"]}
-]' style="min-height:140px;font-family:monospace;font-size:12px;"></textarea>
-                <div style="display:flex;gap:8px;margin-top:10px;">
-                    <button class="knowledge-parse-btn" style="flex:1;text-align:center;" onclick="previewBatchImport()">📋 预览</button>
-                    <button class="knowledge-parse-btn" style="flex:1;text-align:center;background:#FFF7ED;" onclick="loadBatchSample()">📄 加载示例</button>
-                </div>
-                <div id="batchPreview" style="display:none;margin-top:12px;">
-                    <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px;">预览解析结果（<span id="batchPreviewCount">0</span> 条）</div>
-                    <div id="batchPreviewList" style="max-height:200px;overflow-y:auto;border:1px solid #E5E7EB;border-radius:10px;padding:8px;"></div>
-                    <button class="knowledge-modal-save" id="batchImportSave" onclick="executeBatchImport()" style="margin-top:12px;">📦 导入全部</button>
-                </div>
             </div>
 
             <button class="knowledge-modal-save" id="knowledgeModalSave" onclick="saveNewKnowledge()">保存知识</button>
