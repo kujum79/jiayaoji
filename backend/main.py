@@ -153,10 +153,11 @@ async def parse_voice(req: ParseVoiceRequest) -> Dict[str, Any]:
 6. 采购计划："看看要买什么"、"采购计划"、"要买什么"
 7. 确认采购："就按这个买"、"确认采购"、"按这个买"
 8. 移除采购项："番茄不用买了"、"鸡蛋不用买"
+9. 添加采购项："要买莴苣"、"买2斤土豆"、"需要买牛肉"、"今天要买西红柿"
 
 请将用户的语音文字解析为以下JSON格式（只返回JSON，不要其他文字）：
 {
-  "action": "increase" / "decrease" / "set" / "clear" / "query" / "view_shopping" / "confirm_shopping" / "remove_shopping",
+  "action": "increase" / "decrease" / "set" / "clear" / "query" / "view_shopping" / "confirm_shopping" / "remove_shopping" / "add_to_shopping",
   "name": "食材名称",
   "quantity": 数量(数字),
   "unit": "单位"
@@ -167,6 +168,7 @@ async def parse_voice(req: ParseVoiceRequest) -> Dict[str, Any]:
 - quantity: 提取数字（中文数字"两"=2，"十"=10等需转换为阿拉伯数字），无数量时为0
 - unit: 克/个/只/条/瓶/包/袋/盒/把/根/块/颗/斤/两/升/毫升等，默认"个"
 - view_shopping/confirm_shopping: name/quantity/unit可为空
+- add_to_shopping: name必填，quantity无则为0
 - 如果无法识别指令，返回 {"action": "unknown"}
 """.strip()
 
