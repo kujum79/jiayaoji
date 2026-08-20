@@ -21,6 +21,7 @@ import base64
 import json
 import os
 import re
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
@@ -29,6 +30,8 @@ import requests
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 # ========== 阿里云通义千问配置 ==========
@@ -63,6 +66,12 @@ class FamilyMember(BaseModel):
 class ChatRequest(BaseModel):
     prompt: str = Field(..., min_length=1)
     family: List[FamilyMember] = Field(default_factory=list)
+
+
+class PlanRequest(BaseModel):
+    system_prompt: str = Field(..., min_length=1)
+    user_prompt: str = Field(..., min_length=1)
+    max_tokens: int = Field(default=8192, ge=100, le=32768)
 
 
 class ChatResponse(BaseModel):
@@ -218,7 +227,7 @@ def build_family_context(family: List[FamilyMember]) -> str:
 
 
 # ========== 阿里云通义千问调用核心 ==========
-async def call_qwen(messages: List[Dict[str, str]], *, json_mode: bool = False) -> str:
+async def call_qwen(messages: List[Dict[str, str]], *, json_mode: bool = False, max_tokens: int = 8192) -> str:
     headers = {
         "Authorization": f"Bearer {ALIYUN_API_KEY}",
         "Content-Type": "application/json",
@@ -229,6 +238,7 @@ async def call_qwen(messages: List[Dict[str, str]], *, json_mode: bool = False) 
         "parameters": {
             "result_format": "message",
             "temperature": 0.7 if not json_mode else 0.2,
+            "max_tokens": max_tokens,
         }
     }
     try:
@@ -317,6 +327,20 @@ async def chat(req: ChatRequest) -> Dict[str, str]:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": req.prompt},
         ]
+    )
+    return {"response": content}
+
+
+@app.post("/plan")
+async def plan(req: PlanRequest) -> Dict[str, str]:
+    """食谱计划生成接口（前端同源调用，避免 CORS）"""
+    content = await call_qwen(
+        [
+            {"role": "system", "content": req.system_prompt},
+            {"role": "user", "content": req.user_prompt},
+        ],
+        json_mode=False,
+        max_tokens=req.max_tokens,
     )
     return {"response": content}
 
@@ -511,3 +535,24 @@ async def parse_link(req: ParseLinkRequest):
         "subCategory": sub_category,
         "images": images_b64
     }
+
+
+# ========== 前端静态文件托管（用于 TRAE 预览面板直接打开 APP） ==========
+BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIR = BASE_DIR / "frontend"
+
+if FRONTEND_DIR.exists():
+    @app.get("/app", include_in_schema=False)
+    async def serve_app_home():
+        """APP 首页入口：在 TRAE 中间预览栏直接访问即可打开家肴记 APP。"""
+        index_path = FRONTEND_DIR / "index.html"
+        if not index_path.exists():
+            raise HTTPException(status_code=404, detail="前端文件不存在")
+        return FileResponse(index_path, media_type="text/html")
+
+    # 挂载前端目录的静态资源（css/js/图片等），放在最后注册以免覆盖 API 路由
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=False), name="frontend_static")
+else:
+    @app.get("/app", include_in_schema=False)
+    async def serve_app_home():
+        raise HTTPException(status_code=404, detail="frontend 目录不存在")
