@@ -2807,7 +2807,6 @@
                         <!-- 就餐人选择器 -->
                         <div id="diaryDiningSelector" style="margin-left:auto;display:flex;align-items:center;gap:4px;position:relative;">
                             <button id="diaryDiningBtn" style="display:flex;align-items:center;gap:3px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:4px 10px;font-size:12px;color:#C2410C;cursor:pointer;white-space:nowrap;" onclick="toggleDiaryDiningDropdown()">
-                                <span>👤</span>
                                 <span id="diaryDiningLabel">选择就餐人</span>
                                 <span style="font-size:10px;">▼</span>
                             </button>
@@ -20771,14 +20770,13 @@ function renderDiaryDiningDropdown() {
     let mainGroups = diningGroups.filter(g => g.groupType !== 'social' && !g.isContainer);
     let socialSubGroups = diningGroups.filter(g => g.groupType === 'social');
 
-    let html = `<div style="font-size:13px;font-weight:700;color:#1F2937;margin-bottom:8px;">📋 选择就餐人</div>`;
+    let html = `<div style="font-size:13px;font-weight:700;color:#1F2937;margin-bottom:8px;">选择就餐人</div>`;
 
     // 就餐组列表（单选）
     mainGroups.forEach(group => {
         let isSelected = current.groupId === group.id;
         html += `<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:8px;cursor:pointer;margin-bottom:3px;background:${isSelected ? '#FFF7ED' : '#F9FAFB'};" onclick="selectDiaryDiningGroup(${group.id})">
-            <span style="font-size:14px;">${isSelected ? '✅' : '☐'}</span>
-            <span style="font-size:13px;font-weight:${isSelected ? '600' : '400'};color:${isSelected ? '#C2410C' : '#374151'};">${group.icon || '👥'} ${escapeHtml(group.name)}（${group.members.length}人）</span>
+            <span style="font-size:13px;font-weight:${isSelected ? '600' : '400'};color:${isSelected ? '#C2410C' : '#374151'};">${escapeHtml(group.name)}（${group.members.length}人）</span>
         </div>`;
     });
 
@@ -20788,8 +20786,7 @@ function renderDiaryDiningDropdown() {
         socialSubGroups.forEach(group => {
             let isSelected = current.groupId === group.id;
             html += `<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:8px;cursor:pointer;margin-bottom:3px;background:${isSelected ? '#FFF7ED' : '#F9FAFB'};" onclick="selectDiaryDiningGroup(${group.id})">
-                <span style="font-size:14px;">${isSelected ? '✅' : '☐'}</span>
-                <span style="font-size:13px;font-weight:${isSelected ? '600' : '400'};color:${isSelected ? '#C2410C' : '#374151'};">${group.icon || '👫'} ${escapeHtml(group.name)}（${group.members.length}人）</span>
+                <span style="font-size:13px;font-weight:${isSelected ? '600' : '400'};color:${isSelected ? '#C2410C' : '#374151'};">${escapeHtml(group.name)}（${group.members.length}人）</span>
             </div>`;
         });
     }
@@ -20797,13 +20794,12 @@ function renderDiaryDiningDropdown() {
     // 微调区：当前组成员可勾选/取消
     let currentGroup = diningGroups.find(g => g.id === current.groupId);
     if (currentGroup && currentGroup.members.length > 0) {
-        html += `<div style="font-size:11px;color:#9CA3AF;margin:8px 0 3px;padding-left:4px;border-top:1px solid #F3F4F6;padding-top:8px;">─── 微调成员 ───</div>`;
+        html += `<div style="font-size:11px;color:#9CA3AF;margin:8px 0 3px;padding-left:4px;border-top:1px solid #F3F4F6;padding-top:8px;">微调成员</div>`;
         currentGroup.members.forEach(memberName => {
             let isChecked = current.members.includes(memberName);
             let member = familyData.find(m => m.name === memberName);
             let tasteTag = member && member.taste ? `（${member.taste}）` : '';
             html += `<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;cursor:pointer;margin-bottom:2px;" onclick="toggleDiaryDiningMember('${escapeHtml(memberName)}')">
-                <span style="font-size:14px;width:18px;text-align:center;">${isChecked ? '☑️' : '☐'}</span>
                 <span style="font-size:12px;color:${isChecked ? '#1F2937' : '#9CA3AF'};font-weight:${isChecked ? '500' : '400'};">${escapeHtml(memberName)}${tasteTag}</span>
             </div>`;
         });
@@ -21182,8 +21178,8 @@ function renderDiary() {
 
     // 晚餐卡片下方左对齐的外出就餐规划+复盘按钮
     html += `<div style="display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:0 7px;margin-bottom:10px;">
-        <button onclick="generateWeeklyAiMealRecommendation(3)" style="background:#F0F9FF;color:#0284C7;border:1px solid #BAE6FD;border-radius:8px;padding:5px 16px;font-size:13px;font-weight:600;cursor:pointer;">规划3天食谱</button>
-        <button onclick="openDiningOutPlanModal()" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;border-radius:8px;padding:5px 16px;font-size:13px;font-weight:600;cursor:pointer;">外出就餐规划</button>
+        <button onclick="generateWeeklyAiMealRecommendation(3)" style="background:#F0F9FF;color:#0284C7;border:1px solid #BAE6FD;border-radius:8px;padding:5px 16px;font-size:13px;font-weight:600;cursor:pointer;">3天食谱</button>
+        <button onclick="openDiningOutPlanModal()" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;border-radius:8px;padding:5px 16px;font-size:13px;font-weight:600;cursor:pointer;">外出就餐</button>
         <button onclick="showDiaryTodaySummary()" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;border-radius:8px;padding:5px 16px;font-size:13px;font-weight:600;cursor:pointer;">复盘</button>
     </div>`;
     
