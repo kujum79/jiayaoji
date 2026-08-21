@@ -25331,6 +25331,68 @@ function _collectMealPlanContext(planDate) {
         ctx.recentMeals = '近7天吃过：'+recentDishes.join('、')+'\n重复偏好：'+(frequent.length?frequent.join('、'):'无')+'\n好评菜品：'+(goodDishes.length?goodDishes.join('、'):'无')+'\n差评菜品：'+(badDishes.length?badDishes.join('、'):'无');
     } catch(e){}
 
+    // P9: 《中国居民膳食指南》个性化目标 + 近3天营养缺口
+    try {
+        var targets = __dgGetPerPersonTargets();
+        var catLines = [];
+        var limitLines = [];
+        Object.keys(targets.categories).forEach(function(cat) {
+            var t = targets.categories[cat];
+            if (t.dailyMin && t.dailyMax) catLines.push(cat+':'+t.dailyMin+'-'+t.dailyMax+t.unit);
+            else if (t.dailyMin) catLines.push(cat+':≥'+t.dailyMin+t.unit);
+        });
+        Object.keys(targets.limits).forEach(function(k) {
+            var names = {salt:'盐', addedSugar:'添加糖', oil:'烹调油'};
+            var t = targets.limits[k];
+            if (t.dailyMax) limitLines.push((names[k]||k)+':<'+t.dailyMax+t.unit);
+        });
+        // 近3天实际摄入分析（营养缺口）
+        var threeAgo = new Date(planDate); threeAgo.setDate(threeAgo.getDate()-3);
+        var dayCatSum = {}; var dayLimitSum = {saltMg:0, oilG:0, sugarG:0}; var validDays = 0;
+        Object.keys(targets.categories).forEach(function(c){ dayCatSum[c] = 0; });
+        Object.keys(calendar).forEach(function(dateKey) {
+            var d = new Date(dateKey);
+            if (d >= threeAgo && d < planDate) {
+                var dayData = calendar[dateKey];
+                var dayDishes = [];
+                ['breakfast','lunch','dinner'].forEach(function(mt) {
+                    if (dayData[mt] && dayData[mt].actual && dayData[mt].actual.dishes) {
+                        dayData[mt].actual.dishes.forEach(function(dish) { dayDishes.push(dish.name || dish); });
+                    }
+                });
+                if (dayDishes.length > 0) {
+                    var dg = __dgAnalyzeDishes(dayDishes);
+                    validDays++;
+                    Object.keys(dg.categories).forEach(function(c){ dayCatSum[c] += dg.categories[c]; });
+                    dayLimitSum.saltMg += dg.saltMg;
+                    dayLimitSum.oilG += dg.oilG;
+                    dayLimitSum.sugarG += dg.sugarG;
+                    // 加餐并入
+                    var sAgg = aggregateSnackNutrition(dateKey);
+                    Object.keys(sAgg.categories).forEach(function(c){ dayCatSum[c] += sAgg.categories[c]; });
+                }
+            }
+        });
+        var gapLines = [];
+        if (validDays > 0) {
+            Object.keys(targets.categories).forEach(function(cat) {
+                var t = targets.categories[cat];
+                if (!t.dailyMin) return;
+                var avg = dayCatSum[cat] / validDays;
+                var pct = Math.round(avg / t.dailyMin * 100);
+                if (pct < 70) gapLines.push(cat+'仅达到'+pct+'%（日均'+Math.round(avg)+t.unit+'，目标≥'+t.dailyMin+t.unit+'）');
+                else if (t.dailyMax && avg > t.dailyMax * 1.2) gapLines.push(cat+'超标'+Math.round(avg/t.dailyMax*100-100)+'%（日均'+Math.round(avg)+t.unit+'，上限'+t.dailyMax+t.unit+'）');
+            });
+        }
+        ctx.dietaryGuideline =
+            '【成员】' + (targets.source==='family'?('按'+targets.memberCount+'位家庭成员计算'):'按默认成人标准') + '\n' +
+            '【7大类每日目标】' + catLines.join('；') + '\n' +
+            '【每日上限】' + limitLines.join('；') + '；食物种类每日≥12种/每周≥25种\n' +
+            (validDays > 0
+                ? ('【近'+validDays+'天缺口】'+ (gapLines.length?gapLines.join('；')+' —— 请在今日方案中重点补足上述偏低类别':'各类摄入均衡，继续保持') + ' 注意：每餐必须明确写出主食菜名；若水果类缺口≥50%必须安排独立水果菜品（不混在奶类饮品中）；3天方案内所有菜名全局唯一不可重复')
+                : '（近3天暂无记录，按目标量推荐） 注意：每餐必须明确写出主食菜名；若水果类缺口≥50%必须安排独立水果菜品（不混在奶类饮品中）；3天方案内所有菜名全局唯一不可重复');
+    } catch(e) { ctx.dietaryGuideline = ''; }
+
     return ctx;
 }
 
@@ -25364,8 +25426,8 @@ function _buildMealPlanPrompt(dateStr, ctx, styleCount) {
     if (ctx.seasonal) p += '【时节因素】\n'+ctx.seasonal+'\n\n';
     if (ctx.knowledgeBits) p += '【知识库参考】\n'+ctx.knowledgeBits+'\n\n';
     if (ctx.recentMeals) p += '【历史食谱】\n'+ctx.recentMeals+'\n\n';
-    p += '推荐要求：\n1. 尽量使用家中已有食材\n2. 遵守成员忌口和健康关注\n3. 符合当季时令\n4. 避免与近7天重复\n5. 每道菜给出简短标签\n6. 每餐次给出推荐理由（breakfastReason/lunchReason/dinnerReason），说明该餐搭配的合理性，且必须显式引用《中国居民膳食指南》，例如"根据《中国居民膳食指南》推荐每日应摄入300g奶类"\n7. 每餐菜品列表中，主食（米饭、面条、粥、饼等）排在第一位\n\n';
-    p += '【《中国居民膳食指南》每日参考量（请在breakfastReason/lunchReason/dinnerReason中自然引用对应指标）】谷薯类250-400g；蔬菜300-500g（深色占≥50%）；水果200-350g；畜禽鱼蛋类120-200g；奶类300g；大豆坚果类25-35g；烹调油25-30g；盐<5g；添加糖<25g；食物种类每日≥12种/每周≥25种\n\n';
+    if (ctx.dietaryGuideline) p += '【膳食指南约束 P9】\n'+ctx.dietaryGuideline+'\n\n';
+    p += '推荐要求：\n1. 尽量使用家中已有食材\n2. 遵守成员忌口和健康关注\n3. 符合当季时令\n4. 避免与近7天重复\n5. 每道菜给出简短标签\n6. 每餐次给出推荐理由（breakfastReason/lunchReason/dinnerReason），说明该餐搭配的合理性，且必须显式引用《中国居民膳食指南》，例如"根据《中国居民膳食指南》推荐每日应摄入300g奶类"\n7. 每餐菜品列表中必须明确写出一道主食菜名（米饭/杂粮饭/面条/粥/馒头/饼等，不可省略、不可仅在理由中暗示），并且主食排在第一位\n8. 优先补足"【膳食指南约束 P9】"中近3天偏低的类别（如蔬菜吃少了就多安排深色蔬菜，奶类不足就推荐牛奶/酸奶搭配）；若水果类缺口≥50%，必须在三餐或加餐中安排独立水果菜品（如苹果/香蕉/蓝莓/草莓等，不依赖奶类饮品混合来分摊）；超过目标120%的类别今天适当减少\n9. 三餐菜品覆盖的不同食材（含加餐）每天合计应达到≥12种、每周≥25种，盐、烹调油、添加糖严格控制在每日上限内\n10. 3天方案内部，同一菜品名称在全部餐次和日期中合计最多出现1次（允许菜品中的相同食材单独出现，但整道菜全名不可重复，如"牛肉炒莲藕"出现后，任何一天/一餐不得再出现"牛肉炒莲藕"）\n\n';
     p += '严格按以下JSON格式返回（不要包含markdown代码块标记）：\n';
     if (hasExisting) {
         p += '{"styles":[{"name":"快手风","breakfast":[{"name":"菜名","tag":"标签"}],"lunch":[{"name":"菜名","tag":"标签"}],"dinner":[{"name":"菜名","tag":"标签"}],"breakfastReason":"早餐搭配理由","lunchReason":"午餐搭配理由","dinnerReason":"晚餐搭配理由"},{"name":"养生风","breakfast":[...],"lunch":[...],"dinner":[...],"breakfastReason":"...","lunchReason":"...","dinnerReason":"..."}]}';
@@ -25586,6 +25648,108 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
             }
         });
     });
+
+    // ===== 后置校验：全局菜名去重 + 独立水果菜品检查 =====
+    const POST_STAPLES = ['米饭','粥','面','馒头','包子','饼','吐司','面包','三明治','麦片','玉米','红薯','紫薯','南瓜','饭','炒饭','煲仔饭','意面','馄饨','蒸饺','水饺','芝麻糊'];
+    function isPostStaple(dn) { return POST_STAPLES.some(k => (dn||'').includes(k)); }
+
+    // 替代菜品池（按类别）
+    const REPLACE_POOL = {
+        '鱼鲜': ['清蒸鳕鱼','红烧带鱼','蒜蓉虾','番茄鱼','酸菜鱼','葱油鲈鱼','清蒸石斑'],
+        '肉菜': ['糖醋里脊','青椒肉丝','番茄牛肉','芹菜炒肉丝','土豆烧牛肉','葱爆羊肉','酱爆鸡丁'],
+        '蔬菜': ['蒜蓉西兰花','清炒菠菜','凉拌黄瓜','白灼菜心','香菇青菜','蚝油生菜','醋溜白菜','荷塘小炒'],
+        '汤羹': ['紫菜蛋花汤','冬瓜排骨汤','番茄蛋汤','丝瓜蛋汤','萝卜羊肉汤','三鲜汤'],
+        '豆制品': ['麻婆豆腐','家常豆腐','红烧豆腐','豆腐煲','锅塌豆腐','鲫鱼豆腐汤'],
+        '水果': ['蓝莓','草莓','橙子','葡萄','西瓜','梨','猕猴桃','火龙果'],
+        '默认': ['清炒时蔬','番茄炒蛋','蒸蛋羹','凉拌木耳','荷塘小炒','白灼秋葵']
+    };
+    function getReplaceDish(origName, usedSet) {
+        var cat = '默认';
+        if (/鱼|虾|海鲜|鲈|鳕|带鱼|深海鱼/.test(origName)) cat = '鱼鲜';
+        else if (/肉|排骨|牛|猪|羊|鸡|鸭|里脊/.test(origName)) cat = '肉菜';
+        else if (/汤|羹/.test(origName)) cat = '汤羹';
+        else if (/豆腐|豆干/.test(origName)) cat = '豆制品';
+        else if (/菠菜|西兰花|白菜|黄瓜|木耳|菜|萝卜|莲藕|山药|秋葵/.test(origName)) cat = '蔬菜';
+        else if (/苹果|香蕉|蓝莓|草莓|橙|葡萄|西瓜|梨|猕猴桃|水果/.test(origName)) cat = '水果';
+        var pool = REPLACE_POOL[cat] || REPLACE_POOL['默认'];
+        for (var i = 0; i < pool.length; i++) {
+            if (!usedSet.has(pool[i]) && pool[i] !== origName) return pool[i];
+        }
+        return origName + '（改良版）';
+    }
+
+    // 全局去重：跨所有餐次和日期
+    const globalUsed = new Set();
+    days.forEach(day => {
+        const meals = day.meals || {};
+        ['breakfast','lunch','dinner'].forEach(mt => {
+            const meal = meals[mt];
+            if (meal && meal._normalizedDishes) {
+                for (let i = 0; i < meal._normalizedDishes.length; i++) {
+                    var d = meal._normalizedDishes[i];
+                    if (isPostStaple(d.name)) {
+                        if (!globalUsed.has(d.name)) globalUsed.add(d.name);
+                    } else {
+                        if (globalUsed.has(d.name)) {
+                            var newName = getReplaceDish(d.name, globalUsed);
+                            console.log('[后置校验] 重复菜名替换: ' + d.name + ' → ' + newName);
+                            d.name = newName;
+                            if (d.reason) d.reason = d.reason; // 保留原理由
+                        }
+                        globalUsed.add(d.name);
+                    }
+                }
+            }
+        });
+    });
+
+    // 独立水果菜品检查
+    const FRUIT_KW = ['苹果','蓝莓','草莓','橙子','葡萄','西瓜','梨','猕猴桃','火龙果','桃','芒果','水果沙拉','水果拼盘'];
+    function isStandaloneFruit(dishName) {
+        if (/牛奶|酸奶|燕麦|煎|炒|炖|煮|粥|汤|羹|糊|沙拉酱/.test(dishName)) return false;
+        return FRUIT_KW.some(k => dishName.includes(k));
+    }
+    // 香蕉单独处理：只有纯"香蕉"才算独立，"香蕉牛奶""香蕉煎蛋"不算
+    function isStandaloneBanana(dishName) {
+        return dishName.trim() === '香蕉' || dishName.trim() === '香蕉（1根）';
+    }
+
+    var hasStandaloneFruit = false;
+    days.forEach(day => {
+        const meals = day.meals || {};
+        ['breakfast','lunch','dinner'].forEach(mt => {
+            const meal = meals[mt];
+            if (meal && meal._normalizedDishes) {
+                meal._normalizedDishes.forEach(d => {
+                    if (isStandaloneFruit(d.name) || isStandaloneBanana(d.name)) hasStandaloneFruit = true;
+                });
+            }
+        });
+    });
+
+    // 如果没有独立水果菜品，在第一天午餐添加一道
+    if (!hasStandaloneFruit && days.length > 0) {
+        var fruitPool = ['蓝莓','草莓','橙子','葡萄','西瓜','梨','猕猴桃','苹果'];
+        var chosenFruit = null;
+        for (var fi = 0; fi < fruitPool.length; fi++) {
+            if (!globalUsed.has(fruitPool[fi])) { chosenFruit = fruitPool[fi]; break; }
+        }
+        if (!chosenFruit) chosenFruit = '时令水果';
+        // 找第一天有午餐的，加到末尾
+        var firstLunch = days[0].meals && days[0].meals.lunch;
+        if (firstLunch) {
+            if (!firstLunch._normalizedDishes) firstLunch._normalizedDishes = [];
+            firstLunch._normalizedDishes.push({
+                name: chosenFruit,
+                ingredients: null,
+                reason: '根据《中国居民膳食指南》推荐每日水果200-350g，本餐补充独立水果摄入'
+            });
+            console.log('[后置校验] 自动添加独立水果菜品: ' + chosenFruit);
+            globalUsed.add(chosenFruit);
+        }
+    }
+    // ===== 后置校验结束 =====
+
     const mealLabels = { breakfast: '🌅 早餐', lunch: '☀️ 午餐', dinner: '🌙 晚餐' };
     let daysHtml = '';
     days.forEach((day, idx) => {
