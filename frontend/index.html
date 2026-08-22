@@ -2643,6 +2643,79 @@
     </style>
 </head>
 <body>
+<!-- ====== 家庭选择 overlay ====== -->
+<style>
+.family-select-overlay {
+    position: fixed; inset: 0; z-index: 100002;
+    background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 40%, #FED7AA 100%);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px; box-sizing: border-box;
+}
+.family-select-card {
+    background: #fff; border-radius: 20px; padding: 32px 24px;
+    width: 100%; max-width: 340px; text-align: center;
+    box-shadow: 0 12px 40px rgba(234,88,12,0.15);
+}
+.family-select-logo { font-size: 48px; margin-bottom: 8px; }
+.family-select-title { font-size: 22px; font-weight: 800; color: #9A3412; margin-bottom: 4px; }
+.family-select-sub { font-size: 13px; color: #C2410C; margin-bottom: 24px; line-height: 1.5; }
+.family-select-tabs { display: flex; gap: 8px; margin-bottom: 20px; background: #FFF7ED; border-radius: 12px; padding: 4px; }
+.family-select-tab {
+    flex: 1; padding: 10px 0; border: none; border-radius: 8px; cursor: pointer;
+    font-size: 13px; font-weight: 600; color: #9A3412; background: transparent; transition: all 0.25s;
+}
+.family-select-tab.active { background: #F97316; color: #fff; box-shadow: 0 4px 12px rgba(249,115,22,0.3); }
+.family-input {
+    width: 100%; box-sizing: border-box; padding: 12px 14px;
+    border: 2px solid #FED7AA; border-radius: 10px; font-size: 14px;
+    color: #1F2937; margin-bottom: 12px; outline: none; transition: border-color 0.2s;
+}
+.family-input:focus { border-color: #F97316; }
+.family-code-input {
+    width: 100%; box-sizing: border-box; padding: 14px 14px;
+    border: 2px solid #FED7AA; border-radius: 10px; font-size: 20px;
+    font-weight: 800; letter-spacing: 6px; text-align: center; text-transform: uppercase;
+    color: #1F2937; margin-bottom: 12px; outline: none; font-family: monospace;
+}
+.family-code-input:focus { border-color: #F97316; }
+.family-btn {
+    width: 100%; padding: 12px 0; border: none; border-radius: 10px;
+    font-size: 14px; font-weight: 700; color: #fff;
+    background: linear-gradient(135deg, #F97316, #EA580C); cursor: pointer;
+    box-shadow: 0 4px 12px rgba(249,115,22,0.35); transition: transform 0.15s;
+}
+.family-btn:active { transform: scale(0.98); }
+.family-select-hint { font-size: 11px; color: #9CA3AF; margin-top: 16px; line-height: 1.6; }
+.family-select-tip {
+    margin-top: 16px; padding: 10px 12px; background: #F0FDF4; border-radius: 8px;
+    font-size: 11px; color: #166534; line-height: 1.6;
+}
+</style>
+<div class="family-select-overlay" id="familySelectOverlay">
+    <div class="family-select-card">
+        <div class="family-select-logo">🍳</div>
+        <div class="family-select-title">家肴记</div>
+        <div class="family-select-sub">明天吃啥？今天做甚？<br>创建或加入家庭，开启智能饮食管理</div>
+        <div class="family-select-tabs">
+            <button class="family-select-tab active" onclick="toggleFamilyPanel('create')">创建家庭</button>
+            <button class="family-select-tab" onclick="toggleFamilyPanel('join')">加入家庭</button>
+        </div>
+        <!-- 创建家庭 -->
+        <div id="createFamilyPanel">
+            <input type="text" class="family-input" id="newFamilyName" placeholder="输入家庭名称（如：张家）" maxlength="20">
+            <button class="family-btn" onclick="createFamily()">🏠 创建家庭</button>
+            <div class="family-select-tip">创建后将生成一个8位家庭码，可分享给家人加入</div>
+        </div>
+        <!-- 加入家庭 -->
+        <div id="joinFamilyPanel" style="display:none;">
+            <input type="text" class="family-code-input" id="joinFamilyCode" placeholder="输入8位家庭码" maxlength="8">
+            <button class="family-btn" onclick="joinFamily()">🤝 加入家庭</button>
+            <div class="family-select-tip">请向家庭创建者索取8位家庭码</div>
+        </div>
+        <div class="family-select-hint">家庭数据仅存储于本地浏览器，不同家庭间数据相互隔离</div>
+    </div>
+</div>
+
 <div class="phone-frame" id="app">
 
     <!-- ====== 首页 ====== -->
@@ -3399,10 +3472,10 @@
 <script>
 // ==================== 数据迁移：mealPlans + mealRecords → dietCalendar ====================
 function migrateToDietCalendar() {
-    if (localStorage.getItem('dietCalendarMigrated')) return; // 已迁移过则跳过
+    if (lsGet('dietCalendarMigrated')) return; // 已迁移过则跳过
     
-    const plans = JSON.parse(localStorage.getItem('mealPlans')) || {};
-    const records = JSON.parse(localStorage.getItem('mealRecords')) || [];
+    const plans = JSON.parse(lsGet('mealPlans')) || {};
+    const records = JSON.parse(lsGet('mealRecords')) || [];
     const calendar = {};
     
     // 1. 迁移 mealPlans 中的计划数据
@@ -3465,21 +3538,213 @@ function migrateToDietCalendar() {
         };
     });
     
-    localStorage.setItem('dietCalendar', JSON.stringify(calendar));
-    localStorage.setItem('dietCalendarMigrated', 'true');
+    lsSet('dietCalendar', JSON.stringify(calendar));
+    lsSet('dietCalendarMigrated', 'true');
     console.log('✅ 数据迁移完成：mealPlans + mealRecords → dietCalendar');
 }
 
 // 页面加载时执行迁移
 migrateToDietCalendar();
 
+// ==================== 家庭码与数据隔离层 ====================
+// 生成8位家庭码（排除易混淆字符 I/O/0/1）
+function generateFamilyCode() {
+    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    var code = '';
+    for (var i = 0; i < 8; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+}
+
+// ===== 家庭数据隔离层 =====
+function getFamilyId() {
+    return localStorage.getItem('familyId') || null;
+}
+function setFamilyId(id) {
+    localStorage.setItem('familyId', id);
+}
+function familyKey(key) {
+    var fid = getFamilyId();
+    if (!fid) return key;
+    // 家庭相关数据加前缀，全局数据不加
+    var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
+        'shoppingDay','dutySchedule','dutyScores','dutyClaims','dutyConfirmations',
+        'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
+        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
+        'shoppingAlert_'];
+    for (var i=0; i<familyKeys.length; i++) {
+        if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
+            return fid + '_' + key;
+        }
+    }
+    return key;
+}
+// 统一读写函数
+function lsGet(key) { return localStorage.getItem(familyKey(key)); }
+function lsSet(key, val) { localStorage.setItem(familyKey(key), val); }
+function lsRemove(key) { localStorage.removeItem(familyKey(key)); }
+function lsGetJSON(key, defaultVal) {
+    try { var v = localStorage.getItem(familyKey(key)); return v ? JSON.parse(v) : (defaultVal || null); }
+    catch(e) { return defaultVal || null; }
+}
+function lsSetJSON(key, val) { localStorage.setItem(familyKey(key), JSON.stringify(val)); }
+
+// 将全局数据认领到当前家庭前缀下（仅在首次创建/加入家庭时执行）
+function claimGlobalDataForFamily() {
+    var fid = getFamilyId();
+    if (!fid) return;
+    var claimFlag = 'dataClaimed_' + fid;
+    if (localStorage.getItem(claimFlag)) return; // 已认领
+    var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
+        'shoppingDay','dutySchedule','dutyScores','dutyClaims','dutyConfirmations',
+        'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
+        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate'];
+    for (var i = 0; i < familyKeys.length; i++) {
+        var k = familyKeys[i];
+        var globalVal = localStorage.getItem(k);
+        var famKey = fid + '_' + k;
+        if (globalVal !== null && localStorage.getItem(famKey) === null) {
+            localStorage.setItem(famKey, globalVal);
+        }
+    }
+    // 认领 shoppingAlert_ 前缀的数据
+    for (var j = localStorage.length - 1; j >= 0; j--) {
+        var sk = localStorage.key(j);
+        if (sk && sk.indexOf('shoppingAlert_') === 0) {
+            var sv = localStorage.getItem(sk);
+            var famSk = fid + '_' + sk;
+            if (sv !== null && localStorage.getItem(famSk) === null) {
+                localStorage.setItem(famSk, sv);
+            }
+        }
+    }
+    localStorage.setItem(claimFlag, 'true');
+}
+
+// 导出当前家庭全部数据为 JSON
+function exportFamilyData() {
+    var fid = getFamilyId();
+    if (!fid) { showToast('请先创建或加入家庭'); return; }
+    var familyName = localStorage.getItem('familyName_' + fid) || '未命名家庭';
+    var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
+        'shoppingDay','dutySchedule','dutyScores','dutyClaims','dutyConfirmations',
+        'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
+        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate'];
+    var data = {};
+    for (var i = 0; i < familyKeys.length; i++) {
+        var k = familyKeys[i];
+        var v = localStorage.getItem(fid + '_' + k);
+        if (v !== null) data[k] = v;
+    }
+    // 收集 shoppingAlert_ 前缀数据
+    for (var j = 0; j < localStorage.length; j++) {
+        var sk = localStorage.key(j);
+        if (sk && sk.indexOf(fid + '_shoppingAlert_') === 0) {
+            data[sk.replace(fid + '_', '')] = localStorage.getItem(sk);
+        }
+    }
+    var exportObj = {
+        version: '1.0',
+        exportTime: new Date().toISOString(),
+        familyId: fid,
+        familyName: familyName,
+        data: data
+    };
+    var blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '家庭数据_' + familyName + '_' + new Date().toISOString().slice(0,10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('✅ 数据已导出');
+}
+
+// 家庭选择 overlay 控制
+function showFamilyOverlay() {
+    var ov = document.getElementById('familySelectOverlay');
+    if (ov) ov.style.display = 'flex';
+}
+function hideFamilyOverlay() {
+    var ov = document.getElementById('familySelectOverlay');
+    if (ov) ov.style.display = 'none';
+}
+function createFamily() {
+    var nameInput = document.getElementById('newFamilyName');
+    var familyName = nameInput ? nameInput.value.trim() : '';
+    if (!familyName) { showToast('请输入家庭名称'); return; }
+    var code = generateFamilyCode();
+    setFamilyId(code);
+    localStorage.setItem('familyName_' + code, familyName);
+    claimGlobalDataForFamily();
+    hideFamilyOverlay();
+    location.reload();
+}
+function joinFamily() {
+    var codeInput = document.getElementById('joinFamilyCode');
+    var code = codeInput ? codeInput.value.trim().toUpperCase() : '';
+    if (!code || code.length !== 8) { showToast('请输入8位家庭码'); return; }
+    var validChars = /^[A-HJ-NP-Z2-9]{8}$/;
+    if (!validChars.test(code)) { showToast('家庭码格式不正确'); return; }
+    setFamilyId(code);
+    claimGlobalDataForFamily();
+    hideFamilyOverlay();
+    location.reload();
+}
+function toggleFamilyPanel(panel) {
+    var createPanel = document.getElementById('createFamilyPanel');
+    var joinPanel = document.getElementById('joinFamilyPanel');
+    if (panel === 'create') {
+        if (createPanel) createPanel.style.display = 'block';
+        if (joinPanel) joinPanel.style.display = 'none';
+    } else {
+        if (createPanel) createPanel.style.display = 'none';
+        if (joinPanel) joinPanel.style.display = 'block';
+    }
+}
+function showFamilyCodeInfo() {
+    var fid = getFamilyId();
+    if (!fid) return;
+    var overlay = document.getElementById('familyCodeInfoOverlay');
+    if (overlay) overlay.remove();
+    var familyName = localStorage.getItem('familyName_' + fid) || '未命名家庭';
+    overlay = document.createElement('div');
+    overlay.id = 'familyCodeInfoOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100003;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = '<div style="background:#fff;border-radius:16px;padding:24px;width:86%;max-width:340px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.2);">' +
+        '<div style="font-size:28px;margin-bottom:8px;">🏠</div>' +
+        '<div style="font-size:15px;font-weight:700;color:#1F2937;margin-bottom:6px;">' + escapeHtml(familyName) + '</div>' +
+        '<div style="font-size:12px;color:#9CA3AF;margin-bottom:14px;">家庭码（分享给家人加入）</div>' +
+        '<div style="font-size:28px;font-weight:800;letter-spacing:4px;color:#F97316;background:#FFF7ED;border:2px dashed #FED7AA;border-radius:12px;padding:14px 0;margin-bottom:16px;font-family:monospace;">' + fid + '</div>' +
+        '<button onclick="copyFamilyCode()" style="width:100%;padding:10px;border:none;border-radius:8px;font-size:13px;color:#fff;background:#F97316;cursor:pointer;margin-bottom:8px;">📋 复制家庭码</button>' +
+        '<button onclick="document.getElementById(\'familyCodeInfoOverlay\').remove()" style="width:100%;padding:10px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;color:#6B7280;cursor:pointer;background:#fff;">关闭</button>' +
+        '</div>';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+}
+function copyFamilyCode() {
+    var fid = getFamilyId();
+    if (!fid) return;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(fid).then(function() { showToast('✅ 家庭码已复制'); });
+    } else {
+        var ta = document.createElement('textarea');
+        ta.value = fid; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); showToast('✅ 家庭码已复制'); } catch(e) { showToast('复制失败，请手动复制'); }
+        document.body.removeChild(ta);
+    }
+}
+
 // ==================== dietCalendar 工具函数 ====================
 function getDietCalendar() {
-    return JSON.parse(localStorage.getItem('dietCalendar')) || {};
+    return JSON.parse(lsGet('dietCalendar')) || {};
 }
 
 function saveDietCalendar(calendar) {
-    localStorage.setItem('dietCalendar', JSON.stringify(calendar));
+    lsSet('dietCalendar', JSON.stringify(calendar));
 }
 
 function getMealData(date, mealType) {
@@ -3510,11 +3775,11 @@ const SNACK_CATEGORIES = ['水果', '零食', '点心', '饮品', '菜品'];
 function getSnackStorageKey() { return 'snackItems'; }
 
 function getAllSnacks() {
-    return JSON.parse(localStorage.getItem(getSnackStorageKey())) || [];
+    return JSON.parse(lsGet(getSnackStorageKey())) || [];
 }
 
 function saveAllSnacks(items) {
-    localStorage.setItem(getSnackStorageKey(), JSON.stringify(items));
+    lsSet(getSnackStorageKey(), JSON.stringify(items));
 }
 
 function getSnacksByDate(dateStr) {
@@ -4067,14 +4332,14 @@ const SOLAR_TERMS_2026 = {
     '12-22': { name: '冬至', season: '冬', diet: '温补养阳', foods: ['羊肉', '饺子', '汤圆', '糯米'], dishes: ['羊肉汤', '饺子', '汤圆'], tip: '冬至是一年中夜晚最长的一天' }
 };
 
-let familyData = JSON.parse(localStorage.getItem('familyData')) || [...DEFAULT_FAMILY, ...DEFAULT_SOCIAL_MEMBERS];
-let contactsData = JSON.parse(localStorage.getItem('contactsData')) || DEFAULT_CONTACTS;
-let diningGroups = JSON.parse(localStorage.getItem('diningGroups')) || [...DEFAULT_DINING_GROUPS, ...DEFAULT_SOCIAL_SUBGROUPS];
-let familyHomeAddress = localStorage.getItem('familyHomeAddress') || '';
+let familyData = JSON.parse(lsGet('familyData')) || [...DEFAULT_FAMILY, ...DEFAULT_SOCIAL_MEMBERS];
+let contactsData = JSON.parse(lsGet('contactsData')) || DEFAULT_CONTACTS;
+let diningGroups = JSON.parse(lsGet('diningGroups')) || [...DEFAULT_DINING_GROUPS, ...DEFAULT_SOCIAL_SUBGROUPS];
+let familyHomeAddress = lsGet('familyHomeAddress') || '';
 
 // ==================== 采购日设置 ====================
-let shoppingDay = localStorage.getItem('shoppingDay') || '6'; // 默认周六(6)，0=周日
-function saveShoppingDay() { localStorage.setItem('shoppingDay', shoppingDay); }
+let shoppingDay = lsGet('shoppingDay') || '6'; // 默认周六(6)，0=周日
+function saveShoppingDay() { lsSet('shoppingDay', shoppingDay); }
 function changeShoppingDay(val) {
     shoppingDay = val;
     saveShoppingDay();
@@ -4103,6 +4368,35 @@ function isSingleMemberMode() {
     const xiaojiaMembers = familyData.filter(m => xiaojiaNames.includes(m.name) && (m.isFamily !== false));
     return xiaojiaMembers.length <= 1;
 }
+// 值班安排是否关闭（单人模式自动关闭 + 设置开关）
+function isDutyDisabled() {
+    if (isSingleMemberMode()) return true;
+    return lsGet('dutyDisabled') === 'true';
+}
+// 切换值班开关
+function toggleDutyDisabled() {
+    if (isSingleMemberMode()) { showToast('当前只有1位家庭成员，已自动关闭值班安排'); return; }
+    var cur = lsGet('dutyDisabled') === 'true';
+    lsSet('dutyDisabled', cur ? 'false' : 'true');
+    updateDutyToggleUI();
+    showToast(cur ? '已开启值班安排' : '已关闭值班安排');
+    if (typeof renderDiary === 'function') renderDiary();
+}
+// 更新开关按钮UI
+function updateDutyToggleUI() {
+    var btn = document.getElementById('dutyDisabledToggle');
+    if (!btn) return;
+    if (isSingleMemberMode()) {
+        btn.textContent = '单人模式';
+        btn.style.background = '#9CA3AF';
+        btn.title = '当前只有1位家庭成员，已自动关闭';
+    } else {
+        var disabled = lsGet('dutyDisabled') === 'true';
+        btn.textContent = disabled ? '已关闭' : '已开启';
+        btn.style.background = disabled ? '#EF4444' : '#10B981';
+        btn.title = disabled ? '点击开启值班安排' : '点击关闭值班安排';
+    }
+}
 
 // ==================== 值班人机制 ====================
 // 默认值班安排：周1-2妈妈, 周3-4爸爸, 周5儿子, 周六认领值班日, 周日争分日
@@ -4115,16 +4409,16 @@ const DEFAULT_DUTY_SCHEDULE = {
     6: { memberName: '儿子', type: 'claimable' }, // 周六认领值班日（默认儿子，可被认领）
     0: { memberName: '', type: 'contest' } // 周日争分日
 };
-let dutySchedule = JSON.parse(localStorage.getItem('dutySchedule')) || JSON.parse(JSON.stringify(DEFAULT_DUTY_SCHEDULE));
-let dutyScores = JSON.parse(localStorage.getItem('dutyScores')) || {}; // {memberName: score}
-let dutyClaims = JSON.parse(localStorage.getItem('dutyClaims')) || {}; // {dateKey: memberName} 争分日认领记录
-let dutyConfirmations = JSON.parse(localStorage.getItem('dutyConfirmations')) || {}; // {dateKey_mealKey: {memberName, points, type}}
+let dutySchedule = JSON.parse(lsGet('dutySchedule')) || JSON.parse(JSON.stringify(DEFAULT_DUTY_SCHEDULE));
+let dutyScores = JSON.parse(lsGet('dutyScores')) || {}; // {memberName: score}
+let dutyClaims = JSON.parse(lsGet('dutyClaims')) || {}; // {dateKey: memberName} 争分日认领记录
+let dutyConfirmations = JSON.parse(lsGet('dutyConfirmations')) || {}; // {dateKey_mealKey: {memberName, points, type}}
 let selectedFamilyMemberName = null; // 当前选中的小家成员名
 
-function saveDutySchedule() { localStorage.setItem('dutySchedule', JSON.stringify(dutySchedule)); }
-function saveDutyScores() { localStorage.setItem('dutyScores', JSON.stringify(dutyScores)); }
-function saveDutyClaims() { localStorage.setItem('dutyClaims', JSON.stringify(dutyClaims)); }
-function saveDutyConfirmations() { localStorage.setItem('dutyConfirmations', JSON.stringify(dutyConfirmations)); }
+function saveDutySchedule() { lsSet('dutySchedule', JSON.stringify(dutySchedule)); }
+function saveDutyScores() { lsSet('dutyScores', JSON.stringify(dutyScores)); }
+function saveDutyClaims() { lsSet('dutyClaims', JSON.stringify(dutyClaims)); }
+function saveDutyConfirmations() { lsSet('dutyConfirmations', JSON.stringify(dutyConfirmations)); }
 
 // 获取某天的值班人
 function getDutyForDate(date) {
@@ -4205,14 +4499,14 @@ function getMemberScore(memberName) {
 // chatHistory 持久化到 localStorage（每次更新自动保存）
 let chatHistory = [];
 try {
-    const saved = localStorage.getItem('chatHistory');
+    const saved = lsGet('chatHistory');
     if (saved) chatHistory = JSON.parse(saved) || [];
 } catch (e) { chatHistory = []; }
 
 // 保存 chatHistory 到 localStorage
 function persistChatHistory() {
     try {
-        localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+        lsSet('chatHistory', JSON.stringify(chatHistory));
     } catch (e) {}
 }
 let currentTab = 'chat';
@@ -4463,11 +4757,11 @@ const DEFAULT_DIET_KNOWLEDGE = [
     }
 ];
 
-let dietKnowledge = JSON.parse(localStorage.getItem('dietKnowledge')) || [...DEFAULT_DIET_KNOWLEDGE];
+let dietKnowledge = JSON.parse(lsGet('dietKnowledge')) || [...DEFAULT_DIET_KNOWLEDGE];
 let nextKnowledgeId = dietKnowledge.length > 0 ? Math.max(...dietKnowledge.map(k => k.id)) + 1 : 1;
 
 function saveDietKnowledge() {
-    localStorage.setItem('dietKnowledge', JSON.stringify(dietKnowledge));
+    lsSet('dietKnowledge', JSON.stringify(dietKnowledge));
 }
 let currentKnowledgeFilter = 'all';
 let currentKnowledgeSearch = '';
@@ -4853,7 +5147,7 @@ function formatAIResponse(text) {
 // 冰箱食材管理模块
 // ============================================================
 
-let fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+let fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
 let pendingFoodStorage = null;
 let pendingPurchaseAlert = null;
 let currentFridgeView = 'expiring'; // expiring / storage / category
@@ -4888,7 +5182,7 @@ const FOOD_PRESERVATION_KNOWLEDGE = {
 };
 
 // 预置示例数据（仅当 localStorage 中没有 fridgeItems 时）
-if (!localStorage.getItem('fridgeItems')) {
+if (!lsGet('fridgeItems')) {
     const today = new Date();
     const fmt = d => d.toISOString().slice(0, 10);
     const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
@@ -4902,7 +5196,7 @@ if (!localStorage.getItem('fridgeItems')) {
         { id: Date.now()+7, name: '大米', emoji: '🍚', category: '主粮', quantity: '5斤', purchaseDate: fmt(today), expiryDate: fmt(addDays(today, 90)) },
         { id: Date.now()+8, name: '苹果', emoji: '🍎', category: '水果', quantity: '4个', purchaseDate: fmt(today), expiryDate: fmt(addDays(today, 5)) },
     ];
-    localStorage.setItem('fridgeItems', JSON.stringify(fridgeItems));
+    lsSet('fridgeItems', JSON.stringify(fridgeItems));
 }
 
 // ==================== 食材数量解析 ====================
@@ -5014,7 +5308,7 @@ function guessFoodEmoji(name) {
 
 // 保存fridgeItems到localStorage
 function saveFridgeItems() {
-    localStorage.setItem('fridgeItems', JSON.stringify(fridgeItems));
+    lsSet('fridgeItems', JSON.stringify(fridgeItems));
 }
 
 // 计算距过期天数
@@ -5155,7 +5449,7 @@ const WEEKDAYS = ['周日','周一','周二','周三','周四','周五','周六'
 
 // 根据家中食材和食谱库，为7天生成三餐推荐（食材优先逻辑）
 function generateWeekRecommendation() {
-    fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     const calendar = getDietCalendar(); // 从 dietCalendar 读取已确认计划
     const fridgeNames = buildFridgeNamesDict(fridgeItems);
 
@@ -6626,7 +6920,7 @@ function addMissingToShopping(ingredientName, event) {
     if (event) { event.stopPropagation(); event.preventDefault(); }
     // 标准化食材名称
     const stdName = normalizeIngredientName(ingredientName);
-    let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+    let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
     const exists = shoppingPlans.some(s => s.name === stdName && !s.purchased);
     if (exists) {
         showToast('📋 ' + stdName + ' 已在采购计划中');
@@ -6640,7 +6934,7 @@ function addMissingToShopping(ingredientName, event) {
         purchased: false,
         addedAt: Date.now()
     });
-    localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+    lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
     showToast('✅ ' + stdName + ' 已加入采购计划');
 }
 
@@ -6688,7 +6982,7 @@ function renderFridgeRecView() {
 
     const selectedDate = getRecSelectedDate();
     const selectedKey = dateToKey(selectedDate);
-    fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     const fridgeNames = buildFridgeNamesDict(fridgeItems);
 
     let html = '';
@@ -6881,7 +7175,7 @@ function renderRecShopPlan() {
     if (!container) return;
 
     const calendar = getDietCalendar();
-    const fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    const fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     const fridgeNames = buildFridgeNamesDict(fridgeItems);
 
     // 计算选中日期
@@ -7309,7 +7603,7 @@ function confirmRecShopping() {
     const buyItems = (window._recShopBuyItems || []).filter(it => it !== null);
     
     // 存入现有采购计划（食材管理模块）
-    let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+    let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
     let addedCount = 0;
     buyItems.forEach(item => {
         if (!shoppingPlans.find(p => p.name === item.name && !p.purchased && !p.bought)) {
@@ -7325,10 +7619,10 @@ function confirmRecShopping() {
             addedCount++;
         }
     });
-    localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+    lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
 
     // 保存采购记录到历史（用于周/月统计）
-    let purchaseHistory = JSON.parse(localStorage.getItem('purchaseHistory')) || [];
+    let purchaseHistory = JSON.parse(lsGet('purchaseHistory')) || [];
     const totalAmount = buyItems.reduce((sum, it) => sum + it.count * it.unitPrice, 0);
     purchaseHistory.push({
         id: Date.now(),
@@ -7344,10 +7638,10 @@ function confirmRecShopping() {
         totalAmount: totalAmount,
         itemCount: buyItems.length
     });
-    localStorage.setItem('purchaseHistory', JSON.stringify(purchaseHistory));
+    lsSet('purchaseHistory', JSON.stringify(purchaseHistory));
 
     // 自动将采购食材添加到家中食材库
-    let fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    let fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     const fridgeNameSet = new Set();
     fridgeItems.forEach(f => {
         fridgeNameSet.add(f.name);
@@ -7377,7 +7671,7 @@ function confirmRecShopping() {
         }
     });
     if (addedToFridge > 0) {
-        localStorage.setItem('fridgeItems', JSON.stringify(fridgeItems));
+        lsSet('fridgeItems', JSON.stringify(fridgeItems));
     }
 
     showToast(`✅ ${addedCount > 0 ? addedCount + '种食材已加入采购计划' : '采购食材已在计划中'}，共${buyItems.length}种，预估¥${totalAmount.toFixed(1)}${addedToFridge > 0 ? '，其中' + addedToFridge + '种已自动入库' : ''}`);
@@ -7439,7 +7733,7 @@ function closeDishDetail() {
 // 在知识库中查找食谱
 function findDishInKnowledge(dishName) {
     if (!dishName) return null;
-    const allKnowledge = JSON.parse(localStorage.getItem('dietKnowledge')) || [];
+    const allKnowledge = JSON.parse(lsGet('dietKnowledge')) || [];
     // 优先精确匹配标题
     let match = allKnowledge.find(k => k.title === dishName);
     if (match) return match;
@@ -7454,7 +7748,7 @@ function findDishInKnowledge(dishName) {
 // 检查冰箱中是否有某食材（支持精确匹配、标准化匹配、包含匹配）
 function checkFridgeHas(ingredientName) {
     if (!ingredientName) return false;
-    const fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    const fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     const stdName = normalizeIngredientName(ingredientName);
     return fridgeItems.some(item => {
         if (!item || !item.name) return false;
@@ -7740,7 +8034,7 @@ function renderRecShopStats(range) {
     }
 
     // 读取采购历史
-    const purchaseHistory = JSON.parse(localStorage.getItem('purchaseHistory')) || [];
+    const purchaseHistory = JSON.parse(lsGet('purchaseHistory')) || [];
     const startStr = formatDateKey(startDate);
     const endStr = formatDateKey(endDate);
     const records = purchaseHistory.filter(r => r.date >= startStr && r.date <= endStr);
@@ -7897,7 +8191,7 @@ const _origCloseFoodDetail = typeof closeFoodDetail === 'function' ? closeFoodDe
 function renderFridgeCategoryView() {
     const body = document.getElementById('fridgeCategoryBody');
     if (!body) return;
-    fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     let hasAny = fridgeItems.length > 0;
     if (!hasAny) {
         body.innerHTML = `<div class="fridge-cat-empty">暂无食材<br><span style="font-size:12px;color:#D1D5DB;">点击右上角+添加</span></div>`;
@@ -7924,7 +8218,7 @@ function renderFridgeCategoryView() {
 
 // 渲染冰箱页面
 function renderFridge() {
-    fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     // 兼容旧分类名（使用全局迁移映射）
     let migrated = false;
     fridgeItems.forEach(item => {
@@ -7933,7 +8227,7 @@ function renderFridge() {
             migrated = true;
         }
     });
-    if (migrated) { localStorage.setItem('fridgeItems', JSON.stringify(fridgeItems)); }
+    if (migrated) { lsSet('fridgeItems', JSON.stringify(fridgeItems)); }
     // 为没有storage字段的旧数据补充默认值
     let storageMigrated = false;
     fridgeItems.forEach(item => {
@@ -7957,7 +8251,7 @@ function renderFridge() {
             storageMigrated = true;
         }
     });
-    if (storageMigrated) { localStorage.setItem('fridgeItems', JSON.stringify(fridgeItems)); }
+    if (storageMigrated) { lsSet('fridgeItems', JSON.stringify(fridgeItems)); }
     const list = document.getElementById('fridgeList');
     if (!list) return;
 
@@ -8427,7 +8721,7 @@ function chineseToNumber(text) {
 // 模糊匹配食材名称
 function findFridgeItemByName(name) {
     if (!name) return null;
-    fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     // 精确匹配
     let match = fridgeItems.find(item => item.name === name);
     if (match) return match;
@@ -8700,7 +8994,7 @@ function executeFridgeVoiceCommand(command) {
         return;
     }
 
-    fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
 
     switch (command.action) {
         case 'increase': {
@@ -8830,7 +9124,7 @@ function executeFridgeVoiceCommand(command) {
         }
 
         case 'confirm_shopping': {
-            let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+            let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
             const unpurchased = shoppingPlans.filter(s => !s.purchased);
             if (unpurchased.length === 0) {
                 showToast('暂无待确认的采购计划');
@@ -8838,7 +9132,7 @@ function executeFridgeVoiceCommand(command) {
                 return;
             }
             unpurchased.forEach(s => { s.purchased = true; s.purchasedAt = Date.now(); });
-            localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+            lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
             renderFridge();
             const msg = `✅ 已确认${unpurchased.length}项采购计划`;
             showToast(msg);
@@ -8847,7 +9141,7 @@ function executeFridgeVoiceCommand(command) {
         }
 
         case 'remove_shopping': {
-            let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+            let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
             const before = shoppingPlans.length;
             shoppingPlans = shoppingPlans.filter(s => {
                 if (s.purchased) return true;
@@ -8859,7 +9153,7 @@ function executeFridgeVoiceCommand(command) {
                 fridgeVoiceSpeak(`采购计划中未找到${command.name}`);
                 return;
             }
-            localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+            lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
             renderFridge();
             const msg = `✅ 已从采购计划移除${command.name}`;
             showToast(msg);
@@ -8874,7 +9168,7 @@ function executeFridgeVoiceCommand(command) {
                 fridgeVoiceSpeak('未识别到食材名称');
                 return;
             }
-            let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+            let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
             const exists = shoppingPlans.some(s => s.name === stdName && !s.purchased);
             if (exists) {
                 const msg = `📋 ${stdName} 已在采购计划中`;
@@ -8891,7 +9185,7 @@ function executeFridgeVoiceCommand(command) {
                 purchased: false,
                 addedAt: Date.now()
             });
-            localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+            lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
             renderFridge();
             const msg = `✅ ${stdName}已加入采购计划${command.quantity > 0 ? `（${command.quantity}${command.unit}）` : ''}`;
             showToast(msg);
@@ -9446,7 +9740,7 @@ async function handleDiaryVoiceResult(text) {
 }
 
 function generateFridgeMealPlan() {
-    fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     if (fridgeItems.length === 0) { showToast('冰箱是空的，先添加食材吧'); return; }
 
     const fridgeNames = new Set(fridgeItems.map(i => i.name));
@@ -9501,7 +9795,7 @@ function renderFridgeMeals(meals) {
     if (!container) return;
 
     // 获取家庭成员信息用于推荐
-    const family = JSON.parse(localStorage.getItem('familyData')) || [];
+    const family = JSON.parse(lsGet('familyData')) || [];
     const memberTags = family.length > 0 ? family.slice(0, 3).map(m => m.name).join('、') : '全家';
 
     let html = '';
@@ -9543,7 +9837,7 @@ function addToPlanFromFridge(dish, mealType) {
     updateMealPlan(todayKey, mealType, planData6315);
 
     // 预扣食材
-    let fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    let fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     let reservedCount = 0;
     let insufficient = [];
 
@@ -9567,7 +9861,7 @@ function addToPlanFromFridge(dish, mealType) {
             }
             reservedCount++;
         });
-        localStorage.setItem('fridgeItems', JSON.stringify(fridgeItems));
+        lsSet('fridgeItems', JSON.stringify(fridgeItems));
     }
 
     showToast('✅ 已将"' + dishName + '"加入今日' + getMealLabel(mealType) + '计划' + (reservedCount > 0 ? '，已预扣' + reservedCount + '种食材' : ''));
@@ -9575,9 +9869,9 @@ function addToPlanFromFridge(dish, mealType) {
         setTimeout(() => {
             showConfirmDialog('食材不足：' + insufficient.join('、') + '库存不足，建议先采购补充', function() {
                 insufficient.forEach(name => {
-                    let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+                    let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
                     shoppingPlans.push({ id: Date.now() + Math.random(), name: name, quantity: '适量', category: guessFoodCategory(name), purchased: false, addedAt: Date.now() });
-                    localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+                    lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
                 });
                 showToast('✅ 已加入采购计划');
             });
@@ -9649,7 +9943,7 @@ function syncMealsToDiary(meals, dateKey, source) {
 
 // 生成采购计划（从食记dietCalendar读取已确认计划，按就餐人数汇总食材）
 function generateShoppingPlan() {
-    fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     const calendar = getDietCalendar();
 
     // 获取当前就餐人信息
@@ -9766,7 +10060,7 @@ function renderShoppingPlan(planMap, dishCount, servings) {
     if (!container) return;
 
     const list = Object.entries(planMap).sort((a, b) => a[0].localeCompare(b[0]));
-    const checked = JSON.parse(localStorage.getItem('shoppingChecked') || '{}');
+    const checked = JSON.parse(lsGet('shoppingChecked') || '{}');
     const servingsStr = servings ? `，按 ${servings} 人份` : '';
 
     if (list.length === 0) {
@@ -9833,9 +10127,9 @@ function renderShoppingPlan(planMap, dishCount, servings) {
 
 // 切换采购项勾选
 function toggleShoppingItem(name, isChecked) {
-    const checked = JSON.parse(localStorage.getItem('shoppingChecked') || '{}');
+    const checked = JSON.parse(lsGet('shoppingChecked') || '{}');
     checked[name] = isChecked;
-    localStorage.setItem('shoppingChecked', JSON.stringify(checked));
+    lsSet('shoppingChecked', JSON.stringify(checked));
     // 重新渲染采购计划（需要重新调用）
     // 找到当前显示的是菜谱还是采购
     const title = document.getElementById('fridgeResultTitle').textContent;
@@ -9921,8 +10215,8 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(function() {
         if (isDayBeforeShopping()) {
             var key = 'shoppingAlert_' + new Date().toISOString().slice(0,10);
-            if (!localStorage.getItem(key)) {
-                localStorage.setItem(key, '1');
+            if (!lsGet(key)) {
+                lsSet(key, '1');
                 showShoppingReminder();
             }
         }
@@ -9962,11 +10256,11 @@ function markItemUsedUp(id) {
         item.usedUp = true;
         saveFridgeItems();
         // 添加到采购计划
-        let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+        let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
         const exists = shoppingPlans.some(s => s.name === item.name && !s.purchased);
         if (!exists) {
             shoppingPlans.push({ id: Date.now() + Math.random(), name: item.name, quantity: item.quantity || '适量', category: item.category || guessFoodCategory(item.name), purchased: false, addedAt: Date.now() });
-            localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+            lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
         }
         refreshFridgeView();
         showToast('✅ 已标记用完并加入采购计划');
@@ -10073,7 +10367,7 @@ function closeFoodDetail() {
 function renderShoppingView() {
     const list = document.getElementById('fridgeList');
     if (!list) return;
-    let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+    let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
 
     let html = '';
     // 二级分类筛选
@@ -10144,16 +10438,16 @@ function submitAddShoppingItem() {
     const category = document.getElementById('shoppingCategory').value;
     const quantity = document.getElementById('shoppingQuantity').value.trim() || '适量';
     if (!name) { showToast('请输入食材名称'); return; }
-    let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+    let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
     shoppingPlans.push({ id: Date.now(), name, category, quantity, purchased: false, addedAt: Date.now() });
-    localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+    lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
     closeAddShoppingModal();
     renderFridge();
     showToast('✅ 已添加采购项：' + name);
 }
 
 function openEditShoppingModal(id) {
-    let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+    let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
     const item = shoppingPlans.find(s => s.id === id);
     if (!item) return;
     document.getElementById('editShoppingId').value = id;
@@ -10170,43 +10464,43 @@ function submitEditShoppingItem() {
     const category = document.getElementById('editShoppingCategory').value;
     const quantity = document.getElementById('editShoppingQuantity').value.trim() || '适量';
     if (!name) { showToast('请输入食材名称'); return; }
-    let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+    let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
     const item = shoppingPlans.find(s => s.id === id);
     if (!item) return;
     item.name = name; item.category = category; item.quantity = quantity;
-    localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+    lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
     closeEditShoppingModal();
     renderFridge();
     showToast('✅ 已更新采购项');
 }
 
 function deleteShoppingItem(id) {
-    let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+    let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
     const item = shoppingPlans.find(s => s.id === id);
     if (!item) return;
     showConfirmDialog(`确定要删除采购项「${item.name}」吗？`, function() {
         shoppingPlans = shoppingPlans.filter(s => s.id !== id);
-        localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+        lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
         renderFridge();
         showToast('已删除采购项');
     });
 }
 
 function toggleShoppingPurchased(id) {
-    let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+    let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
     const item = shoppingPlans.find(s => s.id === id);
     if (!item) return;
     if (item.purchased) {
         // 取消已购
         item.purchased = false;
-        localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+        lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
         renderFridge();
         return;
     }
     // 标记已购，提示是否入库
     showConfirmDialog(`「${item.name}」已采购，是否添加到家中食材？`, function() {
         item.purchased = true;
-        localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+        lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
         // 打开入库弹窗
         document.getElementById('shopToFridgeId').value = id;
         document.getElementById('shopToFridgeName').value = item.name;
@@ -10224,7 +10518,7 @@ function toggleShoppingPurchased(id) {
         renderFridge();
     }, function() {
         item.purchased = true;
-        localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+        lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
         renderFridge();
         showToast('✅ 已标记为已购');
     });
@@ -10241,7 +10535,7 @@ function confirmShoppingToFridge() {
     const expiryDate = document.getElementById('shopToFridgeExpiry').value;
     const today = new Date().toISOString().slice(0, 10);
 
-    let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+    let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
     const shopItem = shoppingPlans.find(s => s.id === id);
     const category = shopItem ? shopItem.category : guessFoodCategory(name);
 
@@ -10306,6 +10600,7 @@ function renderChat() {
 }
 
 function renderFamily() {
+    try {
     familyList.innerHTML = '';
     renderCurrentDiningGroupSelector();
     // 家庭住址卡片
@@ -10607,7 +10902,7 @@ function renderFamily() {
                 member.trainingFreq = (document.getElementById('editTrainingFreq_' + id)||{}).value || '';
                 member.pregnancyWeek = parseInt((document.getElementById('editPregnancyWeek_' + id)||{}).value) || 0;
                 member.diseaseType = (document.getElementById('editDiseaseType_' + id)||{}).value || '';
-                localStorage.setItem('familyData', JSON.stringify(familyData));
+                lsSet('familyData', JSON.stringify(familyData));
                 // 如果姓名有变化，更新所有就餐组中的旧名
                 if (oldName !== nameVal) {
                     diningGroups.forEach(g => {
@@ -10628,7 +10923,7 @@ function renderFamily() {
                 if (newGroup && !newGroup.members.includes(nameVal)) {
                     newGroup.members.push(nameVal);
                 }
-                localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
+                lsSet('diningGroups', JSON.stringify(diningGroups));
                 form.remove();
                 renderFamily();
                 showToast('修改成功！');
@@ -10642,15 +10937,37 @@ function renderFamily() {
                     const memberName = memberToDelete ? memberToDelete.name : '';
                     const idx = familyData.findIndex(m => m.id === id);
                     if (idx > -1) familyData.splice(idx, 1);
-                    localStorage.setItem('familyData', JSON.stringify(familyData));
+                    lsSet('familyData', JSON.stringify(familyData));
                     // 从所有就餐组中移除该成员
                     diningGroups.forEach(g => {
-                        const mIdx = g.members.indexOf(memberName);
-                        if (mIdx > -1) g.members.splice(mIdx, 1);
+                        if (g && Array.isArray(g.members)) {
+                            const mIdx = g.members.indexOf(memberName);
+                            if (mIdx > -1) g.members.splice(mIdx, 1);
+                        }
                     });
-                    localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
-                    form.remove();
-                    renderFamily();
+                    lsSet('diningGroups', JSON.stringify(diningGroups));
+                    // 如果删除的是当前选中的成员，重置选中状态
+                    if (selectedFamilyMemberName === memberName) {
+                        selectedFamilyMemberName = null;
+                    }
+                    // 先移除编辑表单，避免renderFamily时innerHTML清空造成的问题
+                    try { form.remove(); } catch(e) {}
+                    // 安全调用renderFamily，捕获异常防止白屏
+                    try {
+                        renderFamily();
+                    } catch(err) {
+                        console.error('删除成员后renderFamily出错：', err);
+                        // 兜底：至少重新渲染基础元素，防止白屏
+                        try {
+                            familyList.innerHTML = '';
+                            // 重新插入采购日和设置入口
+                            familyList.insertAdjacentHTML('beforeend', `
+                                <div style="text-align:center;padding:30px 20px;color:#9CA3AF;font-size:14px;">
+                                    暂无小家成员，请点击下方"添加成员"按钮重新添加
+                                </div>
+                            `);
+                        } catch(e2) {}
+                    }
                     showToast('已删除');
                 }
             });
@@ -10658,7 +10975,7 @@ function renderFamily() {
     });
 
     // 设置区域
-    const notifEnabled = localStorage.getItem('notifEnabled') !== 'false'; // 默认开启
+    const notifEnabled = lsGet('notifEnabled') !== 'false'; // 默认开启
     familyList.insertAdjacentHTML('beforeend', `<button id="settingsToggle" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:white;border:1px solid #F3F4F6;border-radius:12px;cursor:pointer;margin-bottom:12px;font-size:14px;color:#374151;">
         <span style="font-weight:500;">⚙️ 设置</span>
         <span style="font-size:12px;color:#9CA3AF;">点击展开 ▼</span>
@@ -10723,6 +11040,23 @@ function renderFamily() {
                 开启后，每天18:00将自动检查并提示您规划明日三餐食谱
             </div>
         </div>
+        <div style="background:white;border-radius:12px;padding:14px;margin-bottom:8px;border:1px solid #F3F4F6;">
+            <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px;">🏠 家庭管理</div>
+            <div id="familyCodeDisplay" style="font-size:12px;color:#6B7280;margin-bottom:10px;line-height:1.6;"></div>
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+                <button onclick="showFamilyCodeInfo()" style="flex:1;padding:8px 0;border:1px solid #FED7AA;border-radius:8px;font-size:12px;color:#9A3412;background:#FFF7ED;cursor:pointer;">📋 查看家庭码</button>
+                <button onclick="exportFamilyData()" style="flex:1;padding:8px 0;border:1px solid #FED7AA;border-radius:8px;font-size:12px;color:#9A3412;background:#FFF7ED;cursor:pointer;">📤 导出数据</button>
+            </div>
+            <div style="border-top:1px solid #F3F4F6;padding-top:10px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div style="font-size:12px;color:#374151;">
+                        <div style="font-weight:500;">不用食谱值班安排</div>
+                        <div style="font-size:11px;color:#9CA3AF;margin-top:2px;">开启后"三餐计划、记录"顶端不再显示"今值日"</div>
+                    </div>
+                    <button id="dutyDisabledToggle" onclick="toggleDutyDisabled()" style="padding:4px 12px;border:none;border-radius:20px;font-size:12px;color:white;cursor:pointer;transition:background 0.2s;"></button>
+                </div>
+            </div>
+        </div>
     </div>`);
 
     // 设置区域展开/折叠
@@ -10733,11 +11067,23 @@ function renderFamily() {
             if (settingsPanel.style.display === 'none') {
                 settingsPanel.style.display = 'block';
                 settingsToggle.querySelector('span:last-child').textContent = '点击收起 ▲';
+                updateDutyToggleUI();
             } else {
                 settingsPanel.style.display = 'none';
                 settingsToggle.querySelector('span:last-child').textContent = '点击展开 ▼';
             }
         });
+    }
+    // 填充家庭信息
+    var famCodeDisplay = document.getElementById('familyCodeDisplay');
+    if (famCodeDisplay) {
+        var fid = getFamilyId();
+        if (fid) {
+            var fName = localStorage.getItem('familyName_' + fid) || '未命名家庭';
+            famCodeDisplay.innerHTML = '家庭名称：<b style="color:#F97316;">' + escapeHtml(fName) + '</b><br>家庭码：<b style="color:#1E40AF;font-family:monospace;letter-spacing:2px;">' + fid + '</b>';
+        } else {
+            famCodeDisplay.innerHTML = '<span style="color:#9CA3AF;">尚未创建或加入家庭</span>';
+        }
     }
     // 使用说明展开/折叠
     const manualToggle = document.getElementById('settingsManualToggle');
@@ -10757,13 +11103,27 @@ function renderFamily() {
     const notifToggle = document.getElementById('notifToggle');
     if (notifToggle) {
         notifToggle.addEventListener('change', function() {
-            localStorage.setItem('notifEnabled', this.checked ? 'true' : 'false');
+            lsSet('notifEnabled', this.checked ? 'true' : 'false');
             const slider = this.nextElementSibling;
             const knob = slider.querySelector('span');
             slider.style.background = this.checked ? '#F97316' : '#D1D5DB';
             knob.style.left = this.checked ? '20px' : '2px';
             showToast(this.checked ? '✅ 已开启18:00 AI计划推送' : '已关闭18:00 AI计划推送');
         });
+    }
+    } catch(err) {
+        console.error('renderFamily执行出错：', err);
+        // 兜底渲染，防止白屏
+        try {
+            familyList.innerHTML = `
+                <div style="padding:16px;">
+                    <div style="text-align:center;padding:30px 20px;color:#9CA3AF;font-size:14px;background:white;border-radius:12px;border:1px solid #F3F4F6;">
+                        页面加载完成，请点击下方"添加成员"按钮开始使用<br>
+                        <span style="font-size:12px;color:#D1D5DB;">（如持续显示此提示，请刷新页面重试）</span>
+                    </div>
+                </div>
+            `;
+        } catch(e2) {}
     }
 }
 
@@ -10796,7 +11156,7 @@ function saveHomeAddress() {
     if (!input) return;
     var addr = input.value.trim();
     familyHomeAddress = addr;
-    localStorage.setItem('familyHomeAddress', addr);
+    lsSet('familyHomeAddress', addr);
     document.getElementById('homeAddressOverlay').remove();
     renderFamily();
     showToast(addr ? '✅ 家庭住址已保存' : '已清除家庭住址');
@@ -10814,17 +11174,17 @@ function getFallbackDiningGroup() {
             ? { id: Date.now(), name: '小家', members: ['我', '老公', '儿子'], icon: '👨‍👩‍👦', type: 'core', isDefault: true, createdAt: Date.now() }
             : { id: Date.now(), name: '夫妻二人组', members: ['我', '老公'], icon: '👩‍❤️‍👨', type: 'core', isDefault: true, createdAt: Date.now() };
         diningGroups.unshift(group);
-        localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
+        lsSet('diningGroups', JSON.stringify(diningGroups));
     }
     return group;
 }
 
 function getDefaultDiningGroup() {
-    let currentName = localStorage.getItem('currentDiningGroup');
+    let currentName = lsGet('currentDiningGroup');
     let group = diningGroups.find(g => g.name === currentName);
     if (!group) {
         group = diningGroups.find(g => g.name === '小家') || diningGroups[0] || getFallbackDiningGroup();
-        if (group) localStorage.setItem('currentDiningGroup', group.name);
+        if (group) lsSet('currentDiningGroup', group.name);
     }
     return group;
 }
@@ -10832,7 +11192,7 @@ function getDefaultDiningGroup() {
 function setCurrentDiningGroup(name) {
     const group = diningGroups.find(g => g.name === name);
     if (!group) return;
-    localStorage.setItem('currentDiningGroup', group.name);
+    lsSet('currentDiningGroup', group.name);
     renderFamily();
     renderPlan();
     showToast(`🍽️ 当前就餐组已切换为「${group.name}」`);
@@ -11007,9 +11367,9 @@ function renderCurrentDiningGroupSelector() {
                 });
                 if (memberNames.length === 0) { showToast('请至少添加一名成员'); return; }
                 if (!memberNames.includes('我')) memberNames.unshift('我');
-                localStorage.setItem('familyData', JSON.stringify(familyData));
+                lsSet('familyData', JSON.stringify(familyData));
                 diningGroups.push({ id: Date.now(), name: trimmed, members: memberNames, icon: '👫', groupType: 'social', parentGroup: '社交组', isDefault: false, createdAt: Date.now() });
-                localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
+                lsSet('diningGroups', JSON.stringify(diningGroups));
                 modal.remove();
                 setCurrentDiningGroup(trimmed);
             };
@@ -11123,9 +11483,9 @@ function editDiningGroup(id) {
         if (!group.groupType) {
             group.groupType = group.type === 'core' ? 'core' : 'family';
         }
-        localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
-        if (localStorage.getItem('currentDiningGroup') === oldName) {
-            localStorage.setItem('currentDiningGroup', group.name);
+        lsSet('diningGroups', JSON.stringify(diningGroups));
+        if (lsGet('currentDiningGroup') === oldName) {
+            lsSet('currentDiningGroup', group.name);
         }
         form.remove();
         renderFamily();
@@ -11144,12 +11504,12 @@ function deleteDiningGroup(id) {
         return;
     }
     if (confirm(`确定删除「${group.name}」吗？`)) {
-        const wasCurrent = localStorage.getItem('currentDiningGroup') === group.name;
+        const wasCurrent = lsGet('currentDiningGroup') === group.name;
         diningGroups = diningGroups.filter(g => g.id !== id);
-        localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
+        lsSet('diningGroups', JSON.stringify(diningGroups));
         if (wasCurrent) {
             const fallback = diningGroups.find(g => g.name === '小家') || diningGroups[0];
-            if (fallback) localStorage.setItem('currentDiningGroup', fallback.name);
+            if (fallback) lsSet('currentDiningGroup', fallback.name);
         }
         renderFamily();
         renderPlan();
@@ -11208,7 +11568,7 @@ function addSocialDiningGroup(section) {
             members: members,
             isDefault: false
         });
-        localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
+        lsSet('diningGroups', JSON.stringify(diningGroups));
         form.remove();
         renderFamily();
         showToast('✅ 已添加「' + name + '」');
@@ -11263,7 +11623,7 @@ function renderPlan() {
     // 旧食计页面已移除，安全守卫：DOM元素不存在时跳过渲染
     if (!planList || !planDateDisplay) return;
     const key = dateToKey(currentPlanDate);
-    const plans = JSON.parse(localStorage.getItem('mealPlans')) || {};
+    const plans = JSON.parse(lsGet('mealPlans')) || {};
     const dayPlan = plans[key] || { breakfast: [], lunch: [], dinner: [] };
     const solarTerm = getSolarTermForDate(currentPlanDate);
 
@@ -11301,7 +11661,7 @@ function renderPlan() {
     }
 
     // 读取已完成的记录，用于判断按钮状态
-    const records = JSON.parse(localStorage.getItem('mealRecords')) || [];
+    const records = JSON.parse(lsGet('mealRecords')) || [];
     const mealKey = currentPlanMealType;
     const items = dayPlan[mealKey] || [];
 
@@ -11409,7 +11769,7 @@ function renderPlan() {
             const meal = this.dataset.meal;
             const name = this.dataset.name;
             // 存入 mealRecords
-            const records = JSON.parse(localStorage.getItem('mealRecords')) || [];
+            const records = JSON.parse(lsGet('mealRecords')) || [];
             const newRecord = {
                 id: Date.now(),
                 date: date,
@@ -11425,14 +11785,14 @@ function renderPlan() {
             };
             newRecord.aiFeedback = generateMealRecordFeedback(newRecord);
             records.push(newRecord);
-            localStorage.setItem('mealRecords', JSON.stringify(records));
+            lsSet('mealRecords', JSON.stringify(records));
             // 将 mealPlans 中该菜品标记为已完成
-            const plans = JSON.parse(localStorage.getItem('mealPlans')) || {};
+            const plans = JSON.parse(lsGet('mealPlans')) || {};
             const dayPlan = plans[date];
             if (dayPlan && dayPlan[meal]) {
                 const target = dayPlan[meal].find(d => (d.name || d.dish) === name);
                 if (target) target.completed = true;
-                localStorage.setItem('mealPlans', JSON.stringify(plans));
+                lsSet('mealPlans', JSON.stringify(plans));
             }
             // 按钮直接变为"已记录"状态（不使用 alert）
             this.textContent = '✅ 已记录';
@@ -11461,7 +11821,7 @@ function renderPlan() {
             const meal = this.dataset.meal;
             const servings = parseInt(this.dataset.servings) || 2;
             // 从 mealPlans 拿到本餐菜品列表
-            const plans = JSON.parse(localStorage.getItem('mealPlans')) || {};
+            const plans = JSON.parse(lsGet('mealPlans')) || {};
             const dayPlan = plans[date];
             const items = (dayPlan && dayPlan[meal]) ? dayPlan[meal] : [];
             fetchAllPlanDishIngredients(date, meal, items, servings, this);
@@ -11558,7 +11918,7 @@ ${dishListStr}
         }
 
         // 保存到 mealPlans：按菜品名匹配
-        const plans = JSON.parse(localStorage.getItem('mealPlans')) || {};
+        const plans = JSON.parse(lsGet('mealPlans')) || {};
         if (!plans[dateKey]) plans[dateKey] = {};
         if (!plans[dateKey][mealKey]) plans[dateKey][mealKey] = [];
         let updatedCount = 0;
@@ -11577,7 +11937,7 @@ ${dishListStr}
             }
         });
         if (updatedCount > 0) {
-            localStorage.setItem('mealPlans', JSON.stringify(plans));
+            lsSet('mealPlans', JSON.stringify(plans));
             showToast(`✅ 已获取 ${updatedCount} 道菜的食材用量`);
             renderRecord();
         } else {
@@ -11914,13 +12274,13 @@ async function fetchPlanDishIngredients(dateKey, mealKey, dishName, servings, bt
         }
 
         // 保存到 mealPlans
-        const plans = JSON.parse(localStorage.getItem('mealPlans')) || {};
+        const plans = JSON.parse(lsGet('mealPlans')) || {};
         if (!plans[dateKey]) plans[dateKey] = {};
         if (!plans[dateKey][mealKey]) plans[dateKey][mealKey] = [];
         const target = plans[dateKey][mealKey].find(d => (d.name || d.dish) === dishName);
         if (target) {
             target.ingredients = ingredients;
-            localStorage.setItem('mealPlans', JSON.stringify(plans));
+            lsSet('mealPlans', JSON.stringify(plans));
             showToast('✅ 已获取' + dishName + '的食材用量');
             // 重新渲染当前餐次
             renderRecord();
@@ -11963,10 +12323,10 @@ const HOLIDAYS = [
 // ---------------- 家宴 ----------------
 function renderFeastPlan() {
     const key = dateToKey(currentPlanDate);
-    const allPlans = JSON.parse(localStorage.getItem('feastPlans')) || {};
+    const allPlans = JSON.parse(lsGet('feastPlans')) || {};
 
     // 读取当前就餐组信息，用于自动匹配子类
-    const currentGroupName = localStorage.getItem('currentDiningGroup');
+    const currentGroupName = lsGet('currentDiningGroup');
     const currentGroup = diningGroups.find(g => g.name === currentGroupName);
     const groupMembers = currentGroup && currentGroup.members ? currentGroup.members : [];
 
@@ -12130,22 +12490,22 @@ function renderFeastPlan() {
 
 function getFeastDayPlan() {
     const key = dateToKey(currentPlanDate);
-    const allPlans = JSON.parse(localStorage.getItem('feastPlans')) || {};
-    const currentGroupName = localStorage.getItem('currentDiningGroup');
+    const allPlans = JSON.parse(lsGet('feastPlans')) || {};
+    const currentGroupName = lsGet('currentDiningGroup');
     const currentGroup = diningGroups.find(g => g.name === currentGroupName);
     if (!allPlans[key]) {
         const defaultFeastType = currentFeastSubtype === '节日家宴' ? 'holiday' : (currentFeastSubtype === '宴请朋友' ? 'friends' : 'family');
         allPlans[key] = { subtype: currentFeastSubtype, feastType: defaultFeastType, theme: '', people: (currentGroup && currentGroup.members) ? currentGroup.members.length : 6, dishes: [], groupName: currentGroup ? currentGroup.name : '', members: currentGroup && currentGroup.members ? currentGroup.members : [] };
-        localStorage.setItem('feastPlans', JSON.stringify(allPlans));
+        lsSet('feastPlans', JSON.stringify(allPlans));
     }
     return allPlans[key];
 }
 
 function saveFeastPlan(dayPlan) {
     const key = dateToKey(currentPlanDate);
-    const allPlans = JSON.parse(localStorage.getItem('feastPlans')) || {};
+    const allPlans = JSON.parse(lsGet('feastPlans')) || {};
     allPlans[key] = dayPlan;
-    localStorage.setItem('feastPlans', JSON.stringify(allPlans));
+    lsSet('feastPlans', JSON.stringify(allPlans));
 }
 
 function saveFeastForm() {
@@ -12170,7 +12530,7 @@ function saveFeastForm() {
         if (peopleInput) dayPlan.people = parseInt(peopleInput.value) || 6;
     }
     // 同步就餐组信息
-    const currentGroupName = localStorage.getItem('currentDiningGroup');
+    const currentGroupName = lsGet('currentDiningGroup');
     const currentGroup = diningGroups.find(g => g.name === currentGroupName);
     dayPlan.groupName = currentGroup ? currentGroup.name : '';
     dayPlan.members = currentGroup && currentGroup.members ? currentGroup.members : [];
@@ -12238,7 +12598,7 @@ function deleteFeastDish(index) {
 // ---------------- 生日宴 ----------------
 function renderBirthdayPlan() {
     const key = dateToKey(currentPlanDate);
-    const allPlans = JSON.parse(localStorage.getItem('birthdayPlans')) || {};
+    const allPlans = JSON.parse(lsGet('birthdayPlans')) || {};
     const dayPlan = allPlans[key] || { memberId: null, theme: '', dishes: [] };
     if (dayPlan.memberId != null) currentBirthdayMemberId = dayPlan.memberId;
     if (currentBirthdayMemberId == null && familyData.length) currentBirthdayMemberId = familyData[0].id;
@@ -12288,19 +12648,19 @@ function renderBirthdayPlan() {
 
 function getBirthdayDayPlan() {
     const key = dateToKey(currentPlanDate);
-    const allPlans = JSON.parse(localStorage.getItem('birthdayPlans')) || {};
+    const allPlans = JSON.parse(lsGet('birthdayPlans')) || {};
     if (!allPlans[key]) {
         allPlans[key] = { memberId: currentBirthdayMemberId, theme: '', dishes: [] };
-        localStorage.setItem('birthdayPlans', JSON.stringify(allPlans));
+        lsSet('birthdayPlans', JSON.stringify(allPlans));
     }
     return allPlans[key];
 }
 
 function saveBirthdayPlan(dayPlan) {
     const key = dateToKey(currentPlanDate);
-    const allPlans = JSON.parse(localStorage.getItem('birthdayPlans')) || {};
+    const allPlans = JSON.parse(lsGet('birthdayPlans')) || {};
     allPlans[key] = dayPlan;
-    localStorage.setItem('birthdayPlans', JSON.stringify(allPlans));
+    lsSet('birthdayPlans', JSON.stringify(allPlans));
 }
 
 function saveBirthdayForm() {
@@ -12366,10 +12726,10 @@ function deleteBirthdayDish(index) {
 // ---------------- 外出就餐 ----------------
 function renderDiningPlan() {
     const key = dateToKey(currentPlanDate);
-    const allPlans = JSON.parse(localStorage.getItem('diningPlans')) || {};
+    const allPlans = JSON.parse(lsGet('diningPlans')) || {};
 
     // 先读取当前就餐组信息，用于自动匹配子类
-    const currentGroupName = localStorage.getItem('currentDiningGroup');
+    const currentGroupName = lsGet('currentDiningGroup');
     const currentGroup = diningGroups.find(g => g.name === currentGroupName);
     const groupMembers = currentGroup && currentGroup.members ? currentGroup.members : [];
 
@@ -12465,21 +12825,21 @@ function renderDiningPlan() {
 
 function getDiningDayPlan() {
     const key = dateToKey(currentPlanDate);
-    const allPlans = JSON.parse(localStorage.getItem('diningPlans')) || {};
+    const allPlans = JSON.parse(lsGet('diningPlans')) || {};
     if (!allPlans[key]) {
-        const currentGroupName = localStorage.getItem('currentDiningGroup');
+        const currentGroupName = lsGet('currentDiningGroup');
         const currentGroup = diningGroups.find(g => g.name === currentGroupName);
         allPlans[key] = { subtype: currentDiningSubtype, restaurant: '', people: 4, budget: 0, dishes: [], groupName: currentGroup ? currentGroup.name : '', members: currentGroup && currentGroup.members ? currentGroup.members : [] };
-        localStorage.setItem('diningPlans', JSON.stringify(allPlans));
+        lsSet('diningPlans', JSON.stringify(allPlans));
     }
     return allPlans[key];
 }
 
 function saveDiningPlan(dayPlan) {
     const key = dateToKey(currentPlanDate);
-    const allPlans = JSON.parse(localStorage.getItem('diningPlans')) || {};
+    const allPlans = JSON.parse(lsGet('diningPlans')) || {};
     allPlans[key] = dayPlan;
-    localStorage.setItem('diningPlans', JSON.stringify(allPlans));
+    lsSet('diningPlans', JSON.stringify(allPlans));
 }
 
 function saveDiningForm() {
@@ -12492,7 +12852,7 @@ function saveDiningForm() {
     if (budgetInput) dayPlan.budget = parseInt(budgetInput.value) || 0;
     dayPlan.subtype = currentDiningSubtype;
     // 保存当前就餐组信息
-    const currentGroupName = localStorage.getItem('currentDiningGroup');
+    const currentGroupName = lsGet('currentDiningGroup');
     const currentGroup = diningGroups.find(g => g.name === currentGroupName);
     dayPlan.groupName = currentGroup ? currentGroup.name : '';
     dayPlan.members = currentGroup && currentGroup.members ? currentGroup.members : [];
@@ -12525,13 +12885,13 @@ function deleteDiningDish(index) {
 function transferDiningToRecord() {
     saveDiningForm();
     const key = dateToKey(currentPlanDate);
-    const allPlans = JSON.parse(localStorage.getItem('diningPlans')) || {};
+    const allPlans = JSON.parse(lsGet('diningPlans')) || {};
     const dayPlan = allPlans[key];
     if (!dayPlan || !dayPlan.dishes || dayPlan.dishes.length === 0) {
         showToast('请先添加菜品再转入食录');
         return;
     }
-    const records = JSON.parse(localStorage.getItem('mealRecords')) || [];
+    const records = JSON.parse(lsGet('mealRecords')) || [];
     const solarTerm = getSolarTermForDate(currentPlanDate);
     const restaurant = dayPlan.restaurant || '';
     const people = dayPlan.people || 0;
@@ -12560,10 +12920,10 @@ function transferDiningToRecord() {
         rec.aiFeedback = generateMealRecordFeedback(rec);
         records.push(rec);
     });
-    localStorage.setItem('mealRecords', JSON.stringify(records));
+    lsSet('mealRecords', JSON.stringify(records));
     // 清空当前表单
     delete allPlans[key];
-    localStorage.setItem('diningPlans', JSON.stringify(allPlans));
+    lsSet('diningPlans', JSON.stringify(allPlans));
     renderPlan();
     renderRecord();
     showToast('✅ 已转入食录！');
@@ -12574,7 +12934,7 @@ function transferDiningToRecord() {
 // ---------------- 食疗 ----------------
 function renderDietPlan() {
     const key = dateToKey(currentPlanDate);
-    const allPlans = JSON.parse(localStorage.getItem('mealPlans')) || {};
+    const allPlans = JSON.parse(lsGet('mealPlans')) || {};
     const savedPlan = allPlans[key] && allPlans[key].planMainType === 'diet' ? allPlans[key].diet : null;
 
     const solarTerm = getSolarTermForDate(currentPlanDate);
@@ -12839,7 +13199,7 @@ function generateDietPlan() {
 
     // 保存到 mealPlans
     const planKey = dateToKey(currentPlanDate);
-    let allPlans = JSON.parse(localStorage.getItem('mealPlans')) || {};
+    let allPlans = JSON.parse(lsGet('mealPlans')) || {};
     allPlans[planKey] = {
         planMainType: "diet",
         planSubType: person ? (person.role === '体育生' ? 'athlete' : person.role === '老人' ? 'elderly' : 'general') : 'general',
@@ -12856,7 +13216,7 @@ function generateDietPlan() {
             createdAt: Date.now()
         }
     };
-    localStorage.setItem('mealPlans', JSON.stringify(allPlans));
+    lsSet('mealPlans', JSON.stringify(allPlans));
 
     // 渲染结果
     renderDietResult(plan);
@@ -12927,7 +13287,7 @@ function renderRecord() {
     // 旧记录页面已移除，安全守卫：DOM元素不存在时跳过渲染
     if (!recordList || !recordDateDisplay) return;
     const key = dateToKey(currentRecordDate);
-    let records = JSON.parse(localStorage.getItem('mealRecords')) || [];
+    let records = JSON.parse(lsGet('mealRecords')) || [];
 
     // 兼容旧的单菜数据格式
     records.forEach(r => {
@@ -13066,7 +13426,7 @@ function renderRecord() {
     document.querySelectorAll('.view-record-detail').forEach(btn => {
         btn.addEventListener('click', function() {
             const id = parseInt(this.dataset.id);
-            const recs = JSON.parse(localStorage.getItem('mealRecords')) || [];
+            const recs = JSON.parse(lsGet('mealRecords')) || [];
             const idx = recs.findIndex(item => item.id === id);
             if (idx === -1) return;
             const record = recs[idx];
@@ -13090,7 +13450,7 @@ function renderRecord() {
                 }
             });
             recs[idx] = record;
-            localStorage.setItem('mealRecords', JSON.stringify(recs));
+            lsSet('mealRecords', JSON.stringify(recs));
 
             // 弹窗中显示每道菜
             let dishesHtml = '';
@@ -13165,7 +13525,7 @@ function getRecordMealSummary(records) {
 function buildHistoryData() {
     const chatItems = getAllChatSessions();
 
-    const plans = JSON.parse(localStorage.getItem('mealPlans')) || {};
+    const plans = JSON.parse(lsGet('mealPlans')) || {};
     const planItems = Object.keys(plans)
         .filter(date => {
             const p = plans[date] || {};
@@ -13178,7 +13538,7 @@ function buildHistoryData() {
             label: `${formatMonthDay(date)} ${getPlanMealSummary(plans[date])}菜谱计划`
         }));
 
-    const records = JSON.parse(localStorage.getItem('mealRecords')) || [];
+    const records = JSON.parse(lsGet('mealRecords')) || [];
     const groupedRecords = records.reduce((acc, record) => {
         if (!record.date) return acc;
         if (!acc[record.date]) acc[record.date] = [];
@@ -13279,7 +13639,7 @@ function openRenameSessionModal(source, archiveIdx) {
 
     let currentTitle = '对话';
     if (source === 'current') {
-        const customTitle = localStorage.getItem('currentChatCustomTitle');
+        const customTitle = lsGet('currentChatCustomTitle');
         if (customTitle) {
             currentTitle = customTitle;
         } else {
@@ -13319,7 +13679,7 @@ function openRenameSessionModal(source, archiveIdx) {
         const newTitle = input.value.trim();
         if (newTitle) {
             if (source === 'current') {
-                localStorage.setItem('currentChatCustomTitle', newTitle);
+                lsSet('currentChatCustomTitle', newTitle);
             } else {
                 renameChatSession(archiveIdx, newTitle);
             }
@@ -13363,7 +13723,7 @@ function openDeleteSessionModal(source, archiveIdx) {
     document.getElementById('deleteConfirmBtn').addEventListener('click', function() {
         if (source === 'current') {
             chatHistory = [];
-            localStorage.removeItem('currentChatCustomTitle');
+            lsRemove('currentChatCustomTitle');
             persistChatHistory();
             renderChat();
             renderKnowledgeChat();
@@ -13632,13 +13992,13 @@ function renderFamilyGroupPanel() {
                 // 从familyData中删除该成员
                 const idx = familyData.findIndex(m => m.name === memberName);
                 if (idx > -1) familyData.splice(idx, 1);
-                localStorage.setItem('familyData', JSON.stringify(familyData));
+                lsSet('familyData', JSON.stringify(familyData));
                 // 从所有就餐组中移除该成员
                 diningGroups.forEach(g => {
                     const mIdx = g.members.indexOf(memberName);
                     if (mIdx > -1) g.members.splice(mIdx, 1);
                 });
-                localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
+                lsSet('diningGroups', JSON.stringify(diningGroups));
                 closeFamilyGroupPanel();
                 renderFamily();
                 showToast('已删除「' + memberName + '」');
@@ -13667,13 +14027,13 @@ function renderFamilyGroupPanel() {
                 // 从familyData中删除该成员
                 const idx = familyData.findIndex(m => m.name === memberName);
                 if (idx > -1) familyData.splice(idx, 1);
-                localStorage.setItem('familyData', JSON.stringify(familyData));
+                lsSet('familyData', JSON.stringify(familyData));
                 // 从所有就餐组中移除该成员
                 diningGroups.forEach(g => {
                     const mIdx = g.members.indexOf(memberName);
                     if (mIdx > -1) g.members.splice(mIdx, 1);
                 });
-                localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
+                lsSet('diningGroups', JSON.stringify(diningGroups));
                 fgpEditCardId = null;
                 renderFamilyGroupPanel();
                 renderFamily();
@@ -13733,7 +14093,7 @@ function renderFamilyGroupPanel() {
             member.pregnancyWeek = pregnancyWeekEl ? (parseInt(pregnancyWeekEl.value) || 0) : (member.pregnancyWeek || 0);
             const diseaseTypeEl = editForm.querySelector('.fgp-edit-diseaseType');
             member.diseaseType = diseaseTypeEl ? (diseaseTypeEl.value || '') : (member.diseaseType || '');
-            localStorage.setItem('familyData', JSON.stringify(familyData));
+            lsSet('familyData', JSON.stringify(familyData));
             // 如果姓名有变化，更新所有就餐组中的旧名
             if (oldName !== newName) {
                 diningGroups.forEach(g => {
@@ -13766,7 +14126,7 @@ function renderFamilyGroupPanel() {
             if (newGroup && !newGroup.members.includes(newName)) {
                 newGroup.members.push(newName);
             }
-            localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
+            lsSet('diningGroups', JSON.stringify(diningGroups));
             fgpEditCardId = null;
             renderFamilyGroupPanel();
             renderFamily();
@@ -14490,7 +14850,7 @@ function renderFullHistoryList(type) {
     }
 
     if (type === 'plan') {
-        const plans = JSON.parse(localStorage.getItem('mealPlans')) || {};
+        const plans = JSON.parse(lsGet('mealPlans')) || {};
         const dates = Object.keys(plans)
             .filter(date => ['breakfast', 'lunch', 'dinner'].some(meal => plans[date]?.[meal]?.length))
             .sort()
@@ -14511,7 +14871,7 @@ function renderFullHistoryList(type) {
     }
 
     if (type === 'record') {
-        const records = JSON.parse(localStorage.getItem('mealRecords')) || [];
+        const records = JSON.parse(lsGet('mealRecords')) || [];
         const sorted = records.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         if (!sorted.length) return `<div class="full-history-empty">暂无三餐实录</div>`;
         return sorted.map(record => {
@@ -14626,7 +14986,7 @@ function deductIngredientsForDish(dishName) {
     const dishInfo = DISH_INGREDIENTS[dishName];
     if (!dishInfo) return [];
 
-    let fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    let fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     const deducted = [];
 
     dishInfo.ingredients.forEach(ingName => {
@@ -14666,17 +15026,17 @@ function deductIngredientsForDish(dishName) {
         }
     });
 
-    localStorage.setItem('fridgeItems', JSON.stringify(fridgeItems));
+    lsSet('fridgeItems', JSON.stringify(fridgeItems));
 
     const usedUpItems = deducted.filter(d => d.usedUp);
     if (usedUpItems.length > 0) {
         setTimeout(() => {
             showConfirmDialog(`「${usedUpItems.map(d => d.name).join('、')}」已用完，是否加入采购计划？`, function() {
-                let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+                let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
                 usedUpItems.forEach(d => {
                     shoppingPlans.push({ id: Date.now() + Math.random(), name: d.name, quantity: '适量', category: guessFoodCategory(d.name), purchased: false, addedAt: Date.now() });
                 });
-                localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+                lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
                 showToast('✅ 已加入采购计划');
             });
         }, 800);
@@ -14769,9 +15129,9 @@ function submitAddRecord() {
         }
     });
     
-    const records = JSON.parse(localStorage.getItem('mealRecords')) || [];
+    const records = JSON.parse(lsGet('mealRecords')) || [];
     records.push(record);
-    localStorage.setItem('mealRecords', JSON.stringify(records));
+    lsSet('mealRecords', JSON.stringify(records));
 
     // 自动扣除家中食材（仅在家做饭时）
     let deductedItems = [];
@@ -15117,7 +15477,7 @@ function handleDatePlanning(text) {
         const currentTerm = getSolarTermForDate(new Date());
         const planDate = dateInfo ? dateInfo.date : new Date();
         const planKey = dateToKey(planDate);
-        let plans = JSON.parse(localStorage.getItem('mealPlans')) || {};
+        let plans = JSON.parse(lsGet('mealPlans')) || {};
         if (!plans[planKey]) plans[planKey] = { breakfast: [], lunch: [], dinner: [] };
         const mealKey = mealType === 'breakfast' ? 'breakfast' : mealType === 'dinner' ? 'dinner' : 'lunch';
         template.dishes.forEach(d => {
@@ -15127,12 +15487,12 @@ function handleDatePlanning(text) {
                     completed: false,
                     addedAt: Date.now(),
                     solarTerm: currentTerm.name,
-                    group: localStorage.getItem('currentDiningGroup') || '小家',
+                    group: lsGet('currentDiningGroup') || '小家',
                     scene: scene.type
                 });
             }
         });
-        localStorage.setItem('mealPlans', JSON.stringify(plans));
+        lsSet('mealPlans', JSON.stringify(plans));
         return reply;
     }
 
@@ -15186,7 +15546,7 @@ function handleDatePlanning(text) {
     const dishNames = dishItems.map(d => d.replace(/^\d+\.\s*/, '').replace(/\s*—.*/, '').trim()).filter(Boolean);
 
     if (dishNames.length > 0) {
-        let plans = JSON.parse(localStorage.getItem('mealPlans')) || {};
+        let plans = JSON.parse(lsGet('mealPlans')) || {};
         if (!plans[planKey]) plans[planKey] = { breakfast: [], lunch: [], dinner: [] };
         const mealKey = mealType === 'breakfast' ? 'breakfast' : mealType === 'dinner' ? 'dinner' : 'lunch';
         dishNames.forEach(d => {
@@ -15196,11 +15556,11 @@ function handleDatePlanning(text) {
                     completed: false,
                     addedAt: Date.now(),
                     solarTerm: currentTerm.name,
-                    group: localStorage.getItem('currentDiningGroup') || '小家'
+                    group: lsGet('currentDiningGroup') || '小家'
                 });
             }
         });
-        localStorage.setItem('mealPlans', JSON.stringify(plans));
+        lsSet('mealPlans', JSON.stringify(plans));
     }
 
     return reply;
@@ -15433,7 +15793,7 @@ function confirmPurchaseAlert() {
     const { foodNames } = pendingPurchaseAlert;
 
     // 读取现有采购计划
-    let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+    let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
     const stdNames = foodNames.map(n => normalizeIngredientName(n));
     stdNames.forEach(name => {
         shoppingPlans.push({
@@ -15445,7 +15805,7 @@ function confirmPurchaseAlert() {
             addedAt: Date.now()
         });
     });
-    localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+    lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
 
     const result = `✅ 已记录到采购计划：${stdNames.join('、')}`;
     pendingPurchaseAlert = null;
@@ -15524,7 +15884,7 @@ function generateAIResponse(text) {
         }
 
         // 直接保存到采购计划
-        let shoppingPlans = JSON.parse(localStorage.getItem('shoppingPlans')) || [];
+        let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
         foodNames.forEach(name => {
             shoppingPlans.push({
                 id: Date.now() + Math.random(),
@@ -15535,7 +15895,7 @@ function generateAIResponse(text) {
                 addedAt: Date.now()
             });
         });
-        localStorage.setItem('shoppingPlans', JSON.stringify(shoppingPlans));
+        lsSet('shoppingPlans', JSON.stringify(shoppingPlans));
 
         return `📋 检测到采购需求：${foodNames.join('、')}。已自动加入采购计划！`;
     }
@@ -15678,7 +16038,7 @@ function generateAIResponse(text) {
 
         const todayKey = dateToKey(new Date());
         const todaySolarTerm = getSolarTermForDate(new Date()).name;
-        let records = JSON.parse(localStorage.getItem('mealRecords')) || [];
+        let records = JSON.parse(lsGet('mealRecords')) || [];
         const existing = records.find(r => r.date === todayKey && r.dishName === name);
         if (existing) {
             existing.aiFeedback = feedback;
@@ -15699,7 +16059,7 @@ function generateAIResponse(text) {
                 createdAt: Date.now()
             });
         }
-        localStorage.setItem('mealRecords', JSON.stringify(records));
+        lsSet('mealRecords', JSON.stringify(records));
         return `收到！${feedback}`;
     }
 
@@ -16350,8 +16710,8 @@ function renderKnowledgeHome() {
     const foods = SOLAR_TERM_FOODS[termName] || DEFAULT_SOLAR_FOODS;
 
     // === AI自动标记：记录用户查看的当季饮食指南 ===
-    localStorage.setItem('knowledgeViewedTerm', termName);
-    localStorage.setItem('knowledgeViewedTime', new Date().toISOString());
+    lsSet('knowledgeViewedTerm', termName);
+    lsSet('knowledgeViewedTime', new Date().toISOString());
 
     // 获取节气日期范围
     const allTerms = getSolarTermEntries();
@@ -16841,7 +17201,7 @@ function generateTomorrowMeals(termName, dayOffset) {
     if (dayOffset === undefined) dayOffset = 0;
 
     // 从家庭口味获取偏好
-    const family = JSON.parse(localStorage.getItem('familyMembers')) || [];
+    const family = JSON.parse(lsGet('familyMembers')) || [];
     const tastes = family.map(f => f.taste).filter(Boolean).join('、');
 
     // 基于节气的推荐菜谱（每个节气3组方案，通过日期偏移轮转）
@@ -17462,7 +17822,7 @@ function resetKnowledgeChat() {
     // 将当前完整对话归档为一组
     saveChatHistoryToArchive();
     // 清除当前会话的自定义标题
-    localStorage.removeItem('currentChatCustomTitle');
+    lsRemove('currentChatCustomTitle');
     chatHistory = [];
     persistChatHistory();
     renderChat();
@@ -17480,7 +17840,7 @@ function resetKnowledgeChat() {
 // 获取归档的对话列表
 function getChatHistoryArchive() {
     try {
-        return JSON.parse(localStorage.getItem('chatHistoryArchive') || '[]');
+        return JSON.parse(lsGet('chatHistoryArchive') || '[]');
     } catch (e) {
         return [];
     }
@@ -17488,7 +17848,7 @@ function getChatHistoryArchive() {
 
 // 保存归档到 localStorage
 function saveChatHistoryArchive(archive) {
-    localStorage.setItem('chatHistoryArchive', JSON.stringify(archive));
+    lsSet('chatHistoryArchive', JSON.stringify(archive));
 }
 
 // 将当前chatHistory保存到归档
@@ -17499,7 +17859,7 @@ function saveChatHistoryToArchive() {
     const firstUserMsg = chatHistory.find(m => m.role === 'user');
     const defaultTitle = firstUserMsg ? firstUserMsg.content.slice(0, 30) : '对话';
     // 保留当前会话的自定义标题
-    const currentCustomTitle = localStorage.getItem('currentChatCustomTitle') || null;
+    const currentCustomTitle = lsGet('currentChatCustomTitle') || null;
     archive.push({
         id: Date.now(),
         title: defaultTitle,
@@ -17550,7 +17910,7 @@ function getAllChatSessions() {
     // 当前会话：只要有消息就显示
     if (chatHistory.length > 0) {
         const firstUserMsg = chatHistory.find(m => m.role === 'user');
-        const currentCustomTitle = localStorage.getItem('currentChatCustomTitle') || null;
+        const currentCustomTitle = lsGet('currentChatCustomTitle') || null;
         sessions.unshift({
             id: 'current',
             title: firstUserMsg ? firstUserMsg.content.slice(0, 30) : '对话',
@@ -17691,14 +18051,14 @@ const DEFAULT_SCENE_TAGS = ['早餐', '一人餐', '宴请'];
 
 // 获取分类建议反馈记录
 function getClassificationFeedback() {
-    return JSON.parse(localStorage.getItem('classificationFeedback') || '[]');
+    return JSON.parse(lsGet('classificationFeedback') || '[]');
 }
 
 // 保存分类建议反馈
 function saveClassificationFeedback(feedback) {
     const list = getClassificationFeedback();
     list.push(feedback);
-    localStorage.setItem('classificationFeedback', JSON.stringify(list));
+    lsSet('classificationFeedback', JSON.stringify(list));
 }
 
 // 打开"存入知识库"模态框
@@ -18504,11 +18864,11 @@ function showKnowledgeDetail(id) {
     currentKnowledgeDetailId = id;
 
     // 记录浏览历史（供AI综合推荐使用）
-    let browseHistory = JSON.parse(localStorage.getItem('knowledgeBrowseHistory')) || [];
+    let browseHistory = JSON.parse(lsGet('knowledgeBrowseHistory')) || [];
     browseHistory = browseHistory.filter(bid => bid !== id);
     browseHistory.unshift(id);
     if (browseHistory.length > 20) browseHistory = browseHistory.slice(0, 20);
-    localStorage.setItem('knowledgeBrowseHistory', JSON.stringify(browseHistory));
+    lsSet('knowledgeBrowseHistory', JSON.stringify(browseHistory));
 
     const overlay = document.getElementById('knowledgeDetailOverlay');
     const titleEl = document.getElementById('knowledgeDetailTitle');
@@ -19962,7 +20322,7 @@ async function autoCheckAndRecommend() {
     }
 
     // 检查上次自动推荐的时间
-    const lastAutoRecommend = localStorage.getItem('lastAutoRecommendDate');
+    const lastAutoRecommend = lsGet('lastAutoRecommendDate');
     const todayStr = dateToKey(new Date());
 
     // 如果今天已标记过推荐，但仍有缺失的天数，说明之前部分失败
@@ -19972,12 +20332,12 @@ async function autoCheckAndRecommend() {
             return; // 缺失不多，不自动重试，用户可手动重新生成
         }
         // 缺失较多，清除标记重试
-        localStorage.removeItem('lastAutoRecommendDate');
+        lsRemove('lastAutoRecommendDate');
     }
 
     // 检查用户是否查看过食知指南
-    const viewedTerm = localStorage.getItem('knowledgeViewedTerm');
-    const viewedTime = localStorage.getItem('knowledgeViewedTime');
+    const viewedTerm = lsGet('knowledgeViewedTerm');
+    const viewedTime = lsGet('knowledgeViewedTime');
 
     // 如果用户查看过食知指南，显示提示
     if (viewedTerm) {
@@ -19988,7 +20348,7 @@ async function autoCheckAndRecommend() {
     try {
         await generateMultiDayRecommendation(7);
         // 只有成功完成后才标记今天已自动推荐
-        localStorage.setItem('lastAutoRecommendDate', todayStr);
+        lsSet('lastAutoRecommendDate', todayStr);
     } catch (error) {
         console.error('自动推荐失败:', error);
         // 失败时不标记，下次进入食记会重试
@@ -20008,7 +20368,7 @@ function autoConfirmPendingPlans() {
     const autoConfirmKey = 'autoConfirmed_' + tomorrowKey;
 
     // 如果已经自动确认过，不再重复
-    if (localStorage.getItem(autoConfirmKey)) return;
+    if (lsGet(autoConfirmKey)) return;
 
     mealTypes.forEach(mt => {
         const data = dayData[mt];
@@ -20026,7 +20386,7 @@ function autoConfirmPendingPlans() {
 
     if (confirmedCount > 0) {
         saveDietCalendar(calendar);
-        localStorage.setItem(autoConfirmKey, '1');
+        lsSet(autoConfirmKey, '1');
         showToast(`⏰ ${tomorrow.getMonth()+1}月${tomorrow.getDate()}日计划已自动确认（${confirmedCount}餐）`);
     }
 }
@@ -20097,7 +20457,10 @@ async function generateMultiDayRecommendation(days) {
         + '【营养均衡要求】\n'
         + '- 每天菜品需包含：主食、蛋白质、蔬菜\n'
         + '- 荤素搭配合理，避免全荤或全素\n'
-        + '- 7天内菜品尽量不重复，避免连续两天出现相同菜';
+        + '- 7天内菜品尽量不重复，避免连续两天出现相同菜\n'
+        + '【菜品排序规则】每餐菜品列表中：第一道必须是主食（米饭/杂粮饭/面条/粥/馒头/饼等）；第二道推荐汤类菜品（如排骨汤/鱼汤/豆腐汤/蛋花汤/羹类等，若无汤类则推荐蔬菜类）；第三道及以后为主菜/副菜\n'
+        + '【菜名全局唯一】同一菜品名称在全部餐次和日期中合计最多出现1次（主食除外，主食可重复）\n'
+        + '【独立水果】若水果类摄入不足，必须在三餐中安排独立水果菜品（如苹果/蓝莓/草莓等，不依赖奶类饮品混合）';
 
     showToast(`🤖 已根据${recData.servings || 3}人家庭，按九个维度生成${days}天食谱推荐。每餐约${_dc.lunch}菜...`);
 
@@ -20232,7 +20595,7 @@ async function generateAiMealRecommendation() {
         const termFoods = SOLAR_TERM_FOODS[solarTerm.name] || DEFAULT_SOLAR_FOODS;
 
         // 采集食知中浏览/收藏的知识
-        const browseHistory = JSON.parse(localStorage.getItem('knowledgeBrowseHistory')) || [];
+        const browseHistory = JSON.parse(lsGet('knowledgeBrowseHistory')) || [];
         const favorited = dietKnowledge.filter(k => k.favorited);
         const browsed = browseHistory.map(id => dietKnowledge.find(k => k.id === id)).filter(Boolean);
         const knowledgeContext = [];
@@ -20246,7 +20609,7 @@ async function generateAiMealRecommendation() {
         const topKnowledge = knowledgeContext.slice(0, 10);
 
         // ========== 维度④：家中食材（食材）==========
-        const fridgeItems = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+        const fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
         const fridgeNames = fridgeItems.map(i => i.name + (i.quantity ? `(${i.quantity})` : '')).join('、');
 
         // ========== 维度⑤：历史记录（食记 - 偏好/重复/不吃）==========
@@ -20482,12 +20845,57 @@ function showAiRecommendationModal(recommendation, targetDate) {
     let meals = recommendation.meals || {};
     let summary = recommendation.summary || recommendation.rawText || '';
 
+    // ===== 后置校验：菜品排序（主食第1、汤/粥第2）+ 数量补充 =====
+    const SHOW_STAPLES = ['米饭','面','馒头','包子','饼','吐司','面包','三明治','麦片','玉米','红薯','紫薯','南瓜','饭','炒饭','煲仔饭','意面','馄饨','蒸饺','水饺','芝麻糊'];
+    const SHOW_SOUPS = ['汤','羹','粥'];
+    function isShowStaple(dn) { return SHOW_STAPLES.some(k => (dn||'').includes(k)); }
+    function isShowSoup(dn) { return SHOW_SOUPS.some(k => (dn||'').includes(k)); }
+    const FILL3 = {
+        breakfast: [{name:'水煮蛋',reason:'补充蛋白质'},{name:'牛奶',reason:'补充奶类'},{name:'豆浆',reason:'补充植物蛋白'}],
+        lunch: [{name:'紫菜蛋花汤',reason:'补充汤品'},{name:'清炒时蔬',reason:'补充蔬菜'},{name:'番茄炒蛋',reason:'补充蛋白质和蔬菜'}],
+        dinner: [{name:'冬瓜排骨汤',reason:'补充汤品'},{name:'清炒菠菜',reason:'补充蔬菜'},{name:'蒸蛋羹',reason:'补充蛋白质'}]
+    };
+    const usedSet3 = new Set();
+    ['breakfast','lunch','dinner'].forEach(mt => {
+        const meal3 = meals[mt];
+        if (meal3 && meal3.dishes) {
+            const raw3 = Array.isArray(meal3.dishes) ? meal3.dishes : [meal3.dishes];
+            const norm3 = raw3.map(d => {
+                if (typeof d === 'string') return { name: cleanDishName(d), ingredients: null, reason: '' };
+                if (d && d.name) return { name: cleanDishName(d.name), ingredients: d.ingredients || null, reason: d.reason || '' };
+                return { name: cleanDishName(String(d)), ingredients: null, reason: '' };
+            });
+            // 数量补充
+            if (norm3.length < 2) {
+                var fp3 = FILL3[mt] || FILL3['lunch'];
+                for (var fi5 = 0; fi5 < fp3.length && norm3.length < 2; fi5++) {
+                    if (!usedSet3.has(fp3[fi5].name)) { norm3.push(fp3[fi5]); usedSet3.add(fp3[fi5].name); }
+                }
+            }
+            // 排序：主食第1、汤/粥第2
+            if (norm3.length > 1) {
+                var stIdx3 = -1;
+                for (var si7 = 0; si7 < norm3.length; si7++) { if (isShowStaple(norm3[si7].name)) { stIdx3 = si7; break; } }
+                var spIdx3 = -1;
+                for (var si8 = 0; si8 < norm3.length; si8++) { if (si8 !== stIdx3 && isShowSoup(norm3[si8].name)) { spIdx3 = si8; break; } }
+                var reordered3 = [];
+                if (stIdx3 >= 0) reordered3.push(norm3[stIdx3]);
+                if (spIdx3 >= 0) reordered3.push(norm3[spIdx3]);
+                for (var si9 = 0; si9 < norm3.length; si9++) { if (si9 !== stIdx3 && si9 !== spIdx3) reordered3.push(norm3[si9]); }
+                meal3._normalizedDishes = reordered3;
+            } else {
+                meal3._normalizedDishes = norm3;
+            }
+        }
+    });
+
     const mealLabels = { breakfast: '🌅 早餐', lunch: '☀️ 午餐', dinner: '🌙 晚餐' };
     let mealsHtml = '';
     ['breakfast', 'lunch', 'dinner'].forEach(mealType => {
         const meal = meals[mealType];
         if (meal) {
-            const rawDishes = Array.isArray(meal.dishes) ? meal.dishes : [meal.dishes];
+            const dishSource = meal._normalizedDishes || (Array.isArray(meal.dishes) ? meal.dishes : [meal.dishes]);
+            const rawDishes = Array.isArray(dishSource) ? dishSource : [dishSource];
             // 规范化菜品数据（支持字符串和对象两种格式）
             const normalizedDishes = rawDishes.map(d => {
                 if (typeof d === 'string') return { name: cleanDishName(d), ingredients: null };
@@ -20580,8 +20988,10 @@ function confirmAiRecommendation() {
 
     mealTypes.forEach(mealType => {
         const meal = meals[mealType];
-        if (meal && meal.dishes) {
-            const rawDishes = Array.isArray(meal.dishes) ? meal.dishes : [meal.dishes];
+        // 优先使用后置校验排序后的 _normalizedDishes，否则回退到原始 dishes
+        const dishSource = (meal && meal._normalizedDishes) ? meal._normalizedDishes : (meal && meal.dishes);
+        if (meal && dishSource) {
+            const rawDishes = Array.isArray(dishSource) ? dishSource : [dishSource];
             // 规范化菜品数据
             const normalizedDishes = rawDishes.map(d => {
                 if (typeof d === 'string') return { name: cleanDishName(d), ingredients: null };
@@ -20620,7 +21030,20 @@ function confirmAiRecommendation() {
                 }
             });
             if (merged.length > existingDishes.length) {
-                let planData = { dishes: merged, note: '' };
+                // 最终排序：主食第1、汤/羹/粥第2、其余依次
+                const FS2_STAPLES = ['米饭','面','馒头','包子','饼','吐司','面包','三明治','麦片','玉米','红薯','紫薯','南瓜','饭','炒饭','煲仔饭','意面','馄饨','蒸饺','水饺','芝麻糊'];
+                const FS2_SOUPS = ['汤','羹','粥'];
+                function isFs2Staple(dn) { return FS2_STAPLES.some(k => (dn||'').includes(k)); }
+                function isFs2Soup(dn) { return FS2_SOUPS.some(k => (dn||'').includes(k)); }
+                var fs2StIdx = -1;
+                for (var fs2i = 0; fs2i < merged.length; fs2i++) { if (isFs2Staple(merged[fs2i])) { fs2StIdx = fs2i; break; } }
+                var fs2SpIdx = -1;
+                for (var fs2i2 = 0; fs2i2 < merged.length; fs2i2++) { if (fs2i2 !== fs2StIdx && isFs2Soup(merged[fs2i2])) { fs2SpIdx = fs2i2; break; } }
+                var fs2Reordered = [];
+                if (fs2StIdx >= 0) fs2Reordered.push(merged[fs2StIdx]);
+                if (fs2SpIdx >= 0) fs2Reordered.push(merged[fs2SpIdx]);
+                for (var fs2i3 = 0; fs2i3 < merged.length; fs2i3++) { if (fs2i3 !== fs2StIdx && fs2i3 !== fs2SpIdx) fs2Reordered.push(merged[fs2i3]); }
+                let planData = { dishes: fs2Reordered, note: '' };
                 if (Object.keys(mergedMeta).length > 0) planData.dishMeta = mergedMeta;
                 updateMealPlan(targetDateKey, mealType, planData);
                 addedCount += merged.length - existingDishes.length;
@@ -20722,7 +21145,7 @@ function aggregateFamilyTasteConstraints() {
  * 维度4：家中已有食材
  */
 function collectFridgeItemsInfo() {
-    const items = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    const items = JSON.parse(lsGet('fridgeItems')) || [];
     if (items.length === 0) return { list: '', expiring: '' };
 
     const categoryMap = {};
@@ -21062,7 +21485,7 @@ async function generateWeeklyAiMealRecommendation(days) {
     // ========== Step 1：立即用内置方案显示（0.1秒内出内容） ==========
     const quickPlan = _buildQuickWeeklyPlan(weekDates, days);
     quickPlan._source = 'quick';
-    showToast('📆 ' + days + '天食谱方案已就绪，AI正在后台个性化优化中...');
+    showToast('📆 ' + days + '天食谱方案已就绪');
     showWeeklyAiRecommendationModal(quickPlan, weekDates, days);
 
     // ========== Step 2：后台异步调AI（不阻塞UI） ==========
@@ -21109,7 +21532,10 @@ async function generateWeeklyAiMealRecommendation(days) {
         + '【营养均衡要求】\n'
         + '- 每天菜品需包含：主食、蛋白质、蔬菜\n'
         + '- 荤素搭配合理，避免全荤或全素\n'
-        + '- 7天内菜品尽量不重复，避免连续两天出现相同菜';
+        + '- 7天内菜品尽量不重复，避免连续两天出现相同菜\n'
+        + '【菜品排序规则】每餐菜品列表中：第一道必须是主食（米饭/杂粮饭/面条/粥/馒头/饼等）；第二道推荐汤类菜品（如排骨汤/鱼汤/豆腐汤/蛋花汤/羹类等，若无汤类则推荐蔬菜类）；第三道及以后为主菜/副菜\n'
+        + '【菜名全局唯一】同一菜品名称在全部餐次和日期中合计最多出现1次（主食除外，主食可重复）\n'
+        + '【独立水果】若水果类摄入不足，必须在三餐中安排独立水果菜品（如苹果/蓝莓/草莓等，不依赖奶类饮品混合）';
 
     // 后台跑AI，成功后自动替换弹窗内容；用户关闭弹窗则静默写入缓存
     (async () => {
@@ -21126,10 +21552,7 @@ async function generateWeeklyAiMealRecommendation(days) {
             console.warn('AI后台优化失败，继续使用快速方案：', err);
             const statusEl = document.querySelector('.ai-plan-status');
             if (statusEl) {
-                statusEl.innerHTML = '📌 快速方案 · AI优化失败，可放心使用本方案';
-                statusEl.style.color = '#78350F';
-                statusEl.style.background = '#FDE68A';
-                statusEl.style.borderColor = '#FCD34D';
+                statusEl.innerHTML = '食谱方案';
             }
         }
     })();
@@ -21193,6 +21616,139 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
         });
     });
 
+    // ===== 后置校验：全局菜名去重 + 独立水果 + 菜品排序 =====
+    const POST2_STAPLES = ['米饭','粥','面','馒头','包子','饼','吐司','面包','三明治','麦片','玉米','红薯','紫薯','南瓜','饭','炒饭','煲仔饭','意面','馄饨','蒸饺','水饺','芝麻糊'];
+    function isPost2Staple(dn) { return POST2_STAPLES.some(k => (dn||'').includes(k)); }
+    const REPLACE2_POOL = {
+        '鱼鲜': ['清蒸鳕鱼','红烧带鱼','蒜蓉虾','番茄鱼','酸菜鱼','葱油鲈鱼','清蒸石斑'],
+        '肉菜': ['糖醋里脊','青椒肉丝','番茄牛肉','芹菜炒肉丝','土豆烧牛肉','葱爆羊肉','酱爆鸡丁'],
+        '蔬菜': ['蒜蓉西兰花','清炒菠菜','凉拌黄瓜','白灼菜心','香菇青菜','蚝油生菜','醋溜白菜','荷塘小炒'],
+        '汤羹': ['紫菜蛋花汤','冬瓜排骨汤','番茄蛋汤','丝瓜蛋汤','萝卜羊肉汤','三鲜汤'],
+        '豆制品': ['麻婆豆腐','家常豆腐','红烧豆腐','豆腐煲','锅塌豆腐','鲫鱼豆腐汤'],
+        '水果': ['蓝莓','草莓','橙子','葡萄','西瓜','梨','猕猴桃','火龙果'],
+        '默认': ['清炒时蔬','番茄炒蛋','蒸蛋羹','凉拌木耳','荷塘小炒','白灼秋葵']
+    };
+    function getReplace2Dish(origName, usedSet) {
+        var cat = '默认';
+        if (/鱼|虾|海鲜|鲈|鳕|带鱼|深海鱼/.test(origName)) cat = '鱼鲜';
+        else if (/肉|排骨|牛|猪|羊|鸡|鸭|里脊/.test(origName)) cat = '肉菜';
+        else if (/汤|羹/.test(origName)) cat = '汤羹';
+        else if (/豆腐|豆干/.test(origName)) cat = '豆制品';
+        else if (/菠菜|西兰花|白菜|黄瓜|木耳|菜|萝卜|莲藕|山药|秋葵/.test(origName)) cat = '蔬菜';
+        else if (/苹果|香蕉|蓝莓|草莓|橙|葡萄|西瓜|梨|猕猴桃|水果/.test(origName)) cat = '水果';
+        var pool = REPLACE2_POOL[cat] || REPLACE2_POOL['默认'];
+        for (var i = 0; i < pool.length; i++) { if (!usedSet.has(pool[i]) && pool[i] !== origName) return pool[i]; }
+        return origName + '（改良版）';
+    }
+    // 全局去重
+    const globalUsed2 = new Set();
+    days.forEach(day => {
+        const meals = day.meals || {};
+        ['breakfast','lunch','dinner'].forEach(mt => {
+            const meal = meals[mt];
+            if (meal && meal._normalizedDishes) {
+                for (let i = 0; i < meal._normalizedDishes.length; i++) {
+                    var d = meal._normalizedDishes[i];
+                    if (isPost2Staple(d.name)) { if (!globalUsed2.has(d.name)) globalUsed2.add(d.name); }
+                    else {
+                        if (globalUsed2.has(d.name)) {
+                            var newName = getReplace2Dish(d.name, globalUsed2);
+                            d.name = newName;
+                        }
+                        globalUsed2.add(d.name);
+                    }
+                }
+            }
+        });
+    });
+    // 独立水果检查
+    const FRUIT2_KW = ['苹果','蓝莓','草莓','橙子','葡萄','西瓜','梨','猕猴桃','火龙果','桃','芒果','水果沙拉','水果拼盘'];
+    function isStandaloneFruit2(dn) { if (/牛奶|酸奶|燕麦|煎|炒|炖|煮|粥|汤|羹|糊|沙拉酱/.test(dn)) return false; return FRUIT2_KW.some(k => dn.includes(k)); }
+    function isStandaloneBanana2(dn) { return dn.trim() === '香蕉' || dn.trim() === '香蕉（1根）'; }
+    var hasFruit2 = false;
+    days.forEach(day => {
+        const meals = day.meals || {};
+        ['breakfast','lunch','dinner'].forEach(mt => {
+            const meal = meals[mt];
+            if (meal && meal._normalizedDishes) meal._normalizedDishes.forEach(d => { if (isStandaloneFruit2(d.name) || isStandaloneBanana2(d.name)) hasFruit2 = true; });
+        });
+    });
+    if (!hasFruit2 && days.length > 0) {
+        var fp2 = ['蓝莓','草莓','橙子','葡萄','西瓜','梨','猕猴桃','苹果'];
+        var cf2 = null;
+        for (var fi2 = 0; fi2 < fp2.length; fi2++) { if (!globalUsed2.has(fp2[fi2])) { cf2 = fp2[fi2]; break; } }
+        if (!cf2) cf2 = '时令水果';
+        var fl2 = days[0].meals && days[0].meals.lunch;
+        if (fl2) { if (!fl2._normalizedDishes) fl2._normalizedDishes = []; fl2._normalizedDishes.push({name: cf2, ingredients: null, reason: '根据《中国居民膳食指南》推荐每日水果200-350g，本餐补充独立水果摄入'}); globalUsed2.add(cf2); }
+    }
+    // 菜品排序：第1道主食、第2道汤类
+    const SORT2_STAPLES = ['米饭','面','馒头','包子','饼','吐司','面包','三明治','麦片','玉米','红薯','紫薯','南瓜','饭','炒饭','煲仔饭','意面','馄饨','蒸饺','水饺','芝麻糊'];
+    const SORT2_SOUPS = ['汤','羹','粥'];
+    function isSort2Staple(dn) { return SORT2_STAPLES.some(k => (dn||'').includes(k)); }
+    function isSort2Soup(dn) { return SORT2_SOUPS.some(k => (dn||'').includes(k)); }
+    days.forEach(day => {
+        const meals = day.meals || {};
+        ['breakfast','lunch','dinner'].forEach(mt => {
+            const meal = meals[mt];
+            if (meal && meal._normalizedDishes && meal._normalizedDishes.length > 1) {
+                var arr = meal._normalizedDishes;
+                var stapleIdx = -1;
+                for (var si = 0; si < arr.length; si++) { if (isSort2Staple(arr[si].name)) { stapleIdx = si; break; } }
+                var soupIdx = -1;
+                for (var si2 = 0; si2 < arr.length; si2++) { if (si2 !== stapleIdx && isSort2Soup(arr[si2].name)) { soupIdx = si2; break; } }
+                var reordered = [];
+                if (stapleIdx >= 0) reordered.push(arr[stapleIdx]);
+                if (soupIdx >= 0) reordered.push(arr[soupIdx]);
+                for (var si3 = 0; si3 < arr.length; si3++) { if (si3 !== stapleIdx && si3 !== soupIdx) reordered.push(arr[si3]); }
+                meal._normalizedDishes = reordered;
+            }
+        });
+    });
+    // ===== 后置校验结束 =====
+
+    // ===== 菜品数量补充：每餐不足2道时自动补齐 =====
+    const FILL_POOL = {
+        breakfast: [{name:'水煮蛋',reason:'补充蛋白质'},{name:'牛奶',reason:'补充奶类'},{name:'豆浆',reason:'补充植物蛋白'},{name:'煮玉米',reason:'补充粗粮'}],
+        lunch: [{name:'紫菜蛋花汤',reason:'补充汤品'},{name:'清炒时蔬',reason:'补充蔬菜'},{name:'番茄炒蛋',reason:'补充蛋白质和蔬菜'},{name:'凉拌黄瓜',reason:'补充蔬菜'}],
+        dinner: [{name:'冬瓜排骨汤',reason:'补充汤品'},{name:'清炒菠菜',reason:'补充蔬菜'},{name:'蒸蛋羹',reason:'补充蛋白质'},{name:'凉拌木耳',reason:'补充蔬菜'}]
+    };
+    days.forEach(day => {
+        const meals = day.meals || {};
+        ['breakfast','lunch','dinner'].forEach(mt => {
+            const meal = meals[mt];
+            if (meal && meal._normalizedDishes && meal._normalizedDishes.length < 2) {
+                var fillItems = FILL_POOL[mt] || FILL_POOL['lunch'];
+                for (var fi3 = 0; fi3 < fillItems.length && meal._normalizedDishes.length < 2; fi3++) {
+                    if (!globalUsed2.has(fillItems[fi3].name)) {
+                        meal._normalizedDishes.push({name: fillItems[fi3].name, ingredients: null, reason: fillItems[fi3].reason});
+                        globalUsed2.add(fillItems[fi3].name);
+                    }
+                }
+            }
+        });
+    });
+    // ===== 菜品数量补充结束 =====
+
+    // 补充后再排序一次（确保补充的菜品也按主食→汤/粥→其他排列）
+    days.forEach(day => {
+        const meals = day.meals || {};
+        ['breakfast','lunch','dinner'].forEach(mt => {
+            const meal = meals[mt];
+            if (meal && meal._normalizedDishes && meal._normalizedDishes.length > 1) {
+                var arr2f = meal._normalizedDishes;
+                var stIdx2f = -1;
+                for (var si4f = 0; si4f < arr2f.length; si4f++) { if (isSort2Staple(arr2f[si4f].name)) { stIdx2f = si4f; break; } }
+                var spIdx2f = -1;
+                for (var si5f = 0; si5f < arr2f.length; si5f++) { if (si5f !== stIdx2f && isSort2Soup(arr2f[si5f].name)) { spIdx2f = si5f; break; } }
+                var reordered2f = [];
+                if (stIdx2f >= 0) reordered2f.push(arr2f[stIdx2f]);
+                if (spIdx2f >= 0) reordered2f.push(arr2f[spIdx2f]);
+                for (var si6f = 0; si6f < arr2f.length; si6f++) { if (si6f !== stIdx2f && si6f !== spIdx2f) reordered2f.push(arr2f[si6f]); }
+                meal._normalizedDishes = reordered2f;
+            }
+        });
+    });
+
     const mealLabels = { breakfast: '🌅 早餐', lunch: '☀️ 午餐', dinner: '🌙 晚餐' };
 
     let daysHtml = '';
@@ -21240,7 +21796,7 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
 
     const sourceTag = (recommendation._source === 'ai')
         ? `<div style="font-size:11px;color:#15803D;background:#DCFCE7;border:1px solid #86EFAC;border-radius:6px;padding:2px 6px;display:inline-block;">AI · 已融合九维数据</div>`
-        : `<div class="ai-plan-status" style="font-size:11px;color:#92400E;background:#FEF3C7;border:1px solid #FDE68A;border-radius:6px;padding:2px 6px;display:inline-block;">⏳ 快速方案 · AI正在后台优化中...</div>`;
+        : `<div class="ai-plan-status" style="font-size:11px;color:#6B7280;background:#F3F4F6;border:1px solid #E5E7EB;border-radius:6px;padding:2px 6px;display:inline-block;">食谱方案</div>`;
 
     const overlay = document.createElement('div');
     overlay.id = 'weeklyAiRecommendOverlay';
@@ -21481,8 +22037,10 @@ function confirmWeeklyAiRecommendation() {
         let dayAdded = 0;
         mealTypes.forEach(mealType => {
             const meal = day.meals && day.meals[mealType];
-            if (meal && meal.dishes) {
-                const rawDishes = Array.isArray(meal.dishes) ? meal.dishes : [meal.dishes];
+            // 优先使用后置校验排序后的 _normalizedDishes，否则回退到原始 dishes
+            const dishSource = (meal && meal._normalizedDishes) ? meal._normalizedDishes : (meal && meal.dishes);
+            if (meal && dishSource) {
+                const rawDishes = Array.isArray(dishSource) ? dishSource : [dishSource];
                 // 规范化菜品数据（使用cleanDishName清理菜名）
                 const normalized = rawDishes.map(d => {
                     if (typeof d === 'string') return { name: cleanDishName(d), ingredients: null, reason: '' };
@@ -21535,7 +22093,21 @@ function confirmWeeklyAiRecommendation() {
                     }
                 });
                 if (merged.length > 0) {
-                    let planData = { dishes: merged, note: '' };
+                    // 最终排序：主食第1、汤/羹/粥第2、其余依次
+                    const FINAL_STAPLES = ['米饭','面','馒头','包子','饼','吐司','面包','三明治','麦片','玉米','红薯','紫薯','南瓜','饭','炒饭','煲仔饭','意面','馄饨','蒸饺','水饺','芝麻糊'];
+                    const FINAL_SOUPS = ['汤','羹','粥'];
+                    function isFinalStaple(dn) { return FINAL_STAPLES.some(k => (dn||'').includes(k)); }
+                    function isFinalSoup(dn) { return FINAL_SOUPS.some(k => (dn||'').includes(k)); }
+                    var fstIdx = -1;
+                    for (var fsi = 0; fsi < merged.length; fsi++) { if (isFinalStaple(merged[fsi])) { fstIdx = fsi; break; } }
+                    var fspIdx = -1;
+                    for (var fsi2 = 0; fsi2 < merged.length; fsi2++) { if (fsi2 !== fstIdx && isFinalSoup(merged[fsi2])) { fspIdx = fsi2; break; } }
+                    var finalReordered = [];
+                    if (fstIdx >= 0) finalReordered.push(merged[fstIdx]);
+                    if (fspIdx >= 0) finalReordered.push(merged[fspIdx]);
+                    for (var fsi3 = 0; fsi3 < merged.length; fsi3++) { if (fsi3 !== fstIdx && fsi3 !== fspIdx) finalReordered.push(merged[fsi3]); }
+                    // 同步重排 mergedMeta 的 key 顺序（不需要，因为 meta 是按 name 索引的）
+                    let planData = { dishes: finalReordered, note: '' };
                     if (Object.keys(mergedMeta).length > 0) planData.dishMeta = mergedMeta;
                     updateMealPlan(targetDateKey, mealType, planData);
                     dayAdded += merged.length;
@@ -21867,7 +22439,7 @@ function handleAiReply(userText, templateReply) {
 
 // 更新当前对话标题（用首条用户消息摘要）
 function updateConversationTitle() {
-    const customTitle = localStorage.getItem('currentChatCustomTitle');
+    const customTitle = lsGet('currentChatCustomTitle');
     if (customTitle) return; // 已有自定义标题则不覆盖
     const firstUserMsg = chatHistory.find(m => m.role === 'user');
     if (firstUserMsg) {
@@ -22059,7 +22631,7 @@ let currentDiaryDate = new Date();
 // ==================== 食记就餐人选择器 ====================
 // 获取食记当前选中的就餐人
 function getDiaryDiningGroup() {
-    let saved = localStorage.getItem('diaryDiningGroup');
+    let saved = lsGet('diaryDiningGroup');
     if (saved) {
         try {
             let parsed = JSON.parse(saved);
@@ -22083,7 +22655,7 @@ function getDiaryDiningGroup() {
 function saveDiaryDiningGroup(groupId, members) {
     let group = diningGroups.find(g => g.id === groupId);
     let groupName = group ? group.name : '';
-    localStorage.setItem('diaryDiningGroup', JSON.stringify({ groupId, groupName, members }));
+    lsSet('diaryDiningGroup', JSON.stringify({ groupId, groupName, members }));
 }
 
 // 获取食记当前就餐人的详细成员信息（含口味、偏好等）
@@ -22355,11 +22927,11 @@ function renderDiary() {
     }
 
     // 值班人信息：显示"今值日：[姓名]"
-    const singleMode = isSingleMemberMode();
+    const dutyDisabled = isDutyDisabled();
     const todayDuty = getDutyForDate(currentDiaryDate);
     const dutyEl = document.getElementById('topbarDuty');
     if (dutyEl) {
-        if (singleMode) {
+        if (dutyDisabled) {
             dutyEl.innerHTML = '';
             dutyEl.style.display = 'none';
         } else {
@@ -22403,8 +22975,25 @@ function renderDiary() {
         // 计划区内容
         let planText, planClass = '';
         if (hasPlan) {
+            // 渲染前排序：主食第1、汤/羹/粥第2、其余依次
+            const RDR_STAPLES = ['米饭','面','馒头','包子','饼','吐司','面包','三明治','麦片','玉米','红薯','紫薯','南瓜','饭','炒饭','煲仔饭','意面','馄饨','蒸饺','水饺','芝麻糊'];
+            const RDR_SOUPS = ['汤','羹','粥'];
+            function isRdrStaple(dn) { return RDR_STAPLES.some(k => (dn||'').includes(k)); }
+            function isRdrSoup(dn) { return RDR_SOUPS.some(k => (dn||'').includes(k)); }
+            var rdrDishes = data.plan.dishes.slice();
+            if (rdrDishes.length > 1) {
+                var rdrStIdx = -1;
+                for (var ri1 = 0; ri1 < rdrDishes.length; ri1++) { var rn1 = typeof rdrDishes[ri1] === 'string' ? rdrDishes[ri1] : (rdrDishes[ri1] && rdrDishes[ri1].name) || ''; if (isRdrStaple(rn1)) { rdrStIdx = ri1; break; } }
+                var rdrSpIdx = -1;
+                for (var ri2 = 0; ri2 < rdrDishes.length; ri2++) { var rn2 = typeof rdrDishes[ri2] === 'string' ? rdrDishes[ri2] : (rdrDishes[ri2] && rdrDishes[ri2].name) || ''; if (ri2 !== rdrStIdx && isRdrSoup(rn2)) { rdrSpIdx = ri2; break; } }
+                var rdrReordered = [];
+                if (rdrStIdx >= 0) rdrReordered.push(rdrDishes[rdrStIdx]);
+                if (rdrSpIdx >= 0) rdrReordered.push(rdrDishes[rdrSpIdx]);
+                for (var ri3 = 0; ri3 < rdrDishes.length; ri3++) { if (ri3 !== rdrStIdx && ri3 !== rdrSpIdx) rdrReordered.push(rdrDishes[ri3]); }
+                rdrDishes = rdrReordered;
+            }
             // 构建每道菜的标签（食材用量在菜谱详情页显示），同行排列
-            planText = data.plan.dishes.map(d => {
+            planText = rdrDishes.map(d => {
                 const dName = typeof d === 'string' ? d : (d && d.name) || '';
                 if (!dName) return '';
                 return '<span class="dish-tag-clickable" onclick="showDishDetail(\'' + escapeHtml(dName) + '\', \'' + dateKey + '\', \'' + meal.key + '\')">' + escapeHtml(dName) + '</span>';
@@ -22737,7 +23326,7 @@ function autoFillDiarySnack(snackId) {
 
 // 加餐记录联动库存扣减
 function deductSnackFromFridge(name, qty, unit) {
-    var items = JSON.parse(localStorage.getItem('fridgeItems')) || [];
+    var items = JSON.parse(lsGet('fridgeItems')) || [];
     var matched = false;
     // 按名称匹配（支持模糊匹配）
     items.forEach(function(it) {
@@ -22755,7 +23344,7 @@ function deductSnackFromFridge(name, qty, unit) {
         }
     });
     if (matched) {
-        localStorage.setItem('fridgeItems', JSON.stringify(items));
+        lsSet('fridgeItems', JSON.stringify(items));
         fridgeItems = items;
     }
     return matched;
@@ -23620,7 +24209,7 @@ var diningOutPlanData = {
 // 外出就餐规划弹窗
 function openDiningOutPlanModal() {
     const dateKey = dateToKey(currentDiaryDate);
-    const allPlans = JSON.parse(localStorage.getItem('diningOutPlans') || '{}');
+    const allPlans = JSON.parse(lsGet('diningOutPlans') || '{}');
     const existingPlan = allPlans[dateKey] || {};
 
     const overlay = document.createElement('div');
@@ -23962,7 +24551,7 @@ async function aiRecommendFromKnowledge() {
     }
 
     // 读取历史就餐记录
-    var pastPlans = JSON.parse(localStorage.getItem('diningOutPlans') || '{}');
+    var pastPlans = JSON.parse(lsGet('diningOutPlans') || '{}');
     var recentPlans = Object.entries(pastPlans).sort(function(a, b) { return b[0].localeCompare(a[0]); }).slice(0, 10);
     var diningHistory = recentPlans.map(function(entry) {
         var p = entry[1];
@@ -24598,7 +25187,7 @@ function confirmDiningOutPlan() {
     var taste = document.getElementById('planTaste').value;
 
     // 保存到 diningOutPlans
-    var allPlans = JSON.parse(localStorage.getItem('diningOutPlans') || '{}');
+    var allPlans = JSON.parse(lsGet('diningOutPlans') || '{}');
     allPlans[dateStr] = {
         mealType: mealType,
         scene: scene,
@@ -24614,11 +25203,11 @@ function confirmDiningOutPlan() {
         reason: r.reason || '',
         createdAt: Date.now()
     };
-    localStorage.setItem('diningOutPlans', JSON.stringify(allPlans));
+    lsSet('diningOutPlans', JSON.stringify(allPlans));
 
     // 同时保存到 dietCalendar（outStatus = 'planning'）
     var dateKey = dateStr.replace(/-/g, '');
-    var calendar = JSON.parse(localStorage.getItem('dietCalendar') || '{}');
+    var calendar = JSON.parse(lsGet('dietCalendar') || '{}');
     if (!calendar[dateKey]) calendar[dateKey] = {};
     var mealData = calendar[dateKey][mealType] || {};
     mealData.actual = mealData.actual || {};
@@ -24637,7 +25226,7 @@ function confirmDiningOutPlan() {
     mealData.actual.dishes = (r.dishes || []).map(function(d) { return { name: d.name, userComment: '', aiFeedback: '' }; });
     mealData.actual.photos = mealData.actual.photos || [];
     calendar[dateKey][mealType] = mealData;
-    localStorage.setItem('dietCalendar', JSON.stringify(calendar));
+    lsSet('dietCalendar', JSON.stringify(calendar));
 
     document.getElementById('diningOutPlanOverlay').remove();
     renderDiary();
@@ -24718,7 +25307,7 @@ function checkTodayCompletion() {
             firstUnrecordedMeal = mt;
         }
     });
-    const reviewDone = localStorage.getItem('dailyReviewDone_' + todayKey) === '1';
+    const reviewDone = lsGet('dailyReviewDone_' + todayKey) === '1';
     return { actualCount, hasPlan, reviewDone, totalMeals: 3, firstUnrecordedMeal };
 }
 
@@ -25100,9 +25689,9 @@ function closeMealPlanPage(alreadySaved) {
     if (!alreadySaved && !_mealPlanState._saved) {
         var result = _collectAllSelectedDishes();
         // 无论有无选中菜，都保存当前状态（包括删除/取消勾选操作）
-        var allPlans = JSON.parse(localStorage.getItem('mealPlans')||'{}');
+        var allPlans = JSON.parse(lsGet('mealPlans')||'{}');
         allPlans[_mealPlanState.dateKey] = { date:_mpFormatDate(_mealPlanState.planDate), style:result.styleName, breakfast:result.plan.breakfast, lunch:result.plan.lunch, dinner:result.plan.dinner, status:'confirmed', createdAt:new Date().toISOString() };
-        localStorage.setItem('mealPlans', JSON.stringify(allPlans));
+        lsSet('mealPlans', JSON.stringify(allPlans));
         // 同步到 dietCalendar，使三餐计划页面能显示
         updateMealPlan(_mealPlanState.dateKey, 'breakfast', { dishes: result.plan.breakfast, note: '来自规划食谱·'+result.styleName });
         updateMealPlan(_mealPlanState.dateKey, 'lunch', { dishes: result.plan.lunch, note: '来自规划食谱·'+result.styleName });
@@ -25258,7 +25847,7 @@ function _collectMealPlanContext(planDate) {
 
     // P4: 家中已有食材
     try {
-        var items = JSON.parse(localStorage.getItem('fridgeItems') || '[]');
+        var items = JSON.parse(lsGet('fridgeItems') || '[]');
         var today = new Date(); today.setHours(0,0,0,0);
         ctx.fridgeItems = items.map(function(item){
             var expDate = item.expiryDate ? new Date(item.expiryDate) : null;
@@ -25293,7 +25882,7 @@ function _collectMealPlanContext(planDate) {
 
     // P7: 知识库
     try {
-        var allKB = JSON.parse(localStorage.getItem('dietKnowledge') || '[]');
+        var allKB = JSON.parse(lsGet('dietKnowledge') || '[]');
         var seasonTerm = ctx.seasonal ? ctx.seasonal.match(/节气：(\S+?)（/): null;
         var seasonKey = seasonTerm ? seasonTerm[1] : '';
         var matched = allKB.filter(function(k){
@@ -25305,7 +25894,7 @@ function _collectMealPlanContext(planDate) {
 
     // P8: 历史实际食谱（最近7天）
     try {
-        var calendar = JSON.parse(localStorage.getItem('dietCalendar') || '{}');
+        var calendar = JSON.parse(lsGet('dietCalendar') || '{}');
         var sevenAgo = new Date(planDate); sevenAgo.setDate(sevenAgo.getDate()-7);
         var recentDishes = [], goodDishes = [], badDishes = [];
         Object.keys(calendar).forEach(function(dateKey){
@@ -25427,7 +26016,7 @@ function _buildMealPlanPrompt(dateStr, ctx, styleCount) {
     if (ctx.knowledgeBits) p += '【知识库参考】\n'+ctx.knowledgeBits+'\n\n';
     if (ctx.recentMeals) p += '【历史食谱】\n'+ctx.recentMeals+'\n\n';
     if (ctx.dietaryGuideline) p += '【膳食指南约束 P9】\n'+ctx.dietaryGuideline+'\n\n';
-    p += '推荐要求：\n1. 尽量使用家中已有食材\n2. 遵守成员忌口和健康关注\n3. 符合当季时令\n4. 避免与近7天重复\n5. 每道菜给出简短标签\n6. 每餐次给出推荐理由（breakfastReason/lunchReason/dinnerReason），说明该餐搭配的合理性，且必须显式引用《中国居民膳食指南》，例如"根据《中国居民膳食指南》推荐每日应摄入300g奶类"\n7. 每餐菜品列表中必须明确写出一道主食菜名（米饭/杂粮饭/面条/粥/馒头/饼等，不可省略、不可仅在理由中暗示），并且主食排在第一位\n8. 优先补足"【膳食指南约束 P9】"中近3天偏低的类别（如蔬菜吃少了就多安排深色蔬菜，奶类不足就推荐牛奶/酸奶搭配）；若水果类缺口≥50%，必须在三餐或加餐中安排独立水果菜品（如苹果/香蕉/蓝莓/草莓等，不依赖奶类饮品混合来分摊）；超过目标120%的类别今天适当减少\n9. 三餐菜品覆盖的不同食材（含加餐）每天合计应达到≥12种、每周≥25种，盐、烹调油、添加糖严格控制在每日上限内\n10. 3天方案内部，同一菜品名称在全部餐次和日期中合计最多出现1次（允许菜品中的相同食材单独出现，但整道菜全名不可重复，如"牛肉炒莲藕"出现后，任何一天/一餐不得再出现"牛肉炒莲藕"）\n\n';
+    p += '推荐要求：\n1. 尽量使用家中已有食材\n2. 遵守成员忌口和健康关注\n3. 符合当季时令\n4. 避免与近7天重复\n5. 每道菜给出简短标签\n6. 每餐次给出推荐理由（breakfastReason/lunchReason/dinnerReason），说明该餐搭配的合理性，且必须显式引用《中国居民膳食指南》，例如"根据《中国居民膳食指南》推荐每日应摄入300g奶类"\n7. 每餐菜品排序规则：第一道必须是主食（米饭/杂粮饭/面条/粥/馒头/饼等，不可省略）；第二道推荐汤类菜品（如排骨汤/鱼汤/豆腐汤/蛋花汤/羹类等，若无汤类则推荐蔬菜类）；第三道及以后为主菜/副菜\n8. 优先补足"【膳食指南约束 P9】"中近3天偏低的类别（如蔬菜吃少了就多安排深色蔬菜，奶类不足就推荐牛奶/酸奶搭配）；若水果类缺口≥50%，必须在三餐或加餐中安排独立水果菜品（如苹果/香蕉/蓝莓/草莓等，不依赖奶类饮品混合来分摊）；超过目标120%的类别今天适当减少\n9. 三餐菜品覆盖的不同食材（含加餐）每天合计应达到≥12种、每周≥25种，盐、烹调油、添加糖严格控制在每日上限内\n10. 3天方案内部，同一菜品名称在全部餐次和日期中合计最多出现1次（允许菜品中的相同食材单独出现，但整道菜全名不可重复，如"牛肉炒莲藕"出现后，任何一天/一餐不得再出现"牛肉炒莲藕"）\n\n';
     p += '严格按以下JSON格式返回（不要包含markdown代码块标记）：\n';
     if (hasExisting) {
         p += '{"styles":[{"name":"快手风","breakfast":[{"name":"菜名","tag":"标签"}],"lunch":[{"name":"菜名","tag":"标签"}],"dinner":[{"name":"菜名","tag":"标签"}],"breakfastReason":"早餐搭配理由","lunchReason":"午餐搭配理由","dinnerReason":"晚餐搭配理由"},{"name":"养生风","breakfast":[...],"lunch":[...],"dinner":[...],"breakfastReason":"...","lunchReason":"...","dinnerReason":"..."}]}';
@@ -25748,7 +26337,83 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
             globalUsed.add(chosenFruit);
         }
     }
-    // ===== 后置校验结束 =====
+
+    // ===== 菜品排序：第1道主食、第2道汤类、其余依次 =====
+    const SORT_STAPLES = ['米饭','面','馒头','包子','饼','吐司','面包','三明治','麦片','玉米','红薯','紫薯','南瓜','饭','炒饭','煲仔饭','意面','馄饨','蒸饺','水饺','芝麻糊'];
+    const SORT_SOUPS = ['汤','羹','粥'];
+    function isSortStaple(dn) { return SORT_STAPLES.some(k => (dn||'').includes(k)); }
+    function isSortSoup(dn) { return SORT_SOUPS.some(k => (dn||'').includes(k)); }
+
+    days.forEach(day => {
+        const meals = day.meals || {};
+        ['breakfast','lunch','dinner'].forEach(mt => {
+            const meal = meals[mt];
+            if (meal && meal._normalizedDishes && meal._normalizedDishes.length > 1) {
+                var arr = meal._normalizedDishes;
+                // 找第一道主食
+                var stapleIdx = -1;
+                for (var si = 0; si < arr.length; si++) { if (isSortStaple(arr[si].name)) { stapleIdx = si; break; } }
+                // 找第一道汤类（排除已选为主食的）
+                var soupIdx = -1;
+                for (var si2 = 0; si2 < arr.length; si2++) { if (si2 !== stapleIdx && isSortSoup(arr[si2].name)) { soupIdx = si2; break; } }
+
+                var reordered = [];
+                // 第1道：主食
+                if (stapleIdx >= 0) { reordered.push(arr[stapleIdx]); }
+                // 第2道：汤类
+                if (soupIdx >= 0) { reordered.push(arr[soupIdx]); }
+                // 其余：保持原顺序
+                for (var si3 = 0; si3 < arr.length; si3++) {
+                    if (si3 !== stapleIdx && si3 !== soupIdx) reordered.push(arr[si3]);
+                }
+                meal._normalizedDishes = reordered;
+            }
+        });
+    });
+    // ===== 菜品排序结束 =====
+
+    // ===== 菜品数量补充：每餐不足2道时自动补齐 =====
+    const FILL_POOL_A = {
+        breakfast: [{name:'水煮蛋',reason:'补充蛋白质'},{name:'牛奶',reason:'补充奶类'},{name:'豆浆',reason:'补充植物蛋白'},{name:'煮玉米',reason:'补充粗粮'}],
+        lunch: [{name:'紫菜蛋花汤',reason:'补充汤品'},{name:'清炒时蔬',reason:'补充蔬菜'},{name:'番茄炒蛋',reason:'补充蛋白质和蔬菜'},{name:'凉拌黄瓜',reason:'补充蔬菜'}],
+        dinner: [{name:'冬瓜排骨汤',reason:'补充汤品'},{name:'清炒菠菜',reason:'补充蔬菜'},{name:'蒸蛋羹',reason:'补充蛋白质'},{name:'凉拌木耳',reason:'补充蔬菜'}]
+    };
+    days.forEach(day => {
+        const meals = day.meals || {};
+        ['breakfast','lunch','dinner'].forEach(mt => {
+            const meal = meals[mt];
+            if (meal && meal._normalizedDishes && meal._normalizedDishes.length < 2) {
+                var fillItems = FILL_POOL_A[mt] || FILL_POOL_A['lunch'];
+                for (var fi4 = 0; fi4 < fillItems.length && meal._normalizedDishes.length < 2; fi4++) {
+                    if (!globalUsed.has(fillItems[fi4].name)) {
+                        meal._normalizedDishes.push({name: fillItems[fi4].name, ingredients: null, reason: fillItems[fi4].reason});
+                        globalUsed.add(fillItems[fi4].name);
+                    }
+                }
+            }
+        });
+    });
+    // ===== 菜品数量补充结束 =====
+
+    // 补充后再排序一次（确保补充的菜品也按主食→汤→其他排列）
+    days.forEach(day => {
+        const meals = day.meals || {};
+        ['breakfast','lunch','dinner'].forEach(mt => {
+            const meal = meals[mt];
+            if (meal && meal._normalizedDishes && meal._normalizedDishes.length > 1) {
+                var arr2 = meal._normalizedDishes;
+                var stIdx2 = -1;
+                for (var si4 = 0; si4 < arr2.length; si4++) { if (isSortStaple(arr2[si4].name)) { stIdx2 = si4; break; } }
+                var spIdx2 = -1;
+                for (var si5 = 0; si5 < arr2.length; si5++) { if (si5 !== stIdx2 && isSortSoup(arr2[si5].name)) { spIdx2 = si5; break; } }
+                var reordered2 = [];
+                if (stIdx2 >= 0) reordered2.push(arr2[stIdx2]);
+                if (spIdx2 >= 0) reordered2.push(arr2[spIdx2]);
+                for (var si6 = 0; si6 < arr2.length; si6++) { if (si6 !== stIdx2 && si6 !== spIdx2) reordered2.push(arr2[si6]); }
+                meal._normalizedDishes = reordered2;
+            }
+        });
+    });
 
     const mealLabels = { breakfast: '🌅 早餐', lunch: '☀️ 午餐', dinner: '🌙 晚餐' };
     let daysHtml = '';
@@ -26014,7 +26679,7 @@ function _renderKnowledgeSection() {
 }
 
 function _getFilteredKnowledge() {
-    var all = JSON.parse(localStorage.getItem('dietKnowledge') || '[]');
+    var all = JSON.parse(lsGet('dietKnowledge') || '[]');
     var scopes = [];
     if (document.getElementById('mpKnPersonal') && document.getElementById('mpKnPersonal').checked) scopes.push('private');
     if (document.getElementById('mpKnFamily') && document.getElementById('mpKnFamily').checked) scopes.push('family');
@@ -26043,7 +26708,7 @@ function _getFilteredKnowledge() {
 
 function updateKnSubCats() {
     var mainCat = document.getElementById('mpKnMainCat').value;
-    var all = JSON.parse(localStorage.getItem('dietKnowledge') || '[]');
+    var all = JSON.parse(lsGet('dietKnowledge') || '[]');
     var subs = {};
     all.forEach(function(item){
         if (!mainCat || item.mainCategory === mainCat) {
@@ -26059,7 +26724,7 @@ function updateKnSubCats() {
 function updateKnDetailCats() {
     var mainCat = document.getElementById('mpKnMainCat').value;
     var subCat = document.getElementById('mpKnSubCat').value;
-    var all = JSON.parse(localStorage.getItem('dietKnowledge') || '[]');
+    var all = JSON.parse(lsGet('dietKnowledge') || '[]');
     var details = {};
     all.forEach(function(item){
         if ((!mainCat || item.mainCategory === mainCat) && (!subCat || item.subCategory === subCat)) {
@@ -26271,9 +26936,9 @@ function _collectAllSelectedDishes() {
 function saveMealPlan() {
     var result = _collectAllSelectedDishes();
     if (result.total===0) { showToast('请至少勾选一道菜'); return; }
-    var allPlans = JSON.parse(localStorage.getItem('mealPlans')||'{}');
+    var allPlans = JSON.parse(lsGet('mealPlans')||'{}');
     allPlans[_mealPlanState.dateKey] = { date:_mpFormatDate(_mealPlanState.planDate), style:result.styleName, breakfast:result.plan.breakfast, lunch:result.plan.lunch, dinner:result.plan.dinner, snack:result.plan.snack, status:'confirmed', createdAt:new Date().toISOString() };
-    localStorage.setItem('mealPlans', JSON.stringify(allPlans));
+    lsSet('mealPlans', JSON.stringify(allPlans));
     // 同步到 dietCalendar，使三餐计划页面能显示
     updateMealPlan(_mealPlanState.dateKey, 'breakfast', { dishes: result.plan.breakfast, note: '来自规划食谱·'+result.styleName });
     updateMealPlan(_mealPlanState.dateKey, 'lunch', { dishes: result.plan.lunch, note: '来自规划食谱·'+result.styleName });
@@ -26839,7 +27504,7 @@ async function loadDailyReview() {
     };
 
     // 标记当日复盘已完成
-    localStorage.setItem('dailyReviewDone_' + dateToKey(currentDiaryDate), '1');
+    lsSet('dailyReviewDone_' + dateToKey(currentDiaryDate), '1');
 
     renderReviewSection();
 }
@@ -28071,7 +28736,7 @@ function openDiaryRecordModal(mealKey) {
         // 外出就餐时自动读取规划数据预填
         if (currentDiningType === '外出就餐') {
             const dateStr = currentDiaryDate.getFullYear() + '-' + String(currentDiaryDate.getMonth()+1).padStart(2,'0') + '-' + String(currentDiaryDate.getDate()).padStart(2,'0');
-            const allPlans = JSON.parse(localStorage.getItem('diningOutPlans') || '{}');
+            const allPlans = JSON.parse(lsGet('diningOutPlans') || '{}');
             const plan = allPlans[dateStr];
             // 填充餐厅名称
             const restInput = document.getElementById('restaurantName');
@@ -28456,12 +29121,12 @@ function switchTab(tab) {
     menuBtn.setAttribute('data-tip', menuTips[tab] || '');
     clearBtn.setAttribute('data-tip', addTips[tab] || '');
 
-    // 食记页面：非单人模式时由renderDiary控制topbar值班信息显示，其他页面隐藏
+    // 食记页面：值班未关闭时由renderDiary控制topbar值班信息显示，其他页面隐藏
     const topbarDuty = document.getElementById('topbarDuty');
     const diaryDiningSelector = document.getElementById('diaryDiningSelector');
-    const singleMode = isSingleMemberMode();
-    if (topbarDuty && (tab !== 'diary' || singleMode)) topbarDuty.style.display = 'none';
-    if (diaryDiningSelector) diaryDiningSelector.style.display = (tab === 'diary' && !singleMode) ? 'flex' : 'none';
+    const dutyOn = !isDutyDisabled();
+    if (topbarDuty && (tab !== 'diary' || !dutyOn)) topbarDuty.style.display = 'none';
+    if (diaryDiningSelector) diaryDiningSelector.style.display = (tab === 'diary') ? 'flex' : 'none';
 
     // 切到食知Tab时渲染（默认显示AI对话）
     if (tab === 'knowledge') {
@@ -29247,14 +29912,14 @@ if (planList) planList.addEventListener('click', function(e) {
     // 家宴：转入食录
     if (e.target.closest('#feastTransfer')) {
         const key = dateToKey(currentPlanDate);
-        const allPlans = JSON.parse(localStorage.getItem('feastPlans')) || {};
+        const allPlans = JSON.parse(lsGet('feastPlans')) || {};
         const dayPlan = allPlans[key];
         if (!dayPlan || !dayPlan.dishes || dayPlan.dishes.length === 0) {
             showToast('请先添加菜品');
             return;
         }
         saveFeastForm();
-        const records = JSON.parse(localStorage.getItem('mealRecords')) || [];
+        const records = JSON.parse(lsGet('mealRecords')) || [];
         dayPlan.dishes.forEach(d => {
             records.push({
                 id: Date.now() + Math.random(),
@@ -29271,7 +29936,7 @@ if (planList) planList.addEventListener('click', function(e) {
                 createdAt: Date.now()
             });
         });
-        localStorage.setItem('mealRecords', JSON.stringify(records));
+        lsSet('mealRecords', JSON.stringify(records));
         showToast('✅ 已转入食录！');
         switchTab('diary');
         return;
@@ -29482,7 +30147,7 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
         height, weight, groupType, healthGoal, medicalHistory, activityLevel,
         trainingItem, trainingFreq, pregnancyWeek, diseaseType
     });
-    localStorage.setItem('familyData', JSON.stringify(familyData));
+    lsSet('familyData', JSON.stringify(familyData));
     // 将新成员添加到所选就餐组
     let targetGroupName;
     if (diningGroupId === 4) {
@@ -29501,7 +30166,7 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
         if (diningGroup && !diningGroup.members.includes(name)) diningGroup.members.push(name);
         targetGroupName = diningGroup ? diningGroup.name : '';
     }
-    localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
+    lsSet('diningGroups', JSON.stringify(diningGroups));
     // 恢复显示我家页面其他版块
     document.getElementById('familyList').style.display = '';
     renderFamily();
@@ -29605,7 +30270,7 @@ document.querySelectorAll('.knowledge-tag-item').forEach(tag => {
 // ============================================================
 // 7. 初始化（预置演示数据）
 // ============================================================
-if (!localStorage.getItem('mealPlans')) {
+if (!lsGet('mealPlans')) {
     const today = new Date();
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
     const demo = {};
@@ -29619,11 +30284,11 @@ if (!localStorage.getItem('mealPlans')) {
         lunch: [{ id: 5, name: '红烧排骨', forWhom: '适合全家', taste: '家常', ingredients: ['排骨','冰糖','生抽'], reason: '家常下饭，老少皆宜', completed: false, addedAt: Date.now(), solarTerm: '小暑', groupName: '小家' }],
         dinner: [{ id: 6, name: '冬瓜排骨汤', forWhom: '适合全家', taste: '清鲜', ingredients: ['冬瓜','排骨'], reason: '清热解暑，消暑佳品', completed: false, addedAt: Date.now(), solarTerm: '小暑', groupName: '小家' }]
     };
-    localStorage.setItem('mealPlans', JSON.stringify(demo));
+    lsSet('mealPlans', JSON.stringify(demo));
 }
-if (!localStorage.getItem('mealRecords')) localStorage.setItem('mealRecords', JSON.stringify([]));
-if (!localStorage.getItem('familyData')) localStorage.setItem('familyData', JSON.stringify(DEFAULT_FAMILY));
-familyData = JSON.parse(localStorage.getItem('familyData'));
+if (!lsGet('mealRecords')) lsSet('mealRecords', JSON.stringify([]));
+if (!lsGet('familyData')) lsSet('familyData', JSON.stringify(DEFAULT_FAMILY));
+familyData = JSON.parse(lsGet('familyData'));
 familyData = familyData.map(member => {
     const defaultMember = DEFAULT_FAMILY.find(item => item.name === member.name);
     return {
@@ -29637,7 +30302,7 @@ familyData.forEach(m => {
     if (m.relationship === undefined) m.relationship = '家人';
     if (m.isFamily === undefined) m.isFamily = true;
 });
-if (!localStorage.getItem('socialMembersMerged_v2')) {
+if (!lsGet('socialMembersMerged_v2')) {
     const existingNames = new Set(familyData.map(m => m.name));
     DEFAULT_SOCIAL_MEMBERS.forEach(sm => {
         if (!existingNames.has(sm.name)) {
@@ -29645,26 +30310,26 @@ if (!localStorage.getItem('socialMembersMerged_v2')) {
             existingNames.add(sm.name);
         }
     });
-    localStorage.setItem('familyData', JSON.stringify(familyData));
-    localStorage.setItem('socialMembersMerged_v2', 'true');
+    lsSet('familyData', JSON.stringify(familyData));
+    lsSet('socialMembersMerged_v2', 'true');
 }
-localStorage.setItem('familyData', JSON.stringify(familyData));
-if (!localStorage.getItem('contactsData')) localStorage.setItem('contactsData', JSON.stringify(DEFAULT_CONTACTS));
-if (!localStorage.getItem('diningGroups')) localStorage.setItem('diningGroups', JSON.stringify(DEFAULT_DINING_GROUPS));
-contactsData = JSON.parse(localStorage.getItem('contactsData'));
-diningGroups = JSON.parse(localStorage.getItem('diningGroups'));
+lsSet('familyData', JSON.stringify(familyData));
+if (!lsGet('contactsData')) lsSet('contactsData', JSON.stringify(DEFAULT_CONTACTS));
+if (!lsGet('diningGroups')) lsSet('diningGroups', JSON.stringify(DEFAULT_DINING_GROUPS));
+contactsData = JSON.parse(lsGet('contactsData'));
+diningGroups = JSON.parse(lsGet('diningGroups'));
 // 给旧就餐组补上 groupType 字段
 diningGroups.forEach(g => {
     if (g.groupType === undefined) g.groupType = g.type === 'social' ? 'social' : 'core';
 });
 // 统一清理：迁移"三口之家"→"小家"，移除所有"聚餐"后缀组，确保7个默认组存在
-if (!localStorage.getItem('diningGroupsV5_final')) {
+if (!lsGet('diningGroupsV5_final')) {
     // 1. 迁移"三口之家"→"小家"
     diningGroups.forEach(g => {
         if (g.name === '三口之家') g.name = '小家';
     });
-    if (localStorage.getItem('currentDiningGroup') === '三口之家') {
-        localStorage.setItem('currentDiningGroup', '小家');
+    if (lsGet('currentDiningGroup') === '三口之家') {
+        lsSet('currentDiningGroup', '小家');
     }
     // 2. 强制移除所有"聚餐"后缀的就餐组（女方家族聚餐、男方家族聚餐、朋友聚餐、同事聚餐、亲戚聚餐）
     diningGroups = diningGroups.filter(g => !g.name.endsWith('聚餐'));
@@ -29678,7 +30343,7 @@ if (!localStorage.getItem('diningGroupsV5_final')) {
     });
     // 4. 迁移mealPlans中的groupName
     try {
-        const plans = JSON.parse(localStorage.getItem('mealPlans') || '{}');
+        const plans = JSON.parse(lsGet('mealPlans') || '{}');
         let planChanged = false;
         Object.keys(plans).forEach(dateKey => {
             ['breakfast','lunch','dinner'].forEach(meal => {
@@ -29693,18 +30358,18 @@ if (!localStorage.getItem('diningGroupsV5_final')) {
                 }
             });
         });
-        if (planChanged) localStorage.setItem('mealPlans', JSON.stringify(plans));
+        if (planChanged) lsSet('mealPlans', JSON.stringify(plans));
     } catch(e) {}
     // 5. 修正currentDiningGroup指向
-    const cur = localStorage.getItem('currentDiningGroup');
+    const cur = lsGet('currentDiningGroup');
     if (cur && cur.endsWith('聚餐')) {
-        localStorage.setItem('currentDiningGroup', cur.replace(/聚餐$/, ''));
+        lsSet('currentDiningGroup', cur.replace(/聚餐$/, ''));
     }
-    localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
-    localStorage.setItem('diningGroupsV5_final', 'true');
+    lsSet('diningGroups', JSON.stringify(diningGroups));
+    lsSet('diningGroupsV5_final', 'true');
 }
 // V6: 重构为"4主组+社交子组"结构
-if (!localStorage.getItem('diningGroupsV6_social')) {
+if (!lsGet('diningGroupsV6_social')) {
     // 1. 确保社交组容器存在
     if (!diningGroups.some(g => g.name === '社交组')) {
         diningGroups.push({ id: 4, name: '社交组', members: [], icon: '👫', groupType: 'social-container', isContainer: true, isDefault: false, createdAt: 1734567893 });
@@ -29725,11 +30390,11 @@ if (!localStorage.getItem('diningGroupsV6_social')) {
             existingNames.add(sg.name);
         }
     });
-    localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
-    localStorage.setItem('diningGroupsV6_social', 'true');
+    lsSet('diningGroups', JSON.stringify(diningGroups));
+    lsSet('diningGroupsV6_social', 'true');
 }
 // V7: 将"客户"社交子组重命名为"亲戚"
-if (!localStorage.getItem('diningGroupsV7_rename')) {
+if (!lsGet('diningGroupsV7_rename')) {
     diningGroups.forEach(g => {
         if (g.name === '客户' && g.groupType === 'social') {
             g.name = '亲戚';
@@ -29741,15 +30406,15 @@ if (!localStorage.getItem('diningGroupsV7_rename')) {
     familyData.forEach(m => {
         if (m.relationship === '客户') m.relationship = '亲戚';
     });
-    localStorage.setItem('familyData', JSON.stringify(familyData));
-    localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
+    lsSet('familyData', JSON.stringify(familyData));
+    lsSet('diningGroups', JSON.stringify(diningGroups));
     // 更新 currentDiningGroup
-    if (localStorage.getItem('currentDiningGroup') === '客户') {
-        localStorage.setItem('currentDiningGroup', '亲戚');
+    if (lsGet('currentDiningGroup') === '客户') {
+        lsSet('currentDiningGroup', '亲戚');
     }
     // 更新 mealPlans 中的 groupName
     try {
-        const plans = JSON.parse(localStorage.getItem('mealPlans') || '{}');
+        const plans = JSON.parse(lsGet('mealPlans') || '{}');
         let planChanged = false;
         Object.keys(plans).forEach(dateKey => {
             ['breakfast','lunch','dinner'].forEach(meal => {
@@ -29760,12 +30425,12 @@ if (!localStorage.getItem('diningGroupsV7_rename')) {
                 }
             });
         });
-        if (planChanged) localStorage.setItem('mealPlans', JSON.stringify(plans));
+        if (planChanged) lsSet('mealPlans', JSON.stringify(plans));
     } catch(e) {}
-    localStorage.setItem('diningGroupsV7_rename', 'true');
+    lsSet('diningGroupsV7_rename', 'true');
 }
 // V8: 确保小家默认成员（我、老公、儿子）存在于familyData和小家就餐组中
-if (!localStorage.getItem('diningGroupsV8_xiaojia_fix')) {
+if (!lsGet('diningGroupsV8_xiaojia_fix')) {
     // 1. 确保familyData中存在默认小家成员
     const existingNames = new Set(familyData.map(m => m.name));
     DEFAULT_FAMILY.forEach(dm => {
@@ -29776,7 +30441,7 @@ if (!localStorage.getItem('diningGroupsV8_xiaojia_fix')) {
             }
         }
     });
-    localStorage.setItem('familyData', JSON.stringify(familyData));
+    lsSet('familyData', JSON.stringify(familyData));
     // 2. 确保小家就餐组成员列表完整
     const xjGroup = diningGroups.find(g => g.name === '小家');
     if (xjGroup) {
@@ -29785,13 +30450,13 @@ if (!localStorage.getItem('diningGroupsV8_xiaojia_fix')) {
             if (!xjGroup.members.includes(n)) xjGroup.members.push(n);
         });
     }
-    localStorage.setItem('diningGroups', JSON.stringify(diningGroups));
-    localStorage.setItem('diningGroupsV8_xiaojia_fix', 'true');
+    lsSet('diningGroups', JSON.stringify(diningGroups));
+    lsSet('diningGroupsV8_xiaojia_fix', 'true');
 }
-const storedCurrentGroup = localStorage.getItem('currentDiningGroup');
+const storedCurrentGroup = lsGet('currentDiningGroup');
 if (!storedCurrentGroup || !diningGroups.some(g => g.name === storedCurrentGroup)) {
     const initialGroup = diningGroups.find(g => g.name === '小家') || diningGroups[0] || getFallbackDiningGroup();
-    if (initialGroup) localStorage.setItem('currentDiningGroup', initialGroup.name);
+    if (initialGroup) lsSet('currentDiningGroup', initialGroup.name);
 }
 
 renderFridge();
@@ -30245,6 +30910,43 @@ function editRestaurantFromDetail(knowledgeId) {
     closeKnowledgeDetail();
     openRestaurantModal(knowledgeId);
 }
+
+// ==================== 家庭选择初始化 ====================
+document.addEventListener('DOMContentLoaded', function() {
+    var fid = getFamilyId();
+    if (!fid) {
+        // 未设置家庭，显示选择 overlay
+        showFamilyOverlay();
+    } else {
+        // 已有家庭，确保 overlay 隐藏
+        hideFamilyOverlay();
+    }
+    // overlay tab 切换高亮
+    var tabs = document.querySelectorAll('.family-select-tab');
+    tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            tabs.forEach(function(t) { t.classList.remove('active'); });
+            tab.classList.add('active');
+        });
+    });
+    // 创建家庭回车提交
+    var nameInput = document.getElementById('newFamilyName');
+    if (nameInput) {
+        nameInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') createFamily();
+        });
+    }
+    // 加入家庭回车提交
+    var codeInput = document.getElementById('joinFamilyCode');
+    if (codeInput) {
+        codeInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') joinFamily();
+        });
+        codeInput.addEventListener('input', function() {
+            this.value = this.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, '');
+        });
+    }
+});
 
 console.log('🍳 家肴记 v1.0 已完整加载！');
 </script>
