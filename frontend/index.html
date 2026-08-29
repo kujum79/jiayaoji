@@ -49,9 +49,9 @@
             opacity: 0;
             pointer-events: none;
         }
-        .home-logo { font-size: 72px; margin-bottom: 16px; }
+        .home-logo { width: 180px; height: auto; margin-top: 40px; margin-bottom: 9px; display: block; mix-blend-mode: multiply; }
         .home-title { font-size: 36px; font-weight: 700; color: #1F2937; letter-spacing: 2px; }
-        .home-sub { font-size: 16px; color: #4B5563; margin-top: 8px; text-align: center; line-height: 1.6; }
+        .home-sub { font-size: 16px; color: #5D4037; margin-top: -24px; text-align: center; line-height: 1.6; }
 
         /* ====== 主界面 ====== */
         .main-app {
@@ -1003,7 +1003,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            font-size: 20px;
+            font-size: 16px !important;
             font-weight: 700;
         }
         .solar-term-banner .term-diet {
@@ -1799,6 +1799,144 @@
     .fridge-modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:none; justify-content:center; align-items:flex-end; z-index:200; }
     .fridge-modal.show { display:flex; }
     .fridge-modal-content { background:#fff; width:100%; max-width:430px; border-radius:16px 16px 0 0; padding:20px 16px; max-height:80vh; overflow-y:auto; }
+    .fi-modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+    .fi-modal-header .fi-back-btn { background:transparent; border:none; font-size:18px; cursor:pointer; color:#374151; padding:4px 8px; border-radius:6px; }
+    .fi-modal-header .fi-back-btn:active { background:#F3F4F6; }
+    .fi-modal-header .fi-title { font-weight:700; font-size:16px; }
+    .fi-modal-header .fi-save-btn { background:#F97316; color:#fff; border:none; padding:6px 14px; border-radius:999px; font-size:13px; font-weight:600; cursor:pointer; }
+    .fi-modal-header .fi-save-btn:active { opacity:0.8; }
+    .fi-row { display:flex; gap:8px; margin-bottom:12px; align-items:flex-start; }
+    .fi-col { display:flex; flex-direction:column; gap:4px; }
+    .fi-col label { font-size:12px; color:#6B7280; }
+    .fi-col input, .fi-col select { width:100%; padding:8px 12px; border:1px solid #e5e7eb; border-radius:8px; font-size:14px; box-sizing:border-box; }
+    .fi-w-1 { flex: 1; }
+    .fi-w-2 { flex: 2; }
+    .fi-w-3 { flex: 3; }
+    .fi-add-more-btn { width:100%; margin-top:8px; padding:10px; background:#E8DEF8; color:#6750A4; border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; }
+    .fi-add-more-btn:active { background:#D9C7F5; }
+    /* ===== 食材准备（采购准备中心） ===== */
+    .prep-card { background:#fff; border-radius:12px; margin:10px 12px; padding:12px; border:1px solid #F3F4F6; box-sizing:border-box; overflow:hidden; }
+    .prep-shop-card { overflow-x:hidden; overflow-y:visible; }
+    .prep-title-label { font-size:13px; font-weight:600; color:#6B7280; margin:10px 12px 4px; }
+    .prep-overview { background:#fff; border-radius:12px; margin:8px 12px 12px; padding:10px 12px; border:1px solid #F3F4F6; font-size:12px; line-height:1.8; }
+    .prep-overview-cat { margin-bottom:4px; }
+    .prep-overview-cat:last-child { margin-bottom:0; }
+    .prep-overview-cat b { color:#374151; margin-right:4px; }
+    .prep-tag { display:inline-block; padding:1px 6px; margin:2px 6px 2px 0; background:#F5F3FF; color:#4F46E5; border-radius:6px; cursor:pointer; font-size:11px; }
+    .prep-tag:active { background:#E8DEF8; }
+    .prep-empty { color:#9CA3AF; }
+    .prep-param-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .prep-param-row + .prep-param-row { margin-top:10px; }
+    .prep-label { font-size:12px; color:#6B7280; flex-shrink:0; font-weight:600; }
+    .prep-cycle-sel { padding:6px 10px; border:1px solid #E5E7EB; border-radius:8px; font-size:13px; background:#fff; }
+    .prep-custom-days { width:56px; padding:6px 8px; border:1px solid #E5E7EB; border-radius:8px; font-size:13px; }
+    .prep-servings { font-size:13px; font-weight:600; color:#374151; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .prep-total-kinds { font-size:13px; font-weight:600; color:#374151; margin-left:auto; }
+    .prep-servings-row { display:flex; align-items:center; gap:8px; margin-top:10px; padding:8px 10px; background:#FFF7ED; border:1px solid #FED7AA; border-radius:10px; font-size:12px; line-height:1.5; color:#374151; flex-wrap:wrap; }
+    .prep-servings-summary { flex:1; min-width:180px; }
+    .prep-servings-summary b { color:#C2410C; }
+    .prep-servings-btn { padding:6px 10px; background:#F97316; color:#fff; border:none; border-radius:999px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; min-height:30px; flex-shrink:0; }
+    .prep-servings-btn:active { background:#EA580C; }
+    .prep-servings-list { max-height:220px; overflow:auto; margin:8px 0 14px; }
+    .prep-servings-item { display:flex; align-items:center; justify-content:space-between; padding:7px 8px; border-radius:8px; margin-bottom:4px; background:#F9FAFB; }
+    .prep-servings-item.s-disabled { opacity:0.45; }
+    .prep-servings-item-label { font-size:12px; font-weight:600; color:#374151; min-width:110px; }
+    .prep-servings-item-label small { display:block; font-weight:400; color:#6B7280; font-size:11px; margin-top:1px; }
+    .prep-servings-item select { padding:5px 8px; border:1px solid #E5E7EB; border-radius:7px; font-size:13px; font-weight:600; }
+    .prep-summary-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:10px; border-bottom:1px dashed #F3F4F6; }
+    .prep-summary-row .left { font-size:13px; color:#374151; }
+    .prep-summary-row .left b { color:#1E40AF; }
+    .prep-summary-row .right { font-size:13px; color:#374151; }
+    .prep-summary-row .right b { color:#DC2626; }
+    .prep-shop-table { width:100%; max-width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
+    .prep-shop-table th { text-align:left; padding:6px 2px; color:#6B7280; font-weight:600; border-bottom:1px solid #E5E7EB; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .prep-shop-table th:nth-child(1) { width:28px; }
+    .prep-shop-table th:nth-child(2) { width:70px; }
+    .prep-shop-table th:nth-child(3) { width:56px; }
+    .prep-shop-table th:nth-child(4) { width:74px; }
+    .prep-shop-table th:nth-child(5) { width:calc(100% - 28px - 70px - 56px - 74px); min-width:80px; text-align:left; }
+    .prep-shop-table td { padding:7px 0; border-bottom:1px solid #F9FAFB; color:#374151; vertical-align:middle; overflow:visible; position:relative; max-width:0; }
+    .prep-shop-table td:nth-child(1) { max-width:28px; padding-right:2px; padding-left:4px; }
+    .prep-shop-table td:nth-child(2) { max-width:70px; width:70px; padding-right:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .prep-shop-table td:nth-child(3) { max-width:56px; width:56px; overflow:visible; }
+    .prep-shop-table td:nth-child(4) { max-width:74px; width:74px; overflow:visible; }
+    .prep-shop-table td:nth-child(5) { text-align:left; padding-right:26px; overflow:visible; }
+    .prep-shop-cat-row td { font-size:12px; font-weight:700; color:#6B7280; padding:10px 4px 4px; border-top:1px solid #F3F4F6; background:transparent; }
+    /* 行内数字输入框（直接显示，无需点✎笔） */
+    .prep-inline-input {
+        width:40px; max-width:40px; min-width:40px; padding:3px 2px;
+        font-size:12px; font-weight:600; color:#374151;
+        background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px;
+        outline:none; box-sizing:border-box; text-align:center;
+        -moz-appearance:textfield; -webkit-appearance:none; appearance:none;
+    }
+    .prep-inline-input::-webkit-outer-spin-button,
+    .prep-inline-input::-webkit-inner-spin-button {
+        -webkit-appearance:none; margin:0;
+    }
+    /* 外出就餐规划：人数输入框（"2人"展示模式）去掉上下滑动按钮 */
+    .plan-people-no-spin { -moz-appearance:textfield; -webkit-appearance:none; appearance:none; }
+    .plan-people-no-spin::-webkit-outer-spin-button,
+    .plan-people-no-spin::-webkit-inner-spin-button {
+        -webkit-appearance:none; margin:0;
+    }
+    .prep-inline-input:focus { background:#FFF; border-color:#F97316; }
+    .prep-inline-unit { font-size:11px; color:#6B7280; flex-shrink:0; margin-left:3px; white-space:nowrap; }
+    .prep-inline-prefix { font-size:12px; color:#6B7280; flex-shrink:0; margin-right:1px; white-space:nowrap; }
+    .prep-inline-wrap { display:flex; align-items:center; justify-content:flex-start; flex-wrap:nowrap; max-width:100%; min-width:0; }
+    .prep-inline-wrap > * { flex-shrink:0; }
+    .prep-inline-wrap .prep-inline-input { flex-shrink:0; }
+    .prep-inline-unit-price { justify-content:flex-start; }
+    .prep-inline-need-qty .prep-inline-input { color:#DC2626; }
+    .prep-inline-est .prep-inline-input { color:#DC2626; text-align:center; }
+    /* 行内删除（× 绝对定位于单元格右上角，绝不跑出TD边界；×贴最右） */
+    .prep-row-del {
+        position:absolute; top:50%; right:0; transform:translateY(-50%);
+        background:none; border:none; color:#DC2626; cursor:pointer;
+        font-size:16px; font-weight:700; padding:2px 4px 2px 2px; border-radius:4px; line-height:1;
+    }
+    .prep-row-del:active { background:#FEF2F2; }
+    /* 删除二次确认浮层（覆盖整屏，非系统 confirm，避免 WebView 黑屏） */
+    .prep-del-confirm-ov { position:fixed; inset:0; background:rgba(0,0,0,0.38); display:none; align-items:center; justify-content:center; z-index:500; padding:20px; }
+    .prep-del-confirm-ov.show { display:flex; }
+    .prep-del-confirm-box { background:#fff; border-radius:14px; width:100%; max-width:320px; padding:16px 18px 14px; box-shadow:0 20px 45px rgba(0,0,0,.18); }
+    .prep-del-confirm-box h3 { margin:0 0 8px; font-size:15px; color:#111827; font-weight:700; }
+    .prep-del-confirm-box p { margin:0 0 14px; font-size:13px; color:#374151; line-height:1.55; }
+    .prep-del-confirm-btns { display:flex; gap:8px; justify-content:flex-end; }
+    .prep-del-confirm-btns button { padding:7px 15px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; }
+    .prep-del-cancel { background:#F3F4F6; color:#374151; }
+    .prep-del-ok { background:#DC2626; color:#fff; }
+    .prep-shop-cat-row:first-child td { border-top:none; padding-top:4px; }
+    .prep-row-have { background:#F0FDF4 !important; color:#16A34A; }
+    .prep-have-tag { font-size:11px; color:#16A34A; font-weight:700; }
+    .prep-need-qty { color:#DC2626; font-weight:600; }
+    .prep-add-item-btn { width:100%; margin-top:10px; padding:8px; background:#FFF7ED; color:#F97316; border:1px dashed #FED7AA; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; }
+    .prep-add-item-btn:active { background:#FFEDD5; }
+    .prep-bottom-actions { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:12px; padding-bottom:16px; flex-wrap:wrap; }
+    .prep-btn-history { padding:9px 14px; background:#F3F4F6; color:#374151; border:none; border-radius:999px; font-size:13px; font-weight:600; cursor:pointer; flex-shrink:0; }
+    .prep-btn-confirm { padding:11px 14px; background:#F97316; color:#fff; border:none; border-radius:999px; font-size:14px; font-weight:700; cursor:pointer; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; max-width:70%; }
+    .prep-btn-confirm:disabled { background:#ccc; cursor:not-allowed; }
+    /* 单价/需购量/预估 行内编辑按钮 */
+    .prep-mini-btn { background:none; border:1px solid #E5E7EB; color:#6B7280; cursor:pointer; font-size:12px; padding:1px 6px; border-radius:5px; line-height:1.3; }
+    .prep-mini-btn:active { background:#F3F4F6; color:#374151; border-color:#D1D5DB; }
+    .prep-del-btn { color:#DC2626; border-color:#FECACA; font-weight:700; }
+    .prep-del-btn:active { background:#FEF2F2; }
+    /* 确认弹窗列表项 删除 × */
+    .prep-confirm-item-del { background:none; border:none; color:#9CA3AF; cursor:pointer; font-size:18px; padding:2px 8px; border-radius:4px; line-height:1; }
+    .prep-confirm-item-del:active { background:#FEF2F2; color:#DC2626; }
+    /* 确认弹窗列表项 */
+    .prep-confirm-item { display:flex; align-items:center; gap:8px; padding:8px 4px; border-bottom:1px solid #F9FAFB; font-size:13px; }
+    .prep-confirm-item .nm { flex:1; color:#1F2937; font-weight:500; }
+    .prep-confirm-item .qt { color:#6B7280; margin-right:6px; font-size:12px; }
+    .prep-confirm-item .pr { color:#DC2626; font-weight:600; margin-right:6px; }
+    .prep-confirm-item .del { background:none; border:none; color:#9CA3AF; cursor:pointer; font-size:18px; padding:2px 6px; border-radius:4px; }
+    .prep-confirm-item .del:hover { background:#FEF2F2; color:#DC2626; }
+    .prep-history-empty { padding:30px 10px; text-align:center; color:#9CA3AF; font-size:13px; }
+    .prep-history-card { background:#fff; border:1px solid #F3F4F6; border-radius:12px; padding:10px 12px; margin-bottom:10px; }
+    .prep-history-head { display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:700; color:#1F2937; margin-bottom:6px; }
+    .prep-history-meta { font-size:12px; color:#6B7280; margin-bottom:6px; }
+    .prep-history-item { font-size:12px; color:#374151; padding:2px 0; display:flex; justify-content:space-between; }
+    .prep-history-item .price { color:#DC2626; font-weight:500; }
     .fridge-form-group { margin-bottom:12px; }
     .fridge-form-group label { display:block; font-size:12px; color:#6B7280; margin-bottom:4px; }
     .fridge-form-group input, .fridge-form-group select { width:100%; padding:8px 12px; border:1px solid #e5e7eb; border-radius:8px; font-size:14px; }
@@ -2578,9 +2716,12 @@
         .mp-manual-block { background: #fff; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
         .mp-manual-header { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; margin-bottom: 6px; }
         .mp-manual-row { display: flex; align-items: center; gap: 2px; flex-wrap: nowrap; overflow-x: auto; }
+        .mp-manual-line { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+        .mp-manual-line:last-child { margin-bottom: 0; }
+        .mp-manual-title-placeholder { flex-shrink: 0; visibility: hidden; font-size: 14px; font-weight: 700; }
         .mp-manual-item { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
-        .mp-manual-label { font-size: 10px; font-weight: 600; color: #1d1b20; flex-shrink: 0; white-space: nowrap; }
-        .mp-manual-input { width: 60px; height: 22px; border: 1.5px solid #e0e0e0; border-radius: 6px; padding: 0 6px; font-size: 12px; outline: none; flex-shrink: 0; box-sizing: border-box; }
+        .mp-manual-label { font-size: 10px; font-weight: 600; color: #1d1b20; flex-shrink: 0; white-space: nowrap; width: 32px; }
+        .mp-manual-input { flex: 1; min-width: 0; height: 22px; border: 1.5px solid #e0e0e0; border-radius: 6px; padding: 0 6px; font-size: 12px; outline: none; box-sizing: border-box; }
         .mp-manual-input:focus { border-color: #6750A4; }
         .mp-manual-checkbox { width: 16px; height: 16px; accent-color: #6750A4; cursor: pointer; flex-shrink: 0; }
         .mp-manual-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
@@ -2723,11 +2864,15 @@
         <div class="solar-term-banner" id="homeSolarBanner">
             <div class="term-name"><span id="homeSolarName">🌞 大暑节气</span><button class="solar-term-link" id="homeSolarBtn">🌿 节气饮食指南</button></div>
         </div>
-        <div class="home-logo">🍳</div>
-        <div class="home-title">家肴记</div>
-        <div class="home-sub">明天吃啥？今天做甚？<br />@家肴记一下哟。</div>
+        <img src="images/logo.png" class="home-logo" alt="家肴记" onclick="switchHomePage()" title="点击回到首页" style="cursor:pointer;">
+        <div class="home-sub">
+            <span style="cursor: pointer; color: #5D4037 !important; text-decoration: underline;" onmouseover="this.style.color='#B91C1C'" onmouseout="this.style.color='#5D4037'" onclick="document.getElementById('pageHome').classList.add('slide-up');document.querySelector('.main-app').style.display='flex';switchTab('diary')">
+                明天吃啥？今天做甚？
+            </span>
+            <br />@家肴记一下哟。
+        </div>
         <div style="flex:1;"></div>
-        <div style="width:100%; padding:0 4px 16px;">
+        <div style="width:100%; padding:0 4px 36px;">
             <div class="input-row">
                 <input type="text" id="homeInput" placeholder="📎 发消息或按住说话" />
                 <button class="btn-icon" id="homeSendBtn">⌨️</button>
@@ -3137,6 +3282,7 @@
             <div class="preview-area" id="previewArea"></div>
         </div>
         <div class="tab-bar">
+            <button class="tab-item" data-tab="home"><span class="tab-icon">🏡</span>首页</button>
             <button class="tab-item" data-tab="knowledge"><span class="tab-icon">📚</span>食知</button>
             <button class="tab-item" data-tab="fridge"><span class="tab-icon">🧊</span>食材</button>
             <button class="tab-item" data-tab="diary"><span class="tab-icon">📖</span>食记</button>
@@ -3220,57 +3366,176 @@
         </div>
     </div>
 
+    <!-- 食材准备：采购清单确认 模态框 -->
+    <div class="fridge-modal" id="prepConfirmModal">
+        <div class="fridge-modal-content">
+            <div class="fi-modal-header">
+                <button class="fi-back-btn" onclick="closePrepConfirmModal()">&lt;</button>
+                <span class="fi-title">采购清单确认</span>
+                <span style="width:48px"></span>
+            </div>
+            <div id="prepConfirmList" style="margin-bottom:12px; max-height:45vh; overflow-y:auto;"></div>
+            <div id="prepConfirmTotal" style="font-weight:700; text-align:right; margin-bottom:12px; font-size:14px;"></div>
+            <div class="fridge-form-actions">
+                <button class="fridge-btn-secondary" onclick="closePrepConfirmModal()">取消</button>
+                <button class="fridge-btn-primary" onclick="finalizePrepPurchase()">最终确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 食材准备：当月采购记录 模态框 -->
+    <div class="fridge-modal" id="prepHistoryModal">
+        <div class="fridge-modal-content">
+            <div class="fi-modal-header">
+                <button class="fi-back-btn" onclick="closePrepHistoryModal()">&lt;</button>
+                <span class="fi-title">当月采购记录</span>
+                <span style="width:48px"></span>
+            </div>
+            <div id="prepHistoryBody" style="max-height:55vh; overflow-y:auto;"></div>
+        </div>
+    </div>
+
+    <div class="prep-del-confirm-ov" id="prepServingsModalOv" style="display:none;">
+        <div class="prep-del-confirm-box" style="max-width:360px;">
+            <div class="fi-modal-header" style="margin:-8px -8px 10px;padding:4px 6px 8px;border-bottom:1px solid #F3F4F6;">
+                <button class="fi-back-btn" onclick="closePrepServingsModal()">&lt;</button>
+                <span class="fi-title">✏️ 调整用餐人数</span>
+                <button class="fi-save-btn" onclick="applyPrepServings()">确认</button>
+            </div>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:13px;font-weight:700;color:#374151;">默认人数：
+                    <select id="prepServingsDefaultSel" style="margin-left:6px;padding:5px 10px;border:1px solid #E5E7EB;border-radius:7px;font-size:13px;font-weight:700;background:#fff;">
+                    </select>
+                </label>
+                <small style="display:block;margin-top:4px;color:#6B7280;font-size:11px;">修改默认人数后，所有餐次人数会自动同步；可单独调整某餐。</small>
+            </div>
+            <div id="prepServingsDayArea" style="max-height:48vh;overflow:auto;padding-right:4px;"></div>
+            <div class="prep-del-confirm-btns" style="margin-top:12px;">
+                <button class="prep-del-cancel" onclick="closePrepServingsModal()">取消</button>
+                <button class="prep-del-ok" style="background:#F97316;" onclick="applyPrepServings()">确认保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 食记：确认计划 选人数浮层（非系统对话框，防WebView黑屏） -->
+    <div class="prep-del-confirm-ov" id="confirmPlanModalOv" style="display:none;">
+        <div class="prep-del-confirm-box">
+            <h3>📋 确认食谱计划</h3>
+            <p style="margin-bottom:6px;"><b id="cpMealLabel">—</b></p>
+            <p id="cpDishesText" style="color:#374151;font-size:12px;max-height:80px;overflow:auto;margin:4px 0 10px;padding:6px 8px;background:#F9FAFB;border-radius:6px;">—</p>
+            <p style="margin:8px 0 14px;">用餐人数：
+                <select id="cpServingsSel" style="padding:5px 8px;border:1px solid #E5E7EB;border-radius:7px;font-size:13px;font-weight:600;">
+                    <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+                    <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
+                    <option value="9">9</option><option value="10">10</option>
+                </select> 人
+            </p>
+            <div class="prep-del-confirm-btns">
+                <button class="prep-del-cancel" onclick="closeConfirmPlanModal()">取消</button>
+                <button class="prep-del-ok" style="background:#10B981;" onclick="applyConfirmPlan()">✅ 最终确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 食材准备：删除采购食材 二次确认浮层（非系统弹窗，防黑屏） -->
+    <div class="prep-del-confirm-ov" id="prepDelConfirmOv">
+        <div class="prep-del-confirm-box">
+            <h3>删除采购食材</h3>
+            <p id="prepDelConfirmMsg">确认要从采购清单中删除该食材？<br><small style="color:#6B7280;">（之后可通过「添加食材」再加回）</small></p>
+            <div class="prep-del-confirm-btns">
+                <button class="prep-del-cancel" onclick="closePrepDelConfirm()">取消</button>
+                <button class="prep-del-ok" onclick="confirmPrepDel()">确认删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 食材准备：添加采购食材 简易弹窗 -->
+    <div class="fridge-modal" id="prepAddItemModal">
+        <div class="fridge-modal-content">
+            <div class="fi-modal-header">
+                <button class="fi-back-btn" onclick="closePrepAddItemModal()">&lt;</button>
+                <span class="fi-title">添加采购食材</span>
+                <button class="fi-save-btn" onclick="submitPrepAddItem()">添加</button>
+            </div>
+            <div class="fi-row">
+                <div class="fi-col fi-w-2">
+                    <label>食材名称 *</label>
+                    <input type="text" id="prepAddName" placeholder="例如：黄瓜">
+                </div>
+                <div class="fi-col fi-w-1">
+                    <label>数量</label>
+                    <input type="number" id="prepAddQty" placeholder="1" min="1" step="any">
+                </div>
+                <div class="fi-col fi-w-1">
+                    <label>单价(¥)</label>
+                    <input type="number" id="prepAddPrice" placeholder="自动" min="0" step="any">
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 冰箱：添加食材模态框 -->
     <div class="fridge-modal" id="addFridgeModal">
         <div class="fridge-modal-content">
-            <div style="font-weight:700; font-size:16px; margin-bottom:16px; text-align:center;">➕ 添加食材</div>
-            <div class="fridge-form-group">
-                <label>食材名称 *</label>
-                <input type="text" id="fridgeName" placeholder="例如：番茄">
+            <div class="fi-modal-header">
+                <button class="fi-back-btn" onclick="closeAddFridgeModal()">&lt;</button>
+                <span class="fi-title">➕ 添加食材</span>
+                <button class="fi-save-btn" onclick="submitAddFridgeItem()">保存</button>
             </div>
-            <div class="fridge-form-group">
-                <label>分类 *</label>
-                <select id="fridgeCategory">
-                    <option value="主粮">🌾 主粮</option>
-                    <option value="蔬菜">🥬 蔬菜</option>
-                    <option value="水果">🍎 水果</option>
-                    <option value="肉蛋奶">🥩 肉蛋奶</option>
-                    <option value="水产">🐟 水产</option>
-                    <option value="调料">🧂 调料</option>
-                    <option value="干货药材">🥜 干货药材</option>
-                    <option value="饮料零食">🧃 饮料零食</option>
-                    <option value="冷冻">🧊 冷冻</option>
-                    <option value="方便食品">🍜 方便食品</option>
-                </select>
+            <!-- 第1行：食材名称（缩至1/3）+ 分类 + 存储方式 三列并排 -->
+            <div class="fi-row">
+                <div class="fi-col fi-w-1">
+                    <label>食材名称 *</label>
+                    <input type="text" id="fridgeName" placeholder="例如：番茄">
+                </div>
+                <div class="fi-col fi-w-1">
+                    <label>分类 *</label>
+                    <select id="fridgeCategory">
+                        <option value="主粮">🌾 主粮</option>
+                        <option value="蔬菜">🥬 蔬菜</option>
+                        <option value="水果">🍎 水果</option>
+                        <option value="肉蛋奶">🥩 肉蛋奶</option>
+                        <option value="水产">🐟 水产</option>
+                        <option value="调料">🧂 调料</option>
+                        <option value="干货药材">🥜 干货药材</option>
+                        <option value="饮料零食">🧃 饮料零食</option>
+                        <option value="冷冻">🧊 冷冻</option>
+                        <option value="方便食品">🍜 方便食品</option>
+                    </select>
+                </div>
+                <div class="fi-col fi-w-1">
+                    <label>存储方式</label>
+                    <select id="fridgeStorage">
+                        <option value="冷藏">❄️ 冷藏</option>
+                        <option value="常温">🌡️ 常温</option>
+                        <option value="冷冻">🧊 冷冻</option>
+                    </select>
+                </div>
             </div>
-            <div class="fridge-form-group">
-                <label>存储方式</label>
-                <select id="fridgeStorage">
-                    <option value="冷藏">❄️ 冷藏</option>
-                    <option value="常温">🌡️ 常温</option>
-                    <option value="冷冻">🧊 冷冻</option>
-                </select>
+            <!-- 第2行：数量（左）+ 存储位置（右）并排 -->
+            <div class="fi-row">
+                <div class="fi-col fi-w-1">
+                    <label>数量</label>
+                    <input type="text" id="fridgeQuantity" placeholder="例如：3个 / 500g">
+                </div>
+                <div class="fi-col fi-w-2">
+                    <label>存储位置</label>
+                    <input type="text" id="fridgeStorageLocation" placeholder="如：冰箱下层、橱柜左侧（可选）">
+                </div>
             </div>
-            <div class="fridge-form-group">
-                <label>存储位置</label>
-                <input type="text" id="fridgeStorageLocation" placeholder="如：冰箱下层、橱柜左侧（可选）">
+            <!-- 第3行：购买日期（左）+ 保质期至（右）并排 -->
+            <div class="fi-row">
+                <div class="fi-col fi-w-1">
+                    <label>购买日期</label>
+                    <input type="date" id="fridgePurchaseDate">
+                </div>
+                <div class="fi-col fi-w-1">
+                    <label>保质期至</label>
+                    <input type="date" id="fridgeExpiryDate">
+                </div>
             </div>
-            <div class="fridge-form-group">
-                <label>数量</label>
-                <input type="text" id="fridgeQuantity" placeholder="例如：3个 / 500g">
-            </div>
-            <div class="fridge-form-group">
-                <label>购买日期</label>
-                <input type="date" id="fridgePurchaseDate">
-            </div>
-            <div class="fridge-form-group">
-                <label>保质期至</label>
-                <input type="date" id="fridgeExpiryDate">
-            </div>
-            <div class="fridge-form-actions">
-                <button class="fridge-btn-secondary" onclick="closeAddFridgeModal()">取消</button>
-                <button class="fridge-btn-primary" onclick="submitAddFridgeItem()">保存</button>
-            </div>
+            <!-- 再添加按钮：保存 + 清空 + 继续添加 -->
+            <button class="fi-add-more-btn" onclick="submitAndAddMoreFridgeItem()">➕ 再添加</button>
         </div>
     </div>
 
@@ -3740,7 +4005,8 @@ function copyFamilyCode() {
 
 // ==================== dietCalendar 工具函数 ====================
 function getDietCalendar() {
-    return JSON.parse(lsGet('dietCalendar')) || {};
+    try { return JSON.parse(lsGet('dietCalendar') || 'null') || {}; }
+    catch(e) { return {}; }
 }
 
 function saveDietCalendar(calendar) {
@@ -4509,7 +4775,7 @@ function persistChatHistory() {
         lsSet('chatHistory', JSON.stringify(chatHistory));
     } catch (e) {}
 }
-let currentTab = 'chat';
+let currentTab = 'home';
 
 // ============================================================
 // 食知模块：数据模型
@@ -5288,6 +5554,7 @@ function getDishIngredientsWithServings(dishName, servings) {
 
 // 自动匹配食材emoji
 function guessFoodEmoji(name) {
+    const nm = (name == null) ? '' : String(name);
     const emojiMap = {
         '番茄':'🍅','鸡蛋':'🥚','牛肉':'🥩','菠菜':'🥬','豆腐':'🧈',
         '生姜':'🧄','大米':'🍚','苹果':'🍎','鱼':'🐟','葱':'🧅',
@@ -5301,7 +5568,7 @@ function guessFoodEmoji(name) {
         '生菜':'🥬','南瓜':'🎃','红薯':'🍠','山药':'🥔','百合':'🌸',
     };
     for (const [key, val] of Object.entries(emojiMap)) {
-        if (name.includes(key)) return val;
+        if (nm.includes(key)) return val;
     }
     return '🍽️';
 }
@@ -5400,7 +5667,7 @@ function switchFridgeView(view) {
     if (recShopView) recShopView.style.display = 'none';
     if (view === 'rec') {
         recView.style.display = 'block';
-        topTitle.textContent = '食材推荐';
+        topTitle.textContent = '食材准备';
         renderFridgeRecView();
     } else if (view === 'home') {
         homeView.style.display = 'block';
@@ -6975,149 +7242,236 @@ function hideDishTooltip() {
     if (_activeDishTooltip) { _activeDishTooltip.remove(); _activeDishTooltip = null; }
 }
 
-// 渲染推荐首页（食材优先展示）
+// 渲染推荐首页（食材准备：采购中心）
 function renderFridgeRecView() {
     const content = document.getElementById('recContent');
     if (!content) return;
+    try {
+    const prep = window._prep;
+    if (!prep.overrides) prep.overrides = {};
+    if (!prep.deleted) prep.deleted = {};
+    fridgeItems = JSON.parse(lsGet('fridgeItems') || '[]');
 
-    const selectedDate = getRecSelectedDate();
-    const selectedKey = dateToKey(selectedDate);
-    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
-    const fridgeNames = buildFridgeNamesDict(fridgeItems);
-
-    let html = '';
-
-    // 顶端标题
-    html += `<div style="margin:10px 12px 4px;font-size:13px;font-weight:600;color:#6B7280;">现有食材提示（部分）：</div>`;
-
-    // 顶端：三类食材概览（蔬菜、肉蛋奶、方便食品）
+    // 1) 现有食材标签（蔬菜/肉蛋奶/方便食品）—— 去图标、去分号
     const overviewCats = ['蔬菜', '肉蛋奶', '方便食品'];
-    html += `<div style="background:#fff;border-radius:12px;margin:10px 12px 12px;padding:10px 12px;border:1px solid #F3F4F6;">`;
-    overviewCats.forEach(cat => {
+    let tagsHtml = '';
+    overviewCats.forEach((cat, ci) => {
         const catItems = fridgeItems.filter(i => i.category === cat);
-        html += `<div class="fridge-cat-row" style="padding:8px 0;border-bottom:1px solid #F3F4F6;">`;
-        html += `<div class="fridge-cat-row-name">${cat}</div>`;
-        html += `<div class="fridge-cat-row-items">`;
-        if (catItems.length === 0) {
-            html += `<span class="fridge-cat-row-empty">-</span>`;
+        tagsHtml += `<b style="color:#374151;margin-right:6px;">${cat}</b>`;
+        if (!catItems.length) {
+            tagsHtml += `<span style="color:#9CA3AF;font-size:12px;">无</span>`;
         } else {
-            catItems.forEach(item => {
-                const qty = item.quantity ? ` ${escapeHtml(item.quantity)}` : '';
-                html += `<span class="fridge-cat-row-item" onclick="event.stopPropagation();showFoodDetail(${item.id})">${escapeHtml(item.name)}${qty}</span>`;
+            catItems.slice(0, 6).forEach((item, ii) => {
+                const qtyStr = item.quantity ? `×${escapeHtml(item.quantity)}` : '';
+                tagsHtml += `<span class="prep-tag" onclick="switchFridgeView('category')" title="点击查看食材分类">${escapeHtml(item.name)}${qtyStr}</span>`;
+                if (ii < catItems.slice(0, 6).length - 1) tagsHtml += ' ';
             });
+            if (catItems.length > 6) tagsHtml += `<span style="color:#9CA3AF;font-size:12px;margin-left:4px;">+${catItems.length - 6}</span>`;
         }
-        html += `</div></div>`;
-    });
-    html += `</div>`;
-
-    // 日期选择器：◀ YYYY年MM月DD日 星期X ▶ [今天/明天]
-    const selDate = getRecSelectedDate();
-    const nowHour = new Date().getHours();
-    const isAfter18 = nowHour >= 18;
-    const defaultDate = getRecDefaultDate();
-    const isDefaultSelected = dateToKey(selDate) === dateToKey(defaultDate);
-    const defaultLabel = isAfter18 ? '明天' : '今天';
-    html += `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin:0 10px 4px;">
-        <button onclick="shiftRecSelectedDate(-1)" style="background:none;border:none;font-size:18px;color:#6B7280;cursor:pointer;padding:4px 8px;">◀</button>
-        <span style="font-size:14px;font-weight:600;color:#374151;display:flex;flex-direction:column;line-height:1.4;align-items:flex-start;">
-            <span>${selDate.getFullYear()}年${String(selDate.getMonth()+1).padStart(2,'0')}月${String(selDate.getDate()).padStart(2,'0')}日</span>
-            <span style="display:flex;align-items:center;justify-content:space-between;width:100%;">
-                <span style="font-size:12px;font-weight:400;color:#6B7280;">${['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][selDate.getDay()]}</span>
-                <button onclick="resetRecSelectedDate()" style="background:${isDefaultSelected ? '#F3F4F6' : '#FFF7ED'};color:${isDefaultSelected ? '#9CA3AF' : '#F97316'};border:1px solid ${isDefaultSelected ? '#E5E7EB' : '#FED7AA'};border-radius:8px;padding:2px 10px;font-size:11px;cursor:pointer;margin-left:8px;">${isDefaultSelected ? defaultLabel : '回' + defaultLabel}</button>
-            </span>
-        </span>
-        <button onclick="shiftRecSelectedDate(1)" style="background:none;border:none;font-size:18px;color:#6B7280;cursor:pointer;padding:4px 8px;">▶</button>
-        <button onclick="openRecShoppingPlan()" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;border-radius:8px;padding:4px 12px;font-size:12px;cursor:pointer;margin-left:auto;">采购计划</button>
-    </div>`;
-
-    // 读取选中日期的食谱计划（排除外出就餐），含 pending/confirmed/completed
-    const calendar = getDietCalendar();
-    const dayCalendar = calendar[selectedKey] || {};
-    const plannedMeals = [];
-    let hasAnyPlan = false;
-
-    MEAL_TYPES.forEach(meal => {
-        const mealData = dayCalendar[meal] || {};
-        const planData = mealData.plan || null;
-        const actualData = mealData.actual || null;
-        // 排除外出就餐/外卖/外带+自制
-        if (actualData && (actualData.diningType === '外出就餐' || actualData.diningType === '外卖' || actualData.diningType === '外带+自制')) return;
-        // 优先使用实际记录的数据，没有实际记录时回退到计划数据
-        const sourceData = (actualData && actualData.dishes && actualData.dishes.length > 0) ? actualData : planData;
-        if (!sourceData || !sourceData.dishes || sourceData.dishes.length === 0) return;
-        const isActual = !!(actualData && actualData.dishes && actualData.dishes.length > 0);
-        const planState = isActual ? 'completed' : (planData.state || (planData.confirmed ? 'confirmed' : 'pending'));
-        hasAnyPlan = true;
-        const dishes = sourceData.dishes.map(dish => {
-            const dishName = dish.name || dish;
-            const ingList = dish.ingredients || getDishIngredients(dishName) || [];
-            return analyzeDishFromFridge(dishName, ingList, fridgeNames);
-        });
-        plannedMeals.push({ meal, dishes, planState, isActual });
+        // 去掉分号分隔符，分类之间仅用 2 个空格
+        if (ci < overviewCats.length - 1) tagsHtml += `<span style="margin:0 6px;"></span>`;
     });
 
-    // 食谱计划
-    html += `<div class="rec-day-group">`;
+    // 2) 采购计算
+    const today = new Date();
+    const confirmedInfo = countConfirmedPlanDays(today);
+    prep.servings = getCurrentServings();
+    // 自定义上限强制收敛
+    if (prep.cycleDays > confirmedInfo.days) {
+        prep.cycleDays = Math.max(1, confirmedInfo.days);
+    }
+    const daysToUse = confirmedInfo.daysList.slice ? confirmedInfo.daysList.slice(0, prep.cycleDays) : [];
+    const result = computeIngredientNeeds(confirmedInfo.daysList, prep.servings, prep.cycleDays);
+    const mode = prep.cycleMode || '2d';
 
-    // 无计划时显示空状态
-    if (!hasAnyPlan) {
-        html += `<div style="padding:40px 20px;text-align:center;color:#9CA3AF;font-size:14px;">📋 暂无食谱计划</div>`;
+    // 3) 食材清单：按分类排序 & 分组 —— 5 列：☑ / 食材 / 单价 / 需购量 / 预估价格
+    const rows = Object.values(result.ingredientsMap);
+    rows.sort((a, b) => (a._catOrder - b._catOrder) || (a.name.localeCompare(b.name, 'zh')));
+    let lastCat = null;
+    let listHtml = '';
+    let buyKinds = 0;
+    const catVisible = {}; // 分类下是否有可见行
+    const rowsRendered = [];
+
+    rows.forEach(r => {
+        // 删除的行跳过
+        if (prep.deleted[r.name]) return;
+        rowsRendered.push(r);
+        if (!r.alreadyHave) {
+            const baseQty = r.needBuyQty > 0 ? r.needBuyQty : (r.totalQty <= 0 ? 1 : 0);
+            if (baseQty > 0) buyKinds++;
+        }
+    });
+    // buyKinds 减去 deleted 中原来 counted 的部分（粗略保持一致：上面循环已经跳过deleted，所以 buyKinds 是正确值）
+
+    if (rowsRendered.length === 0) {
+        listHtml = `<tr><td colspan="5" style="padding:30px 12px;text-align:center;color:#9CA3AF;font-size:13px;">暂无可计算食材，请先确认食谱计划</td></tr>`;
     } else {
-        // 重置提示存储
-        _dishTipStore = [];
-        let dishIdx = 0;
-        // 渲染各餐次计划及食材状态
-        plannedMeals.forEach(mealInfo => {
-            const stateTag = mealInfo.isActual
-                ? `<span style="font-size:10px;color:#16A34A;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:4px;padding:1px 5px;margin-left:4px;">实际</span>`
-                : `<span style="font-size:10px;color:#D97706;background:#FFFBEB;border:1px solid #FDE68A;border-radius:4px;padding:1px 5px;margin-left:4px;">计划</span>`;
-            html += `<div class="rec-meal-section" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:4px 0;">`;
-            html += `<div class="rec-meal-label" style="flex-shrink:0;display:flex;align-items:center;">${MEAL_LABELS[mealInfo.meal]}${stateTag}</div>`;
-            html += `<div style="display:flex;flex-wrap:wrap;gap:8px;">`;
-            mealInfo.dishes.forEach(dish => {
-                // 悬浮提示框内容：完整食材清单
-                let tooltipLines = [];
-                dish.ingredients.forEach(ing => {
-                    let icon, statusText, color;
-                    const fItem = fridgeNames[ing.name];
-                    if (ing.status === 'ok') {
-                        icon = '✅';
-                        const qty = fItem && fItem.quantity ? '（' + fItem.quantity + '）' : '';
-                        statusText = '已有' + qty;
-                        color = '#16A34A';
-                    } else if (ing.status === 'warn') {
-                        icon = '⚠️';
-                        statusText = '即将过期（' + ing.days + '天后）';
-                        color = '#D97706';
-                    } else if (ing.status === 'expired') {
-                        icon = '⚠️';
-                        statusText = '已过期';
-                        color = '#DC2626';
-                    } else {
-                        icon = '⚠️';
-                        statusText = '暂无 · 建议采购';
-                        color = '#DC2626';
-                    }
-                    tooltipLines.push('<div style="padding:3px 0;color:' + color + ';font-size:12px;">' + icon + ' ' + escapeHtml(ing.name) + '　' + statusText + '</div>');
-                });
-                // 存入全局数组
-                const currentIdx = dishIdx;
-                _dishTipStore[currentIdx] = tooltipLines.join('');
+        rowsRendered.forEach(r => {
+            const ov = prep.overrides[r.name] || {};
+            const unit = r.needBuyUnit || r.totalUnit || '';
+            let needQty;
+            if (r.alreadyHave) {
+                needQty = 0;
+            } else if (typeof ov.needQty === 'number' && !isNaN(ov.needQty)) {
+                needQty = Math.max(0, Number(ov.needQty));
+            } else if (r.needBuyQty > 0) {
+                needQty = Number(r.needBuyQty);
+            } else {
+                needQty = r.totalQty <= 0 ? 1 : 0;
+            }
+            // 单价
+            let unitPrice;
+            if (typeof ov.unitPrice === 'number' && !isNaN(ov.unitPrice)) {
+                unitPrice = Number(ov.unitPrice);
+            } else {
+                const oneUnit = unit ? 1 : (needQty || 1);
+                const est1 = estimatePrepPrice(r.name, oneUnit, unit);
+                unitPrice = needQty > 0 ? est1 : (r.estPrice > 0 && needQty === 0 ? r.estPrice : est1);
+                if (needQty > 0 && r.estPrice > 0) {
+                    // 优先反推：unitPrice = estPrice / needQty
+                    unitPrice = Number((r.estPrice / needQty).toFixed(2));
+                }
+            }
+            // 预估价格
+            let estPrice;
+            if (typeof ov.estPrice === 'number' && !isNaN(ov.estPrice)) {
+                estPrice = Number(ov.estPrice);
+            } else {
+                estPrice = Number((unitPrice * needQty).toFixed(1));
+            }
+            // 分类分组
+            if (r.category !== lastCat) {
+                listHtml += `<tr class="prep-shop-cat-row"><td colspan="5">${escapeHtml(r.category || '其他')}</td></tr>`;
+                lastCat = r.category;
+            }
+            const haveClass = r.alreadyHave ? ' prep-row-have' : '';
+            const cbDisabled = r.alreadyHave ? ' disabled' : '';
+            const checked = isPrepItemSelected(r.name) ? ' checked' : '';
+            const n = escapeHtml(r.name);
+            const nn = r.name.replace(/'/g, '\\\'');
+            const nameDisplay = r.extra
+                ? `${n} <span style="color:#D97706;font-size:11px;">[手动]</span>`
+                : n;
+            const isEditable = !r.alreadyHave;
 
-                // 每个菜品作为一个横排卡片（悬浮+点击展开提示框）
-                html += '<div id="dishCard_' + currentIdx + '" style="position:relative;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:6px 10px;min-width:0;cursor:pointer;" onmouseenter="showDishTooltip(' + currentIdx + ')" onmouseleave="hideDishTooltip()" onclick="showDishTooltip(' + currentIdx + ')">';
-                html += '<div style="font-size:14px;font-weight:600;color:#374151;">' + escapeHtml(dish.name) + '</div>';
-                html += '</div>';
-                dishIdx++;
-            });
-            html += `</div>`;
-            html += `</div>`;
+            let needCell, unitCell, priceCell;
+            if (r.alreadyHave) {
+                needCell = `<span class="prep-have-tag">已有</span>`;
+                unitCell = `<span style="color:#9CA3AF;">—</span>`;
+                priceCell = `<span style="color:#9CA3AF;">—</span>`;
+            } else {
+                const unitLabel = unit || '份';
+                const needUnitLabel = unit || '份';
+                const upVal = unitPrice.toFixed(2);
+                const qVal = Number(needQty.toFixed(2)).toString();
+                const epVal = estPrice.toFixed(1);
+                // 三列均改为直接<input type=number>显示与编辑，无需点✎笔；onchange写overrides+重渲染（避免WebView prompt/confirm黑屏）
+                unitCell = `<div class="prep-inline-wrap prep-inline-unit-price">
+                    <input class="prep-inline-input" type="number" min="0" step="0.01" value="${upVal}"
+                        data-n="${n}" data-f="unitPrice" onchange="onPrepInlineEdit(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+                </div>`;
+                needCell = `<div class="prep-inline-wrap prep-inline-need-qty">
+                    <input class="prep-inline-input" type="number" min="0" step="0.01" value="${qVal}"
+                        data-n="${n}" data-f="needQty" onchange="onPrepInlineEdit(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+                    <span class="prep-inline-unit">${escapeHtml(needUnitLabel)}</span>
+                </div>`;
+                priceCell = `<div class="prep-inline-wrap prep-inline-est">
+                    <input class="prep-inline-input" type="number" min="0" step="0.1" value="${epVal}"
+                        data-n="${n}" data-f="estPrice" onchange="onPrepInlineEdit(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+                    <span class="prep-inline-unit">元</span>
+                </div><button class="prep-row-del" data-n="${n}" onclick="openPrepDelConfirm(this.dataset.n)" title="删除此行">×</button>`;
+            }
+            listHtml += `<tr class="${haveClass}">
+                <td style="width:32px;text-align:center;"><input type="checkbox" ${cbDisabled}${checked} onchange="onTogglePrepItem('${n.replace(/'/g,'\\\'')}', this.checked)"></td>
+                <td style="font-weight:600;">${nameDisplay}</td>
+                <td>${unitCell}</td>
+                <td>${needCell}</td>
+                <td style="text-align:left;">${priceCell}</td>
+            </tr>`;
         });
     }
 
-    html += `</div>`;
+    // 4) 底部按钮文案统计：当前所有非已有+非deleted+已勾选的 项数 / 金额
+    let selectedCount = 0, selectedTotal = 0;
+    rowsRendered.forEach(r => {
+        if (r.alreadyHave) return;
+        const ov = prep.overrides[r.name] || {};
+        const unit = r.needBuyUnit || r.totalUnit || '';
+        let needQty;
+        if (typeof ov.needQty === 'number' && !isNaN(ov.needQty)) needQty = Math.max(0, ov.needQty);
+        else needQty = r.needBuyQty > 0 ? r.needBuyQty : (r.totalQty <= 0 ? 1 : 0);
+        if (needQty <= 0) return;
+        if (!isPrepItemSelected(r.name)) return;
+        let estPrice;
+        if (typeof ov.estPrice === 'number' && !isNaN(ov.estPrice)) estPrice = Number(ov.estPrice);
+        else {
+            let unitPrice;
+            if (typeof ov.unitPrice === 'number' && !isNaN(ov.unitPrice)) unitPrice = ov.unitPrice;
+            else if (needQty > 0 && r.estPrice > 0) unitPrice = Number((r.estPrice / needQty).toFixed(2));
+            else unitPrice = estimatePrepPrice(r.name, 1, unit);
+            estPrice = Number((unitPrice * needQty).toFixed(1));
+        }
+        selectedCount++;
+        selectedTotal += estPrice;
+    });
+
+    let html = '';
+    // 现有食材（部分）：仅下方卡片展示一次（去掉上方右侧的重复标签）
+    html += `<div class="prep-overview" style="margin:12px;"><b style="color:#374151;font-size:13px;font-weight:600;">现有食材（部分）：</b>${tagsHtml}</div>`;
+
+    // 参数卡（去图标）
+    html += `<div class="prep-card">
+        <div class="prep-param-row">
+            <div class="prep-cycle-sel">
+                <label>采购周期：</label>
+                <select id="prepCycleSel">
+                    <option value="2d"${mode==='2d'?' selected':''}>2天（基于已确认食谱计划）</option>
+                    <option value="3d"${mode==='3d'?' selected':''}>3天（基于已确认食谱计划）</option>
+                    <option value="7d"${mode==='7d'?' selected':''}>7天（基于已确认食谱计划）</option>
+                </select>
+            </div>
+            <div class="prep-servings">用餐人数：<b>${prep.servings}人</b> <button class="prep-servings-btn" type="button" onclick="openPrepServingsModal()">✏️ 调整人数</button></div>
+            <span class="prep-total-kinds">共 <b style="color:#DC2626;">${buyKinds}</b> 种食材</span>
+        </div>
+    </div>`;
+
+    // 参数区下：总体说明一行
+    html += `<div style="margin:8px 16px 4px;font-size:13px;font-weight:700;color:#374151;">需采购食材清单（以下为采购周期内用量汇总）</div>`;
+
+    // 采购清单表 5 列
+    html += `<div class="prep-card prep-shop-card">
+        <table class="prep-shop-table">
+            <thead>
+                <tr>
+                    <th style="width:32px;">☑</th>
+                    <th>食材</th>
+                    <th>单价</th>
+                    <th>需购量</th>
+                    <th style="text-align:left;">预估价格(元)</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${listHtml}
+            </tbody>
+        </table>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;">
+            <button class="prep-add-item-btn" onclick="openPrepAddItemModal()" style="width:auto;margin:0;padding:8px 16px;">添加食材</button>
+            <button class="prep-btn-confirm" onclick="openPrepConfirmModal()" style="max-width:62%;">确认采购 <span style="font-size:12px;opacity:0.9;">（${selectedCount}项 · ¥${selectedTotal.toFixed(1)}）</span></button>
+        </div>
+    </div>`;
+
+    // 底部只保留采购记录入口（已迁移至食记·复盘页面，此处不显示）
+    // content.innerHTML 末段已经追加到 html 再整体赋值，此处仅占位注释防回归
 
     content.innerHTML = html;
+
+    // 事件绑定
+    const sel = document.getElementById('prepCycleSel');
+    if (sel) sel.onchange = onPrepCycleChange;
+    } catch (err) {
+        content.innerHTML = '<div style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:10px;margin:12px;padding:14px;font-size:13px;line-height:1.6;white-space:pre-wrap;">[食材准备渲染错误]\n' + escapeHtml(err.message) + '\n\n' + escapeHtml(String(err && err.stack || '')) + '</div>';
+    }
 }
 
 // ====== 采购计划（推荐首页） ======
@@ -7125,9 +7479,937 @@ let recShopDateOffset = 0; // 0=今天, 1=明天, 2=后天, 3=大后天
 let _recShopDateDropdownOpen = false;
 // 全局存储：所有需购食材（供勾选用）和默认价格表
 window._recShopAllIngs = {};   // { 食材名: { name, category, isExpiring } }
-window._recShopDefaultPrices = {};
+window._recShopDefaultPrices = {
+    // ====== 蔬菜（元/斤） ======
+    '番茄': 4, '西红柿': 4, '菠菜': 5, '豆腐': 4, '土豆': 4, '生菜': 4, '南瓜': 4,
+    '大蒜': 6, '蒜苗': 8, '葱': 3, '大葱': 3, '小葱': 3, '葱花': 3, '生姜': 8, '姜片': 8, '姜末': 8, '香菜': 3,
+    '白菜': 3, '大白菜': 3, '小白菜': 4, '油菜': 4, '青菜': 4, '芹菜': 5, '韭菜': 5,
+    '胡萝卜': 3, '白萝卜': 3, '萝卜': 3, '黄瓜': 4, '茄子': 5, '青椒': 5,
+    '柿子椒': 5, '彩椒': 10, '西兰花': 7, '花菜': 6, '菜花': 6,
+    '洋葱': 3, '莲藕': 8, '藕': 8, '莴笋': 5, '竹笋': 12, '冬笋': 15,
+    '豆芽': 3, '黄豆芽': 3, '绿豆芽': 3, '蘑菇': 10, '香菇': 12, '金针菇': 8, '杏鲍菇': 10, '平菇': 8,
+    '红薯': 3, '紫薯': 5, '山药': 10, '玉米': 5, '豌豆': 8, '毛豆': 6,
+    '苦瓜': 5, '丝瓜': 5, '冬瓜': 4, '葫芦': 4, '茭白': 10,
+    '荷兰豆': 10, '茼蒿': 6, '油麦菜': 5, '空心菜': 5, '秋葵': 8,
+    '四季豆': 6, '豆角': 6, '豇豆': 6, '蒜苔': 8,
+    // ====== 肉蛋奶（元/斤） ======
+    '鸡蛋': 7, '鸭蛋': 9, '鹌鹑蛋': 12,
+    '牛肉': 45, '猪肉': 20, '排骨': 30, '猪小排': 32, '肋排': 35, '牛腩': 45, '五花肉': 25, '里脊肉': 22,
+    '鸡肉': 15, '鸡腿': 18, '鸡胸肉': 20, '鸡翅': 25, '鸭肉': 20,
+    '牛肉末': 40, '猪肉末': 22, '肉末': 22, '腊肉': 35, '火腿': 30,
+    '猪肝': 15, '猪心': 18, '猪腰': 20, '鸡肝': 10, '鸡胗': 15,
+    '牛奶': 3, '酸奶': 5, '奶酪': 50, '黄油': 45, '淡奶油': 25,
+    // ====== 水产（元/斤） ======
+    '鱼': 25, '虾': 30, '虾仁': 40,
+    '鲈鱼': 35, '鲫鱼': 15, '草鱼': 18, '鲤鱼': 15, '鳕鱼': 40,
+    '带鱼': 25, '黄鱼': 30, '鲳鱼': 28, '武昌鱼': 22, '黑鱼': 30,
+    '三文鱼': 60, '金枪鱼': 80, '龙利鱼': 25, '巴沙鱼': 20,
+    '螃蟹': 50, '大闸蟹': 60, '蟹': 50,
+    '蛤蜊': 15, '花蛤': 12, '扇贝': 20, '生蚝': 25, '牡蛎': 25,
+    '鱿鱼': 25, '章鱼': 30, '墨鱼': 25, '海带': 8, '紫菜': 10,
+    '小龙虾': 35, '基围虾': 35, '明虾': 30,
+    // ====== 主粮（元/斤） ======
+    '大米': 5, '面条': 6, '挂面': 7, '意大利面': 10, '面粉': 5, '全麦粉': 7,
+    '小米': 8, '燕麦': 8, '燕麦片': 9, '糯米': 8, '糙米': 8, '黑米': 9, '薏米': 12,
+    '年糕': 8, '粉丝': 6, '粉条': 7, '米粉': 6,
+    '馄饨皮': 5, '饺子皮': 5, '吐司': 12, '面包': 12,
+    '红豆': 10, '绿豆': 9, '黑豆': 12, '黄豆': 7, '芝麻': 18,
+    // ====== 调料（口径：克类=元/斤；液体类=元/瓶≈500ml；油类=元/瓶≈1L；粉类=元/袋≈50g~100g） ======
+    '盐': 3, '酱油': 10, '生抽': 10, '老抽': 10, '醋': 8, '陈醋': 10, '香醋': 10, '白醋': 8,
+    '料酒': 8, '黄酒': 12, '花雕酒': 25, '啤酒': 6,
+    '糖': 6, '冰糖': 10, '白糖': 6, '红糖': 8, '糖粉': 10,
+    '八角': 20, '花椒': 30, '花椒粉': 25, '胡椒': 25, '胡椒粉': 25, '黑胡椒': 28, '白胡椒': 28,
+    '香油': 20, '芝麻油': 20, '花椒油': 20, '辣椒油': 18,
+    '食用油': 15, '花生油': 20, '橄榄油': 40, '菜籽油': 18, '玉米油': 18, '葵花籽油': 18, '调和油': 16,
+    '豆瓣酱': 10, '蒸鱼豉油': 12, '沙拉酱': 20, '蛋黄酱': 22, '千岛酱': 20,
+    '淀粉': 4, '生粉': 5, '玉米淀粉': 4, '土豆淀粉': 5,
+    '蚝油': 12, '味精': 5, '鸡精': 8, '五香粉': 8, '辣椒粉': 10, '辣椒面': 10,
+    '孜然': 15, '孜然粉': 15, '辣椒': 8, '干辣椒': 12, '小米辣': 10,
+    '豆豉': 12, '甜面酱': 9, '番茄酱': 10, '芝麻酱': 20, '花生酱': 18, '黄豆酱': 10,
+    '桂皮': 15, '香叶': 10, '陈皮': 18, '党参': 38, '黄芪': 32, '当归': 40,
+    // ====== 干货药材（元/斤） ======
+    '银耳': 25, '红枣': 15, '枸杞': 28, '桂圆': 22, '莲子': 22,
+    '百合': 28, '核桃': 28, '花生': 12, '杏仁': 28, '腰果': 40, '开心果': 45, '松子': 60,
+    '木耳': 35, '黑木耳': 35, '黄花菜': 28, '腐竹': 20, '豆皮': 10,
+    // ====== 饮品 ======
+    '水': 1, '矿泉水': 1, '纯净水': 1, '气泡水': 3,
+    '豆浆': 3, '可乐': 3, '雪碧': 3, '红茶': 80, '绿茶': 80, '乌龙茶': 90, '铁观音': 100,
+    '咖啡': 80, '咖啡豆': 100, '速溶咖啡': 30, '蜂蜜': 20,
+    // ====== 水果（元/斤） ======
+    '苹果': 8, '香蕉': 5, '橙子': 8, '橘子': 6, '柠檬': 6,
+    '梨': 7, '葡萄': 12, '草莓': 22, '蓝莓': 28, '西瓜': 5,
+    '芒果': 15, '猕猴桃': 12, '火龙果': 15, '榴莲': 50, '荔枝': 15,
+    '桃子': 8, '樱桃': 35, '菠萝': 8, '柚子': 10, '哈密瓜': 10
+};
 window._recShopSelected = {};   // { 食材名: true }  用户勾选的食材
 window._recShopBuyItems = [];   // 采购清单数据（初始为空，由勾选驱动）
+
+// ====== 食材准备：采购准备中心 全局状态 ======
+window._prep = {
+    cycleDays: 2,          // 当前采购天数
+    cycleMode: '2d',       // 2d / 3d / 7d
+    servings: 1,           // 用餐人数
+    selectedItems: {},     // { name: true } 勾选
+    extraItems: [],        // 用户手动加的食材条目：[{name, qty, unit, unitPrice}]
+    pendingBuyItems: [],   // 确认弹窗中暂存的采购条目
+    overrides: {},         // { name: { unitPrice, needQty, estPrice } } 用户手动改的单价/需购量/预估
+    deleted: {}            // { name: true } 用户删除的行
+};
+// 单价口径提示（采购时常见规格，用于 estimatePrepPrice 的单位换算基准）
+//   LIQUID_BOTTLE = 500ml（生抽/醋/料酒/蒸鱼豉油/蚝油/香油等瓶装调味品）
+//   OIL_BOTTLE    = 1000ml（食用油/花生油/橄榄油/菜籽油 常见 1L 装）
+//   POWDER_POUCH  = 50g（花椒/八角/胡椒/五香粉/辣椒粉/咖喱粉等 小袋装）
+//   JAR_500G      = 500g（芝麻酱/花生酱/黄豆酱/豆瓣酱 等 瓶装≈500g）
+const PRICE_BASIS_LIQUID_BOTTLE_ML = 500;
+const PRICE_BASIS_OIL_BOTTLE_ML    = 1000;
+const PRICE_BASIS_POWDER_POUCH_G   = 50;
+const PRICE_BASIS_JAR_G            = 500;
+// 粉/香料类名称（元/袋，按 POWDER_POUCH_G 换算）
+const PRICE_CLS_POWDER = /花椒|胡椒|八角|桂皮|丁香|香叶|五香粉|辣椒粉|辣椒面|孜然|咖喱粉|姜黄粉|陈皮|胡椒粉|花椒粉|黑胡椒|白胡椒|草果/;
+// 油类名称（元/瓶≈1L，按 OIL_BOTTLE_ML 换算）
+const PRICE_CLS_OIL = /食用油|花生油|橄榄油|菜籽油|玉米油|葵花籽油|调和油|香油|芝麻油|花椒油|辣椒油|黄油/;
+// 液体调味品（元/瓶≈500ml，按 LIQUID_BOTTLE_ML 换算）
+const PRICE_CLS_LIQUID_BOTTLE = /酱油|生抽|老抽|醋|陈醋|香醋|白醋|料酒|黄酒|花雕酒|啤酒|蚝油|蒸鱼豉油|鱼露|米酒|白酒|白兰地|味淋|淡奶油|牛奶|酸奶|豆浆|可乐|雪碧|气泡水|矿泉水|纯净水|水|蜂蜜|柠檬汁|椰汁|橙汁|苹果汁/;
+// 大罐膏酱类（元/罐≈500g，按 JAR_G 换算）
+const PRICE_CLS_JAR = /芝麻酱|花生酱|黄豆酱|豆瓣酱|甜面酱|沙拉酱|蛋黄酱|千岛酱|蒜蓉酱|沙茶酱|番茄酱|芥末酱|咖喱块/;
+// 勺子单位 → 克/毫升 粗估算（小/普通勺）；仅兜底，AI 给 perServing 时优先走 perServing
+const SPOON_LIQUID_ML = 15;   // 1 瓷勺（15ml/液体）
+const SPOON_SOLID_G  = 10;   // 1 瓷勺（10g/固体）
+const TSP_LIQUID_ML  = 5;    // 1 茶匙（5ml）
+const TSP_SOLID_G    = 3;    // 1 茶匙（3g）
+const PIECE_G        = 10;   // 1 片≈10g
+const PETAL_G        = 5;    // 1 瓣/小片≈5g
+
+function estimatePrepPrice(name, qty, unit) {
+    const n = String(name || '').trim();
+    if (!n) return 0;
+    const std = normalizeIngredientName(n) || n;
+    let base = Number(window._recShopDefaultPrices[n]);
+    if (!isFinite(base) || base <= 0) base = Number(window._recShopDefaultPrices[std]);
+    if (!isFinite(base) || base <= 0) {
+        // 兜底价：按类别粗略给，避免 ¥10 一刀切导致 0.02 极值
+        const cat = String(guessFoodCategory(n) || '').trim();
+        if (cat === '肉蛋奶') base = 25;
+        else if (cat === '水产') base = 30;
+        else if (cat === '水果') base = 8;
+        else if (cat === '主粮') base = 6;
+        else if (cat === '调料') base = 8;
+        else if (cat === '干货药材') base = 15;
+        else base = 5;
+    }
+    const q = Number(qty) || 0;
+    const u = String(unit || '').trim();
+    if (!isFinite(q) || q <= 0) return Number(base.toFixed(1));
+    // === 1) 重量单位：克/千克 — base 是元/斤(500g) ===
+    if (u === 'g' || u === '克' || u === 'gm') return Number(((q / 500) * base).toFixed(2));
+    if (u === 'kg' || u === '千克' || u === '公斤') return Number((q * 2 * base).toFixed(2));
+    if (u === '斤' || u === '市斤') return Number((q * base).toFixed(2));
+    if (u === '两') return Number((q * base / 10).toFixed(2));
+    // === 2) 容量单位：毫升/升 —— 按类别换算成 base 口径 ===
+    if (u === 'ml' || u === '毫升') {
+        if (PRICE_CLS_OIL.test(n) || PRICE_CLS_OIL.test(std)) {
+            // 油类 base=元/瓶(1000ml)
+            return Number(((q / PRICE_BASIS_OIL_BOTTLE_ML) * base).toFixed(2));
+        }
+        if (PRICE_CLS_LIQUID_BOTTLE.test(n) || PRICE_CLS_LIQUID_BOTTLE.test(std)) {
+            // 瓶装液体 base=元/瓶(500ml)
+            return Number(((q / PRICE_BASIS_LIQUID_BOTTLE_ML) * base).toFixed(2));
+        }
+        // 其它默认 base=元/斤(≈500ml，水类)
+        return Number(((q / 500) * base).toFixed(2));
+    }
+    if (u === 'L' || u === 'l' || u === '升') {
+        if (PRICE_CLS_OIL.test(n) || PRICE_CLS_OIL.test(std)) return Number(((q * 1000 / PRICE_BASIS_OIL_BOTTLE_ML) * base).toFixed(2));
+        if (PRICE_CLS_LIQUID_BOTTLE.test(n) || PRICE_CLS_LIQUID_BOTTLE.test(std)) return Number(((q * 1000 / PRICE_BASIS_LIQUID_BOTTLE_ML) * base).toFixed(2));
+        return Number((q * 2 * base).toFixed(2));
+    }
+    // === 3) 勺/茶匙/汤匙：先按 固体/液体 粗化成克/毫升再换算 ===
+    if (/勺|汤匙|大勺/.test(u)) {
+        const isLiquidLike = PRICE_CLS_OIL.test(n) || PRICE_CLS_OIL.test(std) || PRICE_CLS_LIQUID_BOTTLE.test(n) || PRICE_CLS_LIQUID_BOTTLE.test(std);
+        if (isLiquidLike) return estimatePrepPrice(n, q * SPOON_LIQUID_ML, '毫升');
+        return estimatePrepPrice(n, q * SPOON_SOLID_G, '克');
+    }
+    if (/茶匙|小勺|小匙|小勺儿/.test(u)) {
+        const isLiquidLike = PRICE_CLS_OIL.test(n) || PRICE_CLS_OIL.test(std) || PRICE_CLS_LIQUID_BOTTLE.test(n) || PRICE_CLS_LIQUID_BOTTLE.test(std);
+        if (isLiquidLike) return estimatePrepPrice(n, q * TSP_LIQUID_ML, '毫升');
+        return estimatePrepPrice(n, q * TSP_SOLID_G, '克');
+    }
+    // === 4) 片/瓣/朵：估成克，避免 153片 爆量 ===
+    if (/片/.test(u)) return estimatePrepPrice(n, q * PIECE_G, '克');
+    if (/瓣/.test(u)) return estimatePrepPrice(n, q * PETAL_G, '克');
+    // === 5) 瓶/罐/袋/盒/条/颗 单位 —— 按类别 base 当作“每瓶/每袋”价格 ===
+    if (u === '瓶') {
+        return Number((q * base).toFixed(2));
+    }
+    if (u === '袋' || u === '包') {
+        return Number((q * base).toFixed(2));
+    }
+    if (u === '罐' || u === '听' || u === '盒') {
+        return Number((q * base).toFixed(2));
+    }
+    if (u === '颗' || u === '粒' || u === '个' || u === '只' || u === '根' || u === '把' || u === '把儿' || u === '头' || u === '条' || u === '尾') {
+        return Number((q * base).toFixed(2));
+    }
+    // === 6) 粉/酱类无单位时，默认按 base 元/袋或元/瓶 修正极小值 ===
+    if (!u) {
+        if (PRICE_CLS_POWDER.test(n) || PRICE_CLS_POWDER.test(std)) return Number(((q / PRICE_BASIS_POWDER_POUCH_G) * base).toFixed(2));
+        if (PRICE_CLS_JAR.test(n) || PRICE_CLS_JAR.test(std)) return Number(((q / PRICE_BASIS_JAR_G) * base).toFixed(2));
+    }
+    // === 7) 默认：按“个数/份数”直乘；但如果算出来单位单价过低（<0.05且非粉类），再升档 500g 估算防止 0.02 ===
+    const est = Number((q * base).toFixed(2));
+    if (q > 0 && est / q < 0.05) {
+        return Number(((q / 500) * base).toFixed(2));
+    }
+    return est;
+}
+// 采购单位+数量的“正常采购规格”归一：解决把"葱116把、生菜153片"这类餐次内小量化大的问题
+// 策略：对人均单位异常（勺/片/瓣/茶匙/颗）统一转成 克/毫升；对“无量化 needBuyQty=人次”的食材按调料/蔬菜/香料分别设上限
+function normalizePrepQuantityUnit(name, rawQty, rawUnit) {
+    const n = String(name || '').trim();
+    if (!n) return { qty: rawQty, unit: rawUnit };
+    let q = Number(rawQty); if (!isFinite(q)) q = 0;
+    let u = String(rawUnit || '').trim();
+    const std = normalizeIngredientName(n) || n;
+    const isOil = PRICE_CLS_OIL.test(n) || PRICE_CLS_OIL.test(std);
+    const isLiq = PRICE_CLS_LIQUID_BOTTLE.test(n) || PRICE_CLS_LIQUID_BOTTLE.test(std);
+    const isPow = PRICE_CLS_POWDER.test(n) || PRICE_CLS_POWDER.test(std);
+    const isJar = PRICE_CLS_JAR.test(n) || PRICE_CLS_JAR.test(std);
+    // 1. 勺/茶匙 → 克或毫升
+    if (/勺|汤匙|大勺/.test(u)) {
+        if (isOil || isLiq) { q = q * SPOON_LIQUID_ML; u = '毫升'; }
+        else { q = q * SPOON_SOLID_G; u = '克'; }
+    } else if (/茶匙|小勺|小匙/.test(u)) {
+        if (isOil || isLiq) { q = q * TSP_LIQUID_ML; u = '毫升'; }
+        else { q = q * TSP_SOLID_G; u = '克'; }
+    } else if (/片/.test(u)) {
+        q = q * PIECE_G; u = '克';
+    } else if (/瓣/.test(u)) {
+        q = q * PETAL_G; u = '克';
+    }
+    // 2. 调料/香料/酱 若数量仍很小（<最小采购规格），升档到常见规格
+    if (q > 0 && q < 20) {
+        if (isPow) { q = Math.max(q, PRICE_BASIS_POWDER_POUCH_G); u = '克'; }
+        else if (isJar) { q = Math.max(q, PRICE_BASIS_JAR_G); u = '克'; }
+    }
+    // 3. 无量化/小量级香料 防止 usedCount 爆炸（>50 即不合理，按上限截断）
+    if (q > 2000 && (isPow || /八角|花椒|胡椒|桂皮|香叶|丁香|草果|陈皮|孜然|五香粉|辣椒粉/.test(n) || /八角|花椒|胡椒|桂皮|香叶|丁香|草果|陈皮|孜然|五香粉|辣椒粉/.test(std))) {
+        q = 50; if (!u) u = '克';
+    }
+    // 4. 葱/姜/蒜/香菜 生鲜香料：超过 2 斤=1000g 不合理，截断到 250g/500g
+    if (q > 1000 && /^(葱|生姜|大蒜|香菜|葱花|姜片|姜末|蒜末|小葱|大葱|蒜苗|青椒|小米辣|干辣椒|彩椒|辣椒|枸杞|红枣|冰糖|糖)$/.test(std)) {
+        q = Math.min(q, 500); if (!u) u = '克';
+    }
+    // 5. 生菜/蔬菜 如果单位是“片/颗”，统一转成 克，并限制单周采购不超过一个合理量级
+    if (q > 3000 && /^(生菜|菠菜|油麦菜|空心菜|茼蒿|娃娃菜|小白菜|上海青|菜心|芥菜|芹菜|韭菜|韭黄|蒜苗|豆角|四季豆|豇豆|荷兰豆|豌豆|秋葵|丝瓜|黄瓜|冬瓜|南瓜|苦瓜|茄子|番茄|西红柿|胡萝卜|白萝卜|土豆|红薯|山药|莲藕|莴笋|茭白|竹笋|冬笋|豆芽|西兰花|花菜|菜花|洋葱|青椒|彩椒|蘑菇|香菇|金针菇|杏鲍菇|平菇|玉米|白菜|大白菜)$/.test(std)) {
+        q = Math.min(q, 3000); if (!u) u = '克';
+    }
+    return { qty: q, unit: u };
+}
+
+// ====== 食材准备：逐餐人数唯一可信入口（永远返回 ≥1） ======
+// 优先级：plan.servings → plan.diningMembers?.length → 当前"小家"就餐组人数 → fallback 参数 → 1
+function getCurrentServings() {
+    try {
+        if (typeof getDefaultDiningGroup === 'function') {
+            const g = getDefaultDiningGroup();
+            if (g && Array.isArray(g.members) && g.members.length > 0) return g.members.length;
+        }
+    } catch(e) {}
+    try {
+        if (typeof diningGroups !== 'undefined' && Array.isArray(diningGroups)) {
+            const xj = diningGroups.find(g => g && g.name === '小家');
+            if (xj && Array.isArray(xj.members) && xj.members.length > 0) return xj.members.length;
+        }
+    } catch(e) {}
+    return 1;
+}
+function getMealServings(dateKey, mealKey, fallback) {
+    try {
+        if (typeof getMealData === 'function') {
+            const md = getMealData(dateKey, mealKey);
+            const plan = md && md.plan;
+            if (plan) {
+                const s1 = Number(plan.servings);
+                if (!isNaN(s1) && s1 >= 1 && s1 <= 999) return Math.floor(s1);
+                if (Array.isArray(plan.diningMembers) && plan.diningMembers.length >= 1) return plan.diningMembers.length;
+            }
+        }
+    } catch(e) {}
+    const cs = Number(getCurrentServings());
+    if (!isNaN(cs) && cs >= 1) return Math.floor(cs);
+    const fb = Number(fallback);
+    if (!isNaN(fb) && fb >= 1) return Math.floor(fb);
+    return 1;
+}
+
+// 统计：从今天起 30 天内有 confirmed 计划的"日期数"（按天去重，不是餐次）
+function countConfirmedPlanDays(today) {
+    const t = today ? new Date(today) : new Date();
+    t.setHours(0,0,0,0);
+    const cal = getDietCalendar();
+    const list = [];
+    for (let i = 0; i < 30; i++) {
+        const d = new Date(t); d.setDate(d.getDate() + i);
+        const key = dateToKey(d);
+        const day = cal[key];
+        if (!day) continue;
+        let found = false;
+        ['breakfast','lunch','dinner'].forEach(meal => {
+            const m = day[meal];
+            if (m && m.plan && Array.isArray(m.plan.dishes) && m.plan.dishes.length > 0) {
+                const state = m.plan.state || '';
+                const confirmed = m.plan.confirmed === true;
+                if (state === 'confirmed' || state === 'completed' || confirmed) found = true;
+            }
+        });
+        if (found) list.push(key);
+    }
+    return { days: list.length, daysList: list };
+}
+
+// 获取食材的冰箱条目（按规范化名匹配）
+function findFridgeItemsByName(fridgeItems, name) {
+    if (!Array.isArray(fridgeItems) || !name) return [];
+    const std = normalizeIngredientName(name);
+    return fridgeItems.filter(f => {
+        if (!f || !f.name) return false;
+        return f.name === name || normalizeIngredientName(f.name) === std;
+    });
+}
+
+// 计算一人份 食材：从 dishMeta 或 getDishIngredientsWithServings(d,1)
+function getOnePersonIngredients(dishName, dishMeta) {
+    const trimmed = String(dishName || '').trim();
+    if (!trimmed) return [];
+    let list = [];
+    let hasQty = false;
+    if (dishMeta) {
+        const m = dishMeta[trimmed] || dishMeta[dishName];
+        if (m && Array.isArray(m.ingredients) && m.ingredients.length > 0) {
+            list = m.ingredients.map(i => {
+                let q = (i.quantity !== undefined && i.quantity !== null) ? Number(i.quantity) : null;
+                if (!isNaN(q) && q !== null) hasQty = true;
+                return {
+                    name: String(i.name || i).trim(),
+                    qty: (q && q > 0) ? q : null,
+                    unit: String(i.unit || '').trim() || ''
+                };
+            });
+        }
+    }
+    if (list.length === 0 && typeof getDishIngredientsWithServings === 'function') {
+        const r = getDishIngredientsWithServings(trimmed, 1);
+        if (Array.isArray(r) && r.length > 0) {
+            list = r.map(i => {
+                let q = (i.quantity !== undefined && i.quantity !== null) ? Number(i.quantity) : null;
+                if (!isNaN(q) && q !== null) hasQty = true;
+                return {
+                    name: String(i.name || '').trim(),
+                    qty: (q && q > 0) ? q : null,
+                    unit: String(i.unit || '').trim() || ''
+                };
+            });
+        }
+    }
+    if (list.length === 0 && typeof getDishIngredients === 'function') {
+        const r = getDishIngredients(trimmed);
+        if (Array.isArray(r) && r.length > 0) {
+            list = r.map(n => ({ name: String(n).trim(), qty: 100, unit: 'g' }));
+            hasQty = true;
+        }
+    }
+    return { list, hasQty };
+}
+
+// 扣减库存：同一单位直接相减，若库存单位无数字（适量/半颗等）→ 保守置需购0
+function subtractFridgeFromTotal(totalQty, totalUnit, fridgeRows) {
+    // 无法量化库存：保守认为够
+    const allQuantifiable = fridgeRows.every(f => {
+        if (!f.quantity) return false;
+        const p = parseQuantity(f.quantity);
+        return p && Number(p.value) > 0;
+    });
+    if (fridgeRows.length > 0 && !allQuantifiable) {
+        return { needBuyQty: 0, needBuyUnit: totalUnit || '', alreadyHave: true, availableQty: null, availableUnit: null };
+    }
+    let totalAvail = 0;
+    let availUnit = totalUnit || '';
+    fridgeRows.forEach(f => {
+        const p = parseQuantity(f.quantity || '');
+        if (!p) return;
+        let v = Number(p.value); if (!v || v <= 0) return;
+        let u = String(p.unit || '').trim();
+        // 换算：g / kg 到 totalUnit（若是g或kg，否则按个数相加）
+        if ((totalUnit === 'g' || totalUnit === '克') && (u === 'kg' || u === '千克')) v = v * 1000;
+        else if ((totalUnit === 'kg' || totalUnit === '千克') && (u === 'g' || u === '克')) v = v / 1000;
+        else if (u && totalUnit && u !== totalUnit && totalUnit !== '' && u !== '') {
+            // 不同单位就不换算，当作1个"份数"计数，加一粗略覆盖
+            // 这里采取保守：若单位不一致，仍当数量相加（可能不准确，但不会高估需购量太多）
+            v = v;
+        }
+        totalAvail += v;
+        if (!availUnit && u) availUnit = u;
+    });
+    const tQty = Number(totalQty) || 0;
+    if (tQty <= 0 && totalAvail > 0) {
+        return { needBuyQty: 0, needBuyUnit: totalUnit || '', alreadyHave: true, availableQty: totalAvail, availableUnit: availUnit };
+    }
+    const need = Math.max(0, tQty - totalAvail);
+    return { needBuyQty: need, needBuyUnit: totalUnit || '', alreadyHave: need <= 0, availableQty: totalAvail, availableUnit: availUnit };
+}
+
+// 主计算：给定 daysList + 全局兜底 servings + 采购天数D
+// 关键规则（2026-08-28 逐餐精确版，替代旧一刀切 S×D）：
+//   每餐独立取 S_meal = getMealServings(date, meal, servingsFallback)；
+//   totalQty = Σ (onePersonQty × S_meal)，逐菜累加，不做末尾 onePersonQty×S×D 二次重写；
+//   displayNote = "(一人份×累计人·餐数人·餐)"；
+//   servingsFallback 仅当一餐完全无数据时才启用，作为全局最后兜底（不再在循环中全局相乘）。
+function computeIngredientNeeds(daysList, servings, daysCount) {
+    const cal = getDietCalendar();
+    const prep = window._prep;
+    const daysToConsume = Array.isArray(daysList) ? daysList.slice(0, Math.max(1, daysCount || prep.cycleDays || 2)) : [];
+    const D = daysToConsume.length || 1;
+    const servingsFallback = Number(servings || prep?.servings) || 0;
+
+    const map = {}; // key = normalizedName
+    const nameMap = {}; // normalized -> displayName
+    const catMap = {};  // normalized -> category
+    const mealSum = {}; // normalized -> Σ S_meal（人·餐累计，用于 displayNote & 无量化计数）
+
+    daysToConsume.forEach(key => {
+        const day = cal[key];
+        if (!day) return;
+        ['breakfast','lunch','dinner'].forEach(meal => {
+            const m = day[meal];
+            if (!m || !m.plan || !Array.isArray(m.plan.dishes) || m.plan.dishes.length === 0) return;
+            const state = m.plan.state || '';
+            const confirmed = m.plan.confirmed === true;
+            if (!(state === 'confirmed' || state === 'completed' || confirmed)) return;
+            const S_meal = getMealServings(key, meal, servingsFallback);
+            const dishMeta = m.plan.dishMeta || {};
+            m.plan.dishes.forEach(dsh => {
+                const dishName = (typeof dsh === 'string') ? dsh : (dsh && dsh.name ? dsh.name : '');
+                if (!dishName) return;
+                const { list } = getOnePersonIngredients(dishName, dishMeta);
+                list.forEach(ing => {
+                    const nm = String(ing.name || '').trim();
+                    if (!nm) return;
+                    const norm = normalizeIngredientName(nm);
+                    nameMap[norm] = nameMap[norm] || nm;
+                    if (!catMap[norm]) catMap[norm] = guessFoodCategory(nm);
+                    const q1 = Number(ing.qty) || 0;
+                    const u1 = String(ing.unit || '').trim() || '';
+                    if (!map[norm]) {
+                        map[norm] = {
+                            norm,
+                            name: nameMap[norm],
+                            category: catMap[norm],
+                            onePersonQty: q1,
+                            onePersonUnit: u1,
+                            totalQty: 0,
+                            totalUnit: u1,
+                            usedCount: 0
+                        };
+                        mealSum[norm] = 0;
+                    } else {
+                        if (!map[norm].onePersonQty && q1) { map[norm].onePersonQty = q1; map[norm].onePersonUnit = u1; }
+                        if (!map[norm].totalUnit && u1) map[norm].totalUnit = u1;
+                    }
+                    mealSum[norm] = (mealSum[norm] || 0) + S_meal;
+                    // 累计总需求（量化的加一人份×该餐人数；无量化累计人次）
+                    if (q1 && q1 > 0) {
+                        map[norm].totalQty += q1 * S_meal;
+                    } else {
+                        map[norm].usedCount += S_meal;
+                    }
+                });
+            });
+        });
+    });
+
+    // 注意：此处不再执行 "totalQty = onePersonQty × S × D" 的重写 —— 上面按餐累加的结果已 = Σ(q1 × S_meal)。
+
+    const fridgeItems = JSON.parse(lsGet('fridgeItems') || '[]');
+    let buyKinds = 0;
+
+    const CATEGORY_ORDER = ['蔬菜','肉蛋奶','主粮','水果','水产','调料','干货药材','饮料零食','冷冻','方便食品','其他'];
+    Object.keys(map).forEach(norm => {
+        const r = map[norm];
+        const sumS = Math.max(0, Math.round(Number(mealSum[norm] || 0)));
+        // 若一人份量化值存在：上面已经 Σ q1×S_meal，totalQty 直接保留；否则 0。
+        if (!(r.onePersonQty && r.onePersonQty > 0)) {
+            r.totalQty = 0;
+        }
+        r.displayOne = (r.onePersonQty && r.onePersonQty>0) ? r.onePersonQty : '适量';
+        r.displayOneUnit = r.onePersonUnit || '';
+        // 可追溯公式：一人份 × ΣX 人·餐
+        r.displayNote = `(${r.displayOne}×${sumS}人·餐)`;
+
+        // ====== 单位/采购规格统一：勺/茶匙/片/瓣 → 克/毫升 ======
+        const totalNorm = normalizePrepQuantityUnit(r.name, r.totalQty, r.totalUnit || r.onePersonUnit);
+        r.totalQty = totalNorm.qty;
+        if (totalNorm.unit) r.totalUnit = totalNorm.unit;
+        // onePerson 也同步归一（避免“1勺”这种不采购口径在显示时误导）
+        const oneNorm = normalizePrepQuantityUnit(r.name, r.onePersonQty || 0, r.onePersonUnit || '');
+        if (oneNorm.qty && oneNorm.qty > 0) {
+            r.onePersonQty = oneNorm.qty;
+            if (oneNorm.unit) r.onePersonUnit = oneNorm.unit;
+        }
+
+        // 扣减库存
+        const fridgeRows = findFridgeItemsByName(fridgeItems, r.name);
+        const sub = subtractFridgeFromTotal(r.totalQty, r.totalUnit, fridgeRows);
+        r.availableQty = sub.availableQty;
+        r.availableUnit = sub.availableUnit;
+        r.alreadyHave = !!sub.alreadyHave;
+        r.needBuyQty = sub.needBuyQty;
+        r.needBuyUnit = sub.needBuyUnit;
+        if (r.totalQty === 0 && !r.alreadyHave) {
+            // 无量化：默认 1 份（多人次时按 sumS 当份数，更合理）—— 但再加一道上限，防止 116把/153片
+            let fallbackQty = sumS > 0 ? sumS : 1;
+            const stdN = norm || String(r.name || '').trim();
+            if (/^(葱|生姜|大蒜|香菜|葱花|姜片|姜末|蒜末|小葱|大葱|蒜苗|青椒|小米辣|干辣椒|彩椒|辣椒|洋葱|芹菜|韭菜|生菜|油麦菜|菠菜|茼蒿|小白菜|上海青|白菜|大白菜|娃娃菜|荷兰豆|豆角|四季豆|豇豆|蒜苔|丝瓜|黄瓜|茄子|番茄|西红柿|土豆|胡萝卜|白萝卜|冬瓜|南瓜|苦瓜|玉米|西兰花|花菜|菜花|山药|红薯|莲藕|莴笋|茭白|豆芽|蘑菇|香菇|金针菇|杏鲍菇|平菇)$/.test(stdN)) {
+                fallbackQty = Math.min(fallbackQty, 1); r.needBuyUnit = '份';
+            }
+            if (/^(盐|糖|冰糖|酱油|生抽|老抽|醋|料酒|蚝油|蒸鱼豉油|香油|芝麻油|食用油|花椒|胡椒|八角|桂皮|香叶|淀粉|豆瓣酱|甜面酱|芝麻酱|花生酱|番茄酱|沙拉酱|蛋黄酱|辣椒粉|五香粉|孜然|咖喱|陈皮|豆豉)$/.test(stdN)) {
+                fallbackQty = Math.min(fallbackQty, 1); r.needBuyUnit = '瓶';
+            }
+            r.needBuyQty = fallbackQty;
+            if (!r.needBuyUnit) r.needBuyUnit = '';
+        } else {
+            // —— 有量化：needBuyQty 也走一遍采购规格统一
+            const buyNorm = normalizePrepQuantityUnit(r.name, r.needBuyQty, r.needBuyUnit || r.totalUnit);
+            r.needBuyQty = buyNorm.qty;
+            if (buyNorm.unit) r.needBuyUnit = buyNorm.unit;
+        }
+        // ====== 无量化时 sumS 过大 → 已在上面用 fallback 限制 1 份。
+        // 对仍显示"把/片"这种采购单位的，兜底做一次"单位升档/数量上限"：
+        // —— 1) 生鲜香辛菜：葱/大蒜/生姜/香菜/小米辣/干辣椒/韭菜/芹菜 等，显示"把/份/颗"时超 3 份即 3 份
+        const stdN2 = norm || String(r.name || '').trim();
+        const unitStr = String(r.needBuyUnit || '').trim();
+        if (/把|颗|束|扎|捆/.test(unitStr)) {
+            if (/^(葱|大葱|小葱|蒜苗|韭菜|芹菜|香菜|蒜苔|油麦菜|茼蒿|上海青|小白菜|空心菜|菠菜|芦笋|辣椒|青椒|小米辣|彩椒)$/.test(stdN2)) {
+                if (Number(r.needBuyQty) > 3) r.needBuyQty = 3;
+            }
+        }
+        // —— 2) "水"：用量 < 10000毫升 仍不按毫升显示，改"瓶/桶"采购规格
+        if (/^(水|矿泉水|纯净水|气泡水)$/.test(stdN2)) {
+            if (r.needBuyUnit === '毫升' || !r.needBuyUnit) {
+                var ml = Number(r.needBuyQty) || 0;
+                if (ml <= 0) ml = 1500;
+                // 按 500ml/瓶 换算，向上取整 1 瓶
+                var bottles = Math.max(1, Math.ceil(ml / 500));
+                r.needBuyQty = bottles; r.needBuyUnit = '瓶';
+            }
+        }
+        // —— 3) 液体调味品/饮品(醋/生抽/料酒/蒸鱼豉油/蚝油/香油/牛奶/豆浆/…)用量 < 500ml 仍按"瓶=500ml"升档到 1 瓶；食用油/橄榄油等油类 < 1000ml → 1 瓶
+        if (r.needBuyUnit === '毫升') {
+            const ml2 = Number(r.needBuyQty) || 0;
+            const isLiqBottle = PRICE_CLS_LIQUID_BOTTLE.test(stdN2) || /^(可乐|雪碧|橙汁|苹果汁|椰汁)$/.test(stdN2);
+            const isOil = PRICE_CLS_OIL.test(stdN2);
+            if (isLiqBottle && ml2 > 0 && ml2 < PRICE_BASIS_LIQUID_BOTTLE_ML) { r.needBuyQty = 1; r.needBuyUnit = '瓶'; }
+            if (isOil && ml2 > 0 && ml2 < PRICE_BASIS_OIL_BOTTLE_ML) { r.needBuyQty = 1; r.needBuyUnit = '瓶'; }
+        }
+        // —— 4) 酱类(沙拉酱/蛋黄酱/芝麻酱/花生酱/黄豆酱/豆瓣酱/甜面酱/番茄酱)用量 < 500g → 1 瓶(罐)
+        if (r.needBuyUnit === '克' && PRICE_CLS_JAR.test(stdN2)) {
+            const gx = Number(r.needBuyQty) || 0;
+            if (gx > 0 && gx < PRICE_BASIS_JAR_G) { r.needBuyQty = 1; r.needBuyUnit = '瓶'; }
+        }
+        // —— 5) 香料粉(花椒/胡椒/八角/桂皮/五香粉/辣椒粉/孜然/咖喱粉/陈皮…) ≤ 50g → 1 袋
+        if ((r.needBuyUnit === '克' || !r.needBuyUnit) && PRICE_CLS_POWDER.test(stdN2)) {
+            const gx = Number(r.needBuyQty) || 0;
+            if (gx > 0 && gx <= PRICE_BASIS_POWDER_POUCH_G) { r.needBuyQty = 1; r.needBuyUnit = '袋'; }
+        }
+        // —— 6) 生鲜蔬菜/肉蛋/水产/主粮：采购单位仍为"克/毫升"时，升档到 斤(500g)/瓶(500ml) 作为显示与采购的计算基准，避免单价列出现 0.01/0.02 这种用户看不懂的超小数
+        //    升档策略：将 500g 定义为 1 份（斤）；把"克数"换算成"份数"向上取整；同时单位改成"份"，显示的每单位单价就自动变成≈每斤的零售价
+        (function(){
+            if (!r || !r.name) return;
+            const unitNow = String(r.needBuyUnit || r.totalUnit || '').trim();
+            const qtyNow = Number(r.needBuyQty) || 0;
+            if (qtyNow <= 0) return;
+            // 已升档成"瓶/袋/罐/份/把/颗/个/只/根/条/尾/斤/两/kg/升/盒/包"的不再次处理
+            if (/瓶|罐|听|袋|包|盒|份|把|颗|粒|个|只|根|头|条|尾|斤|两|kg|千克|公斤|升|L|杯/.test(unitNow)) return;
+            // 只有"克/毫升/g/ml"这种需要做"换单位升档"才能让每单位单价 ≥ 0.1 元
+            const isWeight = (unitNow === '克' || unitNow === 'g' || unitNow === 'gm');
+            const isVolume = (unitNow === '毫升' || unitNow === 'ml');
+            if (!isWeight && !isVolume) return;
+            const perUnit = estimatePrepPrice(r.name, 1, unitNow);
+            if (isFinite(perUnit) && perUnit >= 0.10) return; // 每单位≥1毛就不折腾（比如某药材每克 5 元）
+            if (isWeight) {
+                // 500克 = 1 斤 ≈ 1 份家庭采购；把"克数"折算成"斤数"向上取整
+                const jin = Math.max(1, Math.ceil(qtyNow / 500));
+                r.needBuyQty = jin;
+                r.needBuyUnit = '份'; // 视觉对齐：西兰花/排骨/小米 都变成"1 份 / 30 元"这种可读格式
+            } else if (isVolume) {
+                // 500毫升 ≈ 1 小瓶；如果是大瓶油类（1000ml）前面 step 3 已升档成 1 瓶，不会走到这里
+                const bottles500 = Math.max(1, Math.ceil(qtyNow / 500));
+                r.needBuyQty = bottles500;
+                r.needBuyUnit = '份';
+            }
+        })();
+        // —— 7) 单位兜底：蔬菜/水果 如果单位仍为空或"个/颗"时，若数量过大（> 20 且未被升档）→ 统一按 500g 份 给 1~3 份
+        if (r.needBuyQty > 20 && /蔬菜|水果/.test(String(r.category||'')) && /^(克|毫升|g|ml|)$/.test(String(r.needBuyUnit||''))) {
+            r.needBuyQty = Math.min(3, Math.max(1, Math.ceil(Number(r.needBuyQty)/500)));
+            r.needBuyUnit = '份';
+        }
+        // 最后重新算一次价格
+        r.estPrice = estimatePrepPrice(r.name, r.needBuyQty, r.needBuyUnit || r.totalUnit);
+        if (r.needBuyQty > 0) buyKinds++;
+        r._catOrder = CATEGORY_ORDER.indexOf(r.category) >= 0 ? CATEGORY_ORDER.indexOf(r.category) : 999;
+    });
+
+    // 再加上 extraItems（用户手动添加）：直接按 qty 算
+    if (Array.isArray(prep.extraItems)) {
+        prep.extraItems.forEach(e => {
+            const nm = String(e.name || '').trim();
+            if (!nm) return;
+            const norm = normalizeIngredientName(nm);
+            const qty = Number(e.qty) || 1;
+            const unit = String(e.unit || '').trim() || '';
+            const up = Number(e.unitPrice) || estimatePrepPrice(nm, 1, unit);
+            if (!map[norm]) {
+                const cat = guessFoodCategory(nm);
+                map[norm] = {
+                    norm, name: nm, category: cat,
+                    onePersonQty: 0, onePersonUnit: unit,
+                    totalQty: qty, totalUnit: unit,
+                    usedCount: 0,
+                    displayOne: qty, displayOneUnit: unit,
+                    displayNote: '(手动添加)',
+                    availableQty: 0, availableUnit: null,
+                    alreadyHave: false,
+                    needBuyQty: qty, needBuyUnit: unit,
+                    estPrice: Number((up * Math.max(1,qty)).toFixed(1)),
+                    extra: true,
+                    _catOrder: CATEGORY_ORDER.indexOf(cat) >= 0 ? CATEGORY_ORDER.indexOf(cat) : 999
+                };
+                buyKinds++;
+            } else {
+                map[norm].needBuyQty = (Number(map[norm].needBuyQty) || 0) + qty;
+                map[norm].alreadyHave = map[norm].needBuyQty <= 0;
+                if (!map[norm].alreadyHave && !(map[norm].needBuyQty > 0)) buyKinds++;
+                else if (map[norm].needBuyQty > 0 && map[norm]._wasZeroForBuy) buyKinds++;
+                map[norm].estPrice = estimatePrepPrice(map[norm].name, map[norm].needBuyQty, map[norm].needBuyUnit || map[norm].totalUnit);
+            }
+        });
+    }
+
+    // 返回：servings 改为 "逐餐" 字符串，避免 UI 上被误解为一刀切人数
+    return { confirmedDays: daysToConsume.length, ingredientsMap: map, totalIngredientKinds: buyKinds, servings: '逐餐', days: D };
+}
+
+// prep 周期选择（上限不得超过已确认食谱计划天数）
+function onPrepCycleChange(e) {
+    const v = e.target.value; // 2d / 3d / 7d
+    const prep = window._prep;
+    prep.cycleMode = v;
+    if (v === '2d') prep.cycleDays = 2;
+    else if (v === '3d') prep.cycleDays = 3;
+    else if (v === '7d') prep.cycleDays = 7;
+    const today = new Date();
+    const confirmedInfo = countConfirmedPlanDays(today);
+    const maxDays = Math.max(1, confirmedInfo.days);
+    if (prep.cycleDays > maxDays) {
+        showToast(`采购周期不能超过已确认食谱计划的${maxDays}天，已自动调整为${maxDays}天`);
+        prep.cycleDays = maxDays;
+    }
+    renderFridgeRecView();
+}
+
+// 勾选状态切换
+function onTogglePrepItem(name, checked) {
+    window._prep.selectedItems[name] = !!checked;
+    // 不重渲染，避免打断用户勾选
+}
+function isPrepItemSelected(name) {
+    const s = window._prep.selectedItems;
+    if (s[name] === undefined) return true; // 默认勾选
+    return !!s[name];
+}
+
+// ====== 食材准备：行内<input>编辑 + 自定义删除确认浮层 ======
+// 三列（单价 / 需购量 / 预估价格）任何一列输入框 onchange 即触发：写覆盖层并重渲染
+// 规则：单价↔需购联动更新预估（若用户未锁定预估）；改预估则锁定预估（不再跟随变动）
+function _setPrepOverride(name, patch) {
+    const prep = window._prep;
+    if (!prep.overrides) prep.overrides = {};
+    prep.overrides[name] = { ...(prep.overrides[name] || {}), ...patch };
+}
+function onPrepInlineEdit(inputEl) {
+    try {
+        const name = String(inputEl.dataset.n || '').trim();
+        const field = String(inputEl.dataset.f || '').trim();
+        if (!name || !field) return;
+        const prep = window._prep;
+        const str = inputEl.value;
+        const num = parseFloat(str);
+        if (isNaN(num) || num < 0) { showToast('请输入有效的数字'); renderFridgeRecView(); return; }
+        if (field === 'unitPrice') _setPrepOverride(name, { unitPrice: Number(num.toFixed(2)) });
+        else if (field === 'needQty') _setPrepOverride(name, { needQty: Math.max(0, num) });
+        else if (field === 'estPrice') _setPrepOverride(name, { estPrice: Number(num.toFixed(1)), _estLocked: true });
+        else return;
+        showToast(`${name} ${field==='unitPrice'?'单价':field==='needQty'?'需购量':'预估价格'}已更新`);
+        renderFridgeRecView();
+    } catch (e) {
+        showToast('更新失败：' + (e.message || e));
+    }
+}
+// 删除二次确认（纯DOM浮层，非 window.confirm → 防 WebView 黑屏）
+window._prepDelTarget = null;
+function openPrepDelConfirm(name) {
+    if (!name) return;
+    window._prepDelTarget = String(name);
+    const msgEl = document.getElementById('prepDelConfirmMsg');
+    if (msgEl) msgEl.innerHTML = `确认要从采购清单中删除「<b>${escapeHtml(name)}</b>」？<br><small style="color:#6B7280;">（之后可通过「添加食材」再加回）</small>`;
+    const ov = document.getElementById('prepDelConfirmOv');
+    if (ov) ov.classList.add('show');
+}
+function closePrepDelConfirm() {
+    window._prepDelTarget = null;
+    const ov = document.getElementById('prepDelConfirmOv');
+    if (ov) ov.classList.remove('show');
+}
+function confirmPrepDel() {
+    const name = window._prepDelTarget;
+    if (!name) return;
+    const prep = window._prep;
+    if (!prep.deleted) prep.deleted = {};
+    prep.deleted[name] = true;
+    showToast(`已删除：${name}`);
+    closePrepDelConfirm();
+    renderFridgeRecView();
+}
+
+// ====== 食材准备：➕添加食材 弹窗 ======
+function openPrepAddItemModal() {
+    document.getElementById('prepAddName').value = '';
+    document.getElementById('prepAddQty').value = '';
+    document.getElementById('prepAddPrice').value = '';
+    document.getElementById('prepAddItemModal').style.display = 'flex';
+}
+function closePrepAddItemModal() {
+    document.getElementById('prepAddItemModal').style.display = 'none';
+}
+function submitPrepAddItem() {
+    const name = String(document.getElementById('prepAddName').value || '').trim();
+    const qtyVal = parseFloat(document.getElementById('prepAddQty').value || '');
+    const qty = isNaN(qtyVal) ? 1 : Math.max(0.01, qtyVal);
+    const priceStr = String(document.getElementById('prepAddPrice').value || '').trim();
+    if (!name) { showToast('请输入食材名称'); return; }
+    const unitPrice = priceStr ? Math.max(0, parseFloat(priceStr)) : estimatePrepPrice(name, 1, '');
+    window._prep.extraItems.push({ name, qty, unit: '', unitPrice });
+    window._prep.selectedItems[name] = true; // 默认勾选
+    closePrepAddItemModal();
+    showToast(`已添加：${name} ${qty}`);
+    renderFridgeRecView();
+}
+
+// ====== 食材准备：✅确认采购 弹窗 ======
+function openPrepConfirmModal() {
+    // 生成条目清单：所有已勾选且非已有、非已删除（应用用户覆盖的单价/需购量/预估）
+    const today = new Date();
+    const confirmedInfo = countConfirmedPlanDays(today);
+    const prep = window._prep;
+    if (!prep.overrides) prep.overrides = {};
+    if (!prep.deleted) prep.deleted = {};
+    const result = computeIngredientNeeds(confirmedInfo.daysList, prep.servings, prep.cycleDays);
+    const rows = Object.values(result.ingredientsMap);
+    const items = [];
+    rows.forEach(r => {
+        if (prep.deleted[r.name]) return;
+        if (r.alreadyHave) return;
+        const ov = prep.overrides[r.name] || {};
+        const unit = r.needBuyUnit || r.totalUnit || '';
+        let needQty;
+        if (typeof ov.needQty === 'number' && !isNaN(ov.needQty)) needQty = Math.max(0, Number(ov.needQty));
+        else needQty = r.needBuyQty > 0 ? Number(r.needBuyQty) : (r.totalQty <= 0 ? 1 : 0);
+        if (needQty <= 0) return;
+        if (!isPrepItemSelected(r.name)) return;
+        let unitPrice;
+        if (typeof ov.unitPrice === 'number' && !isNaN(ov.unitPrice)) unitPrice = Number(ov.unitPrice);
+        else if (needQty > 0 && r.estPrice > 0) unitPrice = Number((r.estPrice / needQty).toFixed(2));
+        else unitPrice = estimatePrepPrice(r.name, 1, unit);
+        let estPrice;
+        if (typeof ov.estPrice === 'number' && !isNaN(ov.estPrice)) estPrice = Number(ov.estPrice);
+        else estPrice = Number((unitPrice * needQty).toFixed(1));
+        items.push({
+            name: r.name, category: r.category,
+            qty: Number(needQty.toFixed(2)),
+            unit: unit,
+            unitPrice: Number(unitPrice.toFixed(2)),
+            estPrice: Number(estPrice.toFixed(2)),
+            emoji: ''
+        });
+    });
+    if (items.length === 0) { showToast('请先勾选需要采购的食材'); return; }
+    prep.pendingBuyItems = items;
+    renderPrepConfirmList();
+    document.getElementById('prepConfirmModal').style.display = 'flex';
+}
+function renderPrepConfirmList() {
+    const items = window._prep.pendingBuyItems || [];
+    const body = document.getElementById('prepConfirmList');
+    const totalEl = document.getElementById('prepConfirmTotal');
+    if (!body) return;
+    if (items.length === 0) {
+        body.innerHTML = `<div class="prep-history-empty">暂无可确认的采购项</div>`;
+        if (totalEl) totalEl.innerHTML = `共 0 项 · 合计 ¥0.0`;
+        return;
+    }
+    let html = '';
+    let total = 0;
+    items.forEach((it, idx) => {
+        total += it.estPrice;
+        html += `<div class="prep-confirm-item">
+            <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+                <span style="font-weight:600;color:#1F2937;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(it.name)}</span>
+                <span style="color:#6B7280;font-size:13px;flex-shrink:0;">${it.qty}${escapeHtml(it.unit || '')}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+                <span style="color:#DC2626;font-weight:700;">¥${it.estPrice.toFixed(1)}</span>
+                <span class="prep-confirm-item-del" onclick="deletePrepConfirmItem(${idx})" title="删除此项">×</span>
+            </div>
+        </div>`;
+    });
+    body.innerHTML = html;
+    if (totalEl) totalEl.innerHTML = `共 ${items.length} 项 · 合计 <b style="color:#DC2626;font-size:15px;">¥${total.toFixed(1)}</b>`;
+}
+function deletePrepConfirmItem(idx) {
+    const items = window._prep.pendingBuyItems || [];
+    if (idx < 0 || idx >= items.length) return;
+    const removed = items.splice(idx, 1)[0];
+    if (removed) showToast(`已移除：${removed.name}`);
+    renderPrepConfirmList();
+}
+function closePrepConfirmModal() {
+    document.getElementById('prepConfirmModal').style.display = 'none';
+    window._prep.pendingBuyItems = [];
+}
+function finalizePrepPurchase() {
+    const items = window._prep.pendingBuyItems || [];
+    if (items.length === 0) { showToast('没有可确认的采购项'); return; }
+    const prep = window._prep;
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0, 10);
+    const ts = today.getTime();
+    // 日期范围：今天 + cycleDays-1 天
+    const endDate = new Date(today); endDate.setDate(endDate.getDate() + (prep.cycleDays - 1));
+    const dateRange = `${dateStr} 至 ${endDate.toISOString().slice(0, 10)}`;
+    const itemCount = items.length;
+    const totalAmount = Number(items.reduce((s, i) => s + i.estPrice, 0).toFixed(2));
+    const history = JSON.parse(lsGet('purchaseHistory') || '[]');
+    const rec = {
+        id: 'PH' + ts,
+        date: dateStr,
+        timestamp: ts,
+        dateRange,
+        days: prep.cycleDays,
+        servings: prep.servings,
+        items: items.map(i => ({ ...i })),
+        itemCount,
+        totalAmount
+    };
+    history.push(rec);
+    lsSet('purchaseHistory', JSON.stringify(history));
+
+    // 更新 fridgeItems：同名同单位累加，否则新增
+    let fridge = JSON.parse(lsGet('fridgeItems') || '[]');
+    items.forEach(it => {
+        const nm = String(it.name || '').trim();
+        if (!nm) return;
+        const std = normalizeIngredientName(nm);
+        const qtyStr = it.unit ? `${it.qty}${it.unit}` : `${it.qty}`;
+        // 找到同名（规范化）同单位 或 同名（直接）的条目
+        let target = fridge.find(f => {
+            if (!f || !f.name) return false;
+            const fn = String(f.name);
+            const p = parseQuantity(f.quantity || '');
+            const unitMatch = (p && String(p.unit || '').trim()) === String(it.unit || '').trim();
+            return (fn === nm || normalizeIngredientName(fn) === std) && unitMatch;
+        });
+        if (target) {
+            const p = parseQuantity(target.quantity || '');
+            if (p && Number(p.value) > 0) {
+                target.quantity = `${(Number(p.value) + Number(it.qty)).toFixed(1)}${p.unit || it.unit || ''}`;
+            } else {
+                target.quantity = qtyStr;
+            }
+            target.category = target.category || it.category || guessFoodCategory(nm);
+        } else {
+            fridge.push({
+                id: 'FI' + (Date.now() + Math.floor(Math.random() * 9999)),
+                name: nm,
+                category: it.category || guessFoodCategory(nm),
+                quantity: qtyStr,
+                purchaseDate: dateStr,
+                storageMethod: '冷藏',
+                storageLocation: '冰箱',
+                expireDate: ''
+            });
+        }
+    });
+    lsSet('fridgeItems', JSON.stringify(fridge));
+    // 全局变量同步
+    if (typeof fridgeItems !== 'undefined') fridgeItems = fridge;
+
+    // 清空 pending 和 额外添加（已入库）
+    window._prep.extraItems = [];
+    window._prep.pendingBuyItems = [];
+    window._prep.selectedItems = {};
+
+    closePrepConfirmModal();
+    showToast(`采购已完成：${itemCount}项 · ¥${totalAmount.toFixed(1)}，已入库`);
+    renderFridgeRecView();
+}
+
+// ====== 食材准备：📊 当月采购记录 弹窗 ======
+function openPrepHistoryModal() {
+    renderPrepHistory();
+    document.getElementById('prepHistoryModal').style.display = 'flex';
+}
+function closePrepHistoryModal() {
+    document.getElementById('prepHistoryModal').style.display = 'none';
+}
+function renderPrepHistory() {
+    const body = document.getElementById('prepHistoryBody');
+    if (!body) return;
+    const today = new Date();
+    const ym = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const listAll = JSON.parse(lsGet('purchaseHistory') || '[]');
+    const list = Array.isArray(listAll) ? listAll.filter(r => (r.date || '').slice(0, 7) === ym) : [];
+    list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    if (list.length === 0) {
+        body.innerHTML = `<div class="prep-history-empty">📭 本月还没有采购记录</div>`;
+        return;
+    }
+    let html = '';
+    list.forEach(r => {
+        const t = r.timestamp ? new Date(r.timestamp) : new Date();
+        const timeStr = `${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+        const items = Array.isArray(r.items) ? r.items : [];
+        let itemsHtml = '';
+        items.forEach(it => {
+            itemsHtml += `<div class="prep-history-item">
+                <span>${escapeHtml(it.name)} <i style="color:#6B7280;">${it.qty}${escapeHtml(it.unit || '')}</i></span>
+                <span style="color:#DC2626;">¥${Number(it.estPrice).toFixed(1)}</span>
+            </div>`;
+        });
+        html += `<div class="prep-history-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <span style="font-weight:700;color:#1F2937;font-size:14px;">${timeStr}</span>
+                <span style="color:#6B7280;font-size:12px;">${r.days || '?'}天 · ${r.servings || '?'}人</span>
+            </div>
+            <div style="color:#6B7280;font-size:12px;margin-bottom:6px;">${escapeHtml(r.dateRange || r.date || '')}</div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px;">
+                <span style="color:#374151;">共 <b>${r.itemCount || items.length}</b> 项</span>
+                <span style="color:#DC2626;font-weight:700;">合计 ¥${Number(r.totalAmount || 0).toFixed(1)}</span>
+            </div>
+            ${itemsHtml}
+        </div>`;
+    });
+    body.innerHTML = html;
+}
+
 
 function openRecShoppingPlan() {
     document.getElementById('fridgeRecView').style.display = 'none';
@@ -7142,7 +8424,7 @@ function openRecShoppingPlan() {
 function closeRecShopPlan() {
     document.getElementById('fridgeRecShopView').style.display = 'none';
     document.getElementById('fridgeRecView').style.display = 'block';
-    topTitle.textContent = '食材推荐';
+    topTitle.textContent = '食材准备';
 }
 
 function switchRecShopDate(offset) {
@@ -7237,58 +8519,72 @@ function renderRecShopPlan() {
     // 存储全局数据供勾选使用
     window._recShopAllIngs = allNeedBuy;
 
-    // 默认单价（元/份，按市场常见价估算）
+    // 默认单价（元/斤或元/瓶/元/袋…口径，estimatePrepPrice会按单位换算）
     const defaultPrices = {
-        // 蔬菜
+        // ====== 蔬菜（元/斤） ======
         '番茄': 4, '西红柿': 4, '菠菜': 5, '豆腐': 4, '土豆': 4, '生菜': 4, '南瓜': 4,
-        '大蒜': 6, '蒜苗': 8, '葱': 3, '大葱': 3, '小葱': 3, '生姜': 8, '香菜': 3,
-        '白菜': 3, '大白菜': 3, '小白菜': 4, '油菜': 4, '芹菜': 5, '韭菜': 5,
+        '大蒜': 6, '蒜苗': 8, '葱': 3, '大葱': 3, '小葱': 3, '葱花': 3, '生姜': 8, '姜片': 8, '姜末': 8, '香菜': 3,
+        '白菜': 3, '大白菜': 3, '小白菜': 4, '油菜': 4, '青菜': 4, '芹菜': 5, '韭菜': 5,
         '胡萝卜': 3, '白萝卜': 3, '萝卜': 3, '黄瓜': 4, '茄子': 5, '青椒': 5,
         '柿子椒': 5, '彩椒': 10, '西兰花': 7, '花菜': 6, '菜花': 6,
         '洋葱': 3, '莲藕': 8, '藕': 8, '莴笋': 5, '竹笋': 12, '冬笋': 15,
-        '豆芽': 3, '黄豆芽': 3, '绿豆芽': 3, '木耳': 15, '黑木耳': 15,
-        '蘑菇': 10, '香菇': 12, '金针菇': 8, '杏鲍菇': 10, '平菇': 8,
+        '豆芽': 3, '黄豆芽': 3, '绿豆芽': 3, '蘑菇': 10, '香菇': 12, '金针菇': 8, '杏鲍菇': 10, '平菇': 8,
         '红薯': 3, '紫薯': 5, '山药': 10, '玉米': 5, '豌豆': 8, '毛豆': 6,
         '苦瓜': 5, '丝瓜': 5, '冬瓜': 4, '葫芦': 4, '茭白': 10,
-        // 肉蛋奶
-        '鸡蛋': 1.5, '鸭蛋': 2, '鹌鹑蛋': 1,
-        '牛肉': 45, '猪肉': 20, '排骨': 30, '牛腩': 45, '五花肉': 25,
-        '鸡肉': 15, '鸡腿': 18, '鸡胸肉': 20, '鸡翅': 25, '鸭肉': 20,
-        '牛奶': 8, '酸奶': 8, '奶酪': 25, '黄油': 30,
+        '荷兰豆': 10, '茼蒿': 6, '油麦菜': 5, '空心菜': 5, '莴笋叶': 5, '秋葵': 8,
+        '四季豆': 6, '豆角': 6, '豇豆': 6, '蒜苔': 8, '韭黄': 10,
+        '芋头': 5, '荸荠': 10, '鲜百合': 15,
+        // ====== 肉蛋奶（元/斤） ======
+        '鸡蛋': 7, '鸭蛋': 9, '鹌鹑蛋': 12, '皮蛋': 12, '咸蛋': 10,
+        '牛肉': 45, '猪肉': 20, '排骨': 30, '猪小排': 32, '肋排': 35, '牛腩': 45, '五花肉': 25, '里脊肉': 22,
+        '鸡肉': 15, '鸡腿': 18, '鸡胸肉': 20, '鸡翅': 25, '鸭肉': 20, '整鸡': 18, '整鸭': 18,
         '牛肉末': 40, '猪肉末': 22, '肉末': 22, '腊肉': 35, '火腿': 30,
-        '猪肝': 15, '猪心': 18, '猪腰': 20, '鸡肝': 10, '鸡胗': 15,
-        // 水产
+        '猪肝': 15, '猪心': 18, '猪腰': 20, '鸡肝': 10, '鸡胗': 15, '猪肚': 35,
+        '牛奶': 3, '酸奶': 5, '奶酪': 50, '黄油': 45, '淡奶油': 25, '芝士': 30,
+        // ====== 水产（元/斤） ======
         '鱼': 25, '虾': 30, '虾仁': 40,
         '鲈鱼': 35, '鲫鱼': 15, '草鱼': 18, '鲤鱼': 15, '鳕鱼': 40,
         '带鱼': 25, '黄鱼': 30, '鲳鱼': 28, '武昌鱼': 22, '黑鱼': 30,
-        '三文鱼': 60, '金枪鱼': 80, '龙利鱼': 25, '巴沙鱼': 20,
+        '三文鱼': 60, '金枪鱼': 80, '龙利鱼': 25, '巴沙鱼': 20, '多宝鱼': 35, '石斑鱼': 55,
         '螃蟹': 50, '大闸蟹': 60, '蟹': 50,
-        '蛤蜊': 15, '花蛤': 12, '扇贝': 20, '生蚝': 25, '牡蛎': 25,
-        '鱿鱼': 25, '章鱼': 30, '墨鱼': 25, '海带': 8, '紫菜': 10,
-        '小龙虾': 35, '龙虾': 120, '基围虾': 35, '明虾': 30,
-        // 主食
-        '大米': 5, '面条': 6, '面粉': 5, '小米': 8, '燕麦': 8,
-        '糯米': 8, '糙米': 8, '年糕': 8, '粉丝': 6, '米粉': 6,
-        '馄饨皮': 5, '饺子皮': 5, '吐司': 10, '面包': 10,
-        // 调料
-        '盐': 2, '酱油': 8, '生抽': 8, '老抽': 8, '醋': 6, '料酒': 10,
-        '糖': 6, '冰糖': 10, '白糖': 6, '红糖': 8,
-        '八角': 2, '花椒': 5, '花椒粉': 5, '香油': 12, '芝麻油': 12,
-        '食用油': 15, '花生油': 18, '橄榄油': 30, '菜籽油': 15,
-        '豆瓣酱': 8, '蒸鱼豉油': 10, '沙拉酱': 12, '淀粉': 3,
-        '蚝油': 10, '味精': 5, '鸡精': 6, '五香粉': 3, '辣椒粉': 5,
-        '孜然': 5, '孜然粉': 5, '辣椒': 8, '干辣椒': 8, '小米辣': 10,
-        '豆豉': 8, '甜面酱': 8, '番茄酱': 8, '芝麻酱': 15, '花生酱': 15,
-        // 干货药材
-        '银耳': 20, '红枣': 15, '枸杞': 15, '桂圆': 20, '莲子': 18,
-        '百合': 25, '核桃': 25, '花生': 10, '杏仁': 25, '腰果': 35,
-        '木耳': 15, '黄花菜': 15, '腐竹': 15, '粉丝': 6,
-        '陈皮': 10, '党参': 30, '黄芪': 25, '当归': 30,
-        // 水果
+        '蛤蜊': 15, '花蛤': 12, '扇贝': 20, '生蚝': 25, '牡蛎': 25, '蛏子': 15,
+        '鱿鱼': 25, '章鱼': 30, '墨鱼': 25, '海带': 8, '紫菜': 10, '裙带菜': 10,
+        '小龙虾': 35, '龙虾': 120, '基围虾': 35, '明虾': 30, '皮皮虾': 40,
+        // ====== 主粮（元/斤） ======
+        '大米': 5, '面条': 6, '挂面': 7, '意大利面': 10, '面粉': 5, '全麦粉': 7,
+        '小米': 8, '燕麦': 8, '燕麦片': 9, '糯米': 8, '糙米': 8, '黑米': 9, '薏米': 12,
+        '年糕': 8, '粉丝': 6, '粉条': 7, '米粉': 6, '米线': 7,
+        '馄饨皮': 5, '饺子皮': 5, '吐司': 12, '面包': 12, '馒头': 4, '包子': 6,
+        '红豆': 10, '绿豆': 9, '黑豆': 12, '黄豆': 7, '芝麻': 18, '白芝麻': 16,
+        // ====== 调料（口径：克类=元/斤；液体类=元/瓶≈500ml；油类=元/瓶≈1L；粉类=元/袋≈50g~100g） ======
+        '盐': 3, '酱油': 10, '生抽': 10, '老抽': 10, '醋': 8, '陈醋': 10, '香醋': 10, '白醋': 8,
+        '料酒': 8, '黄酒': 12, '花雕酒': 25, '啤酒': 6,
+        '糖': 6, '冰糖': 10, '白糖': 6, '红糖': 8, '糖粉': 10,
+        '八角': 20, '花椒': 30, '花椒粉': 25, '胡椒': 25, '胡椒粉': 25, '黑胡椒': 28, '白胡椒': 28,
+        '香油': 20, '芝麻油': 20, '花椒油': 20, '辣椒油': 18,
+        '食用油': 15, '花生油': 20, '橄榄油': 40, '菜籽油': 18, '玉米油': 18, '葵花籽油': 18, '调和油': 16,
+        '豆瓣酱': 10, '蒸鱼豉油': 12, '沙拉酱': 20, '蛋黄酱': 22, '千岛酱': 20, '芥末酱': 15,
+        '淀粉': 4, '生粉': 5, '玉米淀粉': 4, '土豆淀粉': 5,
+        '蚝油': 12, '味精': 5, '鸡精': 8, '五香粉': 8, '辣椒粉': 10, '辣椒面': 10,
+        '孜然': 15, '孜然粉': 15, '辣椒': 8, '干辣椒': 12, '小米辣': 10,
+        '豆豉': 12, '甜面酱': 9, '番茄酱': 10, '芝麻酱': 20, '花生酱': 18, '黄豆酱': 10,
+        '蒜蓉酱': 10, '沙茶酱': 12, '咖喱块': 10, '咖喱粉': 12, '姜黄粉': 10,
+        '桂皮': 15, '香叶': 10, '陈皮': 12, '草果': 18, '丁香': 30,
+        // ====== 干货药材（元/斤） ======
+        '银耳': 25, '红枣': 15, '枸杞': 28, '桂圆': 22, '莲子': 22,
+        '百合': 28, '核桃': 28, '花生': 12, '杏仁': 28, '腰果': 40, '开心果': 45, '松子': 60,
+        '木耳': 35, '黑木耳': 35, '黄花菜': 28, '腐竹': 20, '粉丝': 6, '粉条': 7, '豆皮': 10,
+        '陈皮': 18, '党参': 38, '黄芪': 32, '当归': 40, '淮山': 20,
+        // ====== 饮品 ======
+        '水': 1, '矿泉水': 1, '纯净水': 1, '气泡水': 3,
+        '豆浆': 3, '可乐': 3, '雪碧': 3, '红茶': 80, '绿茶': 80, '乌龙茶': 90, '铁观音': 100,
+        '咖啡': 80, '咖啡豆': 100, '速溶咖啡': 30, '蜂蜜': 20,
+        // ====== 水果（元/斤） ======
         '苹果': 8, '香蕉': 5, '橙子': 8, '橘子': 6, '柠檬': 6,
-        '梨': 7, '葡萄': 12, '草莓': 20, '蓝莓': 25, '西瓜': 5,
+        '梨': 7, '葡萄': 12, '草莓': 22, '蓝莓': 28, '树莓': 35, '西瓜': 5,
         '芒果': 15, '猕猴桃': 12, '火龙果': 15, '榴莲': 50, '荔枝': 15,
-        '桃子': 8, '樱桃': 30, '菠萝': 8, '柚子': 10, '哈密瓜': 10
+        '桃子': 8, '樱桃': 35, '菠萝': 8, '柚子': 10, '哈密瓜': 10,
+        '石榴': 10, '柿子': 8, '山楂': 10, '椰子': 12, '百香果': 18, '牛油果': 15
     };
     window._recShopDefaultPrices = defaultPrices;
 
@@ -8573,6 +9869,45 @@ function submitAddFridgeItem() {
     showToast('✅ 已添加：' + name);
 }
 
+// 再添加：保存当前 + 清空表单 + 继续添加
+function submitAndAddMoreFridgeItem() {
+    const name = document.getElementById('fridgeName').value.trim();
+    const category = document.getElementById('fridgeCategory').value;
+    const quantity = document.getElementById('fridgeQuantity').value.trim() || '适量';
+    const purchaseDate = document.getElementById('fridgePurchaseDate').value || new Date().toISOString().slice(0, 10);
+    const expiryDate = document.getElementById('fridgeExpiryDate').value;
+
+    if (!name) { showToast('请输入食材名称'); return; }
+    if (!expiryDate) { showToast('请选择保质期日期'); return; }
+
+    const parsed = parseQuantity(quantity);
+    const item = {
+        id: Date.now(),
+        name, category, quantity, purchaseDate, expiryDate,
+        storage: document.getElementById('fridgeStorage').value,
+        storageLocation: document.getElementById('fridgeStorageLocation').value.trim(),
+        quantityValue: parsed.value,
+        quantityUnit: parsed.unit,
+        reserved: 0,
+        status: 'normal',
+        emoji: guessFoodEmoji(name)
+    };
+    fridgeItems.push(item);
+    saveFridgeItems();
+    refreshFridgeView();
+    showToast('✅ 已添加：' + name);
+
+    // 清空表单（保留分类/存储方式默认值，重置关键字段）
+    document.getElementById('fridgeName').value = '';
+    document.getElementById('fridgeCategory').value = '蔬菜';
+    document.getElementById('fridgeStorage').value = '冷藏';
+    document.getElementById('fridgeStorageLocation').value = '';
+    document.getElementById('fridgeQuantity').value = '';
+    document.getElementById('fridgePurchaseDate').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('fridgeExpiryDate').value = '';
+    document.getElementById('fridgeName').focus();
+}
+
 // 删除食材
 function deleteFridgeItem(id) {
     const item = fridgeItems.find(i => i.id === id);
@@ -9560,28 +10895,8 @@ function executeDiaryVoiceCommand(command) {
         }
 
         case 'confirm_plan': {
-            const data = getMealData(dateKey, command.meal);
-            if (!data.plan || !data.plan.dishes || data.plan.dishes.length === 0) {
-                showToast(`${mealLabel}暂无计划，无法确认`);
-                diaryVoiceSpeak(`${mealLabel}暂无计划，无法确认`);
-                return;
-            }
-            if (data.actual && data.actual.dishes && data.actual.dishes.length > 0) {
-                showToast(`${mealLabel}已有记录，无需确认`);
-                diaryVoiceSpeak(`${mealLabel}已有记录，无需确认`);
-                return;
-            }
-            data.plan.confirmed = true;
-            data.plan.state = 'confirmed';
-            data.plan.confirmTime = new Date().toISOString();
-            updateMealPlan(dateKey, command.meal, data.plan);
-            // 预扣计划中的食材
-            reservePlanIngredients(dateKey, command.meal);
-            currentDiaryDate = new Date(command.date);
-            renderDiary();
-            const msg = `✅ ${mealLabel}计划已确认`;
-            showToast(msg);
-            diaryVoiceSpeak(`${mealLabel}计划已确认`);
+            // 打开选人数浮层（不再直接打戳——必须允许用户指定每餐独立人数）
+            openConfirmPlanModal(dateKey, command.meal);
             break;
         }
 
@@ -20351,8 +21666,7 @@ async function autoCheckAndRecommend() {
         lsSet('lastAutoRecommendDate', todayStr);
     } catch (error) {
         console.error('自动推荐失败:', error);
-        // 失败时不标记，下次进入食记会重试
-        showToast('⚠️ 自动食谱推荐失败，请稍后重试');
+        // 失败时不标记，下次进入食记会重试，不弹提示避免干扰用户
     }
 }
 
@@ -23522,10 +24836,9 @@ function clearMealPlan(mealKey) {
 // 直接确认AI计划（按计划执行，+3分）
 function confirmDiaryPlan(mealKey) {
     const dateKey = dateToKey(currentDiaryDate);
-    const calendar = getDietCalendar();
-    const dayData = calendar[dateKey] || {};
+    const cal = getDietCalendar();
+    const dayData = cal[dateKey] || {};
     const data = dayData[mealKey] || { plan: null, actual: null };
-
     if (!data.plan || !data.plan.dishes || data.plan.dishes.length === 0) {
         showToast('该餐次暂无计划，无法确认');
         return;
@@ -23534,28 +24847,284 @@ function confirmDiaryPlan(mealKey) {
         showToast('该餐次已有记录，无需重复确认');
         return;
     }
+    // 打开选人数浮层（不再直接打戳，避免一刀切人数）
+    openConfirmPlanModal(dateKey, mealKey);
+}
 
-    // 仅标记计划为已确认，不创建实际记录
-    data.plan.confirmed = true;
-    data.plan.state = 'confirmed';
-    data.plan.confirmTime = new Date().toISOString();
-    updateMealPlan(dateKey, mealKey, data.plan);
-    // 预扣计划中的食材
-    reservePlanIngredients(dateKey, mealKey);
-
-    // 值班确认：按AI计划直接确认 → +3分
-    const todayDuty = getDutyForDate(currentDiaryDate);
-    let dutyMsg = '';
-    if (todayDuty.memberName && familyData.some(m => m.name === todayDuty.memberName)) {
-        const points = confirmDuty(currentDiaryDate, mealKey, todayDuty.memberName, 'ai_plan');
-        if (points > 0) {
-            dutyMsg = `，${todayDuty.memberName}按计划确认+${points}分`;
+// ====== 确认计划（选人数）浮层 ======
+window._cpTarget = null; // { dateKey, mealKey }
+function openConfirmPlanModal(dateKey, mealKey) {
+    if (!dateKey || !mealKey) return;
+    window._cpTarget = { dateKey, mealKey };
+    const cal = getDietCalendar();
+    const mealData = ((cal[dateKey] || {})[mealKey] || {}).plan || null;
+    const labels = { breakfast:'🍚 早餐', lunch:'🥗 午餐', dinner:'🍱 晚餐' };
+    const today = new Date(); today.setHours(0,0,0,0);
+    const d0 = new Date(dateKey.slice(0,4),Number(dateKey.slice(4,6))-1,Number(dateKey.slice(6,8)));
+    const diff = Math.round((d0 - today) / 86400000);
+    const dayLabel = diff === 0 ? '今天' : diff === 1 ? '明天' : diff === -1 ? '昨天' : `${d0.getMonth()+1}/${d0.getDate()}`;
+    const mealLabel = `${dayLabel} ${labels[mealKey] || mealKey}`;
+    const dishes = (mealData && Array.isArray(mealData.dishes)) ? mealData.dishes.map(d => typeof d === 'string' ? d : (d && d.name ? d.name : '')).filter(Boolean).join('、') : '—';
+    const s = getMealServings(dateKey, mealKey);
+    document.getElementById('cpMealLabel').textContent = mealLabel;
+    document.getElementById('cpDishesText').textContent = `计划：${dishes}`;
+    const sel = document.getElementById('cpServingsSel');
+    if (sel) {
+        // 若当前值不在 1~10 则选接近的
+        const optVal = (s >= 1 && s <= 10) ? String(s) : s < 1 ? '1' : '10';
+        let found = false;
+        for (let i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === optVal) { sel.selectedIndex = i; found = true; break; }
         }
+        if (!found && sel.options.length > 0) sel.selectedIndex = Math.min(sel.options.length - 1, Math.max(0, s - 1));
+    }
+    const ov = document.getElementById('confirmPlanModalOv');
+    if (ov) { ov.style.display = ''; ov.classList.add('show'); }
+}
+function closeConfirmPlanModal() {
+    window._cpTarget = null;
+    const ov = document.getElementById('confirmPlanModalOv');
+    if (ov) { ov.classList.remove('show'); ov.style.display = 'none'; }
+}
+function applyConfirmPlanModal() { // alias
+    applyConfirmPlan();
+}
+function applyConfirmPlan() {
+    const t = window._cpTarget;
+    if (!t) return;
+    const dateKey = t.dateKey; const mealKey = t.mealKey;
+    const sel = document.getElementById('cpServingsSel');
+    const n = Math.max(1, Math.min(10, parseInt(sel ? sel.value : '1', 10) || 1));
+    const cal = getDietCalendar();
+    const dayData = cal[dateKey] || {};
+    const mealWrap = dayData[mealKey] || {};
+    const plan = mealWrap.plan;
+    if (!plan) { closeConfirmPlanModal(); showToast('计划已失效'); return; }
+    plan.servings = n;
+    plan.confirmed = true;
+    plan.state = 'confirmed';
+    plan.confirmTime = new Date().toISOString();
+    if (!plan.diningGroupId && typeof getDiaryDiningGroup === 'function') {
+        const dg = getDiaryDiningGroup();
+        if (dg && dg.groupId) { plan.diningGroupId = dg.groupId; if (!plan.diningMembers) plan.diningMembers = [...dg.members]; }
+    }
+    updateMealPlan(dateKey, mealKey, plan);
+    reservePlanIngredients(dateKey, mealKey);
+    // 值班加分（沿用原逻辑）
+    let dutyMsg = '';
+    const todayDuty = getDutyForDate(currentDiaryDate);
+    if (todayDuty && todayDuty.memberName && Array.isArray(familyData) && familyData.some(m => m.name === todayDuty.memberName)) {
+        const mealK = (typeof mealKey === 'string') ? mealKey : '';
+        try {
+            const pts = (typeof confirmDuty === 'function') ? confirmDuty(currentDiaryDate, mealK, todayDuty.memberName, 'ai_plan') : 0;
+            if (pts > 0) dutyMsg = `，${todayDuty.memberName}按计划确认+${pts}分`;
+        } catch(_) {}
+    }
+    const labels = { breakfast:'早餐', lunch:'午餐', dinner:'晚餐' };
+    const msgLabel = labels[mealKey] || mealKey;
+    closeConfirmPlanModal();
+    if (typeof renderDiary === 'function') renderDiary();
+    showToast(`✅ ${msgLabel}计划已确认（${n}人）${dutyMsg}`);
+}
+
+// ========== 食材准备：调整用餐人数（轻量弹窗，默认+逐餐覆盖） ==========
+function _keyToDate(k) {
+    const s = String(k || '').split('-').map(Number);
+    if (s.length < 3) return new Date(NaN);
+    return new Date(s[0], (s[1]||1)-1, s[2]||1);
+}
+function buildCycleServingsSummary(dateKeys) {
+    if (!Array.isArray(dateKeys) || !dateKeys.length) return '暂无已确认计划';
+    const prep = window._prep || {};
+    const meals = ['breakfast', 'lunch', 'dinner'];
+    const mealIcon = { breakfast:'早', lunch:'午', dinner:'晚' };
+    const todayKey = dateToKey(new Date());
+    const parts = [];
+    dateKeys.forEach(dk => {
+        const dayMeals = [];
+        let noPlanAll = true;
+        meals.forEach(mk => {
+            const md = (typeof getMealData === 'function') ? getMealData(dk, mk) : null;
+            const hasPlan = !!(md && md.plan && ((Array.isArray(md.plan.dishes) && md.plan.dishes.length) || md.plan.diningOut || md.plan.takeout));
+            if (!hasPlan) { dayMeals.push('—'); return; }
+            noPlanAll = false;
+            const s = getMealServings(dk, mk, prep.servings);
+            dayMeals.push(`${mealIcon[mk] || mk[0]}${s}`);
+        });
+        let prefix = '';
+        const diff = Math.round((_keyToDate(dk).getTime() - _keyToDate(todayKey).getTime()) / 86400000);
+        if (diff === 0) prefix = '今天';
+        else if (diff === 1) prefix = '明天';
+        else if (diff === 2) prefix = '后天';
+        else { const d = _keyToDate(dk); prefix = `${d.getMonth()+1}/${d.getDate()}`; }
+        if (noPlanAll) parts.push(`${prefix}(无计划)`);
+        else parts.push(`${prefix} ${dayMeals.join('·')}`);
+    });
+    return parts.join(' · ');
+}
+
+function _psmOptsStr(selectedVal) {
+    let s = '';
+    for (let i = 1; i <= 15; i++) s += `<option value="${i}"${i===selectedVal?' selected':''}>${i}人</option>`;
+    return s;
+}
+function _psmRerenderMealSelects() {
+    const state = window._psmState || {};
+    const dayArea = document.getElementById('prepServingsDayArea');
+    const defaultSel = document.getElementById('prepServingsDefaultSel');
+    if (!dayArea || !defaultSel) return;
+    const defaultVal = Math.max(1, Math.min(15, parseInt(defaultSel.value || '1', 10) || 1));
+    const groups = dayArea.querySelectorAll('.prep-sm-day-group');
+    groups.forEach(grp => {
+        const rowSels = grp.querySelectorAll('select[data-idx]');
+        rowSels.forEach(sel => {
+            const idx = Number(sel.getAttribute('data-idx'));
+            const it = (state.list || [])[idx];
+            if (!it) return;
+            const touched = state.touched && state.touched[idx];
+            if (!touched) {
+                sel.value = String(defaultVal);
+                it.servings = defaultVal;
+            } else {
+                it.servings = Math.max(1, Math.min(15, parseInt(sel.value || '1', 10) || 1));
+            }
+        });
+    });
+    state.prevDefault = defaultVal;
+}
+
+window._psmState = { list: [], touched: {}, prevDefault: 1 };
+
+function openPrepServingsModal() {
+    const today = new Date();
+    const confirmedInfo = countConfirmedPlanDays(today);
+    const prep = window._prep || {};
+    const cycleDays = Math.max(1, Math.min(prep.cycleDays || 1, confirmedInfo.days));
+    const days = confirmedInfo.daysList.slice(0, cycleDays);
+    const meals = ['breakfast', 'lunch', 'dinner'];
+    const mealName = { breakfast:'早餐', lunch:'午餐', dinner:'晚餐' };
+    const mealIcon = { breakfast:'🌅', lunch:'🍱', dinner:'🍽' };
+    const todayKey = dateToKey(new Date());
+    const defaultServings = Math.max(1, Math.min(10, Number(prep.servings) || 1));
+    const list = [];
+    const dayMap = []; // [{prefix, items:[idx,idx,idx]}]
+    days.forEach(dk => {
+        const items = [];
+        meals.forEach(mk => {
+            const md = (typeof getMealData === 'function') ? getMealData(dk, mk) : null;
+            const hasPlan = !!(md && md.plan && ((Array.isArray(md.plan.dishes) && md.plan.dishes.length) || md.plan.diningOut || md.plan.takeout));
+            const s = getMealServings(dk, mk, defaultServings);
+            let prefix = '';
+            const diff = Math.round((_keyToDate(dk).getTime() - _keyToDate(todayKey).getTime()) / 86400000);
+            if (diff === 0) prefix = '今天';
+            else if (diff === 1) prefix = '明天';
+            else if (diff === 2) prefix = '后天';
+            else { const d = _keyToDate(dk); prefix = `${d.getMonth()+1}月${d.getDate()}日`; }
+            let dishesStr = '';
+            if (md && md.plan && Array.isArray(md.plan.dishes) && md.plan.dishes.length) {
+                const dishNames = md.plan.dishes.slice(0, 2).map(x => (typeof x === 'string') ? x : (x && x.name ? x.name : '')).filter(Boolean);
+                dishesStr = dishNames.join('、') + (md.plan.dishes.length > 2 ? '…' : '');
+            } else if (md && md.plan && md.plan.diningOut) dishesStr = '外出';
+            else if (md && md.plan && md.plan.takeout) dishesStr = '外卖';
+            else dishesStr = '';
+            const idx = list.length;
+            items.push(idx);
+            list.push({ dateKey: dk, meal: mk, prefix, mealName: mealName[mk] || mk, mealIcon: mealIcon[mk] || '', small: dishesStr, servings: s, hasPlan: hasPlan });
+        });
+        const firstPrefix = items.length ? (list[items[0]] || {}).prefix : '';
+        dayMap.push({ prefix: firstPrefix, items });
+    });
+    window._psmState = { list, touched: {}, prevDefault: defaultServings, dayMap };
+
+    // ① 默认人数下拉
+    const defSel = document.getElementById('prepServingsDefaultSel');
+    if (defSel) {
+        let defHtml = '';
+        for (let i = 1; i <= 15; i++) defHtml += `<option value="${i}"${i===defaultServings?' selected':''}>${i}人</option>`;
+        defSel.innerHTML = defHtml;
+        defSel.onchange = function() { _psmRerenderMealSelects(); };
     }
 
-    renderDiary();
-    showToast('✅ 计划已确认' + dutyMsg);
+    // ② 分天展示
+    const dayArea = document.getElementById('prepServingsDayArea');
+    if (dayArea) {
+        let html = '';
+        dayMap.forEach(dm => {
+            html += `<div class="prep-sm-day-group" style="margin-bottom:10px;">
+                <div style="font-size:12px;font-weight:700;color:#374151;margin:0 2px 4px;">${escapeHtml(dm.prefix)}</div>`;
+            dm.items.forEach(idx => {
+                const it = list[idx];
+                if (!it) return;
+                const disCls = it.hasPlan ? '' : ' s-disabled';
+                const small = it.small ? `<small style="display:block;font-weight:400;color:#6B7280;font-size:11px;margin-top:1px;line-height:1.3;">${escapeHtml(it.small)}</small>` : '';
+                html += `<div class="prep-servings-item${disCls}">
+                    <div class="prep-servings-item-label">${it.mealIcon || ''} ${it.mealName || it.meal}${small}</div>
+                    <select data-idx="${idx}">${_psmOptsStr(it.servings)}</select>
+                </div>`;
+            });
+            html += `</div>`;
+        });
+        dayArea.innerHTML = html;
+        // 单餐独立变更 → 标记 touched
+        const sels = dayArea.querySelectorAll('select[data-idx]');
+        sels.forEach(sel => {
+            sel.addEventListener('change', function() {
+                const idx = Number(this.getAttribute('data-idx'));
+                const state = window._psmState || {};
+                const it = (state.list || [])[idx];
+                if (!it) return;
+                it.servings = Math.max(1, Math.min(20, parseInt(this.value || '1', 10) || 1));
+                if (!state.touched) state.touched = {};
+                state.touched[idx] = true;
+            });
+        });
+    }
+
+    const ov = document.getElementById('prepServingsModalOv');
+    if (ov) { ov.style.display = ''; ov.classList.add('show'); }
 }
+function closePrepServingsModal() {
+    const ov = document.getElementById('prepServingsModalOv');
+    if (ov) { ov.classList.remove('show'); setTimeout(() => { ov.style.display = 'none'; }, 200); }
+    window._psmState = { list: [], touched: {}, prevDefault: 1 };
+}
+function applyPrepServings() {
+    const dayArea = document.getElementById('prepServingsDayArea');
+    const state = window._psmState || {};
+    const list = state.list || [];
+    if (!dayArea || !list.length) { closePrepServingsModal(); return; }
+    const selects = dayArea.querySelectorAll('select[data-idx]');
+    const cal = getDietCalendar();
+    const prep = window._prep || {};
+    let changedCount = 0;
+    const defSel = document.getElementById('prepServingsDefaultSel');
+    if (defSel) {
+        const newDefault = Math.max(1, Math.min(20, parseInt(defSel.value || '1', 10) || 1));
+        if (Number(prep.servings) !== newDefault) { prep.servings = newDefault; changedCount++; }
+    }
+    selects.forEach(sel => {
+        const idx = Number(sel.getAttribute('data-idx'));
+        const it = list[idx];
+        if (!it) return;
+        const n = Math.max(1, Math.min(20, Math.floor(Number(sel.value) || 1)));
+        const oldPlan = (cal[it.dateKey] && cal[it.dateKey][it.meal] && cal[it.dateKey][it.meal].plan) ? cal[it.dateKey][it.meal].plan : {};
+        const existed = !!(oldPlan && ((Array.isArray(oldPlan.dishes) && oldPlan.dishes.length) || oldPlan.diningOut || oldPlan.takeout));
+        if (existed && Number(oldPlan.servings) === n) return;
+        if (!existed && n === it.servings && n === Number(prep.servings)) return;
+        if (!cal[it.dateKey]) cal[it.dateKey] = {};
+        if (!cal[it.dateKey][it.meal]) cal[it.dateKey][it.meal] = {};
+        const newPlan = Object.assign({}, oldPlan);
+        newPlan.servings = n;
+        cal[it.dateKey][it.meal].plan = newPlan;
+        changedCount++;
+    });
+    saveDietCalendar(cal);
+    closePrepServingsModal();
+    if (typeof renderFridgeRecView === 'function') renderFridgeRecView();
+    if (changedCount > 0) showToast(`✅ 人数已更新，采购量已重算`);
+    else showToast('人数未变，无需更新');
+}
+
 
 // ==================== 外出就餐三状态管理 ====================
 // 状态：规划中(planning) → 已确定(confirmed) → 已完成(completed)
@@ -24242,7 +25811,10 @@ function openDiningOutPlanModal() {
                 <option value="lunch" ${currentMeal==='lunch'?'selected':''}>午餐</option>
                 <option value="dinner" ${currentMeal==='dinner'?'selected':''}>晚餐</option>
             </select>
-            <input type="number" id="planPeople" placeholder="人数" value="${existingPlan.peopleCount||getDiaryServings()||''}" style="width:48px;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;text-align:center;">
+            <div style="display:inline-flex;align-items:center;gap:2px;border:1px solid #E5E7EB;border-radius:6px;padding:0 6px;background:#fff;flex-shrink:0;">
+                <input type="number" id="planPeople" class="plan-people-no-spin" placeholder="人数" value="${existingPlan.peopleCount||getDiaryServings()||''}" style="width:28px;padding:4px 0;border:none;border-radius:0;font-size:11px;text-align:center;background:transparent;outline:none;-moz-appearance:textfield;-webkit-appearance:none;appearance:none;">
+                <span style="font-size:11px;color:#6B7280;flex-shrink:0;">人</span>
+            </div>
             <select id="planBudget" style="flex:1;min-width:70px;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;">
                 <option value="">预算</option>
                 <option value="0-50" ${existingPlan.budget==='0-50'?'selected':''}>人均0-50</option>
@@ -24253,9 +25825,9 @@ function openDiningOutPlanModal() {
             </select>
         </div>
 
-        <div style="background:#F9FAFB;border-radius:10px;padding:10px;margin-bottom:10px;">
-            <div style="display:flex;flex-wrap:wrap;gap:4px;">
-                <select id="planScene" style="flex:1;min-width:70px;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;">
+        <div style="background:#F9FAFB;border-radius:10px;padding:10px 10px 10px 0;margin-bottom:10px;">
+            <div style="display:flex;flex-wrap:wrap;gap:2px;">
+                <select id="planScene" style="width:80px;max-width:80px;min-width:0;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;flex-shrink:0;">
                     <option value="">场景</option>
                     <option value="家庭聚餐" ${existingPlan.scene==='家庭聚餐'?'selected':''}>家庭聚餐</option>
                     <option value="朋友聚会" ${existingPlan.scene==='朋友聚会'?'selected':''}>朋友聚会</option>
@@ -24265,14 +25837,14 @@ function openDiningOutPlanModal() {
                     <option value="生日宴" ${existingPlan.scene==='生日宴'?'selected':''}>生日宴</option>
                     <option value="日常简餐" ${existingPlan.scene==='日常简餐'?'selected':''}>日常简餐</option>
                 </select>
-                <select id="planLocation" style="flex:1;min-width:60px;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;">
+                <select id="planLocation" style="width:50px;max-width:50px;min-width:0;padding:4px 4px 4px 4px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;flex-shrink:0;">
                     <option value="">位置</option>
                     <option value="附近" ${(existingPlan.location==='附近' || (!existingPlan.location && familyHomeAddress))?'selected':''}>附近</option>
                     <option value="本区" ${existingPlan.location==='本区'?'selected':''}>本区</option>
                     <option value="本市" ${existingPlan.location==='本市'?'selected':''}>本市</option>
                     <option value="其他" ${existingPlan.location==='其他'?'selected':''}>其他</option>
                 </select>
-                <select id="planCuisine" style="flex:1;min-width:70px;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;">
+                <select id="planCuisine" style="width:76px;max-width:76px;min-width:0;padding:4px 4px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;flex-shrink:0;">
                     <option value="">菜系偏好</option>
                     <option value="中餐" ${existingPlan.cuisine==='中餐'?'selected':''}>中餐</option>
                     <option value="川菜" ${existingPlan.cuisine==='川菜'?'selected':''}>川菜</option>
@@ -24286,7 +25858,7 @@ function openDiningOutPlanModal() {
                     <option value="东南亚菜" ${existingPlan.cuisine==='东南亚菜'?'selected':''}>东南亚菜</option>
                     <option value="不限" ${existingPlan.cuisine==='不限'?'selected':''}>不限</option>
                 </select>
-                <select id="planTaste" style="flex:1;min-width:70px;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;">
+                <select id="planTaste" style="width:76px;max-width:76px;min-width:0;padding:4px 4px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;flex-shrink:0;">
                     <option value="">口味偏好</option>
                     <option value="清淡" ${existingPlan.taste==='清淡'?'selected':''}>清淡</option>
                     <option value="微辣" ${existingPlan.taste==='微辣'?'selected':''}>微辣</option>
@@ -24295,25 +25867,21 @@ function openDiningOutPlanModal() {
                     <option value="偏咸" ${existingPlan.taste==='偏咸'?'selected':''}>偏咸</option>
                     <option value="综合家庭口味" ${existingPlan.taste==='综合家庭口味'?'selected':''}>综合家庭口味</option>
                 </select>
-                <button id="aiRecommendBtn" onclick="generateDiningOutAIRecommendation()" style="background:#F97316;color:white;border:none;border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;flex-shrink:0;">AI推荐</button>
+                <button id="aiRecommendBtn" onclick="generateDiningOutAIRecommendation()" style="background:#F97316;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;flex-shrink:0;margin-right:auto;margin-left:-10px;">推荐餐厅</button>
             </div>
-            ${familyHomeAddress ? '<div style="font-size:10px;color:#9CA3AF;margin-top:6px;padding-left:2px;">家庭住址：' + escapeHtml(familyHomeAddress) + '</div>' : ''}
         </div>
 
         <div style="background:#FFFBEB;border:1px solid #FED7AA;border-radius:10px;padding:10px;margin-bottom:10px;">
-            <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:8px;">
-                <div style="font-size:11px;font-weight:600;color:#92400E;flex-shrink:0;line-height:18px;">AI推荐餐厅：</div>
-                <div id="aiRecommendArea" style="font-size:11px;color:#6B7280;flex:1;min-width:0;">
-                    点击"AI推荐"按钮，AI将根据就餐信息为您推荐3个餐厅方案
-                </div>
+            <div id="aiRecommendArea" style="font-size:11px;color:#6B7280;min-width:0;line-height:1.8;">
+                点击"推荐餐厅"按钮，AI将根据就餐信息为您推荐3个餐厅方案
             </div>
         </div>
 
         <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:10px;margin-bottom:10px;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                <div style="font-size:11px;font-weight:600;color:#166534;flex-shrink:0;">从食知添加</div>
+                <div style="font-size:11px;font-weight:600;color:#166534;flex-shrink:0;">从食知文库添加</div>
                 <input type="text" id="knowledgeSearchInput" placeholder="搜索已记录的餐厅..." style="flex:1;min-width:0;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;" oninput="searchKnowledgeRestaurants(this.value)">
-                <button onclick="aiRecommendFromKnowledge()" id="knAiRecommendBtn" style="background:#F97316;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;flex-shrink:0;">AI推荐</button>
+                <button onclick="aiRecommendFromKnowledge()" id="knAiRecommendBtn" style="background:#F97316;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;flex-shrink:0;">推荐餐厅</button>
             </div>
             <div id="knowledgeRestaurantList" style="max-height:120px;overflow-y:auto;"></div>
         </div>
@@ -26529,26 +28097,32 @@ function _renderMealPlanBody() {
         html += '</div>';
     }
 
-    // 手动添加区（一行：早餐+午餐+晚餐）
+    // 手动添加区
+    // 第1行：[手动添加] [早餐] [输入框] [勾选框]
+    // 第2行：[占位]     [午餐] [输入框] [勾选框]  （与早餐行元素对齐）
+    // 第3行：[占位]     [晚餐] [输入框] [勾选框]  （与早餐行元素对齐）
     var manualMeals = [
         {key:'breakfast', label:'早餐'},
         {key:'lunch',     label:'午餐'},
         {key:'dinner',    label:'晚餐'}
     ];
-    html += '<div class="mp-manual-block"><div class="mp-manual-header">';
-    // 标题 + 早餐 + 午餐 + 晚餐 同一行
-    html += '<span class="mp-section-title" style="margin:0;">手动添加</span>';
-    html += '<div class="mp-manual-row" style="flex:1;">';
+    html += '<div class="mp-manual-block">';
     for (var mi2=0; mi2<manualMeals.length; mi2++) {
         var mk2 = manualMeals[mi2].key;
         var mlbl = manualMeals[mi2].label;
-        html += '<div class="mp-manual-item">';
+        html += '<div class="mp-manual-line">';
+        // 第1行显示"手动添加"，第2、3行放等宽占位保证对齐
+        if (mi2 === 0) {
+            html += '<span class="mp-section-title" style="margin:0;">手动添加</span>';
+        } else {
+            html += '<span class="mp-manual-title-placeholder">手动添加</span>';
+        }
         html += '<span class="mp-manual-label">'+mlbl+'</span>';
         html += '<input type="text" class="mp-manual-input" id="mpManual_'+mk2+'" placeholder="菜名" onkeydown="if(event.key===\'Enter\')addManualDish(\''+mk2+'\')">';
         html += '<input type="checkbox" class="mp-manual-checkbox" title="勾选即添加" onchange="toggleManualDish(\''+mk2+'\',this)">';
         html += '</div>';
     }
-    html += '</div></div>';
+    html += '</div>';
     // 已添加的菜品标签（按餐次分组显示）
     for (var mi3=0; mi3<manualMeals.length; mi3++) {
         var mk3 = manualMeals[mi3].key;
@@ -27287,6 +28861,7 @@ function renderReviewDropdown() {
             <span id="reviewPeriodPicker" style="display:flex;gap:4px;align-items:center;"></span>
             <select onchange="changeReviewPeriodDimension(this.value)" style="padding:6px 10px;border:1px solid #BFDBFE;border-radius:6px;font-size:12px;color:#374151;background:white;outline:none;cursor:pointer;margin-left:auto;">
                 <option value="category" ${reviewPeriodDimension==='category'?'selected':''}>📊 类别分布榜</option>
+                <option value="purchase" ${reviewPeriodDimension==='purchase'?'selected':''}>🛒 采购分布榜</option>
                 <option value="dish" ${reviewPeriodDimension==='dish'?'selected':''}>🍳 菜品频次榜</option>
                 <option value="ingredient" ${reviewPeriodDimension==='ingredient'?'selected':''}>🥗 食材使用榜</option>
                 <option value="meal" ${reviewPeriodDimension==='meal'?'selected':''}>🍽️ 餐次分布榜</option>
@@ -27305,10 +28880,12 @@ function renderReviewDropdown() {
                 <option value="custom" ${reviewRecordsPeriod==='custom'?'selected':''}>自定义</option>
             </select>
             <span id="reviewRecordsCustomPicker" style="display:none;gap:4px;align-items:center;"></span>
+            <!-- 右侧第二个（类别维度）下拉：实际记录 → 记录类型（在家做饭/外出就餐/采购记录） -->
             <select onchange="changeReviewRecordsDiningType(this.value)" style="padding:6px 10px;border:1px solid #BFDBFE;border-radius:6px;font-size:12px;color:#374151;background:white;outline:none;cursor:pointer;margin-left:auto;">
                 <option value="all" ${reviewRecordsDiningType==='all'?'selected':''}>全部</option>
                 <option value="home" ${reviewRecordsDiningType==='home'?'selected':''}>在家做饭</option>
                 <option value="eatout" ${reviewRecordsDiningType==='eatout'?'selected':''}>外出就餐</option>
+                <option value="purchase" ${reviewRecordsDiningType==='purchase'?'selected':''}>🛒 采购记录</option>
             </select>
         </div>`;
         if (reviewRecordsPeriod === 'custom') renderReviewRecordsCustomPicker();
@@ -28105,10 +29682,65 @@ function loadPeriodReport() {
             '<span style="font-size:12px;color:#6B7280;min-width:50px;text-align:right;">'+seasonDist[s]+'餐('+pct+'%)</span></div>';
     }).join('');
 
+    // 采购分布榜（按食材分类聚合：次数/金额/各品类占比）
+    var purRange = getPeriodDateRange();
+    var purAll = getPurchaseHistoryAll().map(function(r){
+        var ts = Number(r.timestamp) || 0;
+        if (!ts && r.date) try { ts = (new Date(String(r.date)+'T12:00:00')).getTime(); } catch(e){ ts=0; }
+        return Object.assign({}, r, { _ts: ts });
+    }).filter(function(r){
+        var t = r._ts || 0;
+        if (!t && r.date) {
+            try { t = (new Date(String(r.date)+'T12:00:00')).getTime(); } catch(e){ t=0; }
+        }
+        if (!t) return false;
+        if (!purRange) return false;
+        return t >= purRange.start.getTime() && t <= purRange.end.getTime();
+    });
+    var purCount = purAll.length;
+    var purTotal = purAll.reduce(function(s,r){ return s + (Number(r.totalAmount)||0); }, 0);
+    var catAmount = {};
+    var catItemCount = {};
+    purAll.forEach(function(r){
+        var its = Array.isArray(r.items) ? r.items.map(normalizePurchaseItem) : [];
+        its.forEach(function(it){
+            var c = it.category || '其他';
+            catAmount[c] = (Number(catAmount[c]) || 0) + (Number(it.estPrice) || 0);
+            catItemCount[c] = (Number(catItemCount[c]) || 0) + 1;
+        });
+    });
+    var purCatSorted = Object.keys(catAmount).map(function(c){ return [c, Number(catAmount[c]||0)]; }).sort(function(a,b){ return b[1]-a[1]; });
+    var purCatTotal = purCatSorted.reduce(function(s,e){ return s+e[1]; }, 0);
+    var purItemsTotal = purCatSorted.reduce(function(s,e){ return s + (Number(catItemCount[e[0]])||0); }, 0);
+    var purCatHtml = '';
+    if (purCount === 0) {
+        purCatHtml = '<div style="font-size:12px;color:#9CA3AF;text-align:center;padding:20px;">所选范围内暂无采购记录</div>';
+    } else {
+        purCatSorted.forEach(function(e){
+            var cat = e[0]; var amt = Number(e[1]||0);
+            var cnt = Number(catItemCount[cat])||0;
+            var pct = purCatTotal > 0 ? Math.round(amt/purCatTotal*100) : 0;
+            purCatHtml += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'+
+                '<span style="font-size:13px;color:#374151;min-width:80px;">'+escapeHtml(cat)+'</span>'+
+                '<div style="flex:1;height:18px;background:#F3F4F6;border-radius:4px;overflow:hidden;">'+
+                '<div style="width:'+pct+'%;height:100%;background:linear-gradient(90deg,#F97316,#FB923C);border-radius:4px;"></div></div>'+
+                '<span style="font-size:12px;color:#6B7280;min-width:130px;text-align:right;">'+cnt+'项 · ¥'+Number(amt).toFixed(1)+' ('+pct+'%)</span></div>';
+        });
+    }
+    var purPeriodLabel = periodLabel || '';
+    var purStats = ('<div style="display:flex;gap:10px;justify-content:space-around;margin-bottom:10px;background:#FFF7ED;border-radius:8px;padding:8px 6px;border:1px solid #FED7AA;">' +
+        '<div style="text-align:center;"><div style="font-size:11px;color:#9CA3AF;">采购次数</div><div style="font-size:15px;font-weight:700;color:#F97316;">'+purCount+'</div></div>' +
+        '<div style="text-align:center;"><div style="font-size:11px;color:#9CA3AF;">累计金额</div><div style="font-size:15px;font-weight:700;color:#DC2626;">¥'+Number(purTotal).toFixed(1)+'</div></div>' +
+        '<div style="text-align:center;"><div style="font-size:11px;color:#9CA3AF;">采购品项</div><div style="font-size:15px;font-weight:700;color:#9A3412;">'+purItemsTotal+'</div></div>' +
+        '</div>');
+
     reviewData.period = {
         category: '<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:14px;">'+
             '<div style="font-size:14px;font-weight:600;color:#9A3412;margin-bottom:4px;">📊 类别分布榜</div>'+
             '<div style="font-size:11px;color:#9CA3AF;margin-bottom:10px;">'+periodLabel+' · 共'+catTotal+'道菜</div>'+catHtml+'</div>',
+        purchase: '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:12px;padding:14px;">'+
+            '<div style="font-size:14px;font-weight:600;color:#92400E;margin-bottom:4px;">🛒 采购分布榜</div>'+
+            '<div style="font-size:11px;color:#9CA3AF;margin-bottom:10px;">'+purPeriodLabel+' · 各品类金额占比</div>'+purStats+purCatHtml+'</div>',
         dish: '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:12px;padding:14px;">'+
             '<div style="font-size:14px;font-weight:600;color:#92400E;margin-bottom:4px;">🍳 菜品频次榜 TOP10</div>'+
             '<div style="font-size:11px;color:#9CA3AF;margin-bottom:10px;">'+periodLabel+'</div>'+dishHtml+'</div>',
@@ -28162,6 +29794,11 @@ function getRecordsDateRange() {
 }
 
 function loadActualRecords() {
+    // 若是「采购记录」：独立渲染（不走餐次日历）
+    if (reviewRecordsDiningType === 'purchase') {
+        loadReviewPurchaseRecords();
+        return;
+    }
     var range = getRecordsDateRange();
     var contentEl = document.getElementById('reviewContentArea');
     if (!range) {
@@ -28226,6 +29863,98 @@ function loadActualRecords() {
         reviewData.records = html;
     }
 
+    renderReviewSection();
+}
+
+// ==================== 复盘「实际记录」采购记录视图 ====================
+function getPurchaseHistoryAll() {
+    try {
+        var raw = lsGet('purchaseHistory');
+        if (!raw) return [];
+        var arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+}
+function normalizePurchaseItem(it) {
+    // 兼容两种历史格式：shoppingPlans 写入 {name, count, unitPrice, subtotal, category} ；finalizePrepPurchase 写入 {name, qty, unit, unitPrice, estPrice, category}
+    if (!it || typeof it !== 'object') return { name:'未知', qty:0, unit:'', estPrice:0, unitPrice:0, category:'' };
+    var name = String(it.name || '未知').trim();
+    var qty = Number(it.qty); if (!isFinite(qty) || !(qty>0)) qty = Number(it.count); if (!isFinite(qty) || !(qty>0)) qty = 1;
+    var unit = String(it.unit || '').trim();
+    var estPrice = Number(it.estPrice); if (!isFinite(estPrice) || !(estPrice>=0)) estPrice = Number(it.subtotal); if (!isFinite(estPrice) || !(estPrice>=0)) {
+        var up = Number(it.unitPrice); if (!isFinite(up)) up = 0; estPrice = Number((up*qty).toFixed(2));
+    }
+    var unitPrice = Number(it.unitPrice); if (!isFinite(unitPrice) || unitPrice<0) unitPrice = (qty>0 ? Number((estPrice/qty).toFixed(2)) : 0);
+    var category = String(it.category || '').trim() || guessFoodCategory(name) || '其他';
+    return { name: name, qty: qty, unit: unit, unitPrice: unitPrice, estPrice: estPrice, category: category };
+}
+function loadReviewPurchaseRecords() {
+    var range = getRecordsDateRange();
+    var contentEl = document.getElementById('reviewContentArea');
+    if (!contentEl) return;
+    if (!range) { contentEl.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:13px;">请选择起止日期</div>'; renderReviewSection(); return; }
+    var all = getPurchaseHistoryAll().map(function(r){
+        var ts = Number(r.timestamp) || 0;
+        if (!ts && r.date) try { ts = (new Date(String(r.date)+'T12:00:00')).getTime(); } catch(e){ ts=0; }
+        return Object.assign({}, r, { _ts: ts });
+    }).filter(function(r){
+        if (!r._ts) {
+            var d; try { d = new Date(String(r.date||'')+'T00:00:00'); } catch(e){ d=null; }
+            if (!d) return false;
+            return d >= new Date(range.start.getFullYear(), range.start.getMonth(), range.start.getDate()) &&
+                   d <= new Date(range.end.getFullYear(), range.end.getMonth(), range.end.getDate(), 23,59,59);
+        }
+        return r._ts >= range.start.getTime() && r._ts <= range.end.getTime();
+    });
+    all.sort(function(a,b){ return (b._ts||0) - (a._ts||0); });
+    if (all.length === 0) {
+        reviewData.records = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:13px;">所选范围内暂无采购记录</div>';
+        renderReviewSection();
+        return;
+    }
+    var periodLabel = '';
+    if (reviewRecordsPeriod === 'week') periodLabel = '本周';
+    else if (reviewRecordsPeriod === 'month') periodLabel = '本月';
+    else if (reviewRecordsPeriod === 'quarter') periodLabel = '本季';
+    else if (reviewRecordsPeriod === 'year') periodLabel = '本年';
+    else periodLabel = (reviewRecordsCustomStart||'') + ' ~ ' + (reviewRecordsCustomEnd||'');
+    var grandTotal = all.reduce(function(s,r){ return s + (Number(r.totalAmount)||0); }, 0);
+    var grandCount = all.length;
+    var html = '';
+    html += '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:10px 12px;margin-bottom:10px;display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;">' +
+        '<div><div style="font-size:11px;color:#6B7280;">📋 '+periodLabel+' · 采购次数</div><div style="font-size:16px;font-weight:700;color:#1E40AF;">'+grandCount+' 次</div></div>' +
+        '<div style="text-align:right;"><div style="font-size:11px;color:#6B7280;">💰 累计金额</div><div style="font-size:16px;font-weight:700;color:#DC2626;">¥'+Number(grandTotal).toFixed(1)+'</div></div>' +
+        '</div>';
+    var weekDays = ['日','一','二','三','四','五','六'];
+    all.forEach(function(r){
+        var d = r._ts ? new Date(r._ts) : (r.date ? new Date(String(r.date)+'T12:00:00') : new Date());
+        var dateLine = isFinite(d.getTime())
+            ? ((d.getMonth()+1)+'月'+d.getDate()+'日 周'+weekDays[d.getDay()]+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'))
+            : (r.date || String(r.timestamp || ''));
+        var items = Array.isArray(r.items) ? r.items.map(normalizePurchaseItem) : [];
+        var itemCount = Number(r.itemCount) || items.length;
+        var totalAmt = Number(r.totalAmount);
+        if (!isFinite(totalAmt) || totalAmt < 0) totalAmt = items.reduce(function(s,i){ return s + (Number(i.estPrice)||0); }, 0);
+        var daysTag = (r.days || r.dateRange) ? (' · ' + (r.days ? r.days+'天' : '') + (r.dateRange ? ' '+String(r.dateRange).replace(/T\d\d:\d\d:\d\d/g,'') : '')) : '';
+        var servingsTag = r.servings ? (' · '+r.servings+'人') : '';
+        html += '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;padding:10px 12px;margin-bottom:10px;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">' +
+            '<div style="font-size:14px;font-weight:700;color:#92400E;">🛒 '+dateLine+'</div>' +
+            '<div style="font-size:11px;color:#92400E;">'+(itemCount)+' 项'+daysTag+servingsTag+'</div></div>';
+        var list = [];
+        items.forEach(function(it){
+            var qtyStr = it.qty + (it.unit || '');
+            list.push('<span style="display:inline-flex;gap:4px;align-items:baseline;padding:3px 8px;margin:2px 4px 2px 0;border-radius:6px;background:#FFF7ED;border:1px solid #FED7AA;font-size:12px;">' +
+                '<span style="font-weight:600;color:#374151;">'+escapeHtml(it.name)+'</span>' +
+                '<span style="color:#DC2626;font-weight:600;">'+escapeHtml(qtyStr)+'</span></span>');
+        });
+        if (list.length > 0) html += '<div style="margin:4px 0 8px;">'+list.join('')+'</div>';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px dashed #FCD34D;padding-top:6px;">' +
+            '<span style="font-size:11px;color:#92400E;">🛒 采购日期：'+escapeHtml(r.date || '')+'</span>' +
+            '<span style="font-size:14px;font-weight:700;color:#DC2626;">¥'+Number(totalAmt).toFixed(1)+'</span></div>';
+        html += '</div>';
+    });
+    reviewData.records = html;
     renderReviewSection();
 }
 
@@ -29043,7 +30772,37 @@ function generateDiningSuggestion(actualData, mealKey, solarTerm) {
     return suggestion;
 }
 
+function switchHomePage() {
+    currentTab = 'home';
+    // 移除 slide-up，首页重新可见
+    const hp = document.getElementById('pageHome');
+    if (hp) hp.classList.remove('slide-up');
+    // 隐藏主界面（下次再点标题进入主界面时自动打开）
+    const ma = document.getElementById('mainApp');
+    if (ma) ma.style.display = 'none';
+    // Tab 高亮
+    document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+    document.querySelector('.tab-item[data-tab="home"]')?.classList.add('active');
+    // 顶栏 & 底部：首页不显示任何非首页交互
+    const topTitle = document.getElementById('topTitle');
+    if (topTitle) topTitle.textContent = '';
+    const kb = document.getElementById('knowledgeResetBtn');
+    if (kb) kb.style.display = 'none';
+    const mb = document.getElementById('menuBtn');
+    if (mb) { mb.textContent = '☰'; mb.style.visibility = 'hidden'; }
+    const cb = document.getElementById('clearBtn');
+    if (cb) cb.style.visibility = 'hidden';
+    const ba = document.querySelector('.bottom-area');
+    if (ba) ba.style.display = 'none';
+}
 function switchTab(tab) {
+    // 如果切到首页，走首页分支
+    if (tab === 'home') { switchHomePage(); return; }
+    // 进任何子 Tab：首页滑出 + 主界面显示
+    const hp = document.getElementById('pageHome');
+    if (hp && hp.classList && !hp.classList.contains('slide-up')) hp.classList.add('slide-up');
+    const ma = document.getElementById('mainApp');
+    if (ma) ma.style.display = 'flex';
     currentTab = tab;
     if (tab === 'plan') {
         flushPendingPlanQueue();
@@ -29052,13 +30811,16 @@ function switchTab(tab) {
     document.querySelector(`.tab-item[data-tab="${tab}"]`)?.classList.add('active');
     document.querySelectorAll('.page-panel').forEach(el => el.classList.remove('active'));
     const map = { chat:'panelChat', knowledge:'panelKnowledge', diary:'panelDiary', fridge:'panelFridge', family:'panelFamily' };
-    document.getElementById(map[tab]).classList.add('active');
+    if (map[tab]) document.getElementById(map[tab]).classList.add('active');
+    // 子 Tab：顶栏 ➕ 与 ☰ 默认可见（首页隐藏的必须恢复）
+    if (menuBtn && tab !== 'diary') { menuBtn.style.visibility = 'visible'; }
+    if (clearBtn) clearBtn.style.visibility = 'visible';
     if (tab === 'diary') {
         renderDiary();
         // === AI自动提取：进入食记时自动检测是否需要生成推荐 ===
         autoCheckAndRecommend();
     }
-    const titles = { chat:'AI对话', knowledge:'饮食问答', diary:'三餐计划、记录', fridge:'食材推荐', family:'我家' };
+    const titles = { chat:'AI对话', knowledge:'饮食问答', diary:'三餐计划、记录', fridge:'食材准备', family:'我家' };
     if (tab === 'knowledge' && currentKnowledgeViewMode === 'guide') {
         topTitle.textContent = '节气饮食指南';
     } else if (tab === 'knowledge' && (currentKnowledgeViewMode === 'category' || currentKnowledgeViewMode === 'library')) {
@@ -29529,6 +31291,12 @@ homeSolarBtn.addEventListener('click', function() {
 document.querySelectorAll('.tab-item').forEach(tab => {
     tab.addEventListener('click', function() { switchTab(this.dataset.tab); });
 });
+// 页面初始化：按 currentTab 同步 Tab 高亮（默认 home → 「🏡首页」高亮）
+(function initTabActive() {
+    const want = currentTab || 'home';
+    document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.tab-item[data-tab="${want}"]`)?.classList.add('active');
+})();
 
 let menuOpen = false;
 menuBtn.addEventListener('click', function(e) {
