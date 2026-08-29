@@ -2,8 +2,13 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="format-detection" content="telephone=no,email=no,address=no" />
     <title>家肴记 - AI 家庭膳食助理</title>
+    <!-- 首页 LOGO 预加载 & 兼容修复：手机上避免 2048x2048 大图延迟/逐行扫出/弱网下载失败 空白 -->
+    <link rel="preload" as="image" href="images/logo.png" imagesrcset="images/logo.png 1x" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* ====== 全局样式 ====== */
@@ -43,15 +48,70 @@
             z-index: 20;
             transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease;
             padding: 40px 24px;
+            /* 手机 LOGO 修复配套: 用 dvh 兜底 100vh, 避免 iOS 地址栏展开/收起 导致首图 top 跳动,
+               出现 "LOGO 先不显示 / 从上往下慢慢出现" 的视觉合成 bug. */
+            min-height: 100dvh;
+            min-height: 100vh;
+            overflow: hidden;
+            -webkit-overflow-scrolling: touch;
+            content-visibility: auto;
+            contain-intrinsic-block-size: 600px;
         }
         .page-home.slide-up {
             transform: translateY(-100%);
             opacity: 0;
             pointer-events: none;
         }
-        .home-logo { width: 180px; height: auto; margin-top: 40px; margin-bottom: 9px; display: block; mix-blend-mode: multiply; }
+        /* T 轮: "方形白底换成圆形白底, 正好包裹住Logo即可".
+           Logo 本体显示区(大字)保持 170x170 不缩不切, 外圆 = 170 + 2*10 = 190, 用单一 home-logo img
+           自己承担白底+正圆裁切+均匀边距三职责(正好包裹), 不再拆 wrap/img 两层,
+           这样从任何角度看都不再是"大字方, 后面有小圆", 而是一个包在大字外面的整圆. 
+           仍然保留整体上移 20px (img margin-top:20 auto 9px). */
+        .home-logo-wrap {
+            position: static;
+            width: auto;
+            max-width: 100%;
+            height: auto;
+            margin: 0;
+            display: block;
+            text-align: center;
+        }
+        .home-logo-circle { display: none; }   /* 仍停用 P 轮中央 100 盖层 */
+        .home-logo {
+            position: static;
+            width: 190px !important;           /* 外直径 190, 内填大字 170 + 白圈各 10 = 正好包裹 */
+            max-width: 100%;
+            aspect-ratio: 1 / 1;
+            height: auto;
+            margin: 20px auto 9px !important;  /* N 轮定: 整体上移 20, 不回退; 底 9px 给两行字 */
+            display: block;
+            background-color: #FFFFFF !important;
+            background-image: none !important;
+            border-radius: 50% !important;     /* 圆形白底主开关: 50% 正圆 */
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+            padding: 10px !important;          /* 均匀 10, 大字正好装在正圆里 */
+            object-fit: contain;
+            overflow: hidden !important;       /* 配合 br50% 做裁切, 避免四角漏方 */
+            cursor: pointer;
+            will-change: contents;
+            -webkit-transform: translateZ(0);
+                    transform: translateZ(0);
+            image-rendering: -webkit-optimize-contrast;
+            transition: none !important;
+            animation: none !important;
+            filter: none !important;
+            mix-blend-mode: normal !important;
+            z-index: auto;
+        }
+        .home-logo.is-fallback {
+            padding: 10px !important;
+        }
         .home-title { font-size: 36px; font-weight: 700; color: #1F2937; letter-spacing: 2px; }
-        .home-sub { font-size: 16px; color: #5D4037; margin-top: -24px; text-align: center; line-height: 1.6; }
+        .home-sub { font-size: 16px; color: #7A4A21; margin-top: 16px; text-align: center; line-height: 1.6; }
+        /* U 轮: 两行字改为深棕色 #7A4A21, 与 Logo 的房子棕色 / 砖红暖色调对齐, 温馨家常烟火气.
+           T 轮: "明天吃啥?今天做甚?/ @家肴记一下哟" 下移 30px (S 档 mt=-14 → 新 +16, 净 +30) 保留. */
 
         /* ====== 主界面 ====== */
         .main-app {
@@ -2864,9 +2924,24 @@
         <div class="solar-term-banner" id="homeSolarBanner">
             <div class="term-name"><span id="homeSolarName">🌞 大暑节气</span><button class="solar-term-link" id="homeSolarBtn">🌿 节气饮食指南</button></div>
         </div>
-        <img src="images/logo.png" class="home-logo" alt="家肴记" onclick="switchHomePage()" title="点击回到首页" style="cursor:pointer;">
+        <div class="home-logo-wrap" id="homeLogoWrap">
+            <span class="home-logo-circle" aria-hidden="true"></span>
+            <img src="images/logo.png"
+                 class="home-logo"
+                 id="homeLogo"
+                 alt="家肴记"
+                 width="190"
+                 height="190"
+                 loading="eager"
+                 decoding="async"
+                 fetchpriority="high"
+                 srcset="images/logo.png 1x"
+                 onerror="window._logoFallback && window._logoFallback.call(this, 'onerror');"
+                 onclick="switchHomePage()"
+                 title="点击回到首页">
+        </div>
         <div class="home-sub">
-            <span style="cursor: pointer; color: #5D4037 !important; text-decoration: underline;" onmouseover="this.style.color='#B91C1C'" onmouseout="this.style.color='#5D4037'" onclick="document.getElementById('pageHome').classList.add('slide-up');document.querySelector('.main-app').style.display='flex';switchTab('diary')">
+            <span style="cursor: pointer; color: #7A4A21 !important; text-decoration: underline;" onmouseover="this.style.color='#B91C1C'" onmouseout="this.style.color='#7A4A21'" onclick="document.getElementById('pageHome').classList.add('slide-up');document.querySelector('.main-app').style.display='flex';switchTab('diary')">
                 明天吃啥？今天做甚？
             </span>
             <br />@家肴记一下哟。
@@ -25837,7 +25912,7 @@ function openDiningOutPlanModal() {
                     <option value="生日宴" ${existingPlan.scene==='生日宴'?'selected':''}>生日宴</option>
                     <option value="日常简餐" ${existingPlan.scene==='日常简餐'?'selected':''}>日常简餐</option>
                 </select>
-                <select id="planLocation" style="width:50px;max-width:50px;min-width:0;padding:4px 4px 4px 4px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;flex-shrink:0;">
+                <select id="planLocation" style="width:52px;max-width:52px;min-width:0;padding:4px 4px 4px 4px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;flex-shrink:0;">
                     <option value="">位置</option>
                     <option value="附近" ${(existingPlan.location==='附近' || (!existingPlan.location && familyHomeAddress))?'selected':''}>附近</option>
                     <option value="本区" ${existingPlan.location==='本区'?'selected':''}>本区</option>
@@ -25867,7 +25942,7 @@ function openDiningOutPlanModal() {
                     <option value="偏咸" ${existingPlan.taste==='偏咸'?'selected':''}>偏咸</option>
                     <option value="综合家庭口味" ${existingPlan.taste==='综合家庭口味'?'selected':''}>综合家庭口味</option>
                 </select>
-                <button id="aiRecommendBtn" onclick="generateDiningOutAIRecommendation()" style="background:#F97316;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;flex-shrink:0;margin-right:auto;margin-left:-10px;">推荐餐厅</button>
+                <button id="aiRecommendBtn" onclick="generateDiningOutAIRecommendation()" style="background:#F97316;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;flex-shrink:0;margin-right:auto;margin-left:2px;">推荐餐厅</button>
             </div>
         </div>
 
@@ -33014,6 +33089,100 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
         </div>
     </div>
 </div>
+
+<script>
+/* ========== 首页 LOGO 兜底 & 超时切换 ==========
+ *  手机端症状与根因:
+ *   A) 偶发空白：images/logo.png 为 2048x2048 2.66MB 超大 PNG, 弱网/页面预加载被 iOS Safari
+ *      取消/CDN 304 异常时, img onerror 触发, 若不处理则 home-logo 只有橙径向渐变背景, 像
+ *      "没显示". 同时 mix-blend-mode: multiply 在旧 Safari/微信 WebView 下会导致合成时机丢
+ *      失, 图先空白几秒后再逐行出现.
+ *   B) 从上往下慢慢显示: 该 PNG 是非 interlace 的, 手机弱网下会按 scanline 一行一行解码显示.
+ *
+ *  兜底策略 (全部前端内联, 不依赖后端/图片压缩二进制工具):
+ *   1) onerror 立即切换到内嵌 SVG data-uri (与品牌色一致的 "家肴" 字标 + 圆角橙渐变);
+ *   2) 500ms 内如果 img.complete=false / naturalWidth<20 → 认为超时/取消, 自动切兜底;
+ *   3) 监听 visibilitychange 从后台切回时重试 (iOS 杀后台后回来经常触发 decode 失败, 重跑 1~2 次即可);
+ *   4) 避免循环切换: each node 最多 fallback 2 次.
+ */
+(function(){
+  // SVG 兜底 LOGO (J 轮: 圆形白底 + 无方形粗纹边, 只保留"家肴"二字 + JIA YAO JI, 与外 CSS 正圆容器配套)
+  var SVG_XML = '' +
+'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" preserveAspectRatio="xMidYMid meet">'+
+  // 圆形纯白底, 方形粗纹边(stroke) 彻底去掉, 右上角装饰圆点也去掉
+  '<circle cx="120" cy="120" r="118" fill="#FFFFFF" stroke="none"/>'+
+  // 文字用与 PNG 品牌色一致的橙 #F97316 渐变, 确保不贴圆边(字形最大~200px ↔ viewBox 240px, 天然左右各留 20px)
+  '<defs>'+
+    '<linearGradient id="jy" x1="0" y1="0" x2="0" y2="1">'+
+      '<stop offset="0%" stop-color="#FB923C"/>'+
+      '<stop offset="100%" stop-color="#EA580C"/>'+
+    '</linearGradient>'+
+  '</defs>'+
+  '<text x="50%" y="49%" dominant-baseline="middle" text-anchor="middle" '+
+        'font-family="&quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, &quot;Noto Sans CJK SC&quot;, sans-serif" '+
+        'font-weight="900" font-size="98" letter-spacing="-1" fill="url(#jy)">家肴</text>'+
+  '<text x="50%" y="83%" dominant-baseline="middle" text-anchor="middle" '+
+        'font-family="&quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" '+
+        'font-weight="700" font-size="20" letter-spacing="8" fill="#EA580C" fill-opacity="0.85">JIA YAO JI</text>'+
+'</svg>';
+  var URI = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(SVG_XML);
+
+  function tryFallback(img, reason){
+    if (!img || img.__logoFallbackTimes >= 2) return;
+    // 切换到 data-uri SVG 兜底
+    img.__logoFallbackTimes = (img.__logoFallbackTimes|0) + 1;
+    try {
+      img.removeAttribute('srcset');
+      img.setAttribute('src', URI);
+      img.classList.add('is-fallback');
+      img.setAttribute('aria-label', '家肴记 (兜底LOGO, 原因: ' + reason + ')');
+    } catch (e) { /* noop */ }
+  }
+
+  window._logoFallback = function(reason){
+    tryFallback(this, reason || 'onerror');
+  };
+
+  function schedule(img){
+    if (!img) return;
+    // 500ms 超时兜底 (2G/3G/微信首包慢)
+    setTimeout(function(){
+      var ok = false;
+      try { ok = !!(img.complete && img.naturalWidth && img.naturalWidth > 20); }
+      catch (e) { ok = false; }
+      if (!ok) tryFallback(img, 'timeout>500ms');
+    }, 500);
+    // iOS 后台切回经常触发资源取消, 最多自动重试 1 次
+    var visCount = 0;
+    document.addEventListener && document.addEventListener('visibilitychange', function(){
+      if (document.visibilityState === 'visible' && visCount < 1) {
+        visCount++;
+        try {
+          if (img.classList.contains('is-fallback')) return;
+          img.removeAttribute('srcset');
+          img.setAttribute('src', 'images/logo.png?_=' + Date.now());
+          setTimeout(function(){
+            try {
+              var ok = img.complete && img.naturalWidth && img.naturalWidth > 20;
+              if (!ok) tryFallback(img, 'visible-retry-failed');
+            } catch (e) { tryFallback(img, 'visible-retry-exception'); }
+          }, 800);
+        } catch (e) { tryFallback(img, 'visible-retry-exception'); }
+      }
+    }, false);
+  }
+
+  // 两种挂载时机都试, 避免脚本放在 body 末尾时 img DOM 已就绪但 DOMContentLoaded 还没到.
+  var hook = function(){
+    schedule(document.getElementById('homeLogo'));
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', hook);
+  } else {
+    hook();
+  }
+})();
+</script>
 
 </body>
 </html>
