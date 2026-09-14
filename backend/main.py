@@ -28,7 +28,7 @@ from urllib.parse import urljoin
 import httpx
 import requests
 from bs4 import BeautifulSoup
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -66,12 +66,14 @@ class FamilyMember(BaseModel):
 class ChatRequest(BaseModel):
     prompt: str = Field(..., min_length=1)
     family: List[FamilyMember] = Field(default_factory=list)
+    mode: str = "seasonal"  # 推荐模式：seasonal/diet/fridge/preference/nutrition，默认当季推荐
 
 
 class PlanRequest(BaseModel):
     system_prompt: str = Field(..., min_length=1)
     user_prompt: str = Field(..., min_length=1)
     max_tokens: int = Field(default=8192, ge=100, le=32768)
+    mode: Optional[str] = "seasonal"  # AI推荐模式（由前端 RECOMMEND_MODES 传入），缺省当季推荐
 
 
 class ChatResponse(BaseModel):
@@ -226,6 +228,52 @@ def build_family_context(family: List[FamilyMember]) -> str:
     return "\n".join(lines)
 
 
+# ========== AI推荐模式 System Prompt 模板 ==========
+DEFAULT_RECOMMEND_MODE = "seasonal"
+
+RECOMMEND_MODE_PROMPTS = {
+    "seasonal": "你是家庭膳食顾问，擅长顺时养生。请根据当前节气推荐时令菜谱，优先选用当季蔬菜、水果与水产，兼顾口感、营养与家常易做程度。",
+    "diet": "你是中医食疗顾问。请根据家庭成员的年龄、体质与健康状态推荐调理菜谱，结合温和的中医食疗原则，食材搭配与禁忌说明要清晰；不要编造医疗诊断。",
+    "fridge": "你是家庭膳食顾问，擅长清空冰箱。请优先消耗家中现有食材推荐菜谱，尽量减少需要额外采购的食材，并对缺少的关键食材给出“缺啥补啥”建议。",
+    "preference": "你是家庭膳食顾问，熟悉全家人的口味偏好。请根据用户历史好评、籍贯口味、爱吃与忌口推荐菜品，避免重复近期常吃的菜，让全家都爱吃。",
+    "nutrition": "你是营养师。请根据本周饮食结构的营养缺口（如深色蔬菜、优质蛋白、奶类、豆制品、粗粮摄入不足）推荐补充菜谱，参照《中国居民膳食指南》做到荤素搭配、均衡多样。",
+}
+
+# 各模式给 /plan 接口的前置侧重指令（/chat 使用完整模板，/plan 前端自带详细上下文，仅追加侧重）
+RECOMMEND_MODE_DIRECTIVES = {
+    "diet": "【推荐模式：食疗调理】请以成员体质与健康状态的食疗调理为首要侧重，",
+    "fridge": "【推荐模式：消耗家中食材】请以优先消耗家中现有食材、减少额外采购为首要侧重，",
+    "preference": "【推荐模式：家庭偏好】请以贴合家人历史好评与口味偏好、避免近期重复为首要侧重，",
+    "nutrition": "【推荐模式：营养均衡】请以补齐近期营养缺口、参照《中国居民膳食指南》均衡搭配为首要侧重，",
+}
+
+
+def get_system_prompt(mode: str, family: list) -> str:
+    """根据推荐模式返回对应的 System Prompt 模板，并附带家庭档案与通用回答要求。"""
+    base = RECOMMEND_MODE_PROMPTS.get((mode or "").strip(), RECOMMEND_MODE_PROMPTS[DEFAULT_RECOMMEND_MODE])
+    family_context = build_family_context(family or [])
+    return f"""
+你是“家肴记”的 AI 家庭膳食助理，也是一位熟悉武汉家常菜、济南长辈饮食和青少年口味的家庭厨师。
+{base}
+
+家庭档案：
+{family_context}
+
+回答要求：
+1. 使用中文，语气亲切实用。
+2. 推荐菜谱时优先给出菜名、适合谁、推荐理由、主要食材、简要步骤。
+3. 如果用户在清理冰箱或提供食材，请必须用 Markdown 返回，并包含“菜名”“理由”“缺啥补啥”三个部分。
+4. 不要编造医疗诊断；涉及老人或孩子时只给温和饮食建议。
+""".strip()
+
+
+def get_mode_directive(mode: Optional[str]) -> str:
+    """/plan 接口用：返回模式侧重指令前缀；默认(seasonal)或未知模式返回空串，保持前端 prompt 原样。"""
+    key = (mode or "").strip()
+    directive = RECOMMEND_MODE_DIRECTIVES.get(key)
+    return f"{directive}并与下列要求保持一致。\n\n" if directive else ""
+
+
 # ========== 阿里云通义千问调用核心 ==========
 async def call_qwen(messages: List[Dict[str, str]], *, json_mode: bool = False, max_tokens: int = 8192) -> str:
     headers = {
@@ -307,20 +355,8 @@ def normalize_parse_result(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest) -> Dict[str, str]:
-    family_context = build_family_context(req.family)
-    system_prompt = f"""
-你是“家肴记”的 AI 家庭膳食助理，也是一位熟悉武汉家常菜、济南长辈饮食和青少年口味的家庭厨师。
-请根据以下家庭档案推荐菜谱，兼顾年龄、地域、口味、营养、易做程度和家庭场景。
-
-家庭档案：
-{family_context}
-
-回答要求：
-1. 使用中文，语气亲切实用。
-2. 推荐菜谱时优先给出菜名、适合谁、推荐理由、主要食材、简要步骤。
-3. 如果用户在清理冰箱或提供食材，请必须用 Markdown 返回，并包含“菜名”“理由”“缺啥补啥”三个部分。
-4. 不要编造医疗诊断；涉及老人或孩子时只给温和饮食建议。
-""".strip()
+    # 根据推荐模式（seasonal/diet/fridge/preference/nutrition）切换 System Prompt 模板
+    system_prompt = get_system_prompt(req.mode, req.family)
 
     content = await call_qwen(
         [
@@ -334,9 +370,11 @@ async def chat(req: ChatRequest) -> Dict[str, str]:
 @app.post("/plan")
 async def plan(req: PlanRequest) -> Dict[str, str]:
     """食谱计划生成接口（前端同源调用，避免 CORS）"""
+    # 前端已构建详细的五维上下文 system_prompt；mode 非默认时在其最前面追加模式侧重指令
+    system_content = get_mode_directive(req.mode) + req.system_prompt
     content = await call_qwen(
         [
-            {"role": "system", "content": req.system_prompt},
+            {"role": "system", "content": system_content},
             {"role": "user", "content": req.user_prompt},
         ],
         json_mode=False,
@@ -535,6 +573,114 @@ async def parse_link(req: ParseLinkRequest):
         "subCategory": sub_category,
         "images": images_b64
     }
+
+
+# ========== 拍照识别食材（通义千问 VL 多模态） ==========
+ALIYUN_VL_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+ALIYUN_VL_MODEL = "qwen-vl-plus"
+
+_INGREDIENT_VL_PROMPT = (
+    "你是一位家庭食材识别助手。请识别这张图片中出现的所有【可烹饪食材/生鲜食品】"
+    "（例如蔬菜、水果、肉蛋奶、水产、米面粮油、豆制品、干货、调料等），忽略餐具、人手、桌面、包装袋品牌等非食材物体。\n"
+    "只返回 JSON，不要包含任何解释文字或 markdown 标记，格式严格如下：\n"
+    '{"ingredients":[{"name":"番茄","quantity":"3个","confidence":0.95}]}\n'
+    "要求：\n"
+    "1. name 为中文食材通用名称，去掉品牌、部位修饰（如『某品牌』『土』等）；\n"
+    "2. 同一种食材在结果中只出现一条，quantity 为图片中该食材的总数量；\n"
+    "3. quantity 根据图片估算数量与常见单位（如 3个 / 500g / 1把 / 2斤 / 1袋），"
+    "无法判断数量时返回空字符串；\n"
+    "4. confidence 为 0 到 1 之间的识别置信度，不确定时给较低分值；\n"
+    "5. 主料、配菜、配料、调料（如葱、姜、蒜、香菜、辣椒等）只要清晰可见都要识别；\n"
+    "6. 图片中实在没有可识别食材时，返回 {\"ingredients\":[]}。"
+)
+
+
+@app.post("/recognize_ingredients")
+async def recognize_ingredients(file: UploadFile = File(...)):
+    """接收食材照片，调用通义千问 VL 识别，返回结构化食材列表。"""
+    image_data = await file.read()
+    if not image_data:
+        raise HTTPException(status_code=400, detail="图片为空，请重新拍照或选择图片")
+    # 12MB 上限（前端通常已压缩到 1MB 左右）
+    if len(image_data) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="图片过大（超过12MB），请压缩后上传")
+    # 图片格式预检（JPEG/PNG/GIF/WEBP magic bytes）
+    is_image = (
+        image_data[:3] == b"\xff\xd8\xff"
+        or image_data[:8] == b"\x89PNG\r\n\x1a\n"
+        or image_data[:6] in (b"GIF87a", b"GIF89a")
+        or (len(image_data) >= 12 and image_data[:4] == b"RIFF" and image_data[8:12] == b"WEBP")
+    )
+    if not is_image:
+        raise HTTPException(status_code=400, detail="请上传图片文件（JPG/PNG/GIF/WEBP）")
+
+    mime = file.content_type or "image/jpeg"
+    if not mime.startswith("image/"):
+        mime = "image/jpeg"
+    image_b64 = base64.b64encode(image_data).decode("utf-8")
+    data_url = f"data:{mime};base64,{image_b64}"
+
+    headers = {
+        "Authorization": f"Bearer {ALIYUN_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": ALIYUN_VL_MODEL,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                    {"type": "text", "text": _INGREDIENT_VL_PROMPT},
+                ],
+            }
+        ],
+        "temperature": 0.1,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(ALIYUN_VL_API_URL, headers=headers, json=payload)
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=502, detail=f"视觉识别服务错误：{exc.response.text[:300]}") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"无法连接视觉识别服务：{str(exc)}") from exc
+
+    try:
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
+        raise HTTPException(status_code=502, detail="视觉识别服务返回格式异常") from exc
+
+    # 容错提取 JSON（模型可能带 ```json 代码块）
+    try:
+        parsed = extract_json_object(content)
+    except HTTPException:
+        raise HTTPException(status_code=502, detail="无法解析识别结果，请重新拍照或手动输入")
+
+    raw_list = parsed.get("ingredients") if isinstance(parsed, dict) else None
+    if not isinstance(raw_list, list):
+        return {"ingredients": []}
+
+    # 清洗：去空白/去重（同名保留首个）/置信度收敛到 0~1
+    ingredients, seen = [], set()
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name or name in seen:
+            continue
+        qty = item.get("quantity", "")
+        qty = "" if qty is None else str(qty).strip()
+        try:
+            confidence = float(item.get("confidence", 0.5))
+        except (TypeError, ValueError):
+            confidence = 0.5
+        confidence = max(0.0, min(1.0, confidence))
+        seen.add(name)
+        ingredients.append({"name": name, "quantity": qty, "confidence": round(confidence, 2)})
+
+    return {"ingredients": ingredients}
 
 
 # ========== 前端静态文件托管（用于 TRAE 预览面板直接打开 APP） ==========
