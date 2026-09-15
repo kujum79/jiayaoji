@@ -4686,11 +4686,20 @@ async function doLogin() {
 async function afterLoginCheck() {
     var u = getLoginUser();
     if (!u) { showLoginPage(); return; }
+    // 已通过"加入家庭"持有本地家庭码 → 直接进主界面，不再询问
+    if (getFamilyId()) { showAppRoot(); return; }
     try {
         // 查询 families 表（owner_id = 当前登录用户 uuid）
-        var r = await sb.from('families').select('id,family_name,owner_id').eq('owner_id', u.id).maybeSingle();
+        var r = await sb.from('families').select('id,family_name,owner_id,family_code').eq('owner_id', u.id).maybeSingle();
         if (r && r.data) {
             setLoginFamily({ id: r.data.id, name: r.data.family_name, owner_id: r.data.owner_id });
+            // 同步本地家庭码（老家庭无码则补生成并回写；回写失败不影响进入）
+            var code = r.data.family_code;
+            if (!code) {
+                code = generateFamilyCode();
+                try { await sb.from('families').update({ family_code: code }).eq('id', r.data.id); } catch(e2) {}
+            }
+            if (code) setFamilyId(code);
             showAppRoot();
             return;
         }
@@ -4710,10 +4719,12 @@ async function doCreateFamily() {
     try {
         var btn = document.getElementById('createFamilyBtn');
         if (btn) { btn.disabled = true; btn.textContent = '创建中…'; }
-        var r = await sb.from('families').insert({ family_name: name, owner_id: u.id }).select().single();
+        var code = generateFamilyCode();
+        var r = await sb.from('families').insert({ family_name: name, owner_id: u.id, family_code: code }).select().single();
         if (r && r.error) throw r.error;
         if (r && r.data) {
             setLoginFamily({ id: r.data.id, name: r.data.family_name, owner_id: r.data.owner_id });
+            setFamilyId(code);   // 本地家庭码同步设置, 避免登录后再弹"创建/加入家庭"浮层
             showToast('家庭创建成功');
             showAppRoot();
         }
@@ -4721,6 +4732,8 @@ async function doCreateFamily() {
         var msg = e && e.message || '未知错误';
         if (msg.indexOf('row-level security') > -1 || msg.indexOf('42501') > -1) {
             msg = '数据库权限策略未放行，请在 Supabase 后台为 families 表添加 RLS 策略（允许认证用户插入/查询自己的家庭）';
+        } else if (msg.indexOf('family_code') > -1 || msg.indexOf('PGRST204') > -1) {
+            msg = '缺少 family_code 字段，请先在 Supabase 后台执行：alter table families add column if not exists family_code text;';
         } else if (msg.indexOf('duplicate key') > -1 || msg.indexOf('23505') > -1) {
             msg = '您已创建过家庭，请刷新页面重试';
         }
