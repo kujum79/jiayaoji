@@ -30,7 +30,7 @@ import requests
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -110,7 +110,13 @@ class ParseVoiceRequest(BaseModel):
 
 
 @app.get("/")
-def root() -> Dict[str, str]:
+def root() -> RedirectResponse:
+    # 根路径直接进入家肴记应用，避免浏览器裸显 JSON（健康检查见 /health）
+    return RedirectResponse(url="/app")
+
+
+@app.get("/health")
+def health() -> Dict[str, str]:
     return {"ping": "pong"}
 
 

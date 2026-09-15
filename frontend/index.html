@@ -10,12 +10,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase SDK（用户登录系统） -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         /* ====== 全局样式 ====== */
         * { box-sizing: border-box; }
         body {
             margin: 0;
             min-height: 100vh;
+            overflow: hidden;   /* 隐藏首页右/下页面级滚动条, 滚动全部交给内部容器 */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1847,7 +1850,7 @@
     .fridge-stat-num { font-size:18px; font-weight:700; color:#F97316; }
     .fridge-stat-label { font-size:11px; color:#9A3412; }
     /* 旧的 .fridge-category-tabs / .fridge-cat-tab 样式已由 .fridge-view-tabs / .fridge-view-tab 替代 */
-    .fridge-list { padding-bottom:140px; }
+    .fridge-list { padding-bottom:220px; }
     .fridge-item { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; border-bottom:1px solid #FEF3C7; }
     .fridge-item-name { font-weight:600; font-size:14px; color:#1F2937; }
     .fridge-item-meta { font-size:11px; color:#9CA3AF; }
@@ -1866,11 +1869,11 @@
     .fridge-modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:none; justify-content:center; align-items:flex-end; z-index:200; }
     .fridge-modal.show { display:flex; }
     .fridge-modal-content { background:#fff; width:100%; max-width:430px; border-radius:16px 16px 0 0; padding:20px 16px; max-height:80vh; overflow-y:auto; }
-    .fi-modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
-    .fi-modal-header .fi-back-btn { background:transparent; border:none; font-size:18px; cursor:pointer; color:#374151; padding:4px 8px; border-radius:6px; }
+    .fi-modal-header { display:flex; align-items:center; justify-content:flex-start; margin-bottom:16px; }
+    .fi-modal-header .fi-back-btn { background:transparent; border:none; font-size:26px; cursor:pointer; color:#374151; padding:2px 10px; border-radius:6px; line-height:1; }
     .fi-modal-header .fi-back-btn:active { background:#F3F4F6; }
     .fi-modal-header .fi-title { font-weight:700; font-size:16px; }
-    .fi-modal-header .fi-save-btn { background:#F97316; color:#fff; border:none; padding:6px 14px; border-radius:999px; font-size:13px; font-weight:600; cursor:pointer; }
+    .fi-modal-header .fi-save-btn { background:#F97316; color:#fff; border:none; padding:6px 14px; border-radius:999px; font-size:13px; font-weight:600; cursor:pointer; margin-left:auto; }
     .fi-modal-header .fi-save-btn:active { opacity:0.8; }
     .fi-row { display:flex; gap:8px; margin-bottom:12px; align-items:flex-start; }
     .fi-col { display:flex; flex-direction:column; gap:4px; }
@@ -2241,9 +2244,9 @@
     .shopping-list-card { background:#fff; border:1px solid #FED7AA; border-radius:12px; padding:12px; margin:8px 0; }
     .shopping-category { font-weight:700; font-size:13px; color:#9A3412; margin:8px 0 4px; padding-bottom:4px; border-bottom:1px solid #FEF3C7; }
     .shopping-item { display:flex; justify-content:space-between; padding:4px 0; font-size:13px; }
-    .fridge-action-btns { display:flex; gap:8px; padding:8px 16px; position:fixed; bottom:106px; left:50%; transform:translateX(-50%); width:100%; max-width:414px; background:#FFF7ED; z-index:90; box-sizing:border-box; }
-    .fridge-action-btns button { flex:1; padding:10px; border-radius:10px; font-size:13px; cursor:pointer; border:1px solid #F97316; background:#fff; color:#F97316; font-weight:600; }
-    .fridge-action-btns button:active { background:#F97316; color:#fff; }
+    .fridge-action-btns { display:flex; gap:8px; padding:0; margin-left:auto; flex-shrink:0; }
+    .fridge-action-btns button { padding:6px 14px; border-radius:999px; font-size:12.5px; cursor:pointer; border:none; background:#F97316; color:#fff; font-weight:600; white-space:nowrap; }
+    .fridge-action-btns button:active { opacity:0.8; }
     .fridge-recipe-card { background:#fff; border:1px solid #FED7AA; border-radius:12px; padding:12px; margin:8px 0; }
     .fridge-recipe-title { font-weight:700; font-size:14px; color:#1F2937; }
     .fridge-recipe-meta { font-size:12px; color:#6B7280; margin-top:4px; }
@@ -2378,7 +2381,7 @@
     }
     /* 家中食材分类视图：左上角返回按钮 */
     .fridge-cat-topbar { display:flex; align-items:center; flex-shrink:0; padding:6px 8px 2px; }
-    .fridge-cat-back-btn { width:34px; height:34px; flex-shrink:0; background:transparent; border:none; font-size:20px; font-weight:700; color:#374151; cursor:pointer; border-radius:8px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center; }
+    .fridge-cat-back-btn { width:38px; height:38px; flex-shrink:0; background:transparent; border:none; font-size:26px; font-weight:600; color:#374151; cursor:pointer; border-radius:8px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center; }
     .fridge-cat-back-btn:active { background:#F3F4F6; }
     .fridge-cat-row {
         display: flex; align-items: flex-start; padding: 9px 8px;
@@ -2571,7 +2574,7 @@
     .fridge-stats-bar .stat-num { font-size:18px; font-weight:700; color:#F97316; }
     .fridge-stats-bar .stat-label { font-size:11px; color:#9A3412; }
     .fridge-item-left { display:flex; align-items:center; gap:8px; flex:1; min-width:0; cursor:pointer; }
-    .fridge-item-dot { width:20px; height:20px; border-radius:50%; border:2px solid #D1D5DB; flex-shrink:0; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:10px; transition:all 0.2s; background:#fff; }
+    .fridge-item-dot { width:40px; height:40px; border-radius:50%; border:2px solid #D1D5DB; flex-shrink:0; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; transition:all 0.2s; background:#fff; margin:-4px 0; }
     .fridge-item-dot:active { transform:scale(0.9); }
     .fridge-item-used-up { opacity:0.45; }
     .fridge-item-used-up .fridge-item-name { text-decoration:line-through; color:#9CA3AF; }
@@ -3152,6 +3155,35 @@
     </style>
 </head>
 <body>
+
+<!-- ====== Supabase 登录页（邮箱+密码） ====== -->
+<div id="loginPage" style="position:fixed;inset:0;z-index:100003;background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 40%,#FED7AA 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;">
+    <div style="background:#fff;border-radius:20px;padding:32px 24px;width:100%;max-width:340px;text-align:center;box-shadow:0 12px 40px rgba(234,88,12,0.15);">
+        <div style="font-size:48px;margin-bottom:8px;">🍳</div>
+        <div style="font-size:22px;font-weight:800;color:#9A3412;margin-bottom:4px;">家肴记</div>
+        <div style="font-size:13px;color:#9CA3AF;margin-bottom:24px;">AI 家庭膳食助理</div>
+        <input id="loginEmail" type="email" maxlength="60" placeholder="请输入邮箱" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;" />
+        <input id="loginPassword" type="password" maxlength="40" placeholder="请输入密码" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
+        <button id="loginBtn" onclick="doLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录</button>
+        <div id="loginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.5;"></div>
+        <div id="switchToRegister" onclick="switchLoginRegister()" style="font-size:13px;color:#EA580C;margin-top:14px;cursor:pointer;text-decoration:underline;">还没有账号？点此注册</div>
+        <div style="font-size:11px;color:#9CA3AF;margin-top:10px;line-height:1.5;">登录即表示同意家肴记服务条款</div>
+    </div>
+</div>
+
+<!-- ====== 创建家庭页 ====== -->
+<div id="createFamilyPage" style="position:fixed;inset:0;z-index:100003;background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 40%,#FED7AA 100%);display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;">
+    <div style="background:#fff;border-radius:20px;padding:32px 24px;width:100%;max-width:340px;text-align:center;box-shadow:0 12px 40px rgba(234,88,12,0.15);">
+        <div style="font-size:48px;margin-bottom:8px;">🏠</div>
+        <div style="font-size:22px;font-weight:800;color:#9A3412;margin-bottom:4px;">创建家庭</div>
+        <div style="font-size:13px;color:#9CA3AF;margin-bottom:24px;">为您的家庭起个名字，开始记录膳食</div>
+        <input id="familyNameInput" type="text" maxlength="20" placeholder="如：幸福之家" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
+        <button id="createFamilyBtn" onclick="doCreateFamily()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">创建家庭</button>
+    </div>
+</div>
+
+<!-- ====== APP 主界面（登录后显示） ====== -->
+<div id="appRoot">
 <!-- ====== 家庭选择 overlay ====== -->
 <style>
 .family-select-overlay {
@@ -3573,6 +3605,9 @@
                     <div class="fridge-cat-topbar">
                         <button class="fridge-cat-back-btn" type="button" onclick="switchFridgeView('rec')" title="返回食材准备">&lt;</button>
                         <span style="font-size:13px;color:#9CA3AF;margin-left:4px;">返回食材准备</span>
+                        <div class="fridge-action-btns" id="fridgeActionBtns">
+                            <button onclick="generateFridgeMealPlan()">📋 基于食材生成菜谱</button>
+                        </div>
                     </div>
                     <div class="fridge-stats-bar" id="fridgeStatsBar"></div>
                     <div class="fridge-view-tabs" id="fridgeViewTabs">
@@ -3582,10 +3617,6 @@
                         <div class="fridge-view-tab" data-view="shopping">🛒 采购计划</div>
                     </div>
                     <div class="fridge-list" id="fridgeList"></div>
-                    <div class="fridge-action-btns" id="fridgeActionBtns">
-                        <button onclick="generateFridgeMealPlan()">📋 基于食材生成菜谱</button>
-                        <button onclick="generateShoppingPlan()">📋 生成采购计划</button>
-                    </div>
                     <button class="fridge-fab" id="fridgeFab" onclick="handleFridgeFabClick()" title="添加" style="bottom:170px;">➕</button>
                     <div class="fridge-input-bar" id="fridgeInputBar">
                         <input type="text" class="fridge-input-field" id="fridgeQuickInput" placeholder="📝 说点什么..." onkeydown="if(event.key==='Enter')sendFridgeQuickMsg()">
@@ -4021,12 +4052,6 @@
                 <button type="button" class="mode-btn" data-mode="preference" onclick="selectIngrRecMode('preference', this)">口味偏好</button>
                 <button type="button" class="mode-btn" data-mode="nutrition" onclick="selectIngrRecMode('nutrition', this)">营养均衡</button>
                 <button type="button" class="mode-btn mode-btn-accent" onclick="openIngrRecFromKnowledge()">从食知选菜</button>
-                <div style="display:flex;align-items:center;gap:4px;margin-left:auto;padding-right:4px;">
-                    <span style="font-size:11px;color:#9CA3AF;">多样性</span>
-                    <button type="button" class="mode-btn" data-diversity="low" onclick="selectDiversityLevel('low', this)" style="font-size:11px;padding:3px 8px;">低</button>
-                    <button type="button" class="mode-btn active" data-diversity="medium" onclick="selectDiversityLevel('medium', this)" style="font-size:11px;padding:3px 8px;">中</button>
-                    <button type="button" class="mode-btn" data-diversity="high" onclick="selectDiversityLevel('high', this)" style="font-size:11px;padding:3px 8px;">高</button>
-                </div>
             </div>
             <div class="prep-ingr-rec-summary" id="prepIngrRecSummary">正在融合当前时节、家庭口味与历史爱吃食材，生成 3 天 × 3 餐 个性化推荐，请稍候…</div>
             <div id="prepIngrRecResult" style="min-height:120px;">
@@ -4070,8 +4095,8 @@
                     <button type="button" class="ingr-rec-kb-clear" onclick="clearIngrRecKbFilters()" title="清除">×</button>
                 </div>
                 <div class="ingr-rec-kb-filt-row">
-                    <label class="ingr-rec-kb-vis"><input type="checkbox" class="ingr-rec-kb-vis-cb" data-vis="private" checked>个人</label>
-                    <label class="ingr-rec-kb-vis"><input type="checkbox" class="ingr-rec-kb-vis-cb" data-vis="family" checked>家庭</label>
+                    <label class="ingr-rec-kb-vis"><input type="checkbox" class="ingr-rec-kb-vis-cb" data-vis="private">个人</label>
+                    <label class="ingr-rec-kb-vis"><input type="checkbox" class="ingr-rec-kb-vis-cb" data-vis="family">家庭</label>
                     <label class="ingr-rec-kb-vis"><input type="checkbox" class="ingr-rec-kb-vis-cb" data-vis="public" checked>公共</label>
                     <div class="ingr-rec-kb-cats-row">
                         <select id="ingrRecKbMainCat" class="ingr-rec-kb-sel main-cat" onchange="populateIngrRecKbSubCategories(); filterIngrRecKbList()">
@@ -4103,7 +4128,7 @@
                     <div class="ingr-rec-kb-vis-row">
                         <label class="ingr-rec-kb-vis"><input type="checkbox" class="ingr-rec-kb-vis2" data-vis="private">个人</label>
                         <label class="ingr-rec-kb-vis"><input type="checkbox" class="ingr-rec-kb-vis2" data-vis="family">家庭</label>
-                        <label class="ingr-rec-kb-vis"><input type="checkbox" class="ingr-rec-kb-vis2" data-vis="public">公共</label>
+                        <label class="ingr-rec-kb-vis"><input type="checkbox" class="ingr-rec-kb-vis2" data-vis="public" checked>公共</label>
                     </div>
                     <div class="ingr-rec-kb-ai-title" onclick="toggleIngrRecKbAiSection()">知识库基于当季食材食谱推荐 <span class="ingr-rec-kb-ai-toggle-icon">▼</span></div>
                 </div>
@@ -4189,15 +4214,39 @@
                     </select>
                 </div>
             </div>
-            <!-- 第2行：数量（左）+ 存储位置（右）并排 -->
+            <!-- 第2行：数量 + 单位 + 存储位置 并排 -->
             <div class="fi-row">
-                <div class="fi-col fi-w-1">
+                <div class="fi-col" style="flex:1;">
                     <label>数量</label>
-                    <input type="text" id="fridgeQuantity" placeholder="例如：3个 / 500g">
+                    <input type="number" id="fridgeQuantity" placeholder="如：3" style="min-width:0;">
                 </div>
-                <div class="fi-col fi-w-2">
+                <div class="fi-col" style="flex:1;">
+                    <label>单位</label>
+                    <select id="fridgeUnit" style="min-width:0;">
+                        <option value="">选</option>
+                        <option value="个">个</option>
+                        <option value="只">只</option>
+                        <option value="根">根</option>
+                        <option value="把">把</option>
+                        <option value="条">条</option>
+                        <option value="颗">颗</option>
+                        <option value="斤">斤</option>
+                        <option value="克">克</option>
+                        <option value="千克">千克</option>
+                        <option value="毫升">毫升</option>
+                        <option value="升">升</option>
+                        <option value="包">包</option>
+                        <option value="袋">袋</option>
+                        <option value="盒">盒</option>
+                        <option value="瓶">瓶</option>
+                        <option value="块">块</option>
+                        <option value="份">份</option>
+                        <option value="适量">适量</option>
+                    </select>
+                </div>
+                <div class="fi-col" style="flex:1.2;">
                     <label>存储位置</label>
-                    <input type="text" id="fridgeStorageLocation" placeholder="如：冰箱下层、橱柜左侧（可选）">
+                    <input type="text" id="fridgeStorageLocation" placeholder="如：冰箱下层（可选）">
                 </div>
             </div>
             <!-- 第3行：购买日期（左）+ 保质期至（右）并排 -->
@@ -4258,54 +4307,87 @@
     <!-- 冰箱：编辑食材模态框 -->
     <div class="fridge-modal" id="editFridgeModal">
         <div class="fridge-modal-content">
-            <div style="font-weight:700; font-size:16px; margin-bottom:16px; text-align:center;">✏️ 编辑食材</div>
+            <!-- 顶部导航栏：< 返回  编辑食材  保存 -->
+            <div class="fi-modal-header">
+                <button class="fi-back-btn" onclick="closeEditFridgeModal()">‹</button>
+                <span class="fi-title">编辑食材</span>
+                <button class="fi-save-btn" onclick="submitEditFridgeItem()">保存</button>
+            </div>
             <input type="hidden" id="editFridgeId">
-            <div class="fridge-form-group">
-                <label>食材名称 *</label>
-                <input type="text" id="editFridgeName" placeholder="例如：番茄">
+            <!-- 第一行：食材名称 | 分类 | 数量 | 单位 -->
+            <div class="fi-row">
+                <div class="fi-col" style="flex:2;">
+                    <label>食材名称 *</label>
+                    <input type="text" id="editFridgeName" placeholder="例如：番茄" oninput="autoFillEditDates()">
+                </div>
+                <div class="fi-col" style="flex:1.2;">
+                    <label>分类 *</label>
+                    <select id="editFridgeCategory" onchange="autoFillEditDates()">
+                        <option value="主粮">主粮</option>
+                        <option value="蔬菜">蔬菜</option>
+                        <option value="水果">水果</option>
+                        <option value="肉蛋奶">肉蛋奶</option>
+                        <option value="水产">水产</option>
+                        <option value="调料">调料</option>
+                        <option value="干货药材">干货药材</option>
+                        <option value="饮料零食">饮料零食</option>
+                        <option value="冷冻">冷冻</option>
+                        <option value="方便食品">方便食品</option>
+                    </select>
+                </div>
+                <div class="fi-col" style="flex:0.8;">
+                    <label>数量</label>
+                    <input type="number" id="editFridgeQuantity" placeholder="3" oninput="onEditQtyInput()">
+                </div>
+                <div class="fi-col" style="flex:1;">
+                    <label>单位</label>
+                    <select id="editFridgeUnit">
+                        <option value="个">个</option>
+                        <option value="只">只</option>
+                        <option value="根">根</option>
+                        <option value="把">把</option>
+                        <option value="条">条</option>
+                        <option value="颗">颗</option>
+                        <option value="斤">斤</option>
+                        <option value="克">克</option>
+                        <option value="千克">千克</option>
+                        <option value="毫升">毫升</option>
+                        <option value="升">升</option>
+                        <option value="包">包</option>
+                        <option value="袋">袋</option>
+                        <option value="盒">盒</option>
+                        <option value="瓶">瓶</option>
+                        <option value="块">块</option>
+                        <option value="份">份</option>
+                        <option value="适量">适量</option>
+                    </select>
+                </div>
             </div>
-            <div class="fridge-form-group">
-                <label>分类 *</label>
-                <select id="editFridgeCategory">
-                    <option value="主粮">🌾 主粮</option>
-                    <option value="蔬菜">🥬 蔬菜</option>
-                    <option value="水果">🍎 水果</option>
-                    <option value="肉蛋奶">🥩 肉蛋奶</option>
-                    <option value="水产">🐟 水产</option>
-                    <option value="调料">🧂 调料</option>
-                    <option value="干货药材">🥜 干货药材</option>
-                    <option value="饮料零食">🧃 饮料零食</option>
-                    <option value="冷冻">🧊 冷冻</option>
-                    <option value="方便食品">🍜 方便食品</option>
-                </select>
+            <!-- 第二行：存储方式 | 存储位置 -->
+            <div class="fi-row">
+                <div class="fi-col" style="flex:1;">
+                    <label>存储方式</label>
+                    <select id="editFridgeStorage">
+                        <option value="冷藏">❄️ 冷藏</option>
+                        <option value="常温">🌡️ 常温</option>
+                        <option value="冷冻">🧊 冷冻</option>
+                    </select>
+                </div>
+                <div class="fi-col" style="flex:1.5;">
+                    <label>存储位置</label>
+                    <input type="text" id="editFridgeStorageLocation" placeholder="冰箱下层、橱柜左侧（可选）">
+                </div>
             </div>
-            <div class="fridge-form-group">
-                <label>存储方式</label>
-                <select id="editFridgeStorage">
-                    <option value="冷藏">❄️ 冷藏</option>
-                    <option value="常温">🌡️ 常温</option>
-                    <option value="冷冻">🧊 冷冻</option>
-                </select>
-            </div>
-            <div class="fridge-form-group">
-                <label>存储位置</label>
-                <input type="text" id="editFridgeStorageLocation" placeholder="如：冰箱下层、橱柜左侧（可选）">
-            </div>
-            <div class="fridge-form-group">
-                <label>数量</label>
-                <input type="text" id="editFridgeQuantity" placeholder="例如：3个 / 500g">
-            </div>
-            <div class="fridge-form-group">
-                <label>购买日期</label>
-                <input type="date" id="editFridgePurchaseDate">
-            </div>
-            <div class="fridge-form-group">
-                <label>保质期至</label>
-                <input type="date" id="editFridgeExpiryDate">
-            </div>
-            <div class="fridge-form-actions">
-                <button class="fridge-btn-secondary" onclick="closeEditFridgeModal()">取消</button>
-                <button class="fridge-btn-primary" onclick="submitEditFridgeItem()">保存</button>
+            <!-- 第三行：购买日期 | 保质期至 -->
+            <div class="fi-row">
+                <div class="fi-col" style="flex:1;">
+                    <label>购买日期</label>
+                    <input type="date" id="editFridgePurchaseDate">
+                </div>
+                <div class="fi-col" style="flex:1;">
+                    <label>保质期至</label>
+                    <input type="date" id="editFridgeExpiryDate">
+                </div>
             </div>
         </div>
     </div>
@@ -4442,7 +4524,7 @@
     <div class="fridge-result-overlay" id="fridgeResultOverlay">
         <div class="fridge-result-card">
             <div class="fridge-result-title" id="fridgeResultTitle" style="display:flex;align-items:center;gap:8px;">
-                <button onclick="closeFridgeResult()" style="background:none;border:none;font-size:18px;color:#6B7280;cursor:pointer;padding:2px 4px;line-height:1;">&lt;</button>
+                <button onclick="closeFridgeResult()" style="background:none;border:none;font-size:26px;font-weight:600;color:#374151;cursor:pointer;padding:2px 8px;line-height:1;border-radius:6px;">&lt;</button>
                 <span id="fridgeResultTitleText">现有食材推荐菜谱</span>
                 <button type="button" id="addSchemesToPlanTopBtn" style="display:none;margin-left:auto;padding:6px 14px;background:#16A34A;color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">✅ 添加到食记计划</button>
             </div>
@@ -4452,6 +4534,209 @@
 </div>
 
 <script>
+// ==================== Supabase 用户登录系统 ====================
+const SUPABASE_URL = 'https://tjpjcmmcaortvubtnykm.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_hnSosJoSD9SNMnNrT_G9XQ_VAqtcmBy';
+// 注意：SDK 加载后 window.supabase 已占用该名称，这里用 sb 引用 createClient 实例
+var sb = null;
+try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch(e) { console.warn('Supabase init failed:', e); }
+
+// 当前登录用户与家庭信息（缓存在 localStorage）
+function getLoginUser() { try { return JSON.parse(localStorage.getItem('jj_login_user') || 'null'); } catch(e) { return null; } }
+function setLoginUser(u) { localStorage.setItem('jj_login_user', JSON.stringify(u||null)); }
+function getLoginFamily() { try { return JSON.parse(localStorage.getItem('jj_login_family') || 'null'); } catch(e) { return null; } }
+function setLoginFamily(f) { localStorage.setItem('jj_login_family', JSON.stringify(f||null)); }
+function clearLogin() { localStorage.removeItem('jj_login_user'); localStorage.removeItem('jj_login_family'); }
+
+// 显示登录页（隐藏APP主界面）
+function showLoginPage() {
+    var lp = document.getElementById('loginPage');
+    var fp = document.getElementById('createFamilyPage');
+    var app = document.getElementById('appRoot');
+    if (lp) lp.style.display = 'flex';
+    if (fp) fp.style.display = 'none';
+    if (app) app.style.display = 'none';
+}
+// 显示创建家庭页
+function showCreateFamilyPage() {
+    var lp = document.getElementById('loginPage');
+    var fp = document.getElementById('createFamilyPage');
+    var app = document.getElementById('appRoot');
+    if (lp) lp.style.display = 'none';
+    if (fp) fp.style.display = 'flex';
+    if (app) app.style.display = 'none';
+}
+// 显示APP主界面
+function showAppRoot() {
+    var lp = document.getElementById('loginPage');
+    var fp = document.getElementById('createFamilyPage');
+    var app = document.getElementById('appRoot');
+    if (lp) lp.style.display = 'none';
+    if (fp) fp.style.display = 'none';
+    if (app) app.style.display = '';
+}
+
+// 切换登录/注册模式（isRegister=true 显示注册文案，false 显示登录文案）
+var _isRegisterMode = false;
+function switchLoginRegister() {
+    _isRegisterMode = !_isRegisterMode;
+    var btn = document.getElementById('loginBtn');
+    var switchEl = document.getElementById('switchToRegister');
+    if (_isRegisterMode) {
+        if (btn) { btn.textContent = '注册'; btn.setAttribute('onclick', 'doRegister()'); }
+        if (switchEl) switchEl.textContent = '已有账号？点此登录';
+    } else {
+        if (btn) { btn.textContent = '登录'; btn.setAttribute('onclick', 'doLogin()'); }
+        if (switchEl) switchEl.textContent = '还没有账号？点此注册';
+    }
+}
+
+// 注册（邮箱+密码）
+async function doRegister() {
+    if (!sb) { showToast('登录服务未就绪，请刷新重试'); return; }
+    var emailInput = document.getElementById('loginEmail');
+    var pwdInput = document.getElementById('loginPassword');
+    var email = (emailInput && emailInput.value || '').trim();
+    var pwd = (pwdInput && pwdInput.value || '').trim();
+    // 在登录页卡片内显示错误提示（比 toast 更持久可见）
+    var errBox = document.getElementById('loginErrBox');
+    function showErr(msg) {
+        showToast(msg);
+        if (errBox) { errBox.textContent = msg; errBox.style.display = 'block'; }
+    }
+    function clearErr() { if (errBox) { errBox.textContent = ''; errBox.style.display = 'none'; } }
+    clearErr();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showErr('请输入正确的邮箱'); return; }
+    if (pwd.length < 6) { showErr('密码至少 6 位'); return; }
+    try {
+        var btn = document.getElementById('loginBtn');
+        if (btn) { btn.disabled = true; btn.textContent = '注册中…'; }
+        var res = await sb.auth.signUp({ email: email, password: pwd });
+        if (res && res.error) throw res.error;
+        // 注册成功（部分配置需邮箱确认，这里先尝试直接登录态）
+        var u = (res && res.data && res.data.user) || null;
+        if (u && res.data.session) {
+            // 有会话 → 直接登录
+            setLoginUser({ id: u.id, email: u.email || email, aud: u.aud });
+            showToast('注册成功，已自动登录');
+            await afterLoginCheck();
+        } else if (u && !res.data.session) {
+            // 注册成功但需要邮箱确认
+            showErr('注册成功，请到邮箱点击确认链接后再登录');
+            if (btn) { btn.disabled = false; btn.textContent = '注册'; }
+            // 切回登录模式
+            _isRegisterMode = true; switchLoginRegister();
+        } else {
+            showErr('注册异常，请稍后重试');
+            if (btn) { btn.disabled = false; btn.textContent = '注册'; }
+        }
+    } catch(e) {
+        var msg = e && e.message || '未知错误';
+        // 常见错误友好提示
+        if (msg.indexOf('rate limit') > -1 || msg.indexOf('over_email_send_rate_limit') > -1) {
+            msg = '注册过于频繁，请稍后再试（每小时限3次）';
+        } else if (msg.indexOf('already') > -1 && msg.indexOf('registered') > -1) {
+            msg = '该邮箱已注册，请直接登录';
+        } else if (msg.indexOf('weak') > -1 || msg.indexOf('password') > -1) {
+            msg = '密码强度不足，请使用更复杂的密码';
+        }
+        showErr('注册失败：' + msg);
+        var btn = document.getElementById('loginBtn'); if (btn) { btn.disabled = false; btn.textContent = '注册'; }
+    }
+}
+
+// 登录（邮箱+密码）
+async function doLogin() {
+    if (!sb) { showToast('登录服务未就绪，请刷新重试'); return; }
+    var emailInput = document.getElementById('loginEmail');
+    var pwdInput = document.getElementById('loginPassword');
+    var email = (emailInput && emailInput.value || '').trim();
+    var pwd = (pwdInput && pwdInput.value || '').trim();
+    var errBox = document.getElementById('loginErrBox');
+    function showErr(msg) {
+        showToast(msg);
+        if (errBox) { errBox.textContent = msg; errBox.style.display = 'block'; }
+    }
+    function clearErr() { if (errBox) { errBox.textContent = ''; errBox.style.display = 'none'; } }
+    clearErr();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showErr('请输入正确的邮箱'); return; }
+    if (!pwd) { showErr('请输入密码'); return; }
+    try {
+        var btn = document.getElementById('loginBtn');
+        if (btn) { btn.disabled = true; btn.textContent = '登录中…'; }
+        var res = await sb.auth.signInWithPassword({ email: email, password: pwd });
+        if (res && res.error) throw res.error;
+        var u = (res && res.data && res.data.user) || null;
+        setLoginUser({ id: u && u.id, email: (u && u.email) || email, aud: u && u.aud });
+        showToast('登录成功');
+        await afterLoginCheck();
+    } catch(e) {
+        var msg = e && e.message || '邮箱或密码错误';
+        if (msg.indexOf('Invalid login credentials') > -1) {
+            msg = '邮箱或密码错误（若您尚未注册，请点下方"还没有账号？点此注册"先注册）';
+        } else if (msg.indexOf('Email not confirmed') > -1) {
+            msg = '邮箱尚未确认，请先到邮箱点击确认链接';
+        }
+        showErr('登录失败：' + msg);
+        var btn = document.getElementById('loginBtn'); if (btn) { btn.disabled = false; btn.textContent = '登录'; }
+    }
+}
+
+// 登录后检查家庭归属
+async function afterLoginCheck() {
+    var u = getLoginUser();
+    if (!u) { showLoginPage(); return; }
+    try {
+        // 查询 families 表（owner_id = 当前登录用户 uuid）
+        var r = await sb.from('families').select('id,family_name,owner_id').eq('owner_id', u.id).maybeSingle();
+        if (r && r.data) {
+            setLoginFamily({ id: r.data.id, name: r.data.family_name, owner_id: r.data.owner_id });
+            showAppRoot();
+            return;
+        }
+    } catch(e) { console.warn('query family failed:', e); }
+    // 无家庭 → 创建家庭页
+    showCreateFamilyPage();
+}
+
+// 创建家庭
+async function doCreateFamily() {
+    if (!sb) { showToast('服务未就绪'); return; }
+    var nameInput = document.getElementById('familyNameInput');
+    var name = (nameInput && nameInput.value || '').trim();
+    if (!name) { showToast('请输入家庭名称'); return; }
+    var u = getLoginUser();
+    if (!u || !u.id) { showToast('请先登录'); showLoginPage(); return; }
+    try {
+        var btn = document.getElementById('createFamilyBtn');
+        if (btn) { btn.disabled = true; btn.textContent = '创建中…'; }
+        var r = await sb.from('families').insert({ family_name: name, owner_id: u.id }).select().single();
+        if (r && r.error) throw r.error;
+        if (r && r.data) {
+            setLoginFamily({ id: r.data.id, name: r.data.family_name, owner_id: r.data.owner_id });
+            showToast('家庭创建成功');
+            showAppRoot();
+        }
+    } catch(e) {
+        var msg = e && e.message || '未知错误';
+        if (msg.indexOf('row-level security') > -1 || msg.indexOf('42501') > -1) {
+            msg = '数据库权限策略未放行，请在 Supabase 后台为 families 表添加 RLS 策略（允许认证用户插入/查询自己的家庭）';
+        } else if (msg.indexOf('duplicate key') > -1 || msg.indexOf('23505') > -1) {
+            msg = '您已创建过家庭，请刷新页面重试';
+        }
+        showToast('创建失败：' + msg);
+        var btn = document.getElementById('createFamilyBtn'); if (btn) { btn.disabled = false; btn.textContent = '创建家庭'; }
+    }
+}
+
+// 退出登录
+function doLogout() {
+    if (sb) { try { sb.auth.signOut(); } catch(e) {} }
+    clearLogin();
+    showLoginPage();
+    showToast('已退出登录');
+}
+
 // ==================== 数据迁移：mealPlans + mealRecords → dietCalendar ====================
 function migrateToDietCalendar() {
     if (lsGet('dietCalendarMigrated')) return; // 已迁移过则跳过
@@ -6557,20 +6842,53 @@ function _loadFridgeItemsForAi() {
 function _freshnessDaysByCategory(name, category) {
     const c = String(category || '').trim();
     const n = String(name || '').trim();
-    if (/叶菜|青菜|生菜|菠菜|油麦|油麦菜|小白菜|韭菜|空心菜|菜心/.test(n)) return 2;
-    if (/黄瓜|番茄|西红柿|茄子|青椒|辣椒|豆角|玉米|土豆|胡萝卜|萝卜|洋葱|南瓜|冬瓜/.test(n)) return 5;
-    if (/草莓|蓝莓|葡萄|桃|西瓜|哈密瓜|樱桃|杨梅/.test(n)) return 3;
-    if (/苹果|梨|橙子|橘子|柚子|柠檬|香蕉|芒果|火龙果|猕猴桃/.test(n)) return 7;
-    if (/猪肉|牛肉|羊肉|鸡肉|鸭肉|鱼|虾|蟹|水产|鱼块|鱼片|排骨|牛腩|里脊|鸡胸|鸡腿/.test(n) || c === '水产' || /肉/.test(c)) return 3;
-    if (/鸡蛋|鸭蛋|鹌鹑蛋|奶|酸奶|牛奶/.test(n) || c === '肉蛋奶') return 10;
-    if (/豆腐|豆皮|千张|豆干|腐竹/.test(n)) return 4;
-    if (/米|面|面粉|挂面|面条|杂粮|馒头|面包|全麦|燕麦|藜麦|玉米饭|杂粮饭/.test(n) || c === '主粮') return 30;
-    if (/冷冻|冻|冰/.test(n) || c === '冷冻') return 45;
-    if (/调料|油|盐|酱|醋|酱油|生抽|老抽|蚝油|糖|味精|鸡精|胡椒|花椒|八角|桂皮|辣椒|豆瓣酱|咖喱/.test(n) || c === '调料') return 120;
-    if (/干货|干香菇|木耳|银耳|莲子|枸杞|红枣|药材|山药干|黄芪|党参/.test(n) || c === '干货药材') return 180;
-    if (/饮料|可乐|汽水|果汁|矿泉水|纯净水|零食|饼干|薯片|巧克力|糖果/.test(n) || c === '饮料零食') return 60;
-    if (/方便面|火锅底料|速冻饺子|速冻包子|手抓饼|自热|罐头|午餐肉/.test(n) || c === '方便食品') return 90;
-    return 7; // 默认 7 天
+    // ===== 叶菜类：冷藏 1-3 天 =====
+    if (/叶菜|青菜|生菜|菠菜|油麦|油麦菜|小白菜|韭菜|空心菜|菜心|苋菜|荠菜|油菜/.test(n)) return 2;
+    // ===== 浆果类：冷藏 2-3 天 =====
+    if (/草莓|蓝莓|葡萄|提子|桃|西瓜|哈密瓜|樱桃|杨梅|枇杷|桑葚/.test(n)) return 3;
+    // ===== 根茎/瓜果蔬菜：冷藏 5-7 天 =====
+    if (/黄瓜|番茄|西红柿|茄子|青椒|辣椒|豆角|玉米|土豆|胡萝卜|萝卜|洋葱|南瓜|冬瓜|丝瓜|苦瓜|莴笋|莲藕|茭白|红薯|紫薯|山药|芋头/.test(n)) return 7;
+    // ===== 常温耐放水果：7-14 天 =====
+    if (/苹果|梨|橙子|橘子|柚子|柠檬/.test(n)) return 14;
+    if (/香蕉|芒果|火龙果|猕猴桃|木瓜|牛油果|榴莲/.test(n)) return 5; // 热带水果常温 3-5 天
+    // ===== 蛋类：冷藏 30 天（需在肉类之前匹配） =====
+    if (/鸡蛋|鸭蛋|鹌鹑蛋|皮蛋|咸蛋|鹅蛋/.test(n)) return 30;
+    // ===== 鲜奶：冷藏 7 天（开封后） =====
+    if (/牛奶|鲜奶|酸奶|豆奶/.test(n)) return 7;
+    // ===== 豆制品：冷藏 3-5 天 =====
+    if (/豆腐|豆皮|千张|豆干|腐竹|血豆腐|内酯豆腐/.test(n)) return 4;
+    // ===== 鲜肉/水产：冷藏 2-3 天 =====
+    if (/猪肉|牛肉|羊肉|鸡肉|鸭肉|鱼|虾|蟹|水产|鱼块|鱼片|排骨|牛腩|里脊|鸡胸|鸡腿|五花肉|鸡翅|鸭翅/.test(n) || c === '水产' || /肉/.test(c)) return 3;
+    // ===== 葱姜蒜 =====
+    if (/葱|小葱|大葱|香葱/.test(n)) return 5;  // 冷藏 3-5 天
+    if (/姜|生姜|老姜|嫩姜/.test(n)) return 15; // 常温阴凉处 2-3 周
+    if (/蒜|大蒜|蒜头|蒜瓣/.test(n)) return 60; // 常温 1-2 个月
+    // ===== 主粮：常温 6-12 个月 =====
+    if (/大米|糯米|小米|糙米|黑米|红米|杂粮|藜麦|燕麦米|玉米渣/.test(n)) return 180;
+    if (/面粉|全麦粉|高筋粉|低筋粉|中筋粉|淀粉|生粉|玉米淀粉/.test(n)) return 180;
+    if (/挂面|面条|米粉|粉丝|宽面|细面|意大利面|意面/.test(n)) return 180;
+    if (/面包|吐司|馒头|花卷|包子|烧麦|饺子皮|馄饨皮/.test(n)) return 5; // 短保：3-5 天
+    if (c === '主粮') return 180;
+    // ===== 冷冻食品 =====
+    if (/冷冻|冻|冰/.test(n) || c === '冷冻') return 90;
+    // ===== 调料：开封后 3-6 个月 =====
+    if (/料酒|黄酒|白酒|米酒/.test(n)) return 180; // 料酒开封后 3-6 个月
+    if (/食用油|菜籽油|花生油|大豆油|调和油|玉米油|橄榄油|芝麻油|香油/.test(n)) return 90; // 开封后 1-3 个月
+    if (/酱油|生抽|老抽|醋|陈醋|香醋|米醋/.test(n)) return 180; // 开封后 3-6 个月
+    if (/蚝油|鱼露/.test(n)) return 90; // 开封后 1-3 个月（需冷藏）
+    if (/盐|白糖|冰糖|蜂蜜|味精|鸡精|胡椒粉|花椒粉|八角|桂皮|香叶|丁香|茴香|花椒|孜然|咖喱粉|五香粉|辣椒粉|豆瓣酱|甜面酱|黄豆酱|番茄酱|芝麻酱|花生酱/.test(n) || c === '调料') return 180;
+    // ===== 干货药材：6-12 个月 =====
+    if (/干货|干香菇|木耳|银耳|莲子|枸杞|红枣|药材|山药干|黄芪|党参|桂圆|荔枝干|花生|核桃|杏仁|腰果|葵花籽|瓜子/.test(n) || c === '干货药材') return 180;
+    // ===== 饮料零食 =====
+    if (/饮料|可乐|汽水|果汁|矿泉水|纯净水|零食|饼干|薯片|巧克力|糖果/.test(n) || c === '饮料零食') return 90;
+    // ===== 方便食品 =====
+    if (/方便面|火锅底料|速冻饺子|速冻包子|手抓饼|自热|罐头|午餐肉/.test(n) || c === '方便食品') return 180;
+    // ===== 奶酪等长期乳制品 =====
+    if (/奶酪|芝士|黄油|奶油/.test(n)) return 60;
+    // ===== 分类兜底 =====
+    if (c === '肉蛋奶') return 7;
+    // 默认：7 天（保守估计）
+    return 7;
 }
 // ⚠️ 新鲜度权重（现有食材食谱专用）：自动识别快过期食材，无需用户单独选择"清空冰箱"模式
 // 返回 0=正常权重 1=存放超3天/临近保质期 →「⚠️ 建议优先使用」 2=存放超7天/保质期将尽 →「⚠️ 即将过期，建议尽快使用」
@@ -6977,6 +7295,17 @@ const DISH_INGREDIENTS = {
     '番茄鸡蛋饼': { ingredients: ['番茄', '鸡蛋', '面粉'], category: '蔬菜', meals: ['breakfast'], perServing: [{name:'番茄',quantity:80,unit:'克'},{name:'鸡蛋',quantity:1,unit:'个'},{name:'面粉',quantity:50,unit:'克'}] },
     '银耳红枣羹': { ingredients: ['银耳', '红枣', '冰糖'], category: '干货药材', meals: ['breakfast'], perServing: [{name:'银耳',quantity:10,unit:'克'},{name:'红枣',quantity:3,unit:'颗'},{name:'冰糖',quantity:10,unit:'克'}] },
     '蒸南瓜': { ingredients: ['南瓜'], category: '蔬菜', meals: ['breakfast'], perServing: [{name:'南瓜',quantity:150,unit:'克'}] },
+    '小米南瓜粥': { ingredients: ['小米', '南瓜'], category: '主粮', meals: ['breakfast'], perServing: [{name:'小米',quantity:40,unit:'克'},{name:'南瓜',quantity:100,unit:'克'}] },
+    '南瓜粥': { ingredients: ['大米', '南瓜'], category: '主粮', meals: ['breakfast'], perServing: [{name:'大米',quantity:30,unit:'克'},{name:'南瓜',quantity:120,unit:'克'}] },
+    '燕麦粥': { ingredients: ['燕麦片'], category: '主粮', meals: ['breakfast'], perServing: [{name:'燕麦片',quantity:50,unit:'克'}] },
+    '煎蛋': { ingredients: ['鸡蛋', '食用油', '盐'], category: '肉蛋奶', meals: ['breakfast'], perServing: [{name:'鸡蛋',quantity:1,unit:'个'},{name:'食用油',quantity:5,unit:'毫升'},{name:'盐',quantity:1,unit:'克'}] },
+    '荷包蛋': { ingredients: ['鸡蛋', '食用油', '盐'], category: '肉蛋奶', meals: ['breakfast'], perServing: [{name:'鸡蛋',quantity:1,unit:'个'},{name:'食用油',quantity:5,unit:'毫升'},{name:'盐',quantity:1,unit:'克'}] },
+    '白煮蛋': { ingredients: ['鸡蛋'], category: '肉蛋奶', meals: ['breakfast'], perServing: [{name:'鸡蛋',quantity:1,unit:'个'}] },
+    '茶叶蛋': { ingredients: ['鸡蛋', '茶叶', '酱油'], category: '肉蛋奶', meals: ['breakfast'], perServing: [{name:'鸡蛋',quantity:1,unit:'个'},{name:'茶叶',quantity:1,unit:'克'},{name:'酱油',quantity:3,unit:'毫升'}] },
+    '燕麦牛奶': { ingredients: ['燕麦片', '牛奶'], category: '主粮', meals: ['breakfast'], perServing: [{name:'燕麦片',quantity:40,unit:'克'},{name:'牛奶',quantity:250,unit:'毫升'}] },
+    '牛奶燕麦': { ingredients: ['燕麦片', '牛奶'], category: '主粮', meals: ['breakfast'], perServing: [{name:'燕麦片',quantity:40,unit:'克'},{name:'牛奶',quantity:250,unit:'毫升'}] },
+    '牛奶麦片': { ingredients: ['燕麦片', '牛奶'], category: '主粮', meals: ['breakfast'], perServing: [{name:'燕麦片',quantity:50,unit:'克'},{name:'牛奶',quantity:250,unit:'毫升'}] },
+    '三明治': { ingredients: ['吐司', '鸡蛋', '生菜', '番茄'], category: '主粮', meals: ['breakfast'], perServing: [{name:'吐司',quantity:80,unit:'克'},{name:'鸡蛋',quantity:1,unit:'个'},{name:'生菜',quantity:30,unit:'克'},{name:'番茄',quantity:50,unit:'克'}] },
     // ========== 午晚餐菜品 ==========
     '番茄炒蛋': { ingredients: ['番茄', '鸡蛋', '葱花'], category: '蔬菜', meals: ['lunch', 'dinner'], perServing: [{name:'番茄',quantity:150,unit:'克'},{name:'鸡蛋',quantity:1,unit:'个'},{name:'葱花',quantity:5,unit:'克'}] },
     '菠菜牛肉汤': { ingredients: ['牛肉', '菠菜', '姜片', '枸杞'], category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'牛肉',quantity:80,unit:'克'},{name:'菠菜',quantity:100,unit:'克'},{name:'姜片',quantity:5,unit:'克'},{name:'枸杞',quantity:3,unit:'克'}] },
@@ -7081,7 +7410,10 @@ var SAVING_RESTAURANT_PRICE = {
     '宫保鸡丁': 28, '香菇滑鸡': 30, '黄焖鸡': 30, '白切鸡': 28, '土豆炖鸡块': 28,
     '茭白炒肉丝': 26, '冬瓜炒肉片': 22, '虾皮烧冬瓜': 18, '芹菜炒香干': 20, '油焖茭白': 20,
     '青椒土豆丝': 14, '醋溜土豆丝': 14, '酸辣土豆丝': 14, '米饭': 3, '白米饭': 3,
-    '小米粥': 5, '白粥': 4, '阳春面': 12, '蔬菜面': 14, '牛肉粉': 24, '蒸饺': 18, '水饺': 18,
+    '小米粥': 5, '白粥': 4, '小米南瓜粥': 6, '南瓜粥': 6, '燕麦粥': 8, '燕麦牛奶': 10, '牛奶燕麦': 10,
+    '牛奶麦片': 8, '三明治': 12, '鸡蛋三明治': 12,
+    '煎蛋': 5, '荷包蛋': 5, '水煮蛋': 3, '白煮蛋': 3, '茶叶蛋': 3, '白粥配鸡蛋': 7, '豆腐脑': 7, '豆浆': 3,
+    '葱油拌面': 14, '阳春面': 12, '蔬菜面': 14, '牛肉粉': 24, '蒸饺': 18, '水饺': 18,
     '绿豆汤': 8, '紫菜汤': 8
 };
 // 关键词兜底（每人份餐厅价，元）
@@ -7134,7 +7466,10 @@ function calcDishSaving(dishName, servings) {
     var perOut = getDishRestaurantPerPerson(dishName);
     var out = perOut * sv;
     var home = getDishHomeCost(dishName, sv);
-    if (home == null) home = Math.max(3, Math.round(out * 0.42 * 10) / 10); // 无食材用量表的菜：按餐厅价42%估在家价
+    if (home == null) {
+        // 无食材用量表的菜：不参与省钱计算（避免估算失真）
+        return { name: dishName, home: 0, out: out, saved: 0, noRecipe: true };
+    }
     // 在家价不可能高于外面吃，异常数据兜底
     if (home > out) home = Math.round(out * 0.6 * 10) / 10;
     return { name: dishName, home: Math.round(home * 10) / 10, out: out, saved: Math.max(0, Math.round((out - home) * 10) / 10) };
@@ -7199,7 +7534,7 @@ function calcMealSaving(md) {
     });
     if (!names.length) return null;
     var sv = _savingServingsOf(md);
-    var dishes = names.map(function (nm) { return calcDishSaving(nm, sv); });
+    var dishes = names.map(function (nm) { return calcDishSaving(nm, sv); }).filter(function(x){ return !x.noRecipe; });
     var home = dishes.reduce(function (s, x) { return s + x.home; }, 0);
     var out = dishes.reduce(function (s, x) { return s + x.out; }, 0);
     return { dishes: dishes, home: Math.round(home * 10) / 10, out: out, saved: Math.round((out - home) * 10) / 10, servings: sv, projected: isProjected };
@@ -7247,6 +7582,186 @@ function aggregateSaving(start, end) {
             .sort(function (a, b) { return b[1] - a[1]; }).slice(0, 5)
     };
 }
+// 用户累计记录天数：取采购记录、实际就餐记录、食材购买日期中最早的一条，距今天数
+function getSavingRecordDays() {
+    var earliest = 0;
+    function consider(ts) { if (ts && !isNaN(ts) && (!earliest || ts < earliest)) earliest = ts; }
+    try {
+        getPurchaseHistoryAll().forEach(function (r) {
+            var ts = Number(r.timestamp) || 0;
+            if (!ts && r.date) { try { ts = (new Date(String(r.date) + 'T12:00:00')).getTime(); } catch (e) { ts = 0; } }
+            consider(ts);
+        });
+    } catch (e) {}
+    try {
+        var cal0 = getDietCalendar();
+        Object.keys(cal0).forEach(function (dk) {
+            var dd = cal0[dk] || {};
+            ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+                if (dd[mt] && dd[mt].actual) consider(new Date(dk + 'T12:00:00').getTime());
+            });
+        });
+    } catch (e) {}
+    try {
+        var fr0 = JSON.parse(lsGet('fridgeItems') || '[]');
+        fr0.forEach(function (it) {
+            if (it && it.purchaseDate) consider(new Date(String(it.purchaseDate) + 'T12:00:00').getTime());
+        });
+    } catch (e) {}
+    if (!earliest) return 0;
+    return Math.max(1, Math.floor((Date.now() - earliest) / (24 * 60 * 60 * 1000)) + 1);
+}
+// 扩展省钱汇总：在家做饭省 + 减少浪费省 + 采购/外卖真实数据
+// 数据来源规范：优先使用用户真实数据；记录不足30天时，减少浪费项使用明确标注的行业平均估算
+function aggregateSavingExtended(start, end) {
+    var base = aggregateSaving(start, end);
+    // 1. 采购真实数据
+    var purAll = getPurchaseHistoryAll().map(function(r){
+        var ts = Number(r.timestamp) || 0;
+        if (!ts && r.date) try { ts = (new Date(String(r.date)+'T12:00:00')).getTime(); } catch(e){ ts=0; }
+        return Object.assign({}, r, { _ts: ts });
+    }).filter(function(r){
+        var t = r._ts || 0;
+        if (!t) {
+            var d; try { d = new Date(String(r.date||'')+'T00:00:00'); } catch(e){ d=null; }
+            if (!d || isNaN(d)) return false;
+            return d >= new Date(start.getFullYear(), start.getMonth(), start.getDate(), 0,0,0) &&
+                   d <= new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23,59,59);
+        }
+        return t >= start.getTime() && t <= end.getTime();
+    });
+    var purTotal = purAll.reduce(function(s,r){ return s + (Number(r.totalAmount)||0); }, 0);
+    var purCount = purAll.length;
+    // 2. 浪费数据：冰箱中已过期且未用完的食材（真实记录）
+    var fridge = [];
+    try { fridge = JSON.parse(lsGet('fridgeItems') || '[]'); } catch(e) { fridge = []; }
+    var now = new Date();
+    var wastedItems = fridge.filter(function(it){
+        if (!it) return false;
+        if (it.usedUp || it.status === 'usedUp' || it.status === 'used_up') return false;
+        if (!it.expiryDate) return false;
+        try {
+            var exp = new Date(String(it.expiryDate)+'T23:59:59');
+            if (isNaN(exp)) return false;
+            return exp < now; // 已过保质期
+        } catch(e) { return false; }
+    });
+    // 估算过期食材价值：优先从采购记录匹配，否则用 estimatePrepPrice
+    var wastedValue = 0;
+    var wastedDetails = [];
+    wastedItems.forEach(function(it){
+        var val = 0;
+        for (var i = 0; i < purAll.length && val <= 0; i++) {
+            var items = Array.isArray(purAll[i].items) ? purAll[i].items.map(normalizePurchaseItem) : [];
+            for (var j = 0; j < items.length; j++) {
+                if (items[j].name === it.name) { val = Number(items[j].estPrice) || 0; break; }
+            }
+        }
+        if (val <= 0 && typeof estimatePrepPrice === 'function') {
+            var qty = it.quantityValue || 1;
+            var unit = it.quantityUnit || '';
+            if (!unit && it.quantity) {
+                var m = String(it.quantity).match(/^(\d+(?:\.\d+)?)(.*)$/);
+                if (m) { qty = Number(m[1]) || 1; unit = m[2] || ''; }
+            }
+            val = estimatePrepPrice(it.name, qty, unit);
+        }
+        wastedValue += val;
+        wastedDetails.push({ name: it.name, value: Math.round(val*10)/10, expiryDate: it.expiryDate });
+    });
+    // 3. 外出就餐/外卖真实数据
+    var cal = getDietCalendar();
+    var mealTypes = ['breakfast', 'lunch', 'dinner'];
+    var extDiningCount = 0;
+    var extDiningCost = 0;
+    Object.keys(cal).forEach(function(dk){
+        var d = new Date(dk + 'T00:00:00');
+        if (isNaN(d) || d < start || d > end) return;
+        var dd = cal[dk] || {};
+        mealTypes.forEach(function(mt){
+            var md = dd[mt];
+            if (!md || !md.actual || !md.actual.diningType) return;
+            var dt = String(md.actual.diningType);
+            if (dt === '外出就餐' || dt === '外卖' || dt === '外带+自制') {
+                extDiningCount++;
+                extDiningCost += Number(md.actual.totalCost) || 0;
+            }
+        });
+    });
+    // 4. 减少浪费省
+    // 行业平均浪费率12%（10%-15%中值），来源：中国农科院《中国食物浪费报告》
+    // 规划后参考浪费率5%（有规划习惯家庭的参考低位），仅在记录不足30天时用于估算
+    var INDUSTRY_WASTE_RATE = 0.12;
+    var PLANNED_REF_WASTE_RATE = 0.05;
+    // 累计记录天数（跨全部历史，非当前周期）
+    var recordDays = getSavingRecordDays();
+    var enoughRecordDays = recordDays >= 30;
+    var homeCost = Number(base.home) || 0;
+    // hasPurchaseData 仅表示有合格的采购记录（控制"本月食材总花费"等展示）
+    var hasPurchaseData = purTotal >= 30 && purCount > 0;
+    // 真实浪费率计算基数（需≥¥30防分母过小失真）：优先采购记录，回退在家做饭食材成本
+    var wasteBase = 0, wasteBaseSource = '';
+    if (purTotal >= 30 && purCount > 0) {
+        wasteBase = purTotal; wasteBaseSource = '采购记录';
+    } else if (homeCost >= 30) {
+        wasteBase = homeCost; wasteBaseSource = '在家做饭食材成本';
+    }
+    // 估算用全月食材花费：周期内已记录食材花费（采购/做饭取大值）按已过天数外推到整个周期
+    var periodFoodSpend = Math.max(purTotal, homeCost);
+    var periodTotalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+    var elapsedDays = Math.min(periodTotalDays, Math.max(1, Math.floor((Date.now() - start.getTime()) / 86400000) + 1));
+    var monthlySpendEst = periodFoodSpend > 0 ? periodFoodSpend / elapsedDays * periodTotalDays : 0;
+    monthlySpendEst = Math.round(monthlySpendEst * 10) / 10;
+    var wasteSaving = 0;
+    var wasteSavingAvailable = false;       // 基于用户真实数据计算
+    var wasteSavingEstimated = false;       // 记录不足30天，基于行业平均估算
+    var wasteRateAvailable = false;         // 是否能计算真实浪费率
+    var actualWasteRate = 0;
+    if (enoughRecordDays && wasteBase >= 30 && wastedItems.length > 0) {
+        // 真实数据：实际浪费率 = 过期食材价值 ÷ 食材花费基数（合理性校验：0-100%）
+        actualWasteRate = Math.min(1, wastedValue / wasteBase);
+        wasteRateAvailable = true;
+        // 仅当实际浪费率 < 行业平均时才计为"节省"（用户规划有效，浪费率低于行业）
+        if (actualWasteRate < INDUSTRY_WASTE_RATE) {
+            wasteSaving = wasteBase * (INDUSTRY_WASTE_RATE - actualWasteRate);
+            wasteSavingAvailable = true;
+        }
+    } else if (!enoughRecordDays && monthlySpendEst > 0) {
+        // 记录不足30天：全月食材花费预估 × 浪费率差（报告中明确标注"基于行业平均估算"）
+        wasteSaving = monthlySpendEst * (INDUSTRY_WASTE_RATE - PLANNED_REF_WASTE_RATE);
+        wasteSavingEstimated = true;
+    }
+    var hasEstimatedPart = wasteSavingEstimated;
+    var totalSaving = base.saved + wasteSaving;
+    return Object.assign({}, base, {
+        purchaseTotal: Math.round(purTotal * 10) / 10,
+        purchaseCount: purCount,
+        wastedValue: Math.round(wastedValue * 10) / 10,
+        wastedItemCount: wastedItems.length,
+        wastedDetails: wastedDetails,
+        wasteBase: Math.round(wasteBase * 10) / 10,
+        wasteBaseSource: wasteBaseSource,
+        periodFoodSpend: Math.round(periodFoodSpend * 10) / 10,
+        elapsedDays: elapsedDays,
+        periodTotalDays: periodTotalDays,
+        monthlySpendEst: monthlySpendEst,
+        actualWasteRatePct: Math.round(actualWasteRate * 1000) / 10,
+        industryWasteRatePct: 12,
+        plannedRefWasteRatePct: 5,
+        wasteSaving: Math.round(wasteSaving * 10) / 10,
+        wasteSavingAvailable: wasteSavingAvailable,
+        wasteSavingEstimated: wasteSavingEstimated,
+        wasteRateAvailable: wasteRateAvailable,
+        recordDays: recordDays,
+        enoughRecordDays: enoughRecordDays,
+        hasEstimatedPart: hasEstimatedPart,
+        hasEnoughHistory: enoughRecordDays,
+        hasPurchaseData: hasPurchaseData,
+        extDiningCount: extDiningCount,
+        extDiningCost: Math.round(extDiningCost * 10) / 10,
+        totalSaving: Math.round(totalSaving * 10) / 10
+    });
+}
 function getMonthRange(y, m) { // y年（4位）、m月（1-12）
     return { start: new Date(y, m - 1, 1), end: new Date(y, m, 0, 23, 59, 59) };
 }
@@ -7256,10 +7771,10 @@ function renderHomeSavingCard() {
     if (!wrap) return;
     var now = new Date();
     var rng = getMonthRange(now.getFullYear(), now.getMonth() + 1);
-    var agg = aggregateSaving(rng.start, rng.end);
+    var agg = aggregateSavingExtended(rng.start, rng.end);
     var txt = document.getElementById('homeSavingLinkText');
-    if (agg.saved <= 0 || !txt) { wrap.style.display = 'none'; return; }
-    txt.textContent = '本月已省¥' + agg.saved.toFixed(1).replace(/\.0$/, '');
+    if (agg.totalSaving <= 0 || !txt) { wrap.style.display = 'none'; return; }
+    txt.textContent = '本月已省¥' + agg.totalSaving.toFixed(1).replace(/\.0$/, '');
     wrap.style.display = 'inline';
 }
 // 首页卡片点击：打开复盘 → 周期报告 → 省钱汇总（当月）
@@ -7309,14 +7824,90 @@ function buildWeeklySavingHtml(weekDates) {
         + '<div style="font-size:11.5px;color:#166534;background:#fff;border:1px dashed #86EFAC;border-radius:8px;padding:8px 10px;">💡 本周在家做 ' + agg.meals + ' 餐，比全部点外卖/下馆子预计少花 <b>¥' + agg.saved.toFixed(1).replace(/\.0$/, '') + '</b></div>'
         + '</div>';
 }
-// 周期省钱汇总 HTML
+// 周期省钱汇总 HTML（规划 vs 不规划对比 + 透明数据来源）
 function buildPeriodSavingHtml(range, periodLabel) {
-    var agg = aggregateSaving(range.start, range.end);
-    if (agg.meals === 0) {
+    var agg = aggregateSavingExtended(range.start, range.end);
+    window.__lastSavingAgg = agg;
+    window.__lastSavingPeriodLabel = periodLabel || '';
+    // 无任何数据
+    if (agg.meals === 0 && agg.purchaseCount === 0) {
         return '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:14px;">'
-            + '<div style="font-size:14px;font-weight:600;color:#166534;margin-bottom:6px;">💰 省钱汇总</div>'
-            + '<div style="font-size:12px;color:#9CA3AF;text-align:center;padding:16px 0;">' + (periodLabel || '所选周期') + ' 暂无在家做饭的记录</div></div>';
+            + '<div style="font-size:14px;font-weight:600;color:#166534;margin-bottom:6px;">📊 本月省钱报告</div>'
+            + '<div style="font-size:12px;color:#9CA3AF;text-align:center;padding:16px 0;">' + (periodLabel || '所选周期') + ' 暂无在家做饭和采购记录</div></div>';
     }
+    // === 规划 vs 不规划 对比区 ===
+    var cmpHtml = '<div style="background:#fff;border:1px solid #DCFCE7;border-radius:10px;padding:12px;margin-bottom:10px;">'
+        + '<div style="font-size:13px;font-weight:600;color:#166534;margin-bottom:8px;">📈 规划 vs 不规划</div>'
+        + '<div style="border-top:1px dashed #BBF7D0;margin:2px 0 8px;"></div>';
+    // 浪费率对比（能计算真实浪费率时显示；记录不足时显示估算对比）
+    if (agg.wasteRateAvailable) {
+        cmpHtml += '<div style="display:flex;justify-content:space-between;font-size:12px;color:#374151;margin-bottom:4px;">'
+            + '<span>规划后食材浪费率 <small style="color:#9CA3AF;font-weight:400;">（真实记录）</small></span><span style="font-weight:600;color:#16A34A;">' + agg.actualWasteRatePct + '%</span></div>';
+        cmpHtml += '<div style="display:flex;justify-content:space-between;font-size:12px;color:#374151;margin-bottom:4px;">'
+            + '<span>不规划预估浪费率</span><span style="font-weight:600;color:#EA580C;">' + agg.industryWasteRatePct + '% <small style="color:#9CA3AF;font-weight:400;">（行业平均）</small></span></div>';
+        cmpHtml += '<div style="border-top:1px dashed #BBF7D0;margin:4px 0;"></div>';
+    } else if (agg.wasteSavingEstimated) {
+        cmpHtml += '<div style="display:flex;justify-content:space-between;font-size:12px;color:#374151;margin-bottom:4px;">'
+            + '<span>规划后食材浪费率 <span style="background:#FEF3C7;color:#92400E;font-size:10px;padding:1px 6px;border-radius:999px;font-weight:400;">估算</span></span><span style="font-weight:600;color:#D97706;">' + agg.plannedRefWasteRatePct + '%</span></div>';
+        cmpHtml += '<div style="display:flex;justify-content:space-between;font-size:12px;color:#374151;margin-bottom:4px;">'
+            + '<span>不规划预估浪费率</span><span style="font-weight:600;color:#EA580C;">' + agg.industryWasteRatePct + '% <small style="color:#9CA3AF;font-weight:400;">（行业平均）</small></span></div>';
+        cmpHtml += '<div style="border-top:1px dashed #BBF7D0;margin:4px 0;"></div>';
+    }
+    // 本月食材总花费（有采购数据时显示）
+    if (agg.hasPurchaseData) {
+        cmpHtml += '<div style="display:flex;justify-content:space-between;font-size:12px;color:#374151;margin-bottom:4px;">'
+            + '<span>本月食材总花费 <small style="color:#9CA3AF;font-weight:400;">（' + agg.purchaseCount + ' 次采购）</small></span><span style="font-weight:600;color:#374151;">¥' + agg.purchaseTotal.toFixed(1).replace(/\.0$/, '') + '</span></div>';
+    }
+    // ✅ 减少外卖（基于用户真实记录的外卖餐数和在家做饭餐数）
+    if (agg.meals > 0) {
+        cmpHtml += '<div style="display:flex;justify-content:space-between;font-size:12px;color:#374151;margin-bottom:4px;">'
+            + '<span>✅ 规划减少外卖 <small style="color:#9CA3AF;font-weight:400;">（在家做饭 ' + agg.meals + ' 餐 · 真实记录）</small></span>'
+            + '<span style="font-weight:600;color:#16A34A;">¥' + agg.saved.toFixed(1).replace(/\.0$/, '') + '</span></div>';
+    }
+    // ⏳/✅ 减少浪费（基于用户记录的食材使用和丢弃情况；不足30天用行业平均估算）
+    if (agg.wasteSavingAvailable) {
+        cmpHtml += '<div style="display:flex;justify-content:space-between;font-size:12px;color:#374151;margin-bottom:4px;">'
+            + '<span>✅ 规划减少浪费 <small style="color:#9CA3AF;font-weight:400;">（过期食材 ¥' + agg.wastedValue.toFixed(1).replace(/\.0$/, '') + ' · 真实记录）</small></span>'
+            + '<span style="font-weight:600;color:#16A34A;">¥' + agg.wasteSaving.toFixed(1).replace(/\.0$/, '') + '</span></div>';
+    } else if (agg.wasteSavingEstimated) {
+        cmpHtml += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#374151;margin-bottom:4px;">'
+            + '<span>⏳ 规划减少浪费 <span style="background:#FEF3C7;color:#92400E;font-size:10px;padding:1px 6px;border-radius:999px;margin-left:2px;font-weight:400;">基于行业平均估算</span><br><small style="color:#9CA3AF;font-weight:400;">全月食材花费预估 ¥' + agg.monthlySpendEst.toFixed(1).replace(/\.0$/, '') + '（已记录 ¥' + agg.periodFoodSpend.toFixed(1).replace(/\.0$/, '') + ' ÷ ' + agg.elapsedDays + ' 天 × ' + agg.periodTotalDays + ' 天外推）</small></span>'
+            + '<span style="font-weight:600;color:#D97706;">¥' + agg.wasteSaving.toFixed(1).replace(/\.0$/, '') + '</span></div>';
+    } else if (agg.wasteRateAvailable && agg.actualWasteRatePct >= agg.industryWasteRatePct) {
+        // 实际浪费率 ≥ 行业平均：不省反浪费
+        cmpHtml += '<div style="display:flex;justify-content:space-between;font-size:12px;color:#374151;margin-bottom:4px;">'
+            + '<span>✅ 规划减少浪费 <small style="color:#9CA3AF;font-weight:400;">（实际浪费率' + agg.actualWasteRatePct + '% ≥ 行业' + agg.industryWasteRatePct + '%）</small></span>'
+            + '<span style="font-weight:600;color:#9CA3AF;">¥0</span></div>';
+    }
+    // 数据积累进度（记录不足30天时显示）
+    if (!agg.enoughRecordDays) {
+        var progPct = Math.min(100, Math.round(agg.recordDays / 30 * 100));
+        cmpHtml += '<div style="margin:6px 0 8px;">'
+            + '<div style="font-size:11px;color:#92400E;margin-bottom:3px;">数据积累中：已记录 ' + agg.recordDays + ' 天 / 建议 30 天</div>'
+            + '<div style="height:6px;background:#FEF3C7;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + progPct + '%;background:#F59E0B;border-radius:3px;"></div></div>'
+            + '<div style="text-align:right;margin-top:5px;"><button onclick="document.getElementById(\'diarySummaryOverlay\').remove()" style="background:#FFFBEB;border:1px solid #FCD34D;color:#92400E;font-size:11px;border-radius:999px;padding:3px 10px;cursor:pointer;">继续记录，解锁精准报告</button></div>'
+            + '</div>';
+    }
+    // 合计
+    cmpHtml += '<div style="border-top:1px dashed #BBF7D0;margin:6px 0;"></div>';
+    var totalParts = [];
+    if (agg.meals > 0) totalParts.push('✅ 减少外卖 ¥' + agg.saved.toFixed(1).replace(/\.0$/, ''));
+    if (agg.wasteSavingAvailable) totalParts.push('✅ 减少浪费 ¥' + agg.wasteSaving.toFixed(1).replace(/\.0$/, ''));
+    else if (agg.wasteSavingEstimated) totalParts.push('⏳ 减少浪费 ¥' + agg.wasteSaving.toFixed(1).replace(/\.0$/, '') + '（估）');
+    cmpHtml += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#166534;margin-bottom:4px;">'
+        + '<span style="font-weight:600;">💡 本月通过规划共省'
+        + (agg.hasEstimatedPart ? '<span style="background:#FEF3C7;color:#92400E;font-size:10px;padding:1px 6px;border-radius:999px;margin-left:4px;font-weight:400;">含估算部分</span>' : '')
+        + '</span>'
+        + '<span style="font-weight:700;color:#16A34A;font-size:17px;">¥' + agg.totalSaving.toFixed(1).replace(/\.0$/, '') + '</span></div>';
+    if (totalParts.length) {
+        cmpHtml += '<div style="font-size:11px;color:#9CA3AF;text-align:right;margin-bottom:8px;">（' + totalParts.join(' + ') + '）</div>';
+    } else {
+        cmpHtml += '<div style="height:8px;"></div>';
+    }
+    // 查看计算逻辑
+    cmpHtml += '<div style="text-align:right;"><button onclick="showSavingCalcLogic()" style="background:none;border:none;color:#2563EB;font-size:11px;cursor:pointer;text-decoration:underline;padding:2px 4px;">查看计算逻辑</button></div>';
+    cmpHtml += '</div>';
+    // === TOP 最省钱的菜 ===
     var topHtml = agg.topDishes.length ? agg.topDishes.map(function (e, i) {
         var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
         return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #F3F4F6;">'
@@ -7324,18 +7915,126 @@ function buildPeriodSavingHtml(range, periodLabel) {
             + '<span style="flex:1;font-size:13px;color:#374151;">' + escapeHtml(e[0]) + '</span>'
             + '<span style="font-size:12px;color:#16A34A;font-weight:700;">省 ¥' + e[1].toFixed(1).replace(/\.0$/, '') + '</span></div>';
     }).join('') : '';
+    // === 在家做 vs 外面吃 三栏（有在家做饭记录时显示）===
+    var statsHtml = '';
+    if (agg.meals > 0) {
+        statsHtml = '<div style="display:flex;gap:8px;justify-content:space-around;margin-bottom:10px;">'
+            + '<div style="text-align:center;flex:1;background:#fff;border:1px solid #DCFCE7;border-radius:10px;padding:10px 4px;"><div style="font-size:11px;color:#9CA3AF;">在家做花费</div><div style="font-size:17px;font-weight:700;color:#374151;margin-top:2px;">¥' + agg.home.toFixed(1).replace(/\.0$/, '') + '</div></div>'
+            + '<div style="text-align:center;flex:1;background:#fff;border:1px solid #DCFCE7;border-radius:10px;padding:10px 4px;"><div style="font-size:11px;color:#9CA3AF;">预计外面吃</div><div style="font-size:17px;font-weight:700;color:#EA580C;margin-top:2px;">¥' + agg.out.toFixed(1).replace(/\.0$/, '') + '</div></div>'
+            + '<div style="text-align:center;flex:1;background:#16A34A;border-radius:10px;padding:10px 4px;"><div style="font-size:11px;color:#D1FAE5;">累计省下</div><div style="font-size:17px;font-weight:700;color:#fff;margin-top:2px;">¥' + agg.totalSaving.toFixed(1).replace(/\.0$/, '') + '</div></div>'
+            + '</div>';
+    }
+    var subInfo = (periodLabel || '') + (agg.meals > 0 ? ' · 在家做饭 ' + agg.meals + ' 餐' : '') + (agg.purchaseCount > 0 ? ' · 采购 ' + agg.purchaseCount + ' 次' : '');
     return '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:14px;">'
-        + '<div style="font-size:14px;font-weight:600;color:#166534;margin-bottom:4px;">💰 省钱汇总</div>'
-        + '<div style="font-size:11px;color:#9CA3AF;margin-bottom:10px;">' + (periodLabel || '') + ' · 在家做饭 ' + agg.meals + ' 餐 · 金额为估算值</div>'
-        + '<div style="display:flex;gap:8px;justify-content:space-around;margin-bottom:12px;">'
-        + '<div style="text-align:center;flex:1;background:#fff;border:1px solid #DCFCE7;border-radius:10px;padding:10px 4px;"><div style="font-size:11px;color:#9CA3AF;">在家做花费</div><div style="font-size:17px;font-weight:700;color:#374151;margin-top:2px;">¥' + agg.home.toFixed(1).replace(/\.0$/, '') + '</div></div>'
-        + '<div style="text-align:center;flex:1;background:#fff;border:1px solid #DCFCE7;border-radius:10px;padding:10px 4px;"><div style="font-size:11px;color:#9CA3AF;">预计外面吃</div><div style="font-size:17px;font-weight:700;color:#EA580C;margin-top:2px;">¥' + agg.out.toFixed(1).replace(/\.0$/, '') + '</div></div>'
-        + '<div style="text-align:center;flex:1;background:#16A34A;border-radius:10px;padding:10px 4px;"><div style="font-size:11px;color:#D1FAE5;">累计省下</div><div style="font-size:17px;font-weight:700;color:#fff;margin-top:2px;">¥' + agg.saved.toFixed(1).replace(/\.0$/, '') + '</div></div>'
-        + '</div>'
+        + '<div style="font-size:14px;font-weight:600;color:#166534;margin-bottom:4px;">📊 本月省钱报告</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;margin-bottom:10px;">' + subInfo + '</div>'
+        + cmpHtml
+        + statsHtml
         + (topHtml ? '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">🏆 最省钱的菜 TOP' + agg.topDishes.length + '</div>' + topHtml : '')
-        + '<div style="font-size:11.5px;color:#166534;background:#fff;border:1px dashed #86EFAC;border-radius:8px;padding:8px 10px;margin-top:10px;">💡 ' + (periodLabel || '该周期') + '在家做 ' + agg.meals + ' 餐，比全部点外卖预计少花 <b>¥' + agg.saved.toFixed(1).replace(/\.0$/, '') + '</b>。金额按食材参考价与同类菜品餐厅预估价估算，仅供参考。</div>'
+        + '<div style="font-size:11.5px;color:#166534;background:#fff;border:1px dashed #86EFAC;border-radius:8px;padding:8px 10px;margin-top:10px;">💡 金额基于用户真实记录（菜品食材、采购、外卖数据）与行业平均数据估算，仅供参考。点击上方"查看计算逻辑"了解详情。</div>'
+        + '<div style="font-size:11.5px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;margin-top:8px;line-height:1.6;">📌 减少浪费的计算依赖您真实记录食材使用和丢弃情况。记录满1个月后，将自动切换为您的真实数据。</div>'
         + '</div>';
 }
+// 查看计算逻辑弹窗：透明展示数据来源、计算公式、时间范围
+function showSavingCalcLogic() {
+    var agg = window.__lastSavingAgg;
+    var label = window.__lastSavingPeriodLabel || '所选周期';
+    if (!agg) return;
+    var fmt = function(v){ return '¥' + Number(v).toFixed(1).replace(/\.0$/, ''); };
+    var html = '<div data-saving-overlay="1" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100001;display:flex;align-items:center;justify-content:center;padding:16px;" onclick="if(event.target===this)this.remove()">'
+        + '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;max-height:80vh;overflow-y:auto;padding:16px;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+        + '<div style="display:flex;align-items:center;gap:8px;"><button onclick="var n=this;while(n){if(n.getAttribute(\'data-saving-overlay\')){n.remove();break;}n=n.parentElement;}" style="background:none;border:none;font-size:26px;font-weight:600;color:#374151;cursor:pointer;padding:2px 8px;line-height:1;border-radius:6px;">&lt;</button><span style="font-size:15px;font-weight:700;color:#166534;">计算逻辑与数据来源</span></div>'
+        + '<button onclick="var n=this;while(n){if(n.getAttribute(\'data-saving-overlay\')){n.remove();break;}n=n.parentElement;}" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9CA3AF;padding:4px 8px;line-height:1;">✕</button></div>'
+        + '<div style="font-size:11px;color:#9CA3AF;margin-bottom:12px;">时间范围：' + escapeHtml(label) + '</div>';
+    // 1. 减少外卖
+    if (agg.meals > 0) {
+        html += '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:10px;margin-bottom:10px;">'
+            + '<div style="font-size:13px;font-weight:600;color:#166534;margin-bottom:6px;">🛵 减少外卖：' + fmt(agg.saved) + '</div>'
+            + '<div style="font-size:11.5px;color:#374151;line-height:1.7;">'
+            + '<b>数据来源：</b>用户记录的在家做饭餐次（' + agg.meals + ' 餐）<br>'
+            + '<b>计算公式：</b>（同类菜品餐厅预估价 × 就餐人数）-（食材参考价 × 用量）<br>'
+            + '<b>说明：</b>在家成本按食材参考价表计算，外出价按同类菜品餐厅/外卖预估价表估算'
+            + '</div></div>';
+    }
+    // 2. 采购数据
+    if (agg.hasPurchaseData) {
+        html += '<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:10px;margin-bottom:10px;">'
+            + '<div style="font-size:13px;font-weight:600;color:#9A3412;margin-bottom:6px;">🛒 食材总花费：' + fmt(agg.purchaseTotal) + '</div>'
+            + '<div style="font-size:11.5px;color:#374151;line-height:1.7;">'
+            + '<b>数据来源：</b>用户采购记录（' + agg.purchaseCount + ' 次采购）<br>'
+            + '<b>说明：</b>来自"食记 → 复盘 → 实际记录 → 采购记录"的真实数据'
+            + '</div></div>';
+    }
+    // 3. 减少浪费
+    if (agg.wasteSavingAvailable) {
+        var wastedList = agg.wastedDetails.map(function(d){ return d.name + '(' + fmt(d.value) + ')'; }).join('、');
+        html += '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:10px;margin-bottom:10px;">'
+            + '<div style="font-size:13px;font-weight:600;color:#92400E;margin-bottom:6px;">🥬 减少浪费：' + fmt(agg.wasteSaving) + '</div>'
+            + '<div style="font-size:11.5px;color:#374151;line-height:1.7;">'
+            + '<b>数据来源：</b>用户冰箱过期食材 + ' + escapeHtml(agg.wasteBaseSource) + ' + 行业平均浪费率<br>'
+            + '<b>计算公式：</b>食材花费基数 ' + fmt(agg.wasteBase) + ' × (行业平均 ' + agg.industryWasteRatePct + '% - 实际浪费率 ' + agg.actualWasteRatePct + '%)<br>'
+            + '<b>实际浪费率：</b>过期食材价值 ' + fmt(agg.wastedValue) + ' ÷ 食材花费基数 ' + fmt(agg.wasteBase) + ' = ' + agg.actualWasteRatePct + '%<br>'
+            + '<b>行业数据来源：</b>中国农科院《中国食物浪费报告》（平均浪费率10%-15%，取中值12%）<br>'
+            + '<b>过期食材：</b>' + escapeHtml(wastedList)
+            + '</div></div>';
+    } else if (agg.wasteSavingEstimated) {
+        // 记录不足30天：基于行业平均估算
+        html += '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:10px;margin-bottom:10px;">'
+            + '<div style="font-size:13px;font-weight:600;color:#92400E;margin-bottom:6px;">⏳ 减少浪费（基于行业平均估算）：' + fmt(agg.wasteSaving) + '</div>'
+            + '<div style="font-size:11.5px;color:#374151;line-height:1.7;">'
+            + '<b>数据来源：</b>用户真实记录的食材花费（采购/在家做饭取大值）+ 行业平均浪费率<br>'
+            + '<b>全月食材花费预估：</b>已记录 ' + fmt(agg.periodFoodSpend) + ' ÷ 周期已过 ' + agg.elapsedDays + ' 天 × 全周期 ' + agg.periodTotalDays + ' 天 = ' + fmt(agg.monthlySpendEst) + '<br>'
+            + '<b>计算公式：</b>全月食材花费预估 ' + fmt(agg.monthlySpendEst) + ' × (不规划行业平均 ' + agg.industryWasteRatePct + '% - 规划参考 ' + agg.plannedRefWasteRatePct + '%)<br>'
+            + '<b>行业数据来源：</b>中国农科院《中国食物浪费报告》（平均浪费率10%-15%，取中值12%）<br>'
+            + '<b>估算说明：</b>您累计记录 ' + agg.recordDays + ' 天（未满30天），规划后浪费率暂按有规划习惯家庭参考值 ' + agg.plannedRefWasteRatePct + '% 估算<br>'
+            + '<b>切换规则：</b>记录满1个月后，将自动切换为您的真实过期食材数据计算'
+            + '</div></div>';
+    } else if (agg.wasteRateAvailable) {
+        // 有浪费率数据但实际浪费率 ≥ 行业平均
+        var wastedList2 = agg.wastedDetails.map(function(d){ return d.name + '(' + fmt(d.value) + ')'; }).join('、');
+        html += '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:10px;margin-bottom:10px;">'
+            + '<div style="font-size:13px;font-weight:600;color:#92400E;margin-bottom:6px;">🥬 减少浪费：¥0</div>'
+            + '<div style="font-size:11.5px;color:#374151;line-height:1.7;">'
+            + '<b>数据来源：</b>用户冰箱过期食材 + ' + escapeHtml(agg.wasteBaseSource) + ' + 行业平均浪费率<br>'
+            + '<b>实际浪费率：</b>过期食材价值 ' + fmt(agg.wastedValue) + ' ÷ 食材花费基数 ' + fmt(agg.wasteBase) + ' = ' + agg.actualWasteRatePct + '%<br>'
+            + '<b>行业平均浪费率：</b>' + agg.industryWasteRatePct + '%（中国农科院《中国食物浪费报告》）<br>'
+            + '<b>当前状态：</b>实际浪费率 ' + agg.actualWasteRatePct + '% ≥ 行业平均 ' + agg.industryWasteRatePct + '%，未产生节省<br>'
+            + '<b>过期食材：</b>' + escapeHtml(wastedList2)
+            + '</div></div>';
+    } else if (agg.enoughRecordDays && agg.wasteBase >= 30) {
+        html += '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:10px;margin-bottom:10px;">'
+            + '<div style="font-size:13px;font-weight:600;color:#92400E;margin-bottom:6px;">🥬 减少浪费</div>'
+            + '<div style="font-size:11.5px;color:#374151;line-height:1.7;">'
+            + '<b>行业平均浪费率：</b>约10%-15%（中国农科院《中国食物浪费报告》）<br>'
+            + '<b>当前状态：</b>未检测到过期食材，无法计算实际浪费率，故不计算具体金额<br>'
+            + '<b>说明：</b>仅在检测到过期食材时才计算减少浪费金额'
+            + '</div></div>';
+    }
+    // 4. 外卖数据
+    if (agg.extDiningCount > 0) {
+        html += '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:10px;margin-bottom:10px;">'
+            + '<div style="font-size:13px;font-weight:600;color:#1E40AF;margin-bottom:6px;">🍽️ 外出就餐/外卖记录</div>'
+            + '<div style="font-size:11.5px;color:#374151;line-height:1.7;">'
+            + '<b>数据来源：</b>用户记录的外出就餐/外卖餐次<br>'
+            + '<b>统计：</b>' + agg.extDiningCount + ' 次 · 实付 ' + fmt(agg.extDiningCost) + '<br>'
+            + '<b>说明：</b>来自"三餐计划、记录"中标记为"外出就餐/外卖"的餐次'
+            + '</div></div>';
+    }
+    // 5. 透明度声明
+    html += '<div style="font-size:11px;color:#6B7280;background:#F9FAFB;border-radius:8px;padding:8px 10px;line-height:1.6;">'
+        + '📋 <b>透明度声明：</b><br>'
+        + '· 所有计算优先使用用户真实数据<br>'
+        + '· 行业数据已标注来源<br>'
+        + '· 数据不足时不计算具体金额<br>'
+        + '· 金额均为估算值，仅供参考'
+        + '</div>';
+    html += '</div></div>';
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    document.body.appendChild(div.firstChild);
+}
+window.showSavingCalcLogic = showSavingCalcLogic;
 
 // ====== AI 兜底：未知菜谱调用AI生成食材用量，缓存到 localStorage ======
 // 返回 Promise<[{name, quantity, unit}]>（按 servings 缩放，基准2人份）
@@ -7439,24 +8138,38 @@ function getStorageDays(purchaseDate) {
     return diff < 0 ? 0 : diff;
 }
 
-// 新鲜度分级：normal(≤2天灰) / warn(3-5天黄) / urgent(6-7天橙) / expired(>7天红)
+// 新鲜度分级（仅按存放天数的阈值辅助；"已过期"必须由保质期判定，见 getFridgeFreshness）
 function getFreshnessLevel(days) {
     if (days === null || days === undefined || isNaN(days)) return null;
     if (days <= 2) return { level: 'normal', days: days, color: '#9CA3AF', phrase: '' };
     if (days <= 5) return { level: 'warn', days: days, color: '#D97706', phrase: '建议优先使用' };
-    if (days <= 7) return { level: 'urgent', days: days, color: '#EA580C', phrase: '即将过期' };
-    return { level: 'expired', days: days, color: '#DC2626', phrase: '已过期，请检查是否可用' };
+    if (days <= 7) return { level: 'urgent', days: days, color: '#EA580C', phrase: '建议尽快使用' };
+    return { level: 'warn', days: days, color: '#D97706', phrase: '建议优先使用' };
 }
 
 // 取食材新鲜度信息（已用完的食材不提醒）
+// 关键规则："已过期"只能由 expiryDate 已过来判定；保质期充足时，存放天数只做温和提醒，
+// 绝不能把大米/干货这类存了一周以上的食材误报为"已过期"。
 function getFridgeFreshness(item) {
     if (!item) return null;
     if (item.usedUp || item.status === 'usedUp' || item.status === 'used_up') return null;
     var days = getStorageDays(item.purchaseDate);
+    var daysLeft = item.expiryDate ? daysUntilExpiry(item.expiryDate) : null;
+
+    // 1) 已过保质期 → 红色"已过期"
+    if (daysLeft !== null && daysLeft < 0) {
+        return { level: 'expired', days: days, daysLeft: daysLeft, color: '#DC2626', phrase: '已过期' + (-daysLeft) + '天，请检查是否可用' };
+    }
+    // 2) 临期（3天内到期）→ 橙色"即将过期"
+    if (daysLeft !== null && daysLeft <= 3) {
+        return { level: 'urgent', days: days, daysLeft: daysLeft, color: '#EA580C', phrase: '即将过期（还剩' + daysLeft + '天）' };
+    }
+    // 3) 保质期充足或无保质期：仅按存放天数做温和提醒，绝不说"已过期"
     if (days === null) return null;
     var f = getFreshnessLevel(days);
     if (!f) return null;
     f.days = days;
+    f.daysLeft = daysLeft;
     return f;
 }
 
@@ -7468,12 +8181,22 @@ function fridgeFreshnessMeta(item) {
     return ' <span style="color:' + f.color + ';font-weight:' + (f.level === 'normal' ? '400' : '600') + ';">⏱ ' + escapeHtml(text) + '</span>';
 }
 
-// 找出存放超过 N 天（默认5天）需提醒的食材，按存放天数倒序
+// 找出需要提醒的食材（按风险倒序）：
+// 1) 已过期 → 必须提醒
+// 2) 即将过期（≤3天）→ 必须提醒
+// 3) 无保质期信息且存放超过5天 → 提醒（无法判断保质期时按存放天数兜底）
+// 4) 保质期充足且存放虽久 → 不提醒（大米存13天但还有78天到期，不该打扰）
 function getLongStoredFridgeItems(items, threshold) {
     threshold = threshold || 5;
     return (items || []).filter(function (it) {
         var f = getFridgeFreshness(it);
-        return f && f.days > threshold;
+        if (!f) return false;
+        // 已过期 / 即将过期 → 必须提醒
+        if (f.level === 'expired' || f.level === 'urgent') return true;
+        // 有保质期且充足 → 不提醒
+        if (f.daysLeft !== null && f.daysLeft > 3) return false;
+        // 无保质期信息：按存放天数兜底
+        return f.days > threshold;
     }).sort(function (a, b) {
         return getStorageDays(b.purchaseDate) - getStorageDays(a.purchaseDate);
     });
@@ -7510,13 +8233,21 @@ function freshnessWeightFactor(days) {
 function buildFridgeWasteBannerHtml(items) {
     var longs = getLongStoredFridgeItems(items, 5);
     if (!longs.length) return '';
+    // 统计已过期数，文案随实际风险动态变化
+    var expired = longs.filter(function (it) { var f = getFridgeFreshness(it); return f && f.level === 'expired'; });
+    var urgent  = longs.filter(function (it) { var f = getFridgeFreshness(it); return f && f.level === 'urgent'; });
+    var head;
+    if (expired.length && urgent.length) head = '⚠️ 有 ' + longs.length + ' 种食材需要关注：';
+    else if (expired.length) head = '🔴 有 ' + longs.length + ' 种食材已过期：';
+    else if (urgent.length) head = '⚠️ 有 ' + longs.length + ' 种食材即将过期：';
+    else head = '⚠️ 有 ' + longs.length + ' 种食材存放较久，建议优先使用：';
     var names = longs.slice(0, 8).map(function (it) {
         var f = getFridgeFreshness(it);
         return '<span style="color:' + f.color + ';font-weight:700;">' + escapeHtml(it.name) + '（' + f.days + '天）</span>';
     }).join('<span style="color:#9CA3AF;margin:0 2px;">、</span>');
     var more = longs.length > 8 ? '<span style="font-size:12px;color:#9CA3AF;margin-left:2px;">等 ' + longs.length + ' 种</span>' : '';
     return '<div style="margin:10px 10px 0;padding:8px 8px;background:#FFFBEB;border:1px solid #FCD34D;border-radius:12px;display:flex;align-items:center;flex-wrap:wrap;column-gap:2px;row-gap:4px;">'
-        + '<span style="font-size:13px;font-weight:700;color:#92400E;line-height:1.5;white-space:nowrap;">⚠️ 有 ' + longs.length + ' 种食材已存放超过5天：</span>'
+        + '<span style="font-size:13px;font-weight:700;color:#92400E;line-height:1.5;white-space:nowrap;">' + head + '</span>'
         + '<span style="display:inline-flex;align-items:center;flex-wrap:wrap;column-gap:0;row-gap:2px;font-size:13px;line-height:1.5;">' + names + more
         + '<button type="button" onclick="viewFridgeWasteDetail()" style="margin-left:2px;padding:4px 12px;background:#F59E0B;color:#fff;border:none;border-radius:999px;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">查看详情</button>'
         + '</span>'
@@ -9575,6 +10306,55 @@ const TSP_LIQUID_ML  = 5;    // 1 茶匙（5ml）
 const TSP_SOLID_G    = 3;    // 1 茶匙（3g）
 const PIECE_G        = 10;   // 1 片≈10g
 const PETAL_G        = 5;    // 1 瓣/小片≈5g
+// 按件售卖食材的单件克重（key 为"食材名:单位"）。参考价表是"元/斤"口径，
+// 个/只/根/把/颗/头/条/朵等单位必须按单件克重折算，否则会把每斤价错当成每件价
+// （历史 bug：鸡蛋 7元/斤被算成 7元/个，导致煎蛋、早餐等估价严重虚高）
+const PIECE_UNIT_WEIGHT_G = {
+    // 蛋/豆制品（个）
+    '鸡蛋:个': 55, '鸭蛋:个': 75, '鹌鹑蛋:个': 10, '皮蛋:个': 60, '咸鸭蛋:个': 60,
+    // 蔬果（个）
+    '番茄:个': 160, '西红柿:个': 160, '土豆:个': 150, '洋葱:个': 140, '柠檬:个': 70,
+    '苹果:个': 200, '梨:个': 200, '橙子:个': 180, '橘子:个': 120, '沃柑:个': 120, '耙耙柑:个': 150,
+    '桃子:个': 150, '猕猴桃:个': 90, '柿子:个': 130, '石榴:个': 300, '芒果:个': 250,
+    '牛油果:个': 160, '百香果:个': 60, '杏:个': 50, '李子:个': 50,
+    '青椒:个': 70, '紫薯:个': 150, '红薯:个': 200, '馒头:个': 90, '包子:个': 90, '花卷:个': 80,
+    // 只
+    '虾:只': 20, '明虾:只': 20, '基围虾:只': 20, '小龙虾:只': 30, '大闸蟹:只': 150,
+    '螃蟹:只': 200, '生蚝:只': 100, '扇贝:只': 40, '鸡腿:只': 150, '鸡翅:只': 50, '鸭腿:只': 200,
+    // 根
+    '香蕉:根': 120, '胡萝卜:根': 110, '黄瓜:根': 170, '丝瓜:根': 200, '苦瓜:根': 200,
+    '茭白:根': 70, '大葱:根': 130, '玉米:根': 250, '白萝卜:根': 700, '莴笋:根': 450,
+    '山药:根': 300, '茄子:根': 220, '西葫芦:根': 250, '芹菜:根': 250, '油条:根': 70,
+    '黄颡鱼:条': 150, '鲫鱼:条': 300, '鲈鱼:条': 500, '小黄鱼:条': 80, '黄花鱼:条': 300,
+    '带鱼:条': 250, '鲳鱼:条': 200, '武昌鱼:条': 400, '黑鱼:条': 500, '秋刀鱼:条': 120,
+    // 把（生鲜一把的克重）
+    '小葱:把': 50, '香菜:把': 80, '菠菜:把': 200, '芹菜:把': 250, '韭菜:把': 150,
+    '蒜苔:把': 150, '油麦菜:把': 200, '空心菜:把': 200, '小白菜:把': 150, '上海青:把': 150,
+    '茼蒿:把': 150, '生菜:把': 200, '油菜:把': 150, '菜心:把': 150, '芥蓝:把': 150,
+    // 颗（水果小件/整棵菜）
+    '草莓:颗': 25, '荔枝:颗': 25, '龙眼:颗': 12, '桂圆:颗': 12, '杨梅:颗': 12,
+    '山楂:颗': 15, '红枣:颗': 8, '大枣:颗': 10, '葡萄:颗': 8, '提子:颗': 8,
+    '樱桃:颗': 8, '车厘子:颗': 10,
+    '西兰花:颗': 250, '花菜:颗': 400, '菜花:颗': 400, '娃娃菜:颗': 150,
+    // 头（整棵/整头）
+    '大蒜:头': 45, '蒜头:头': 45, '西兰花:头': 400, '花菜:头': 400, '菜花:头': 400,
+    '包菜:头': 900, '卷心菜:头': 900, '大白菜:头': 1200, '白菜:头': 800, '生菜:头': 250,
+    // 朵
+    '香菇:朵': 20, '鲜香菇:朵': 20, '木耳:朵': 50, '西兰花:朵': 40,
+    // 香辛料小件（干重）
+    '八角:颗': 1, '草果:颗': 3, '干辣椒:个': 2, '小米辣:个': 3, '枸杞:颗': 0.2
+};
+// 查单件克重（先原名，再标准名）
+function pieceUnitWeightG(name, unit) {
+    var u = String(unit || '');
+    if (!name || !u) return 0;
+    var w = PIECE_UNIT_WEIGHT_G[String(name) + ':' + u];
+    if (!w) {
+        var std = normalizeIngredientName(name);
+        if (std && std !== name) w = PIECE_UNIT_WEIGHT_G[std + ':' + u];
+    }
+    return Number(w) || 0;
+}
 
 function estimatePrepPrice(name, qty, unit) {
     const n = String(name || '').trim();
@@ -9643,7 +10423,10 @@ function estimatePrepPrice(name, qty, unit) {
     if (u === '罐' || u === '听' || u === '盒') {
         return Number((q * base).toFixed(2));
     }
-    if (u === '颗' || u === '粒' || u === '个' || u === '只' || u === '根' || u === '把' || u === '把儿' || u === '头' || u === '条' || u === '尾') {
+    if (u === '颗' || u === '粒' || u === '个' || u === '只' || u === '根' || u === '把' || u === '把儿' || u === '头' || u === '条' || u === '尾' || u === '朵') {
+        // 有单件克重数据的按件食材：按 克重/500g × 每斤价 折算；无表的维持按件计价（兼容采购口径）
+        var pieceW = pieceUnitWeightG(n, u) || pieceUnitWeightG(std, u);
+        if (pieceW > 0) return Number((q * pieceW / 500 * base).toFixed(2));
         return Number((q * base).toFixed(2));
     }
     // === 6) 粉/酱类无单位时，默认按 base 元/袋或元/瓶 修正极小值 ===
@@ -11280,9 +12063,9 @@ const INGR_REC_MODE_LABELS = {
 };
 // 页面本地推荐模式（默认食疗调理；与全局 currentMode 解耦，其他页面保持当季基础层行为）
 window._ingrRecMode = 'diet';
-// 同步「食材推荐食谱」浮层模式按钮高亮
+// 同步「食材推荐食谱」浮层模式按钮高亮（仅模式按钮，避免误清多样性分段控件高亮）
 function syncIngrRecModeBtns(mode) {
-    document.querySelectorAll('#prepIngrRecOverlay .mode-btn').forEach(function(b){
+    document.querySelectorAll('#prepIngrRecOverlay .mode-btn[data-mode]').forEach(function(b){
         b.classList.toggle('active', b.getAttribute('data-mode') === mode);
     });
 }
@@ -11428,7 +12211,9 @@ async function generateIngredientPrefRecipes() {
             var freshText = _longStored.slice(0, 10).map(function (i) { return i.name + '（已存放' + getStorageDays(i.purchaseDate) + '天）'; }).join('、') || '无';
             var freshnessRule = '【新鲜度优先·减少浪费】家中有存放较久的食材需要优先消耗：存放超过5天的食材，推荐权重提高50%；存放超过7天的食材，推荐权重提高100%。多推荐能用这些食材做的菜，涉及这些食材的菜，其 reason 末尾必须标注"，建议优先使用XX"（XX为食材名）。';
             var sys = modePrefix + ' 当季食材作为基础层自动融入所有推荐（用户无需选择时节）。' + freshnessRule + '仅返回一个严格 JSON，无任何 Markdown/解释：{ byDate: { "YYYYMMDD": { breakfast:[ {dish:"菜名", reason:"15-22字说明"} ], lunch:[...], dinner:[...] } } }，3 天每天 3 餐，每餐 4 道菜（3~5 均可），家常菜；所有 reason 必须是中文，且必须标注节气信息（如"大暑节气推荐"、"大暑宜食冬瓜"），结合用户给的"当前节气+家人偏好+爱吃食材 Top8+久放食材"，例如"爸爸喜欢牛肉，近30天出现4次"；不要重复同一天同一道菜；菜名必须是真实家常菜；日期 key 必须严格等于用户给的 3 个 YYYYMMDD。';
-            var usr = `当前节气/时节：${solarTermName}（${solarTermRangeText(term)}，建议食材：${solarIngs.join('、')||'无提示'}）；目标日期：${daysText}；家庭成员/口味：${familyText || '（2 人家庭，默认）'}；近 30 天爱吃食材 Top：${topLiked}；家中久放需优先消耗的食材：${freshText}；${modeHint}；每道菜 reason 需包含节气标注（如"${solarTermName||'当季'}节气推荐"），用到久放食材的菜需在 reason 中标注"建议优先使用XX"；请输出 3 天 3 餐的 4 道菜/餐个性化推荐，并为每道菜给出 15~22 字中文推荐理由。`;
+            // 多样性约束注入（固定策略：避免7天内重复+换菜系+避免连续同主食材）
+            var divText = getDiversityConstraints(days[0] ? days[0].dateKey : undefined);
+            var usr = `当前节气/时节：${solarTermName}（${solarTermRangeText(term)}，建议食材：${solarIngs.join('、')||'无提示'}）；目标日期：${daysText}；家庭成员/口味：${familyText || '（2 人家庭，默认）'}；近 30 天爱吃食材 Top：${topLiked}；家中久放需优先消耗的食材：${freshText}；${divText ? divText.replace(/\n/g, ' ') + '；' : ''}${modeHint}；每道菜 reason 需包含节气标注（如"${solarTermName||'当季'}节气推荐"），用到久放食材的菜需在 reason 中标注"建议优先使用XX"；请输出 3 天 3 餐的 4 道菜/餐个性化推荐，并为每道菜给出 15~22 字中文推荐理由。`;
             var fastFb = new Promise(function(r){ setTimeout(function(){ r(null); }, 3500); });
             var res = await Promise.race([ callAliyunQwenApi(sys, usr, { mode: modeKey }), fastFb ]);
             if (res && res.byDate && typeof res.byDate === 'object') {
@@ -11468,6 +12253,17 @@ async function generateIngredientPrefRecipes() {
     }
 
     latest.plan3x3 = plan3x3;
+    // 推荐完成后记录多样性数据（供下次推荐按 低/中/高 等级去重）
+    try {
+        days.forEach(function(d){
+            var m3 = plan3x3[d.dateKey];
+            if (!m3) return;
+            ['breakfast','lunch','dinner'].forEach(function(mt){
+                var dl = (m3[mt] || []).filter(function(r){ return r && r.dish; });
+                if (dl.length) recordRecommendation(d.dateKey, mt, dl);
+            });
+        });
+    } catch(e) { console.warn('recordRecommendation failed:', e); }
     window.__prepIngrLatestDays = days; // 供 addIngrRecToMealPlan 分配槽位时取 dateKeys
     // ===== 渲染：三个分区（早餐推荐 / 午餐推荐 / 晚餐推荐），每区 6 道菜 + 按天选择 + 单输入框 =====
     var html = '';
@@ -11611,8 +12407,8 @@ async function generateIngredientPrefRecipes() {
         document.querySelectorAll('.ingr-rec-kb-ai-btn').forEach(function(b){
             b.classList.remove('is-done','is-generating'); b.textContent = b.getAttribute('onclick').match(/'(\w+)'/) ? ({diet:'食疗调理',symptom:'对症调理',preference:'口味偏好',nutrition:'营养均衡'}[RegExp.$1]||'') : '';
         });
-        document.getElementById('ingrRecKbConfirmBtn').disabled = true;
-        document.getElementById('ingrRecKbConfirmBtn').classList.add('is-disabled');
+        var _kbConfirmBtn = document.getElementById('ingrRecKbConfirmBtn'); // 旧"确认选择"按钮已改为"候选菜池"，元素可能不存在
+        if (_kbConfirmBtn) { _kbConfirmBtn.disabled = true; _kbConfirmBtn.classList.add('is-disabled'); }
         var resBox = document.getElementById('ingrRecKbAiResults');
         if (resBox) resBox.innerHTML = '';
     }
@@ -11638,7 +12434,8 @@ async function generateIngredientPrefRecipes() {
         var mc = document.getElementById('ingrRecKbMainCat'); if (mc) mc.value = '';
         var sc = document.getElementById('ingrRecKbSubCat'); if (sc) sc.innerHTML = '<option value="">子分类</option>';
         var fc = document.getElementById('ingrRecKbFineCat'); if (fc) fc.innerHTML = '<option value="">细分类</option>';
-        document.querySelectorAll('.ingr-rec-kb-vis-cb').forEach(function(cb){ cb.checked = true; });
+        // 知识库可见范围重置为默认：仅勾选"公共"
+        document.querySelectorAll('.ingr-rec-kb-vis-cb').forEach(function(cb){ cb.checked = cb.getAttribute('data-vis') === 'public'; });
         filterIngrRecKbList();
     }
     function populateIngrRecKbSubCategories() {
@@ -14166,7 +14963,7 @@ function renderFridge() {
     } else {
         if (actionBtns) actionBtns.style.display = 'flex';
     }
-    if (inputBar) inputBar.style.display = 'flex';
+    if (inputBar) inputBar.style.display = (currentFridgeView === 'category') ? 'none' : 'flex';
 
     // 采购计划Tab
     if (currentFridgeView === 'shopping') {
@@ -14190,8 +14987,8 @@ function renderFridge() {
                 const days = daysUntilExpiry(item.expiryDate);
                 let statusClass = 'fridge-item-expired';
                 let statusText = '· 已过期' + Math.abs(days) + '天';
-                html += `<div class="fridge-item ${item.usedUp ? 'fridge-item-used-up' : ''}">
-                    <div class="fridge-item-dot" onclick="event.stopPropagation();markItemUsedUp(${item.id})" title="标记已用完">${item.usedUp ? '✓' : ''}</div>
+                html += `<div class="fridge-item">
+                    <div class="fridge-item-dot" onclick="event.stopPropagation();toggleFridgeItemCheck(${item.id})" title="勾选/取消">${item._checked ? '✓' : ''}</div>
                     <div class="fridge-item-left" onclick="showFoodDetail(${item.id})">
                         <div class="fridge-item-name">${item.emoji||'🍽️'} ${escapeHtml(item.name)} <span style="font-weight:400; font-size:12px; color:#6B7280;">${escapeHtml(item.quantity)}</span>${item.storage ? `<span style="font-size:11px; color:#6B7280; margin-left:4px;">${item.storage}</span>` : ''}${item.reserved > 0 ? `<span style="font-size:10px; background:#FFF7ED; color:#9A3412; padding:1px 5px; border-radius:4px; margin-left:4px;">已预留${item.reserved}个</span>` : ''}${item.reservedBy && item.reservedBy.length > 0 ? `<span style="font-size:10px; background:#FEF3C7; color:#92400E; padding:1px 5px; border-radius:4px; margin-left:4px;">📌 已预扣</span>` : ''}${item.status === 'used_up' ? `<span style="font-size:10px; background:#F3F4F6; color:#9CA3AF; padding:1px 5px; border-radius:4px; margin-left:4px;">已用完</span>` : ''}${item.status === 'low' ? `<span style="font-size:10px; background:#FEF2F2; color:#DC2626; padding:1px 5px; border-radius:4px; margin-left:4px;">不足</span>` : ''}</div>
                         <div class="fridge-item-meta ${statusClass}">${statusText}${fridgeFreshnessMeta(item)}</div>
@@ -14208,8 +15005,8 @@ function renderFridge() {
             todayExp.forEach(item => {
                 let statusClass = 'fridge-item-expiring';
                 let statusText = '· 今天过期 ⚠️';
-                html += `<div class="fridge-item ${item.usedUp ? 'fridge-item-used-up' : ''}">
-                    <div class="fridge-item-dot" onclick="event.stopPropagation();markItemUsedUp(${item.id})" title="标记已用完">${item.usedUp ? '✓' : ''}</div>
+                html += `<div class="fridge-item">
+                    <div class="fridge-item-dot" onclick="event.stopPropagation();toggleFridgeItemCheck(${item.id})" title="勾选/取消">${item._checked ? '✓' : ''}</div>
                     <div class="fridge-item-left" onclick="showFoodDetail(${item.id})">
                         <div class="fridge-item-name">${item.emoji||'🍽️'} ${escapeHtml(item.name)} <span style="font-weight:400; font-size:12px; color:#6B7280;">${escapeHtml(item.quantity)}</span>${item.storage ? `<span style="font-size:11px; color:#6B7280; margin-left:4px;">${item.storage}</span>` : ''}${item.reserved > 0 ? `<span style="font-size:10px; background:#FFF7ED; color:#9A3412; padding:1px 5px; border-radius:4px; margin-left:4px;">已预留${item.reserved}个</span>` : ''}${item.reservedBy && item.reservedBy.length > 0 ? `<span style="font-size:10px; background:#FEF3C7; color:#92400E; padding:1px 5px; border-radius:4px; margin-left:4px;">📌 已预扣</span>` : ''}${item.status === 'used_up' ? `<span style="font-size:10px; background:#F3F4F6; color:#9CA3AF; padding:1px 5px; border-radius:4px; margin-left:4px;">已用完</span>` : ''}${item.status === 'low' ? `<span style="font-size:10px; background:#FEF2F2; color:#DC2626; padding:1px 5px; border-radius:4px; margin-left:4px;">不足</span>` : ''}</div>
                         <div class="fridge-item-meta ${statusClass}">${statusText}${fridgeFreshnessMeta(item)}</div>
@@ -14226,8 +15023,8 @@ function renderFridge() {
             day1.forEach(item => {
                 let statusClass = 'fridge-item-expiring';
                 let statusText = '· 还剩1天 ⚠️';
-                html += `<div class="fridge-item ${item.usedUp ? 'fridge-item-used-up' : ''}">
-                    <div class="fridge-item-dot" onclick="event.stopPropagation();markItemUsedUp(${item.id})" title="标记已用完">${item.usedUp ? '✓' : ''}</div>
+                html += `<div class="fridge-item">
+                    <div class="fridge-item-dot" onclick="event.stopPropagation();toggleFridgeItemCheck(${item.id})" title="勾选/取消">${item._checked ? '✓' : ''}</div>
                     <div class="fridge-item-left" onclick="showFoodDetail(${item.id})">
                         <div class="fridge-item-name">${item.emoji||'🍽️'} ${escapeHtml(item.name)} <span style="font-weight:400; font-size:12px; color:#6B7280;">${escapeHtml(item.quantity)}</span>${item.storage ? `<span style="font-size:11px; color:#6B7280; margin-left:4px;">${item.storage}</span>` : ''}${item.reserved > 0 ? `<span style="font-size:10px; background:#FFF7ED; color:#9A3412; padding:1px 5px; border-radius:4px; margin-left:4px;">已预留${item.reserved}个</span>` : ''}${item.reservedBy && item.reservedBy.length > 0 ? `<span style="font-size:10px; background:#FEF3C7; color:#92400E; padding:1px 5px; border-radius:4px; margin-left:4px;">📌 已预扣</span>` : ''}${item.status === 'used_up' ? `<span style="font-size:10px; background:#F3F4F6; color:#9CA3AF; padding:1px 5px; border-radius:4px; margin-left:4px;">已用完</span>` : ''}${item.status === 'low' ? `<span style="font-size:10px; background:#FEF2F2; color:#DC2626; padding:1px 5px; border-radius:4px; margin-left:4px;">不足</span>` : ''}</div>
                         <div class="fridge-item-meta ${statusClass}">${statusText}${fridgeFreshnessMeta(item)}</div>
@@ -14244,8 +15041,8 @@ function renderFridge() {
             day2.forEach(item => {
                 let statusClass = 'fridge-item-expiring';
                 let statusText = '· 还剩2天 ⚠️';
-                html += `<div class="fridge-item ${item.usedUp ? 'fridge-item-used-up' : ''}">
-                    <div class="fridge-item-dot" onclick="event.stopPropagation();markItemUsedUp(${item.id})" title="标记已用完">${item.usedUp ? '✓' : ''}</div>
+                html += `<div class="fridge-item">
+                    <div class="fridge-item-dot" onclick="event.stopPropagation();toggleFridgeItemCheck(${item.id})" title="勾选/取消">${item._checked ? '✓' : ''}</div>
                     <div class="fridge-item-left" onclick="showFoodDetail(${item.id})">
                         <div class="fridge-item-name">${item.emoji||'🍽️'} ${escapeHtml(item.name)} <span style="font-weight:400; font-size:12px; color:#6B7280;">${escapeHtml(item.quantity)}</span>${item.storage ? `<span style="font-size:11px; color:#6B7280; margin-left:4px;">${item.storage}</span>` : ''}${item.reserved > 0 ? `<span style="font-size:10px; background:#FFF7ED; color:#9A3412; padding:1px 5px; border-radius:4px; margin-left:4px;">已预留${item.reserved}个</span>` : ''}${item.reservedBy && item.reservedBy.length > 0 ? `<span style="font-size:10px; background:#FEF3C7; color:#92400E; padding:1px 5px; border-radius:4px; margin-left:4px;">📌 已预扣</span>` : ''}${item.status === 'used_up' ? `<span style="font-size:10px; background:#F3F4F6; color:#9CA3AF; padding:1px 5px; border-radius:4px; margin-left:4px;">已用完</span>` : ''}${item.status === 'low' ? `<span style="font-size:10px; background:#FEF2F2; color:#DC2626; padding:1px 5px; border-radius:4px; margin-left:4px;">不足</span>` : ''}</div>
                         <div class="fridge-item-meta ${statusClass}">${statusText}${fridgeFreshnessMeta(item)}</div>
@@ -14262,8 +15059,8 @@ function renderFridge() {
             day3.forEach(item => {
                 let statusClass = 'fridge-item-expiring';
                 let statusText = '· 还剩3天 ⚠️';
-                html += `<div class="fridge-item ${item.usedUp ? 'fridge-item-used-up' : ''}">
-                    <div class="fridge-item-dot" onclick="event.stopPropagation();markItemUsedUp(${item.id})" title="标记已用完">${item.usedUp ? '✓' : ''}</div>
+                html += `<div class="fridge-item">
+                    <div class="fridge-item-dot" onclick="event.stopPropagation();toggleFridgeItemCheck(${item.id})" title="勾选/取消">${item._checked ? '✓' : ''}</div>
                     <div class="fridge-item-left" onclick="showFoodDetail(${item.id})">
                         <div class="fridge-item-name">${item.emoji||'🍽️'} ${escapeHtml(item.name)} <span style="font-weight:400; font-size:12px; color:#6B7280;">${escapeHtml(item.quantity)}</span>${item.storage ? `<span style="font-size:11px; color:#6B7280; margin-left:4px;">${item.storage}</span>` : ''}${item.reserved > 0 ? `<span style="font-size:10px; background:#FFF7ED; color:#9A3412; padding:1px 5px; border-radius:4px; margin-left:4px;">已预留${item.reserved}个</span>` : ''}${item.reservedBy && item.reservedBy.length > 0 ? `<span style="font-size:10px; background:#FEF3C7; color:#92400E; padding:1px 5px; border-radius:4px; margin-left:4px;">📌 已预扣</span>` : ''}${item.status === 'used_up' ? `<span style="font-size:10px; background:#F3F4F6; color:#9CA3AF; padding:1px 5px; border-radius:4px; margin-left:4px;">已用完</span>` : ''}${item.status === 'low' ? `<span style="font-size:10px; background:#FEF2F2; color:#DC2626; padding:1px 5px; border-radius:4px; margin-left:4px;">不足</span>` : ''}</div>
                         <div class="fridge-item-meta ${statusClass}">${statusText}${fridgeFreshnessMeta(item)}</div>
@@ -14310,8 +15107,8 @@ function renderFridge() {
                 if (days < 0) { statusClass = 'fridge-item-expired'; statusText = `· 已过期${Math.abs(days)}天`; }
                 else if (days <= 3) { statusClass = 'fridge-item-expiring'; statusText = `· ${days}天后过期 ⚠️`; }
                 else { statusText = `· ${days}天后过期`; }
-                html += `<div class="fridge-item ${item.usedUp ? 'fridge-item-used-up' : ''}">
-                    <div class="fridge-item-dot" onclick="event.stopPropagation();markItemUsedUp(${item.id})" title="标记已用完">${item.usedUp ? '✓' : ''}</div>
+                html += `<div class="fridge-item">
+                    <div class="fridge-item-dot" onclick="event.stopPropagation();toggleFridgeItemCheck(${item.id})" title="勾选/取消">${item._checked ? '✓' : ''}</div>
                     <div class="fridge-item-left" onclick="showFoodDetail(${item.id})">
                         <div class="fridge-item-name">${item.emoji||'🍽️'} ${escapeHtml(item.name)} <span style="font-weight:400; font-size:12px; color:#6B7280;">${escapeHtml(item.quantity)}</span>${item.storage ? `<span style="font-size:11px; color:#6B7280; margin-left:4px;">${item.storage}</span>` : ''}${item.reserved > 0 ? `<span style="font-size:10px; background:#FFF7ED; color:#9A3412; padding:1px 5px; border-radius:4px; margin-left:4px;">已预留${item.reserved}个</span>` : ''}${item.reservedBy && item.reservedBy.length > 0 ? `<span style="font-size:10px; background:#FEF3C7; color:#92400E; padding:1px 5px; border-radius:4px; margin-left:4px;">📌 已预扣</span>` : ''}${item.status === 'used_up' ? `<span style="font-size:10px; background:#F3F4F6; color:#9CA3AF; padding:1px 5px; border-radius:4px; margin-left:4px;">已用完</span>` : ''}${item.status === 'low' ? `<span style="font-size:10px; background:#FEF2F2; color:#DC2626; padding:1px 5px; border-radius:4px; margin-left:4px;">不足</span>` : ''}</div>
                         <div class="fridge-item-meta ${statusClass}">${statusText}${fridgeFreshnessMeta(item)}</div>
@@ -14354,8 +15151,8 @@ function renderFridge() {
                 if (days < 0) { statusClass = 'fridge-item-expired'; statusText = `· 已过期${Math.abs(days)}天`; }
                 else if (days <= 3) { statusClass = 'fridge-item-expiring'; statusText = `· ${days}天后过期 ⚠️`; }
                 else { statusText = `· ${days}天后过期`; }
-                html += `<div class="fridge-item ${item.usedUp ? 'fridge-item-used-up' : ''}">
-                    <div class="fridge-item-dot" onclick="event.stopPropagation();markItemUsedUp(${item.id})" title="标记已用完">${item.usedUp ? '✓' : ''}</div>
+                html += `<div class="fridge-item">
+                    <div class="fridge-item-dot" onclick="event.stopPropagation();toggleFridgeItemCheck(${item.id})" title="勾选/取消">${item._checked ? '✓' : ''}</div>
                     <div class="fridge-item-left" onclick="showFoodDetail(${item.id})">
                         <div class="fridge-item-name">${item.emoji||'🍽️'} ${escapeHtml(item.name)} <span style="font-weight:400; font-size:12px; color:#6B7280;">${escapeHtml(item.quantity)}</span>${item.storage ? `<span style="font-size:11px; color:#6B7280; margin-left:4px;">${item.storage}</span>` : ''}${item.reserved > 0 ? `<span style="font-size:10px; background:#FFF7ED; color:#9A3412; padding:1px 5px; border-radius:4px; margin-left:4px;">已预留${item.reserved}个</span>` : ''}${item.reservedBy && item.reservedBy.length > 0 ? `<span style="font-size:10px; background:#FEF3C7; color:#92400E; padding:1px 5px; border-radius:4px; margin-left:4px;">📌 已预扣</span>` : ''}${item.status === 'used_up' ? `<span style="font-size:10px; background:#F3F4F6; color:#9CA3AF; padding:1px 5px; border-radius:4px; margin-left:4px;">已用完</span>` : ''}${item.status === 'low' ? `<span style="font-size:10px; background:#FEF2F2; color:#DC2626; padding:1px 5px; border-radius:4px; margin-left:4px;">不足</span>` : ''}</div>
                         <div class="fridge-item-meta ${statusClass}">${statusText}${fridgeFreshnessMeta(item)}</div>
@@ -14969,9 +15766,10 @@ function openAddFridgeModal() {
     document.getElementById('fridgeStorage').value = '冷藏';
     document.getElementById('fridgeStorageLocation').value = '';
     document.getElementById('fridgeQuantity').value = '';
+    document.getElementById('fridgeUnit').value = '';
     document.getElementById('fridgePurchaseDate').value = new Date().toISOString().slice(0, 10);
     document.getElementById('fridgeExpiryDate').value = '';
-    // emoji自动补全
+    // emoji自动补全 + 自动填充保质期 + 自动匹配单位
     const nameInput = document.getElementById('fridgeName');
     nameInput.oninput = function() {
         const val = this.value.trim();
@@ -14979,7 +15777,66 @@ function openAddFridgeModal() {
             const emoji = guessFoodEmoji(val);
             this.setAttribute('placeholder', emoji + ' ' + val);
         }
+        autoFillAddFridgeExpiry();
+        autoGuessFridgeUnit(val);
     };
+    document.getElementById('fridgeCategory').onchange = autoFillAddFridgeExpiry;
+    document.getElementById('fridgeStorage').onchange = autoFillAddFridgeExpiry;
+}
+
+// 根据食材名自动匹配常用单位
+function autoGuessFridgeUnit(name) {
+    var n = String(name || '').trim();
+    if (!n) return;
+    var unit = '';
+    // 按件计
+    if (/鸡蛋|鸭蛋|鹌鹑蛋|皮蛋/.test(n)) unit = '个';
+    else if (/番茄|西红柿|土豆|马铃薯|洋葱|苹果|橙子|橘子|柚子|柠檬|梨|猕猴桃|火龙果|芒果|石榴|土豆|芋头/.test(n)) unit = '个';
+    else if (/黄瓜|萝卜|胡萝卜|白萝卜|山药|玉米|茄子|丝瓜|苦瓜|莴笋|大葱|莲藕|茭白|冬瓜|红薯|紫薯/.test(n)) unit = '根';
+    else if (/香菜|葱|小葱|韭菜|芹菜|菠菜|油麦菜|生菜|空心菜|苋菜|蒜苗|小白菜|油菜|荠菜/.test(n)) unit = '把';
+    else if (/鱼|黄颡鱼|鲫鱼|鲤鱼|草鱼|鲈鱼|带鱼|黄花鱼|鲳鱼|鳕鱼|三文鱼|黑鱼|鲶鱼|鳊鱼/.test(n)) unit = '条';
+    else if (/虾|基围虾|小龙虾|皮皮虾/.test(n)) unit = '只';
+    else if (/大蒜|蒜头|蒜/.test(n)) unit = '头';
+    else if (/八角|茴香|花椒|胡椒|桂皮|香叶|丁香/.test(n)) unit = '颗';
+    else if (/豆腐|豆干|千张|腐竹|血豆腐/.test(n)) unit = '块';
+    else if (/牛奶|酸奶|豆浆|果汁|可乐|饮料/.test(n)) unit = '毫升';
+    else if (/油|酱油|生抽|老抽|醋|蚝油|料酒|香油|芝麻油/.test(n)) unit = '毫升';
+    else if (/大米|面粉|糯米|小米|绿豆|红豆|黄豆|黑豆|花生|芝麻|杂粮/.test(n)) unit = '斤';
+    else if (/猪肉|牛肉|羊肉|排骨|牛腩|里脊|五花肉|前腿肉|后腿肉|鸡腿|鸡胸|鸡翅|鸭肉/.test(n)) unit = '克';
+    else if (/白菜|包菜|卷心菜|娃娃菜/.test(n)) unit = '颗';
+    else if (/馒头|包子|饺子|花卷|烧麦|汤圆/.test(n)) unit = '个';
+    else if (/面包|吐司|蛋糕/.test(n)) unit = '块';
+    else if (/面条|挂面|米粉|粉丝|宽面|细面/.test(n)) unit = '包';
+    // 未匹配：按分类兜底
+    if (!unit) {
+        var cat = document.getElementById('fridgeCategory').value;
+        if (cat === '肉蛋奶') unit = '克';
+        else if (cat === '水产') unit = '条';
+        else if (cat === '蔬菜') unit = '个';
+        else if (cat === '水果') unit = '个';
+        else if (cat === '主粮') unit = '斤';
+        else if (cat === '调料') unit = '适量';
+        else if (cat === '冷冻') unit = '包';
+    }
+    if (unit) document.getElementById('fridgeUnit').value = unit;
+}
+
+// 添加食材：自动填充保质期（购买日期为空→今天，保质期为空→按品类推算）
+function autoFillAddFridgeExpiry() {
+    var name = document.getElementById('fridgeName').value.trim();
+    var category = document.getElementById('fridgeCategory').value;
+    if (!name || !category) return;
+    var today = new Date();
+    var todayStr = today.toISOString().slice(0, 10);
+    var purchaseEl = document.getElementById('fridgePurchaseDate');
+    var expiryEl = document.getElementById('fridgeExpiryDate');
+    if (!purchaseEl.value) purchaseEl.value = todayStr;
+    if (!expiryEl.value) {
+        var days = _freshnessDaysByCategory(name, category);
+        var exp = new Date();
+        exp.setDate(exp.getDate() + days);
+        expiryEl.value = exp.toISOString().slice(0, 10);
+    }
 }
 
 function closeAddFridgeModal() {
@@ -14990,7 +15847,13 @@ function closeAddFridgeModal() {
 function submitAddFridgeItem() {
     const name = document.getElementById('fridgeName').value.trim();
     const category = document.getElementById('fridgeCategory').value;
-    const quantity = document.getElementById('fridgeQuantity').value.trim() || '适量';
+    const qty = document.getElementById('fridgeQuantity').value.trim();
+    const unit = document.getElementById('fridgeUnit').value;
+    // 合并数量+单位
+    var quantity;
+    if (qty && unit) quantity = qty + unit;
+    else if (qty) quantity = qty;
+    else quantity = unit || '适量';
     const purchaseDate = document.getElementById('fridgePurchaseDate').value || new Date().toISOString().slice(0, 10);
     const expiryDate = document.getElementById('fridgeExpiryDate').value;
 
@@ -15020,7 +15883,12 @@ function submitAddFridgeItem() {
 function submitAndAddMoreFridgeItem() {
     const name = document.getElementById('fridgeName').value.trim();
     const category = document.getElementById('fridgeCategory').value;
-    const quantity = document.getElementById('fridgeQuantity').value.trim() || '适量';
+    const qty = document.getElementById('fridgeQuantity').value.trim();
+    const unit = document.getElementById('fridgeUnit').value;
+    var quantity;
+    if (qty && unit) quantity = qty + unit;
+    else if (qty) quantity = qty;
+    else quantity = unit || '适量';
     const purchaseDate = document.getElementById('fridgePurchaseDate').value || new Date().toISOString().slice(0, 10);
     const expiryDate = document.getElementById('fridgeExpiryDate').value;
 
@@ -15050,6 +15918,7 @@ function submitAndAddMoreFridgeItem() {
     document.getElementById('fridgeStorage').value = '冷藏';
     document.getElementById('fridgeStorageLocation').value = '';
     document.getElementById('fridgeQuantity').value = '';
+    document.getElementById('fridgeUnit').value = '';
     document.getElementById('fridgePurchaseDate').value = new Date().toISOString().slice(0, 10);
     document.getElementById('fridgeExpiryDate').value = '';
     document.getElementById('fridgeName').focus();
@@ -15078,7 +15947,17 @@ function openEditFridgeModal(id) {
     document.getElementById('editFridgeCategory').value = item.category;
     document.getElementById('editFridgeStorage').value = item.storage || '冷藏';
     document.getElementById('editFridgeStorageLocation').value = item.storageLocation || '';
-    document.getElementById('editFridgeQuantity').value = item.quantity;
+    // 拆分已存数量为数值+单位（如"5条" → 数量5, 单位"条"；"适量" → 数量空, 单位"适量"）
+    var parsed = parseQuantity(item.quantity);
+    if (parsed.value > 0) {
+        document.getElementById('editFridgeQuantity').value = parsed.value;
+    } else {
+        document.getElementById('editFridgeQuantity').value = '';
+    }
+    var unitSel = document.getElementById('editFridgeUnit');
+    var unitVal = parsed.unit || '个';
+    var found = Array.from(unitSel.options).some(function(o){ return o.value === unitVal; });
+    if (found) unitSel.value = unitVal; else unitSel.value = '个';
     document.getElementById('editFridgePurchaseDate').value = item.purchaseDate;
     document.getElementById('editFridgeExpiryDate').value = item.expiryDate;
 }
@@ -15087,11 +15966,43 @@ function closeEditFridgeModal() {
     document.getElementById('editFridgeModal').classList.remove('show');
 }
 
+// 编辑食材：数量输入时，如果选了"适量"则切回"个"
+function onEditQtyInput() {
+    var qty = document.getElementById('editFridgeQuantity').value.trim();
+    if (qty && document.getElementById('editFridgeUnit').value === '适量') {
+        document.getElementById('editFridgeUnit').value = '个';
+    }
+}
+
+// 编辑食材：食材名称/分类变化时，自动填充购买日期（今天）和保质期至（按品类推算）
+// 仅在日期为空时自动填充，不覆盖用户已填的日期
+function autoFillEditDates() {
+    var name = document.getElementById('editFridgeName').value.trim();
+    var category = document.getElementById('editFridgeCategory').value;
+    if (!name || !category) return;
+    var today = new Date();
+    var todayStr = today.toISOString().slice(0, 10);
+    var purchaseEl = document.getElementById('editFridgePurchaseDate');
+    var expiryEl = document.getElementById('editFridgeExpiryDate');
+    // 购买日期为空 → 填今天
+    if (!purchaseEl.value) purchaseEl.value = todayStr;
+    // 保质期为空 → 按品类推算
+    if (!expiryEl.value) {
+        var days = _freshnessDaysByCategory(name, category);
+        var exp = new Date();
+        exp.setDate(exp.getDate() + days);
+        expiryEl.value = exp.toISOString().slice(0, 10);
+    }
+}
+
 function submitEditFridgeItem() {
     const id = parseInt(document.getElementById('editFridgeId').value);
     const name = document.getElementById('editFridgeName').value.trim();
     const category = document.getElementById('editFridgeCategory').value;
-    const quantity = document.getElementById('editFridgeQuantity').value.trim() || '适量';
+    const qtyRaw = document.getElementById('editFridgeQuantity').value.trim();
+    const unit = document.getElementById('editFridgeUnit').value;
+    // 合并数量+单位：有数字则 "5条"，无数字则取单位（如"适量"）
+    const quantity = qtyRaw ? (qtyRaw + unit) : (unit === '适量' ? '适量' : unit || '适量');
     const purchaseDate = document.getElementById('editFridgePurchaseDate').value;
     const expiryDate = document.getElementById('editFridgeExpiryDate').value;
 
@@ -16269,7 +17180,7 @@ function _computeShoppingMealMatches(shoppingItems) {
 }
 
 // ========== 推荐多样性算法 ==========
-var _diversityLevel = 'medium'; // low/medium/high
+// 固定策略（原 低/中/高 选择器已移除）：避免7天内重复推荐 + 连续2天同菜系换新 + 避免连续3天同主食材
 
 // 读取最近推荐记录（7天）
 function getRecentRecommendations() {
@@ -16304,13 +17215,11 @@ function recordRecommendation(dateKey, mealKey, dishes) {
     lsSet('recentRecommendations', JSON.stringify(rec));
 }
 
-// 获取多样性约束文本（注入AI prompt）
+// 获取多样性约束文本（注入AI prompt，固定最强策略）
 function getDiversityConstraints(dateKey) {
     var rec = getRecentRecommendations();
     if (!Object.keys(rec).length) return '';
-    var level = _diversityLevel;
-    var days = level === 'low' ? 0 : level === 'high' ? 7 : 3;
-    if (days === 0) return '';
+    var days = 7;
 
     var cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
@@ -16340,27 +17249,15 @@ function getDiversityConstraints(dateKey) {
     if (recentDishes.length) {
         constraints += '【多样性约束】避免推荐以下最近' + days + '天已推荐的菜品：' + recentDishes.slice(0, 20).join('、') + '。\n';
     }
-    if (level === 'high' && Object.keys(recentCategories).length) {
+    if (Object.keys(recentCategories).length) {
         var catList = Object.keys(recentCategories).join('、');
         constraints += '避免连续2天推荐同一菜系类型（近期已出现：' + catList + '），尝试推荐新菜系。\n';
     }
-    if (level !== 'low') {
-        var topIngs = Object.keys(recentIngredients).sort(function(a,b){ return recentIngredients[b]-recentIngredients[a]; }).slice(0,5);
-        if (topIngs.length) {
-            constraints += '避免连续3天使用同一主食材（近期高频：' + topIngs.join('、') + '）。\n';
-        }
+    var topIngs = Object.keys(recentIngredients).sort(function(a,b){ return recentIngredients[b]-recentIngredients[a]; }).slice(0,5);
+    if (topIngs.length) {
+        constraints += '避免连续3天使用同一主食材（近期高频：' + topIngs.join('、') + '）。\n';
     }
     return constraints;
-}
-
-// 多样性等级选择
-function selectDiversityLevel(level, btn) {
-    _diversityLevel = level;
-    if (btn) {
-        var siblings = btn.parentNode.querySelectorAll('[data-diversity]');
-        siblings.forEach(function(s) { s.classList.remove('active'); });
-        btn.classList.add('active');
-    }
 }
 
 // 新增：为单日单餐生成 AI 推荐食谱（3.5s 超时，失败走本地兜底）
@@ -16412,6 +17309,8 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey) {
 
 // 现有食材推荐菜谱：顶部配置面板（食材来源/人数/餐次）→ 生成方案 A/B/C
 function generateFridgeMealPlan() {
+    // 先从内存 fridgeItems 中提取勾选的食材（localStorage 重新读取会丢失 _checked）
+    var checkedNames = (fridgeItems || []).filter(function(it) { return it._checked; }).map(function(it) { return it.name; });
     fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     var defaultServings = (window._prep && window._prep.servings) ? Number(window._prep.servings) : 2;
     if (!window._existingIngSrc) window._existingIngSrc = 'auto';
@@ -16419,10 +17318,28 @@ function generateFridgeMealPlan() {
     if (!window._existingServings) window._existingServings = defaultServings;
     if (!window._existingMeal) window._existingMeal = 'dinner';
 
+    // 如果用户勾选了食材，用勾选的；否则用全部冰箱食材
+    var ingNames = checkedNames.length > 0 ? checkedNames : fridgeItems.map(function(it) { return String(it.name||'').trim(); }).filter(Boolean);
+
     var t = document.getElementById('fridgeResultTitleText');
-    if (t) t.textContent = '现有食材推荐菜谱';
-    renderExistingIngredientConfig(defaultServings);
+    if (t) t.textContent = checkedNames.length > 0 ? '基于勾选食材的菜谱' : '基于冰箱食材的菜谱';
+    // 直接生成，跳过配置面板
+    var container = document.getElementById('fridgeResultContent');
+    if (container) container.innerHTML = '<div style="text-align:center;color:#9CA3AF;font-size:12px;padding:24px;">正在生成推荐…</div>';
     document.getElementById('fridgeResultOverlay').classList.add('show');
+    var meal = window._existingMeal || 'dinner';
+    var servings = Number(window._existingServings) || defaultServings;
+    setTimeout(function() {
+        var schemes = buildExistingIngredientSchemes(ingNames, servings, meal);
+        // 直接渲染到 fridgeResultContent（跳过配置面板时没有 existingSchemesResult）
+        var result = document.getElementById('existingSchemesResult') || document.getElementById('fridgeResultContent');
+        if (result && schemes && schemes.length > 0) {
+            result.innerHTML = '';
+            renderExistingSchemesInto(result, schemes, meal);
+        } else if (result) {
+            result.innerHTML = '<div style="padding:16px;text-align:center;color:#9CA3AF;font-size:13px;">暂无匹配的推荐方案，试试添加更多食材</div>';
+        }
+    }, 50);
 }
 
 // 渲染配置面板：食材来源单选 + 手动标签输入 + 用餐人数/餐次 + 生成推荐
@@ -16710,7 +17627,13 @@ function buildExistingIngredientSchemes(ingNames, servings, meal) {
 
 // 渲染方案卡片：菜品 + 已有 + 需补购 + 用时 + 选择框；底部“添加到食记计划”
 function renderExistingSchemes(schemes, meal) {
-    var result = document.getElementById('existingSchemesResult');
+    var result = document.getElementById('existingSchemesResult') || document.getElementById('fridgeResultContent');
+    if (!result) return;
+    renderExistingSchemesInto(result, schemes, meal);
+}
+
+// 将推荐方案渲染到指定容器
+function renderExistingSchemesInto(result, schemes, meal) {
     if (!result) return;
     if (!schemes || schemes.length === 0) {
         result.innerHTML = '<div style="padding:16px;text-align:center;color:#9CA3AF;font-size:13px;">暂无匹配的推荐方案，试试更换食材或餐次</div>';
@@ -17072,7 +17995,7 @@ function showAddToPlanPicker(dish, source) {
         card.style.cssText = 'background:#FFFFFF;border-radius:16px;width:360px;max-width:100%;padding:18px 16px 16px;box-sizing:border-box;box-shadow:0 10px 30px rgba(0,0,0,0.18);';
         card.innerHTML =
             '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">'
-            +'<button type="button" id="fapClose" style="background:none;border:none;font-size:18px;color:#6B7280;cursor:pointer;padding:2px 4px;line-height:1;">&lt;</button>'
+            +'<button type="button" id="fapClose" style="background:none;border:none;font-size:26px;font-weight:600;color:#374151;cursor:pointer;padding:2px 8px;line-height:1;border-radius:6px;">&lt;</button>'
             +'<div style="font-size:17px;font-weight:700;color:#7A4A21;">加入食记计划</div>'
             +'<div style="flex:1;"></div>'
             +'<button type="button" id="fapOk" style="height:32px;background:#EA580C;color:#FFFFFF;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;padding:0 14px;">✅ 确认加入</button>'
@@ -17980,6 +18903,26 @@ function showShoppingReminder() {
     `;
     document.body.appendChild(overlay);
     overlay.addEventListener('click', function(e) { if (e.target === this) overlay.remove(); });
+}
+
+// 食材勾选/取消（纯 UI 态，不写入 localStorage，不标记用完，不变灰）
+function toggleFridgeItemCheck(id) {
+    const item = fridgeItems.find(i => i.id === id);
+    if (!item) return;
+    item._checked = !item._checked;
+    // 只更新圆点 DOM，不重新渲染整个列表（避免 localStorage 覆盖内存中的 _checked）
+    var matchStr = 'toggleFridgeItemCheck(' + id + ')';
+    var dots = document.querySelectorAll('#fridgeList .fridge-item-dot');
+    for (var i = 0; i < dots.length; i++) {
+        var oc = dots[i].getAttribute('onclick') || '';
+        if (oc.indexOf(matchStr) >= 0) {
+            dots[i].textContent = item._checked ? '✓' : '';
+            dots[i].style.borderColor = item._checked ? '#F97316' : '#D1D5DB';
+            dots[i].style.background = item._checked ? '#F97316' : '#fff';
+            dots[i].style.color = item._checked ? '#fff' : '';
+            break;
+        }
+    }
 }
 
 // ==================== 标记已用完 ====================
@@ -30166,7 +31109,7 @@ function showToast(msg) {
     toast.style.cssText = `
         position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%);
         background: #1F2937; color: white; padding: 10px 24px;
-        border-radius: 12px; font-size: 14px; z-index: 10001;
+        border-radius: 12px; font-size: 14px; z-index: 100005;
         max-width: 380px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         animation: fadeInUp 0.3s ease;
     `;
@@ -35245,7 +36188,7 @@ function openPlanSnackAddModal() {
     overlay.innerHTML = `<div style="background:#fff;border-radius:16px 16px 0 0;width:420px;max-width:calc(100% - 10px);padding:16px;box-sizing:border-box;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
             <div style="display:flex;align-items:center;gap:8px;">
-                <button onclick="document.getElementById('planSnackAddOverlay').remove()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#6B7280;">&lt;</button>
+                <button onclick="document.getElementById('planSnackAddOverlay').remove()" style="background:none;border:none;font-size:26px;font-weight:600;color:#374151;cursor:pointer;padding:2px 8px;line-height:1;border-radius:6px;">&lt;</button>
                 <span style="font-size:16px;font-weight:700;color:#C2410C;">手动加餐</span>
             </div>
             <button onclick="submitPlanSnackAdd()" style="height:28px;background:#FB923C;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;padding:0 12px;">✅ 添加到加餐计划</button>
@@ -35368,6 +36311,16 @@ function proceedToPlanTomorrow() {
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 }
+// 关闭复盘弹窗并返回"三餐计划、记录"页（< 与 ✕ 按钮统一入口）
+// 若当前已在食记页则只关弹窗，避免重渲染丢失滚动位置
+function closeReviewOverlay() {
+    const ov = document.getElementById('diarySummaryOverlay');
+    if (ov) ov.remove();
+    if (typeof currentTab !== 'undefined' && currentTab !== 'diary') {
+        try { switchTab('diary'); } catch (e) {}
+    }
+}
+window.closeReviewOverlay = closeReviewOverlay;
 function showDiaryTodaySummary() {
     // 移除已有弹窗
     const existing = document.getElementById('diarySummaryOverlay');
@@ -35398,8 +36351,11 @@ function showDiaryTodaySummary() {
     modal.style.cssText = 'background:white;border-radius:20px 20px 0 0;padding:0;width:420px;max-width:calc(100% - 10px);max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 -4px 20px rgba(0,0,0,0.15);';
     modal.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px 0 20px;flex-shrink:0;">
-            <div style="font-size:17px;font-weight:700;color:#374151;">📊 复盘</div>
-            <button onclick="document.getElementById('diarySummaryOverlay').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9CA3AF;">✕</button>
+            <div style="display:flex;align-items:center;gap:8px;">
+                <button onclick="closeReviewOverlay()" style="background:none;border:none;font-size:26px;font-weight:600;color:#374151;cursor:pointer;padding:2px 8px;line-height:1;border-radius:6px;">&lt;</button>
+                <div style="font-size:17px;font-weight:700;color:#374151;">📊 复盘</div>
+            </div>
+            <button onclick="closeReviewOverlay()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9CA3AF;">✕</button>
         </div>
         <div style="display:flex;gap:0;padding:12px 12px 0 12px;flex-shrink:0;border-bottom:1px solid #E5E7EB;">
             <button id="reviewTabDaily" onclick="switchReviewTab('daily')" style="flex:1;padding:10px 0;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:#F97316;border-bottom:2px solid #F97316;white-space:nowrap;">📅 今日总结</button>
@@ -36870,8 +37826,11 @@ function _oldShowDiaryTodaySummary_removed() {
     modal.style.cssText = 'background:white;border-radius:20px 20px 0 0;padding:20px;width:420px;max-width:calc(100% - 10px);max-height:85vh;overflow-y:auto;box-shadow:0 -4px 20px rgba(0,0,0,0.15);';
     modal.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-            <div style="font-size:17px;font-weight:700;color:#374151;">📊 复盘</div>
-            <button onclick="document.getElementById('diarySummaryOverlay').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9CA3AF;">✕</button>
+            <div style="display:flex;align-items:center;gap:8px;">
+                <button onclick="closeReviewOverlay()" style="background:none;border:none;font-size:26px;font-weight:600;color:#374151;cursor:pointer;padding:2px 8px;line-height:1;border-radius:6px;">&lt;</button>
+                <div style="font-size:17px;font-weight:700;color:#374151;">📊 复盘</div>
+            </div>
+            <button onclick="closeReviewOverlay()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9CA3AF;">✕</button>
         </div>
         <div style="font-size:12px;color:#6B7280;margin-bottom:14px;">${currentDiaryDate.getMonth()+1}月${currentDiaryDate.getDate()}日 · ${solarTerm.name} · ${todayDuty.memberName ? '值班：' + escapeHtml(todayDuty.memberName) : '无值班安排'}</div>
 
@@ -39979,7 +40938,28 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
     hook();
   }
 })();
+// ====== 登录系统初始化：页面加载完成后判断登录状态 ======
+(function initAuth() {
+    function start() {
+        var u = getLoginUser();
+        if (!u || !u.phone) { showLoginPage(); return; }
+        // 已登录过，检查是否仍有有效 supabase 会话 + 家庭归属
+        if (sb) {
+            sb.auth.getSession().then(function(s) {
+                if (!s.data || !s.data.session) {
+                    // 会话失效，尝试从 localStorage 恢复（OTP 登录会话可能过期）
+                    if (u && u.phone) { afterLoginCheck(); }
+                    else { clearLogin(); showLoginPage(); }
+                } else { afterLoginCheck(); }
+            }).catch(function() { afterLoginCheck(); });
+        } else { afterLoginCheck(); }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start);
+    } else { start(); }
+})();
 </script>
+</div><!-- /appRoot -->
 
 </body>
 </html>
