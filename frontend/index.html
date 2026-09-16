@@ -1856,7 +1856,7 @@
     .fridge-item-meta { font-size:11px; color:#9CA3AF; }
     .fridge-item-expiring { color:#DC2626; font-weight:600; }
     .fridge-item-expired { color:#991B1B; text-decoration:line-through; }
-    .fridge-fab { position:fixed; bottom:80px; right:16px; width:50px; height:50px; background:#F97316; color:#fff; border:none; border-radius:50%; font-size:24px; cursor:pointer; box-shadow:0 4px 12px rgba(249,115,22,0.3); z-index:100; }
+    .fridge-input-btn { width:32px; height:32px; border:none; border-radius:50%; background:#F3F4F6; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; padding:0; }
     .fridge-sub-filter-tabs { display:flex; flex-wrap:wrap; gap:6px; padding:8px 16px; background:#FAFAFA; border-bottom:1px solid #F3F4F6; }
     .fridge-sub-filter-tab { padding:4px 10px; border:1px solid #E5E7EB; border-radius:12px; font-size:12px; color:#6B7280; cursor:pointer; background:#fff; }
     .fridge-sub-filter-tab.active { background:#F97316; color:#fff; border-color:#F97316; }
@@ -2574,7 +2574,7 @@
     .fridge-stats-bar .stat-num { font-size:18px; font-weight:700; color:#F97316; }
     .fridge-stats-bar .stat-label { font-size:11px; color:#9A3412; }
     .fridge-item-left { display:flex; align-items:center; gap:8px; flex:1; min-width:0; cursor:pointer; }
-    .fridge-item-dot { width:40px; height:40px; border-radius:50%; border:2px solid #D1D5DB; flex-shrink:0; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; transition:all 0.2s; background:#fff; margin:-4px 0; }
+    .fridge-item-dot { width:28px; height:28px; border-radius:50%; border:1.5px solid #D1D5DB; flex-shrink:0; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:13px; transition:all 0.2s; background:#fff; margin:-2px 0; }
     .fridge-item-dot:active { transform:scale(0.9); }
     .fridge-item-used-up { opacity:0.45; }
     .fridge-item-used-up .fridge-item-name { text-decoration:line-through; color:#9CA3AF; }
@@ -3162,8 +3162,8 @@
         <div style="font-size:48px;margin-bottom:8px;">🍳</div>
         <div style="font-size:22px;font-weight:800;color:#9A3412;margin-bottom:4px;">家肴记</div>
         <div style="font-size:13px;color:#9CA3AF;margin-bottom:24px;">AI 家庭膳食助理</div>
-        <input id="loginEmail" type="email" maxlength="60" placeholder="请输入邮箱" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;" />
-        <input id="loginPassword" type="password" maxlength="40" placeholder="请输入密码" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
+        <input id="loginEmail" type="email" maxlength="60" placeholder="请输入邮箱" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;" />
+        <input id="loginPassword" type="password" maxlength="40" placeholder="请输入密码" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
         <button id="loginBtn" onclick="doLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录</button>
         <div id="loginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.5;"></div>
         <div id="switchToRegister" onclick="switchLoginRegister()" style="font-size:13px;color:#EA580C;margin-top:14px;cursor:pointer;text-decoration:underline;">还没有账号？点此注册</div>
@@ -3614,10 +3614,8 @@
                         <div class="fridge-view-tab active" data-view="expiring">即将过期</div>
                         <div class="fridge-view-tab" data-view="storage">存储方式</div>
                         <div class="fridge-view-tab" data-view="category">分类</div>
-                        <div class="fridge-view-tab" data-view="shopping">🛒 采购计划</div>
                     </div>
                     <div class="fridge-list" id="fridgeList"></div>
-                    <button class="fridge-fab" id="fridgeFab" onclick="handleFridgeFabClick()" title="添加" style="bottom:170px;">➕</button>
                     <div class="fridge-input-bar" id="fridgeInputBar">
                         <input type="text" class="fridge-input-field" id="fridgeQuickInput" placeholder="📝 说点什么..." onkeydown="if(event.key==='Enter')sendFridgeQuickMsg()">
                         <button class="fridge-input-btn" onclick="showFridgeInput()" title="发送">⌨️</button>
@@ -18832,15 +18830,6 @@ function switchToFridgeExpiring() {
     // 滚动到顶部
     const content = document.querySelector('.content');
     if (content) content.scrollTop = 0;
-}
-
-// ==================== FAB按钮动态处理 ====================
-function handleFridgeFabClick() {
-    if (currentFridgeView === 'shopping') {
-        openAddShoppingModal();
-    } else {
-        openAddFridgeModal();
-    }
 }
 
 // ==================== 确认对话框 ====================
