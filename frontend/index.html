@@ -4571,8 +4571,10 @@ function showAppRoot() {
     var lp = document.getElementById('loginPage');
     var fp = document.getElementById('createFamilyPage');
     var app = document.getElementById('appRoot');
+    var fo = document.getElementById('familySelectOverlay');
     if (lp) lp.style.display = 'none';
     if (fp) fp.style.display = 'none';
+    if (fo) fo.style.display = 'none';   // 家庭码浮层: 登录/家庭关联成功后自动关闭
     if (app) app.style.display = '';
 }
 
