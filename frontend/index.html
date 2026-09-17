@@ -2721,10 +2721,6 @@
     .diary-today-btn-inline.active { color:#DC2626; font-weight:600; }
     .diary-nav-link { background:none; border:none; padding:4px 8px; font-size:12px; color:#374151; cursor:pointer; line-height:1; }
     .diary-nav-link:hover { text-decoration:underline; }
-    .diary-duty-bar { background:linear-gradient(135deg,#EFF6FF,#DBEAFE); border:1px solid #93C5FD; border-radius:10px; padding:8px 12px; font-size:12px; color:#1E40AF; margin-bottom:10px; display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
-    .diary-duty-contest { background:linear-gradient(135deg,#FEF3C7,#FDE68A); border-color:#F59E0B; color:#92400E; }
-    .diary-claim-btn { background:#F59E0B; color:white; border:none; border-radius:6px; padding:3px 10px; font-size:11px; cursor:pointer; }
-    .diary-claim-btn:hover { background:#D97706; }
         .diary-meal-card {
             background: transparent;
             border-radius: 14px;
@@ -3325,7 +3321,6 @@
                 <div id="diaryDiningDropdown" style="display:none;position:absolute;top:100%;left:0;margin-top:4px;background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.15);padding:10px;z-index:200;width:240px;max-height:380px;overflow-y:auto;border:1px solid #E5E7EB;">
                 </div>
             </div>
-            <span id="topbarDuty" style="display:none;font-size:10px;color:#1E40AF;white-space:nowrap;line-height:1.3;font-weight:600;margin-left:4px;"></span>
             <span class="title" id="topTitle" onclick="clickTitleAction()">AI对话</span>
             <div style="display:flex;gap:4px;margin-left:auto;">
                 <button class="clear-btn" id="knowledgeResetBtn" style="display:none;" title="重新对话">🔄</button>
@@ -4906,7 +4901,7 @@ function familyKey(key) {
     if (!fid) return key;
     // 家庭相关数据加前缀，全局数据不加
     var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
-        'shoppingDay','dutySchedule','dutyScores','dutyClaims','dutyConfirmations',
+        'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'shoppingAlert_'];
@@ -4934,7 +4929,7 @@ function claimGlobalDataForFamily() {
     var claimFlag = 'dataClaimed_' + fid;
     if (localStorage.getItem(claimFlag)) return; // 已认领
     var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
-        'shoppingDay','dutySchedule','dutyScores','dutyClaims','dutyConfirmations',
+        'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate'];
     for (var i = 0; i < familyKeys.length; i++) {
@@ -4965,7 +4960,7 @@ function exportFamilyData() {
     if (!fid) { showToast('请先创建或加入家庭'); return; }
     var familyName = localStorage.getItem('familyName_' + fid) || '未命名家庭';
     var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
-        'shoppingDay','dutySchedule','dutyScores','dutyClaims','dutyConfirmations',
+        'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate'];
     var data = {};
@@ -5964,134 +5959,7 @@ function isSingleMemberMode() {
     const xiaojiaMembers = familyData.filter(m => xiaojiaNames.includes(m.name) && (m.isFamily !== false));
     return xiaojiaMembers.length <= 1;
 }
-// 值班安排是否关闭（单人模式自动关闭 + 设置开关）
-function isDutyDisabled() {
-    if (isSingleMemberMode()) return true;
-    return lsGet('dutyDisabled') === 'true';
-}
-// 切换值班开关
-function toggleDutyDisabled() {
-    if (isSingleMemberMode()) { showToast('当前只有1位家庭成员，已自动关闭值班安排'); return; }
-    var cur = lsGet('dutyDisabled') === 'true';
-    lsSet('dutyDisabled', cur ? 'false' : 'true');
-    updateDutyToggleUI();
-    showToast(cur ? '已开启值班安排' : '已关闭值班安排');
-    if (typeof renderDiary === 'function') renderDiary();
-}
-// 更新开关按钮UI
-function updateDutyToggleUI() {
-    var btn = document.getElementById('dutyDisabledToggle');
-    if (!btn) return;
-    if (isSingleMemberMode()) {
-        btn.textContent = '单人模式';
-        btn.style.background = '#9CA3AF';
-        btn.title = '当前只有1位家庭成员，已自动关闭';
-    } else {
-        var disabled = lsGet('dutyDisabled') === 'true';
-        btn.textContent = disabled ? '已关闭' : '已开启';
-        btn.style.background = disabled ? '#EF4444' : '#10B981';
-        btn.title = disabled ? '点击开启值班安排' : '点击关闭值班安排';
-    }
-}
-
-// ==================== 值班人机制 ====================
-// 默认值班安排：周1-2妈妈, 周3-4爸爸, 周5儿子, 周六认领值班日, 周日争分日
-const DEFAULT_DUTY_SCHEDULE = {
-    1: { memberName: '妈妈', type: 'duty' },
-    2: { memberName: '妈妈', type: 'duty' },
-    3: { memberName: '爸爸', type: 'duty' },
-    4: { memberName: '爸爸', type: 'duty' },
-    5: { memberName: '儿子', type: 'duty' },
-    6: { memberName: '儿子', type: 'claimable' }, // 周六认领值班日（默认儿子，可被认领）
-    0: { memberName: '', type: 'contest' } // 周日争分日
-};
-let dutySchedule = JSON.parse(lsGet('dutySchedule')) || JSON.parse(JSON.stringify(DEFAULT_DUTY_SCHEDULE));
-let dutyScores = JSON.parse(lsGet('dutyScores')) || {}; // {memberName: score}
-let dutyClaims = JSON.parse(lsGet('dutyClaims')) || {}; // {dateKey: memberName} 争分日认领记录
-let dutyConfirmations = JSON.parse(lsGet('dutyConfirmations')) || {}; // {dateKey_mealKey: {memberName, points, type}}
 let selectedFamilyMemberName = null; // 当前选中的小家成员名
-
-function saveDutySchedule() { lsSet('dutySchedule', JSON.stringify(dutySchedule)); }
-function saveDutyScores() { lsSet('dutyScores', JSON.stringify(dutyScores)); }
-function saveDutyClaims() { lsSet('dutyClaims', JSON.stringify(dutyClaims)); }
-function saveDutyConfirmations() { lsSet('dutyConfirmations', JSON.stringify(dutyConfirmations)); }
-
-// 获取某天的值班人
-function getDutyForDate(date) {
-    const dayOfWeek = date.getDay();
-    const schedule = dutySchedule[dayOfWeek] || { memberName: '', type: 'duty' };
-    const dateKey = dateToKey(date);
-    
-    if (schedule.type === 'contest') {
-        // 争分日：检查是否已认领
-        const claimer = dutyClaims[dateKey];
-        return { memberName: claimer || '', type: 'contest', claimed: !!claimer };
-    }
-    if (schedule.type === 'claimable') {
-        // 认领值班日：有默认值班人，但可被认领覆盖
-        const claimer = dutyClaims[dateKey];
-        if (claimer) {
-            return { memberName: claimer, type: 'claimable', claimed: true, defaultMember: schedule.memberName };
-        }
-        return { memberName: schedule.memberName, type: 'claimable', claimed: false, defaultMember: schedule.memberName };
-    }
-    return { memberName: schedule.memberName, type: schedule.type, claimed: false };
-}
-
-// 获取明日值班人
-function getTomorrowDuty(date) {
-    const tomorrow = new Date(date);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return getDutyForDate(tomorrow);
-}
-
-// 认领争分日/认领值班日
-function claimContestDay(date, memberName) {
-    const dateKey = dateToKey(date);
-    const duty = getDutyForDate(date);
-    if (duty.type !== 'contest' && duty.type !== 'claimable') return { success: false, msg: '今天不是认领日' };
-    if (duty.claimed) return { success: false, msg: '已被' + duty.memberName + '认领' };
-    dutyClaims[dateKey] = memberName;
-    saveDutyClaims();
-    return { success: true, msg: memberName + '已认领今日值班日' };
-}
-
-// 值班确认（记录保存时自动触发）
-function confirmDuty(date, mealKey, memberName, confirmType) {
-    const dateKey = dateToKey(date);
-    const confirmKey = dateKey + '_' + mealKey;
-    const duty = getDutyForDate(date);
-    
-    // 已确认过则不重复加分
-    if (dutyConfirmations[confirmKey]) return 0;
-    
-    let points = 0;
-    if (duty.type === 'contest' && duty.claimed && duty.memberName === memberName) {
-        points = 5; // 认领争分日
-    } else if (duty.memberName === memberName) {
-        // 是值班人
-        if (confirmType === 'ai_plan') {
-            points = 3; // 按AI计划直接确认
-        } else {
-            points = 5; // 完成值班确认
-        }
-    } else {
-        points = 0; // 非值班人，不加分
-    }
-    
-    if (points > 0) {
-        dutyConfirmations[confirmKey] = { memberName, points, type: confirmType, time: Date.now() };
-        dutyScores[memberName] = (dutyScores[memberName] || 0) + points;
-        saveDutyConfirmations();
-        saveDutyScores();
-    }
-    return points;
-}
-
-// 获取成员积分
-function getMemberScore(memberName) {
-    return dutyScores[memberName] || 0;
-}
 // chatHistory 持久化到 localStorage（每次更新自动保存）
 let chatHistory = [];
 try {
@@ -15142,9 +15010,8 @@ function renderFridge() {
     } else if (currentFridgeView === 'category') {
         // Tab3：分类 + 二级筛选标签
         html += `<div class="fridge-sub-filter-tabs" id="categoryFilterTabs">`;
-        html += `<div class="fridge-sub-filter-tab ${currentCategoryFilter==='all'?'active':''}" data-filter="all">全部</div>`;
         for (const cat of FOOD_CATEGORIES) {
-            html += `<div class="fridge-sub-filter-tab ${currentCategoryFilter===cat?'active':''}" data-filter="${cat}">${FOOD_ICONS[cat]||'🍽️'} ${cat}</div>`;
+            html += `<div class="fridge-sub-filter-tab ${currentCategoryFilter===cat?'active':''}" data-filter="${cat}">${cat}</div>`;
         }
         html += `</div>`;
         const grouped = {};
@@ -15205,12 +15072,15 @@ function renderFridge() {
             renderFridge();
         };
     });
-    // 分类二级筛选点击事件
+    // 分类二级筛选点击事件（再次点击已选中的分类 → 恢复显示全部）
     document.querySelectorAll('#categoryFilterTabs .fridge-sub-filter-tab').forEach(tab => {
         tab.onclick = function() {
-            document.querySelectorAll('#categoryFilterTabs .fridge-sub-filter-tab').forEach(t => t.classList.remove('active'));
-            this.classList.add('active');
-            currentCategoryFilter = this.dataset.filter;
+            if (currentCategoryFilter === this.dataset.filter) {
+                currentCategoryFilter = 'all';
+            } else {
+                currentCategoryFilter = this.dataset.filter;
+            }
+            document.querySelectorAll('#categoryFilterTabs .fridge-sub-filter-tab').forEach(t => t.classList.toggle('active', t.dataset.filter === currentCategoryFilter));
             renderFridge();
         };
     });
@@ -19366,88 +19236,7 @@ function renderFamily() {
     } else {
         familyList.insertAdjacentHTML('beforeend', `<div style="text-align:center;padding:20px;color:#9CA3AF;font-size:14px;">暂无小家成员，请添加</div>`);
     }
-    
-    // 食谱值班安排（单人模式下隐藏）
-    if (!isSingleMemberMode()) {
-    const weekDayNames = ['周日(争分日)', '周一', '周二', '周三', '周四', '周五', '周六'];
-    const familyMembers = xiaojiaMembers;
-    let dutyOptionsHtml = '';
-    if (familyMembers.length > 0) {
-        dutyOptionsHtml = familyMembers.map(m => `<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
-    } else {
-        dutyOptionsHtml = '<option value="">请先添加家人</option>';
-    }
-    
-    let dutyScheduleHtml = '';
-    for (let i = 1; i <= 6; i++) {
-        const schedule = dutySchedule[i] || { memberName: '', type: 'duty' };
-        dutyScheduleHtml += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #F3F4F6;">
-            <span style="width:80px;font-size:12px;color:#6B7280;">${weekDayNames[i]}</span>
-            <select class="duty-select" data-day="${i}" style="flex:1;padding:4px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;">
-                <option value="">未设置</option>
-                ${dutyOptionsHtml.replace(`value="${escapeHtml(schedule.memberName)}"`, `value="${escapeHtml(schedule.memberName)}" selected`)}
-            </select>
-        </div>`;
-    }
-    // 周日争分日
-    dutyScheduleHtml += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">
-        <span style="width:80px;font-size:12px;color:#F59E0B;font-weight:600;">${weekDayNames[0]}</span>
-        <span style="flex:1;font-size:12px;color:#92400E;background:#FEF3C7;padding:4px 8px;border-radius:6px;border:1px solid #F59E0B;">🏆 争分日 · 开放认领，先认先得</span>
-    </div>`;
-    
-    // 积分排行
-    let scoreHtml = '';
-    const sortedScores = Object.entries(dutyScores).sort((a,b) => b[1] - a[1]);
-    if (sortedScores.length > 0) {
-        const medals = ['🥇','🥈','🥉'];
-        scoreHtml = sortedScores.map((entry, idx) => `${medals[idx] || (idx+1+'.')} ${escapeHtml(entry[0])}：${entry[1]}分`).join(' ｜ ');
-    } else {
-        scoreHtml = '暂无积分记录';
-    }
-    
-    familyList.insertAdjacentHTML('beforeend', `<button id="dutyScheduleToggle" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:white;border:1px solid #F3F4F6;border-radius:12px;cursor:pointer;margin-bottom:12px;font-size:14px;color:#374151;">
-        <span style="font-weight:500;">👨‍🍳 食谱值班安排</span>
-        <span style="font-size:12px;color:#9CA3AF;">点击设置 ▼</span>
-    </button>`);
-    familyList.insertAdjacentHTML('beforeend', `<div id="dutySchedulePanel" style="display:none;background:white;border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid #F3F4F6;">
-        <div style="font-size:12px;color:#6B7280;margin-bottom:8px;">设置每天的食谱值班人，值班人完成记录可获得积分</div>
-        ${dutyScheduleHtml}
-        <div style="margin-top:12px;padding-top:10px;border-top:1px solid #F3F4F6;">
-            <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">📊 积分排行</div>
-            <div style="font-size:12px;color:#6B7280;">${scoreHtml}</div>
-        </div>
-        <div style="margin-top:8px;padding:8px 10px;background:#F0FDF4;border-radius:8px;font-size:11px;color:#166534;">
-            积分规则：完成值班确认 +5分 ｜ 按AI计划直接确认 +3分 ｜ 认领争分日 +5分 ｜ 未按时确认 0分
-        </div>
-    </div>`);
-    
-    // 值班安排展开/折叠
-    const dutyToggle = document.getElementById('dutyScheduleToggle');
-    const dutyPanel = document.getElementById('dutySchedulePanel');
-    if (dutyToggle && dutyPanel) {
-        dutyToggle.addEventListener('click', function() {
-            if (dutyPanel.style.display === 'none') {
-                dutyPanel.style.display = 'block';
-                dutyToggle.querySelector('span:last-child').textContent = '点击收起 ▲';
-            } else {
-                dutyPanel.style.display = 'none';
-                dutyToggle.querySelector('span:last-child').textContent = '点击设置 ▼';
-            }
-        });
-    }
-    
-    // 绑定值班设置change事件
-    document.querySelectorAll('.duty-select').forEach(sel => {
-        sel.addEventListener('change', function() {
-            const day = parseInt(this.dataset.day);
-            if (!dutySchedule[day]) dutySchedule[day] = { memberName: '', type: 'duty' };
-            dutySchedule[day].memberName = this.value;
-            saveDutySchedule();
-            showToast('✅ 值班安排已更新');
-        });
-    });
-    } // end if (!isSingleMemberMode())
-    
+
     document.querySelectorAll('.edit-member').forEach(btn => {
         btn.addEventListener('click', function() {
             const id = parseInt(this.dataset.id);
@@ -19456,7 +19245,7 @@ function renderFamily() {
             // 如果已有编辑表单打开，先关闭
             const existing = document.getElementById('editMemberForm_' + id);
             if (existing) { existing.remove(); return; }
-            // 在成员卡片下方插入编辑表单（位于食谱值班安排上方）
+            // 在成员卡片下方插入编辑表单
             const card = this.closest('.member-card');
             if (!card) return;
             const form = document.createElement('div');
@@ -19678,43 +19467,8 @@ function renderFamily() {
         <div style="background:white;border-radius:12px;padding:14px;margin-bottom:8px;border:1px solid #F3F4F6;">
             <button id="settingsManualToggle" style="width:100%;display:flex;align-items:center;justify-content:space-between;background:none;border:none;cursor:pointer;font-size:13px;color:#374151;">
                 <span style="font-weight:600;">📖 使用说明</span>
-                <span style="font-size:11px;color:#9CA3AF;">展开 ▼</span>
+                <span style="font-size:11px;color:#9CA3AF;">点击查看 ›</span>
             </button>
-            <div id="settingsManualBody" style="display:none;margin-top:12px;">
-                <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px;">🗓️ 每日推荐使用流程</div>
-                <div style="font-size:12px;color:#6B7280;line-height:1.8;">
-                    <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:6px;">
-                        <span style="color:#F97316;font-weight:700;flex-shrink:0;">①</span>
-                        <span><b>查看计划</b>：打开「食记」，查看当天三餐食谱计划，点击菜品可查看详细做法</span>
-                    </div>
-                    <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:6px;">
-                        <span style="color:#F97316;font-weight:700;flex-shrink:0;">②</span>
-                        <span><b>记录实际</b>：用餐后点击三餐卡片中的「记录实际」，记录真实就餐情况（可修改菜品、外出就餐等）</span>
-                    </div>
-                    <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:6px;">
-                        <span style="color:#F97316;font-weight:700;flex-shrink:0;">③</span>
-                        <span><b>当日复盘</b>：点击「复盘」按钮，AI将根据计划与实际的差异生成饮食建议和营养分析</span>
-                    </div>
-                    <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:6px;">
-                        <span style="color:#F97316;font-weight:700;flex-shrink:0;">④</span>
-                        <span><b>规划明日</b>：完成记录与复盘后，点击右上角「➕」规划明日食谱（18:00后自动切换到明天）</span>
-                    </div>
-                    <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:6px;">
-                        <span style="color:#3B82F6;font-weight:700;flex-shrink:0;">⑤</span>
-                        <span><b>采购准备</b>：切换到「食材」页面查看采购计划，确认采购后食材自动入库</span>
-                    </div>
-                </div>
-                <div style="margin-top:10px;padding:8px 10px;background:#FFF7ED;border-radius:8px;font-size:11px;color:#9A3412;line-height:1.6;">
-                    💡 <b>小贴士</b>：建议每餐后及时「记录实际」，当天结束时进行「复盘」，再规划明日食谱。这样AI能根据您的实际饮食情况给出更精准的推荐。
-                </div>
-                <div style="margin-top:12px;font-size:13px;font-weight:600;color:#374151;margin-bottom:10px;">📑 各页面功能说明</div>
-                <div style="font-size:12px;color:#6B7280;line-height:1.8;">
-                    <div style="margin-bottom:4px;"><span style="color:#F97316;">📚 食知</span> · 饮食知识库，支持搜索食材、食谱、节气、食疗等内容</div>
-                    <div style="margin-bottom:4px;"><span style="color:#F97316;">🧊 食材</span> · 管理冰箱库存与采购计划，18:00后自动显示明日采购需求</div>
-                    <div style="margin-bottom:4px;"><span style="color:#F97316;">📖 食记</span> · 三餐计划与记录，支持AI推荐、手动规划、记录实际、复盘</div>
-                    <div style="margin-bottom:4px;"><span style="color:#F97316;">🏠 我家</span> · 成员管理、就餐组设置、食谱值班安排与设置</div>
-                </div>
-            </div>
         </div>
         <div style="background:white;border-radius:12px;padding:14px;margin-bottom:8px;border:1px solid #F3F4F6;">
             <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px;">🔔 通知提醒</div>
@@ -19734,23 +19488,6 @@ function renderFamily() {
                 开启后，每天18:00将自动检查并提示您规划明日三餐食谱
             </div>
         </div>
-        <div style="background:white;border-radius:12px;padding:14px;margin-bottom:8px;border:1px solid #F3F4F6;">
-            <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px;">🏠 家庭管理</div>
-            <div id="familyCodeDisplay" style="font-size:12px;color:#6B7280;margin-bottom:10px;line-height:1.6;"></div>
-            <div style="display:flex;gap:8px;margin-bottom:12px;">
-                <button onclick="showFamilyCodeInfo()" style="flex:1;padding:8px 0;border:1px solid #FED7AA;border-radius:8px;font-size:12px;color:#9A3412;background:#FFF7ED;cursor:pointer;">📋 查看家庭码</button>
-                <button onclick="exportFamilyData()" style="flex:1;padding:8px 0;border:1px solid #FED7AA;border-radius:8px;font-size:12px;color:#9A3412;background:#FFF7ED;cursor:pointer;">📤 导出数据</button>
-            </div>
-            <div style="border-top:1px solid #F3F4F6;padding-top:10px;">
-                <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <div style="font-size:12px;color:#374151;">
-                        <div style="font-weight:500;">不用食谱值班安排</div>
-                        <div style="font-size:11px;color:#9CA3AF;margin-top:2px;">开启后"三餐计划、记录"顶端不再显示"今值日"</div>
-                    </div>
-                    <button id="dutyDisabledToggle" onclick="toggleDutyDisabled()" style="padding:4px 12px;border:none;border-radius:20px;font-size:12px;color:white;cursor:pointer;transition:background 0.2s;"></button>
-                </div>
-            </div>
-        </div>
     </div>`);
 
     // 设置区域展开/折叠
@@ -19761,37 +19498,16 @@ function renderFamily() {
             if (settingsPanel.style.display === 'none') {
                 settingsPanel.style.display = 'block';
                 settingsToggle.querySelector('span:last-child').textContent = '点击收起 ▲';
-                updateDutyToggleUI();
             } else {
                 settingsPanel.style.display = 'none';
                 settingsToggle.querySelector('span:last-child').textContent = '点击展开 ▼';
             }
         });
     }
-    // 填充家庭信息
-    var famCodeDisplay = document.getElementById('familyCodeDisplay');
-    if (famCodeDisplay) {
-        var fid = getFamilyId();
-        if (fid) {
-            var fName = localStorage.getItem('familyName_' + fid) || '未命名家庭';
-            famCodeDisplay.innerHTML = '家庭名称：<b style="color:#F97316;">' + escapeHtml(fName) + '</b><br>家庭码：<b style="color:#1E40AF;font-family:monospace;letter-spacing:2px;">' + fid + '</b>';
-        } else {
-            famCodeDisplay.innerHTML = '<span style="color:#9CA3AF;">尚未创建或加入家庭</span>';
-        }
-    }
-    // 使用说明展开/折叠
+    // 使用说明：打开专门的全屏说明页
     const manualToggle = document.getElementById('settingsManualToggle');
-    const manualBody = document.getElementById('settingsManualBody');
-    if (manualToggle && manualBody) {
-        manualToggle.addEventListener('click', function() {
-            if (manualBody.style.display === 'none') {
-                manualBody.style.display = 'block';
-                manualToggle.querySelector('span:last-child').textContent = '收起 ▲';
-            } else {
-                manualBody.style.display = 'none';
-                manualToggle.querySelector('span:last-child').textContent = '展开 ▼';
-            }
-        });
+    if (manualToggle) {
+        manualToggle.addEventListener('click', function() { openManualOverlay(); });
     }
     // 通知开关
     const notifToggle = document.getElementById('notifToggle');
@@ -29121,6 +28837,7 @@ async function autoCheckAndRecommend() {
         lsSet('lastAutoRecommendDate', todayStr);
     } catch (error) {
         console.error('自动推荐失败:', error);
+        showPlanGeneratingBanner(false); // 失败时关闭"生成中"横幅
         // 失败时不标记，下次进入食记会重试，不弹提示避免干扰用户
     }
 }
@@ -29183,6 +28900,27 @@ function showKnowledgeAppliedNotice(termName) {
 }
 
 // 多天推荐：一次性调用API生成未来N天食谱（避免多次调用导致频率限制）
+// 食谱计划"生成中"横幅（持续显示，直到生成成功/失败后手动关闭）
+function showPlanGeneratingBanner(on) {
+    let el = document.getElementById('planGeneratingBanner');
+    if (on) {
+        if (el) return;
+        el = document.createElement('div');
+        el.id = 'planGeneratingBanner';
+        el.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:100006;background:#FFF7ED;color:#9A3412;border:1px solid #FED7AA;padding:9px 18px;border-radius:24px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 4px 14px rgba(249,115,22,0.25);pointer-events:none;max-width:90vw;';
+        el.innerHTML = '<span style="width:14px;height:14px;border:2px solid #FDBA74;border-top-color:#F97316;border-radius:50%;display:inline-block;animation:planGenSpin 0.8s linear infinite;flex-shrink:0;"></span><span>食谱计划生成中…首次生成约需1分钟，请稍候</span>';
+        document.body.appendChild(el);
+        if (!document.getElementById('planGenSpinStyle')) {
+            var st = document.createElement('style');
+            st.id = 'planGenSpinStyle';
+            st.textContent = '@keyframes planGenSpin{to{transform:rotate(360deg)}}';
+            document.head.appendChild(st);
+        }
+    } else if (el) {
+        el.remove();
+    }
+}
+
 async function generateMultiDayRecommendation(days) {
     // 读取饮食日历（仅用于判断某天是否已有计划；写入仍统一走 updateMealPlan）
     const calendar = getDietCalendar();
@@ -29233,7 +28971,8 @@ async function generateMultiDayRecommendation(days) {
         + '【菜名全局唯一】同一菜品名称在全部餐次和日期中合计最多出现1次（主食除外，主食可重复）\n'
         + '【独立水果】若水果类摄入不足，必须在三餐中安排独立水果菜品（如苹果/蓝莓/草莓等，不依赖奶类饮品混合）';
 
-    showToast(`🤖 已根据${recData.servings || 3}人家庭，按九个维度生成${days}天食谱推荐。每餐约${_dc.lunch}菜...`);
+    // 显示持续"生成中"横幅（替代一闪而过的toast）
+    showPlanGeneratingBanner(true);
 
     // 添加重试机制（最多3次）
     let aiResponse = null;
@@ -29355,6 +29094,7 @@ async function generateMultiDayRecommendation(days) {
 
     // 推荐完成后刷新食记
     renderDiary();
+    showPlanGeneratingBanner(false);
     showToast(`✅ AI已生成${successCount}天食谱推荐`);
 }
 
@@ -31105,6 +30845,121 @@ function renderKnowledgeChat() {
     if (contentArea) contentArea.scrollTop = contentArea.scrollHeight;
 }
 
+// ==================== 📖 使用说明（专门页面 + 两级手风琴） ====================
+const MANUAL_SECTIONS = [
+    { title: '🗓️ 每日推荐使用流程', open: true, flow: true, items: [
+        { t: '查看计划', d: '打开「食记」，查看当天三餐食谱计划，点击菜品可查看详细做法。' },
+        { t: '记录实际', d: '用餐后点击三餐卡片中的「记录实际」，记录真实就餐情况（可修改菜品、标记外出就餐等）。' },
+        { t: '当日复盘', d: '点击「复盘」按钮，AI将根据计划与实际的差异生成饮食建议和营养分析。' },
+        { t: '规划明日', d: '完成记录与复盘后，点击右上角「➕」规划明日食谱（18:00后自动切换到明天）。' },
+        { t: '采购准备', d: '切换到「食材」页面，查看采购计划，确认采购后食材自动入库。' }
+    ], tip: '💡 小贴士：建议每餐后及时「记录实际」，当天结束时进行「复盘」，再规划明日食谱。这样AI能根据您的实际饮食情况给出更精准的推荐。' },
+    { title: '📑 各页面功能说明', items: [
+        { t: '📚 食知 · 饮食知识库', more: ['支持搜索食材、食谱、节气、食疗等内容。', '可浏览当季食材推荐、人群专属食谱等。'] },
+        { t: '🧊 食材 · 管理冰箱库存与采购计划', more: [
+            '食材管理（左上角）：点击可管理储物位置、查看食材分类。',
+            '添加食材（右上角「➕」）：手动添加食材，填写名称、数量、保质期等信息。',
+            '现有食材规划食谱：基于冰箱现有食材，AI生成可做的菜谱。',
+            '现购食材生成食谱：输入刚购买的食材，AI推荐可制作的菜谱。',
+            '食材推荐食谱：根据当季食材、食疗调理、口味偏好等模式AI推荐食谱，选中的食谱可推送至「食记」。',
+            '采购计划：选择「据食计采购期」（如2天、3天、7天）；点击人数旁「调整」可按餐次分别设置用餐人数，系统自动计算食材用量；展开需采购食材清单，勾选确认后食材自动入库。'
+        ] },
+        { t: '📖 食记 · 三餐计划与记录', more: [
+            '支持AI推荐、手动规划、记录实际、复盘。',
+            '3天食谱计划：页面展示今日、明日、后天的三餐计划，勾选需要的菜品后点击「确认计划」按钮完成食谱定稿。',
+            '确认后，食材采购计划将自动同步更新。'
+        ] },
+        { t: '🏠 我家 · 成员与设置', more: ['成员管理、就餐组设置与应用设置。'] }
+    ] },
+    { title: '📌 常用操作指南', items: [
+        { t: '如何用现有食材规划食谱？', num: true, more: ['进入「食材」页面，点击「现有食材规划食谱」。', 'AI根据冰箱库存生成推荐菜品。', '勾选喜欢的菜品，点击「添加到食记」，即可加入三餐计划。'] },
+        { t: '如何用现购食材生成食谱？', num: true, more: ['进入「食材」页面，点击「现购食材生成食谱」。', '输入刚购买的食材名称和数量。', 'AI推荐可制作的菜谱，勾选后一键推送到「食记」。'] },
+        { t: '如何使用“食材推荐食谱”？', num: true, more: ['进入「食材」页面，点击「食材推荐食谱」。', '选择推荐模式：当季推荐、食疗调理、口味偏好、营养均衡等。', '浏览推荐菜品，勾选后推送到「食记」。', '也可从「食知」中手动挑选食谱加入推荐列表。'] },
+        { t: '如何生成采购清单？', num: true, more: ['进入「食材」页面，点击「采购计划」。', '选择采购周期（基于已确认的食记计划）。', '调整用餐人数（可按餐次分别设置）。', '点击展开“需采购食材清单”，勾选需购买的食材。', '点击「确认采购」，食材自动入库。'] },
+        { t: '如何管理食材？', num: true, more: ['点击「食材」左上角的「食材管理」，可查看储物位置、分类。', '点击右上角「➕」，可添加新食材，填写名称、数量、保质期等。'] },
+        { t: '如何确认3天食谱计划？', num: true, more: ['进入「食记」页面，查看今日、明日、后天的三餐计划。', '勾选需要的菜品（可多选）。', '点击「确认计划」按钮，完成定稿。', '确认后，系统将自动生成采购需求。'] }
+    ] },
+    { title: '💡 小贴士', lines: [
+        '建议每天18:00后规划明日食谱，系统会自动切换到明天。',
+        '每餐后及时「记录实际」，AI复盘会更精准。',
+        '在「食材」中善用拍照识别，可快速录入库存。',
+        '添加食材时填写单价，可自动计算餐费节省。'
+    ] }
+];
+const MANUAL_STEP_NUMS = ['①','②','③','④','⑤','⑥','⑦','⑧'];
+function openManualOverlay() {
+    const old = document.getElementById('manualOverlay');
+    if (old) old.remove();
+    const ov = document.createElement('div');
+    ov.id = 'manualOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:#FDF8F3;z-index:100050;display:flex;justify-content:center;';
+    let secHtml = '';
+    MANUAL_SECTIONS.forEach(function(sec, si) {
+        const isOpen = !!sec.open;
+        secHtml += '<div style="background:white;border:1px solid #F3F4F6;border-radius:12px;margin-bottom:10px;overflow:hidden;">';
+        secHtml += '<div class="manual-sec" data-i="' + si + '" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer;user-select:none;">'
+            + '<span style="font-size:14px;font-weight:600;color:#374151;">' + sec.title + '</span>'
+            + '<span class="manual-sec-arrow" style="font-size:11px;color:#9CA3AF;transition:transform 0.2s;display:inline-block;' + (isOpen ? 'transform:rotate(90deg);' : '') + '">▶</span></div>';
+        secHtml += '<div class="manual-sec-body" style="display:' + (isOpen ? 'block' : 'none') + ';padding:0 14px 13px;font-size:12.5px;color:#6B7280;line-height:1.8;">';
+        if (sec.lines) {
+            sec.lines.forEach(function(ln) { secHtml += '<div style="display:flex;gap:6px;margin-bottom:5px;"><span style="color:#F97316;flex-shrink:0;">•</span><span>' + ln + '</span></div>'; });
+        }
+        if (sec.items) {
+            sec.items.forEach(function(it, ii) {
+                if (it.more) {
+                    secHtml += '<div style="border-top:1px solid #F9FAFB;padding-top:8px;margin-top:8px;">';
+                    secHtml += '<div class="manual-item" data-s="' + si + '" data-k="' + ii + '" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;">'
+                        + '<span style="font-size:12.5px;' + (it.num ? 'font-weight:600;color:#374151;' : 'color:#374151;') + '">' + it.t + '</span>'
+                        + '<span class="manual-item-arrow" style="font-size:10px;color:#C4C9D0;transition:transform 0.2s;display:inline-block;">▶</span></div>';
+                    secHtml += '<div class="manual-item-body" style="display:none;padding:6px 0 2px 4px;">';
+                    it.more.forEach(function(m, mi) {
+                        const mark = it.num ? ('<span style="color:#F97316;font-weight:700;flex-shrink:0;">' + (MANUAL_STEP_NUMS[mi] || (mi + 1) + '.') + '</span>') : '<span style="color:#FDBA74;flex-shrink:0;">•</span>';
+                        secHtml += '<div style="display:flex;gap:6px;margin-bottom:4px;">' + mark + '<span>' + m + '</span></div>';
+                    });
+                    secHtml += '</div></div>';
+                } else if (sec.flow) {
+                    secHtml += '<div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:6px;"><span style="color:#F97316;font-weight:700;flex-shrink:0;">' + (MANUAL_STEP_NUMS[ii] || (ii + 1) + '.') + '</span><span><b style="color:#374151;">' + it.t + '</b>：' + it.d + '</span></div>';
+                } else {
+                    secHtml += '<div style="margin-bottom:4px;">' + it.t + '</div>';
+                }
+            });
+        }
+        if (sec.tip) {
+            secHtml += '<div style="margin-top:10px;padding:8px 10px;background:#FFF7ED;border-radius:8px;font-size:11px;color:#9A3412;line-height:1.6;">' + sec.tip + '</div>';
+        }
+        secHtml += '</div></div>';
+    });
+    ov.innerHTML = '<div style="width:100%;max-width:480px;height:100%;display:flex;flex-direction:column;background:#FDF8F3;">'
+        + '<div style="flex-shrink:0;display:flex;align-items:center;gap:10px;padding:14px 16px;background:white;border-bottom:1px solid #F3F4F6;">'
+        + '<button onclick="closeManualOverlay()" style="width:34px;height:34px;border:none;background:#FFF7ED;border-radius:10px;font-size:20px;font-weight:600;color:#9A3412;cursor:pointer;line-height:1;flex-shrink:0;">‹</button>'
+        + '<div style="font-size:16px;font-weight:600;color:#374151;">📖 使用说明</div></div>'
+        + '<div id="manualOverlayContent" style="flex:1;overflow-y:auto;padding:14px 14px 40px;">' + secHtml + '</div></div>';
+    ov.onclick = function(e) { if (e.target === ov) closeManualOverlay(); };
+    ov.addEventListener('click', function(e) {
+        const secHead = e.target.closest('.manual-sec');
+        if (secHead) {
+            const body = secHead.nextElementSibling;
+            const arrow = secHead.querySelector('.manual-sec-arrow');
+            const show = body.style.display === 'none';
+            body.style.display = show ? 'block' : 'none';
+            arrow.style.transform = show ? 'rotate(90deg)' : '';
+            return;
+        }
+        const itemHead = e.target.closest('.manual-item');
+        if (itemHead) {
+            const body = itemHead.nextElementSibling;
+            const arrow = itemHead.querySelector('.manual-item-arrow');
+            const show = body.style.display === 'none';
+            body.style.display = show ? 'block' : 'none';
+            arrow.style.transform = show ? 'rotate(90deg)' : '';
+        }
+    });
+    document.body.appendChild(ov);
+}
+function closeManualOverlay() {
+    const ov = document.getElementById('manualOverlay');
+    if (ov) ov.remove();
+}
 function showToast(msg) {
     const existing = document.querySelector('.toast-msg');
     if (existing) existing.remove();
@@ -31767,15 +31622,6 @@ function renderDiary() {
         todayBtn.classList.toggle('active', !isToday);
     }
 
-    // 值班人信息（顶栏标题已居中，值班信息不再占用顶栏空间，避免重叠；值班信息在首页展示）
-    const dutyDisabled = isDutyDisabled();
-    const todayDuty = getDutyForDate(currentDiaryDate);
-    const dutyEl = document.getElementById('topbarDuty');
-    if (dutyEl) {
-        dutyEl.innerHTML = '';
-        dutyEl.style.display = 'none';
-    }
-    
     const meals = [
         { key: 'breakfast', icon: '🍳', name: '早餐' },
         { key: 'lunch', icon: '🍱', name: '午餐' },
@@ -32478,17 +32324,6 @@ function applyConfirmPlan() {
     try { confirmDiaryMealPlan(mealKey, dateKey); } catch(e) {
         if (typeof renderDiary === 'function') renderDiary();
     }
-    // 值班加分（沿用原逻辑 —— 以原"确认人数后即算完成计划操作"语义，仍尝试加分）
-    let dutyMsg = '';
-    const todayDuty = getDutyForDate(currentDiaryDate);
-    if (todayDuty && todayDuty.memberName && Array.isArray(familyData) && familyData.some(m => m.name === todayDuty.memberName)) {
-        const mealK = (typeof mealKey === 'string') ? mealKey : '';
-        try {
-            const pts = (typeof confirmDuty === 'function') ? confirmDuty(currentDiaryDate, mealK, todayDuty.memberName, 'ai_plan') : 0;
-            if (pts > 0) dutyMsg = `，${todayDuty.memberName}按计划确认+${pts}分`;
-        } catch(_) {}
-    }
-    if (dutyMsg) showToast(`已调整就餐人数为${n}人${dutyMsg}（逐道确认仍按食记页面勾选 + 确认计划生效）`);
 }
 
 // ========== 食材准备：调整用餐人数（轻量弹窗，默认+逐餐覆盖） ==========
@@ -33111,17 +32946,9 @@ function openDiningOutRecordActual(mealKey, existing) {
             syncDiningOutToKnowledge(actualData, mealKey, dateKey);
         }
 
-        // 值班确认
-        const todayDuty = getDutyForDate(currentDiaryDate);
-        let dutyMsg = '';
-        if (todayDuty.memberName && familyData.some(m => m.name === todayDuty.memberName)) {
-            const points = confirmDuty(currentDiaryDate, mealKey, todayDuty.memberName, 'duty');
-            if (points > 0) dutyMsg = `，${todayDuty.memberName}值班确认+${points}分`;
-        }
-
         overlay.remove();
         renderDiary();
-        showToast('✅ 外出就餐已完成记录' + dutyMsg);
+        showToast('✅ 外出就餐已完成记录');
     });
 }
 
@@ -34363,51 +34190,6 @@ function confirmDiningOutPlan() {
     document.getElementById('diningOutPlanOverlay').remove();
     renderDiary();
     showToast('✅ 外出就餐规划已保存');
-}
-function showClaimContestModal() {
-    const familyMembers = familyData.filter(m => (m.relationship || '家人') === '家人');
-    if (familyMembers.length === 0) { showToast('请先在"我家"添加家庭成员'); return; }
-    
-    const todayDuty = getDutyForDate(currentDiaryDate);
-    const isClaimable = todayDuty.type === 'claimable';
-    const modalTitle = isClaimable ? '认领值班日' : '🏆 认领争分日';
-    const modalDesc = isClaimable 
-        ? `默认值班人：${todayDuty.defaultMember || '无'}，选择认领人覆盖默认，认领后完成记录可获5分`
-        : '选择认领人，先认先得，认领后完成记录可获5分';
-    
-    const overlay = document.createElement('div');
-    overlay.id = 'claimContestOverlay';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(31,41,55,0.5);display:flex;align-items:center;justify-content:center;padding:20px;';
-    overlay.addEventListener('click', function(e) { if (e.target === this) overlay.remove(); });
-
-    const modal = document.createElement('div');
-    modal.style.cssText = 'background:white;border-radius:16px;padding:20px;width:340px;max-width:calc(100% - 20px);box-shadow:0 10px 40px rgba(0,0,0,0.2);';
-    let memberBtns = '';
-    familyMembers.forEach(m => {
-        memberBtns += `<button class="claim-member-btn" data-name="${escapeHtml(m.name)}" style="width:100%;padding:12px;margin-bottom:8px;border:1px solid #FED7AA;border-radius:10px;background:#FFFBEB;font-size:14px;color:#9A3412;cursor:pointer;transition:all .15s;">${escapeHtml(m.name)}（积分：${getMemberScore(m.name)}分）</button>`;
-    });
-    modal.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-            <div style="font-size:16px;font-weight:700;color:#374151;">${modalTitle}</div>
-            <button onclick="document.getElementById('claimContestOverlay').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9CA3AF;">✕</button>
-        </div>
-        <div style="font-size:12px;color:#6B7280;margin-bottom:12px;">${modalDesc}</div>
-        <div id="claimMemberList">${memberBtns}</div>
-    `;
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    
-    overlay.querySelectorAll('.claim-member-btn').forEach(btn => {
-        btn.addEventListener('mouseenter', function() { this.style.background = '#FED7AA'; });
-        btn.addEventListener('mouseleave', function() { this.style.background = '#FFFBEB'; });
-        btn.addEventListener('click', function() {
-            const name = this.dataset.name;
-            const result = claimContestDay(currentDiaryDate, name);
-            overlay.remove();
-            showToast(result.msg);
-            renderDiary();
-        });
-    });
 }
 document.getElementById('diaryPrev').addEventListener('click', function() {
     currentDiaryDate.setDate(currentDiaryDate.getDate() - 1);
@@ -38476,20 +38258,10 @@ function openDiaryRecordModal(mealKey) {
             syncDiningOutToKnowledge(actualData, mealKey, dateKey);
         }
 
-        // 值班确认：检查是否是值班人，自动加分
-        const todayDuty = getDutyForDate(currentDiaryDate);
-        let dutyMsg = '';
-        if (todayDuty.memberName && familyData.some(m => m.name === todayDuty.memberName)) {
-            const points = confirmDuty(currentDiaryDate, mealKey, todayDuty.memberName, 'duty');
-            if (points > 0) {
-                dutyMsg = `，${todayDuty.memberName}值班确认+${points}分`;
-            }
-        }
-        
         overlay.remove();
         renderDiary();
         const hasFeedback = actualData.dishes.some(d => d.aiFeedback) || actualData.aiSuggestion;
-        showToast('✅ 记录已保存' + (hasFeedback ? '，AI建议已生成' : '') + dutyMsg);
+        showToast('✅ 记录已保存' + (hasFeedback ? '，AI建议已生成' : ''));
     });
 }
 
@@ -38672,11 +38444,8 @@ function switchTab(tab) {
     menuBtn.setAttribute('data-tip', menuTips[tab] || '');
     clearBtn.setAttribute('data-tip', addTips[tab] || '');
 
-    // 食记页面：值班未关闭时由renderDiary控制topbar值班信息显示，其他页面隐藏
-    const topbarDuty = document.getElementById('topbarDuty');
+    // 食记页面显示就餐人选择器，其他页面隐藏
     const diaryDiningSelector = document.getElementById('diaryDiningSelector');
-    const dutyOn = !isDutyDisabled();
-    if (topbarDuty && (tab !== 'diary' || !dutyOn)) topbarDuty.style.display = 'none';
     if (diaryDiningSelector) diaryDiningSelector.style.display = (tab === 'diary') ? 'flex' : 'none';
 
     // 切到食知Tab时渲染（默认显示AI对话）
