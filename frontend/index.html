@@ -273,6 +273,7 @@
             justify-content: center;
             gap: 6px;
             white-space: nowrap;
+            overflow: hidden;   /* 兜底：极端情况下截断在边框内，不画出框外 */
         }
         .solar-term-guide-btn:hover {
             background: linear-gradient(135deg, #DCFCE7, #BBF7D0);
@@ -281,11 +282,17 @@
             font-size: 13px;
             font-weight: 600;
             color: #15803D;
+            overflow: hidden; text-overflow: ellipsis; min-width: 0;
         }
         .solar-term-guide-btn div:last-child {
             font-size: 11px;
             color: #15803D;
             opacity: 0.85;
+            overflow: hidden; text-overflow: ellipsis; min-width: 0;
+        }
+        /* 窄屏：节气按钮独占一行，保证"白露节气 · 饮食指南（日期）"完整显示 */
+        @media (max-width: 410px) {
+            .solar-term-guide-btn { flex-basis: 100%; padding: 4px 6px; }
         }
         .knowledge-back-btn {
             background: white;
@@ -1900,16 +1907,23 @@
     .prep-tag { display:inline-block; padding:1px 6px; margin:2px 6px 2px 0; background:#F5F3FF; color:#4F46E5; border-radius:6px; cursor:pointer; font-size:11px; }
     .prep-tag:active { background:#E8DEF8; }
     .prep-empty { color:#9CA3AF; }
-    .prep-param-row { display:flex; align-items:center; gap:6px; flex-wrap:nowrap; }
+    .prep-param-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }   /* 窄屏放不下时整组换行，防挤压竖排 */
     .prep-param-row + .prep-param-row { margin-top:10px; }
     .prep-label { font-size:12px; color:#6B7280; flex-shrink:0; font-weight:600; }
     .prep-cycle-sel { padding:4px 6px; border:1px solid #E5E7EB; border-radius:8px; font-size:13px; background:#fff; display:flex; align-items:center; flex-shrink:1; min-width:0; }
+    .prep-cycle-sel label { white-space:nowrap; flex-shrink:0; }   /* 标签永不断行，防窄屏竖排变形 */
     .prep-cycle-sel select { font-size:12px; padding:2px 2px; border:none; outline:none; background:transparent; max-width:88px; }
     .prep-custom-days { width:56px; padding:6px 8px; border:1px solid #E5E7EB; border-radius:8px; font-size:13px; }
     .prep-servings { font-size:13px; font-weight:600; color:#374151; display:flex; align-items:center; gap:6px; flex-wrap:nowrap; }
     .prep-param-row .prep-servings-right { margin-left:auto; flex-shrink:0; }
     .prep-param-row .prep-servings-right b { color:#DC2626; margin-left:2px; }
     .prep-param-row .prep-servings-btn { padding:5px 9px; font-size:12px; min-height:28px; }
+    @media (max-width: 410px) {
+        .prep-cycle-sel { font-size:12px; padding:4px 5px; }
+        .prep-cycle-sel label { font-size:12px; }
+        .prep-servings { font-size:12px; gap:4px; }
+        .prep-param-row .prep-servings-btn { padding:5px 7px; font-size:11px; }
+    }
     /* 需采购食材清单：标题行 + 右侧「点击展开/收起」倒三角按钮 */
     .prep-shop-list-header { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:8px 16px 4px; }
     .prep-shop-list-header > span { font-size:13px; font-weight:700; color:#374151; min-width:0; line-height:1.4; }
@@ -2031,12 +2045,17 @@
     }
     .prep-ai-btn {
         flex: 1 1 0; min-width: 0;
-        padding: 9px 6px;
+        padding: 8px 4px;
         border-radius: 10px; border: 1px solid #FED7AA;
         background: #FFF7ED; color: #7A4A21;
         font-size: 12px; font-weight: 700; letter-spacing: -0.2px;
-        cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        cursor: pointer;
+        /* 宽度不足时自动换行完整显示，禁止 ellipsis 截断按钮名 */
+        white-space: normal; text-align: center; line-height: 1.4; overflow: hidden;
         box-sizing: border-box;
+    }
+    @media (max-width: 410px) {
+        .prep-ai-btn { padding: 8px 2px; font-size: 11px; }
     }
     .prep-ai-btn:active { background: #FFEDD5; border-color: #FDBA74; }
     .prep-ai-btn.ai-btn-existing { background: #FFF7ED; color: #9A3412; border-color: #FED7AA; }
@@ -2713,17 +2732,27 @@
     .diary-bar-title { font-size:16px; font-weight:700; color:#1F2937; }
     .diary-scroll { flex:1; min-height:0; overflow-y:auto; padding:4px 16px 16px; }
     .diary-date-nav { display:flex; align-items:center; justify-content:flex-start; margin-bottom:6px; gap:8px; }
-    .diary-nav-btn { background:none; border:1px solid #E5E7EB; border-radius:10px; padding:4px 10px; font-size:14px; cursor:pointer; color:#374151; transition:all .15s; }
+    .diary-nav-btn { background:none; border:1px solid #E5E7EB; border-radius:10px; padding:4px 10px; font-size:14px; cursor:pointer; color:#374151; transition:all .15s; flex-shrink:0; }
     .diary-nav-btn:hover { background:#F9FAFB; border-color:#D1D5DB; }
-    .diary-date-center { text-align:center; }
-    .diary-date-text { font-size:15px; font-weight:600; color:#374151; }
-    .diary-week-text { font-size:12px; color:#9CA3AF; margin-top:2px; }
+    .diary-date-center { text-align:center; flex:1 1 auto; min-width:0; }
+    .diary-date-text { font-size:15px; font-weight:600; color:#374151; white-space:nowrap; }
+    .diary-week-text { font-size:12px; color:#9CA3AF; margin-top:2px; white-space:nowrap; }
     .diary-today-area { text-align:center; margin-bottom:12px; }
     .diary-today-btn { background:#FFF7ED; border:1px solid #FED7AA; border-radius:8px; padding:4px 14px; font-size:12px; color:#EA580C; cursor:pointer; transition:all .15s; }
     .diary-today-btn:hover { background:#FFEDD5; }
     .diary-today-btn-inline { background:none; border:none; padding:0; font-size:12px; color:#9CA3AF; cursor:pointer; line-height:1; }
     .diary-today-btn-inline:hover { color:#6B7280; }
     .diary-today-btn-inline.active { color:#DC2626; font-weight:600; }
+    /* 日期行右侧动作按钮组：窄屏自动紧凑，保证日期区不被挤压成竖排 */
+    .diary-top-actions { margin-left:auto; display:flex; align-items:center; gap:6px; flex-shrink:0; }
+    .diary-top-actions button { background:#FFF7ED; color:#F97316; border:1px solid #FED7AA; border-radius:8px; padding:4px 10px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
+    @media (max-width: 410px) {
+        .diary-nav-btn { padding:4px 6px; font-size:13px; }
+        .diary-date-text { font-size:14px; }
+        .diary-date-nav { gap:5px; }
+        .diary-top-actions { gap:4px; }
+        .diary-top-actions button { padding:4px 6px; font-size:11px; }
+    }
     .diary-nav-link { background:none; border:none; padding:4px 8px; font-size:12px; color:#374151; cursor:pointer; line-height:1; }
     .diary-nav-link:hover { text-decoration:underline; }
         .diary-meal-card {
@@ -2738,6 +2767,8 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-wrap: wrap;   /* 窄屏下按钮组放不下时整体换行，避免挤压/溢出 */
+            gap: 4px;
             margin-bottom: 10px;
         }
         .diary-meal-label {
@@ -2748,6 +2779,7 @@
         .diary-meal-actions {
             display: flex;
             gap: 6px;
+            flex-shrink: 0;
         }
         .diary-meal-actions button {
             background: #FFF7ED;
@@ -2757,6 +2789,7 @@
             font-size: 11px;
             color: #EA580C;
             cursor: pointer;
+            white-space: nowrap;   /* 防窄屏下"确认计划/记录实际"断成两行 */
         }
         .diary-meal-actions button:hover { background: #FFEDD5; }
         .diary-section {
@@ -3463,7 +3496,7 @@
                 <!-- 子头部：饮食文库下拉 + 节气指南 -->
                 <div class="knowledge-sub-header" id="knowledgeSubHeader">
                     <!-- 默认模式：显示下拉和节气按钮 -->
-                    <div id="knowledgeSubHeaderDefault" style="display:flex;align-items:center;gap:8px;width:100%;">
+                    <div id="knowledgeSubHeaderDefault" style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">
                         <div class="knowledge-dropdown-wrapper">
                             <button class="knowledge-dropdown-btn" id="knowledgeDropdownBtn" onclick="toggleKnowledgeDropdown()">饮食文库 ▼</button>
                             <div class="knowledge-dropdown-menu" id="knowledgeDropdownMenu" style="display:none;">
@@ -3601,9 +3634,9 @@
                         </div>
                         <button id="diaryNext" class="diary-nav-btn">▶</button>
                         <!-- 外出就餐 + 复盘（原就餐人选择器位置） -->
-                        <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
-                            <button onclick="openDiningOutPlanModal()" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">外出就餐</button>
-                            <button onclick="showDiaryTodaySummary()" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">复盘</button>
+                        <div class="diary-top-actions">
+                            <button onclick="openDiningOutPlanModal()">外出就餐</button>
+                            <button onclick="showDiaryTodaySummary()">复盘</button>
                         </div>
                     </div>
                     <!-- 餐次卡片容器 -->
@@ -32099,14 +32132,14 @@ function renderDiary() {
                 + _renderMealNutritionSummary(allDishes);
             // 确认计划按钮放到 meal-actions 中渲染（见下方 meal header 构造）
             window.__diaryPlanBtnHtml = planConfirmedLocal
-                ? '<button disabled style="background:#F3F4F6;border:1px solid #E5E7EB;border-radius:8px;padding:3px 10px;font-size:11px;color:#9CA3AF;cursor:not-allowed;">' + btnLabel + '</button>'
-                : '<button onclick="confirmDiaryMealPlan(\'' + escapeAttr(meal.key) + '\',\'' + escapeAttr(dateKey) + '\')" style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:3px 10px;font-size:11px;color:#EA580C;cursor:pointer;">' + btnLabel + '</button>';
+                ? '<button disabled style="background:#F3F4F6;border:1px solid #E5E7EB;border-radius:8px;padding:3px 10px;font-size:11px;color:#9CA3AF;cursor:not-allowed;white-space:nowrap;">' + btnLabel + '</button>'
+                : '<button onclick="confirmDiaryMealPlan(\'' + escapeAttr(meal.key) + '\',\'' + escapeAttr(dateKey) + '\')" style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:3px 10px;font-size:11px;color:#EA580C;cursor:pointer;white-space:nowrap;">' + btnLabel + '</button>';
             planClass = 'diary-section-plan';
         } else {
             planHtml = '<div class="diary-source-group" style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px 8px;flex:1 1 0;min-width:120px;margin:0;padding:0;background:transparent;border:none;border-radius:0;">'
                 + '<div class="diary-empty-source">（暂无计划，点 ☰ 选择食谱）</div>'
                 + '</div>';
-            window.__diaryPlanBtnHtml = '<button disabled style="background:#F3F4F6;border:1px solid #E5E7EB;border-radius:8px;padding:3px 10px;font-size:11px;color:#9CA3AF;cursor:not-allowed;">✅ 确认计划</button>';
+            window.__diaryPlanBtnHtml = '<button disabled style="background:#F3F4F6;border:1px solid #E5E7EB;border-radius:8px;padding:3px 10px;font-size:11px;color:#9CA3AF;cursor:not-allowed;white-space:nowrap;">✅ 确认计划</button>';
             planClass = 'diary-section-empty';
         }
         // 为兼容"旧的 planConfirmed 判定"和后续 statusBadge/planSet 对比：仍统一用 planConfirmed
