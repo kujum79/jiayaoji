@@ -27,9 +27,11 @@
             background: #f0f0f0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
+        /* 阻断 flex item 被 430px 固定宽子元素撑开导致手机端左右各裁 20px 的溢出 */
+        #appRoot { width: 100%; max-width: 430px; margin: 0 auto; }
         .phone-frame {
-            width: 430px;
-            max-width: 100%;
+            width: 100%;
+            max-width: 430px;
             height: 100vh;
             max-height: 900px;
             background: #FFF7ED;
@@ -1425,8 +1427,8 @@
             animation: fadeInUp 0.25s ease;
         }
         .knowledge-detail-wrapper {
-            width: 430px;
-            max-width: 100%;
+            width: 100%;
+            max-width: 430px;
             height: 100vh;
             max-height: 900px;
             display: flex;
@@ -6090,11 +6092,9 @@ function restoreFridgeByQuantity(detail) {
 // ============================================================
 // 1. 数据层
 // ============================================================
+// 默认数据骨架：新用户只含"我"一个占位成员，其余由用户自己创建（禁止注入任何演示数据）
 const DEFAULT_FAMILY = [
-    { id: 1, name: '我', age: 50, place: '武汉', currentCity: '武汉', taste: '微辣', dietaryPreference: '喜欢吃牛肉，不吃葱姜', relationship: '家人', isFamily: true, role: '普通人', healthConcerns: '日常保健，注意营养均衡', constitution: "平和质", constitutionDetail: "健康状态良好" },
-    { id: 2, name: '老公', age: 57, place: '武汉', currentCity: '武汉', taste: '微辣', dietaryPreference: '喜欢家常菜，少油', relationship: '家人', isFamily: true, role: '普通人', healthConcerns: '工作压力大，需养心安神', constitution: "气郁质", constitutionDetail: "工作压力大，情绪低落" },
-    { id: 3, name: '儿子', age: 16, place: '武汉', currentCity: '武汉', taste: '不喜辣，口味重', dietaryPreference: '喜欢酸甜口，不吃太辣', relationship: '家人', isFamily: true, role: '体育生', groupType: '生长发育期', healthStartDate: '2026-09-01', healthEndDate: '', healthNote: '中学生，正在长高，需要补充钙和蛋白质', healthConcerns: '运动量大，需要补气血、增肌', constitution: "湿热质", constitutionDetail: "面垢油光、容易上火" },
-    { id: 4, name: '父亲', age: 80, place: '济南', currentCity: '武汉', taste: '微辣', dietaryPreference: '适合软烂少盐，少油', relationship: '家人', isFamily: true, role: '老人', healthConcerns: '年纪大了，需要健脾养胃、补钙', constitution: "阴虚质", constitutionDetail: "口干舌燥、手足心热" }
+    { id: 1, name: '我', age: null, place: '', currentCity: '', taste: '', dietaryPreference: '', relationship: '家人', isFamily: true, role: '普通人', healthConcerns: '', constitution: '平和质', constitutionDetail: '' }
 ];
 
 const DIET_KNOWLEDGE_BASE = {
@@ -6116,38 +6116,19 @@ const CONSTITUTION_DIET_RULES = {
     '特禀质': { principle: '扶正固表，宜食黄芪、大枣、山药等。忌发物、过敏原。', suitable: ['黄芪', '大枣', '山药', '蜂蜜', '燕麦'], avoid: ['发物', '过敏原', '海鲜'] }
 };
 
-const DEFAULT_CONTACTS = [
-    { id: 101, name: '老公的大哥', dietaryPreference: '家常口味' },
-    { id: 102, name: '老公的二哥', dietaryPreference: '偏爱肉菜' },
-    { id: 103, name: '老公的妹妹', dietaryPreference: '少油少辣' }
-];
+const DEFAULT_CONTACTS = [];
 
 const DEFAULT_DINING_GROUPS = [
-    { id: 1, name: '小家', members: ['我', '老公', '儿子'], icon: '👨‍👩‍👦', type: 'core', groupType: 'core', isDefault: true, createdAt: 1734567890 },
-    { id: 2, name: '女方家族', members: ['我', '老公', '儿子', '父亲'], icon: '👨‍👩‍👧‍👦', type: 'extended', groupType: 'family', isDefault: false, createdAt: 1734567891 },
-    { id: 3, name: '男方家族', members: ['我', '老公', '儿子', '老公的大哥', '老公的二哥', '老公的妹妹'], icon: '👨‍👩‍👧‍👦', type: 'extended', groupType: 'family', isDefault: false, createdAt: 1734567892 },
+    { id: 1, name: '小家', members: ['我'], icon: '👨‍👩‍👦', type: 'core', groupType: 'core', isDefault: true, createdAt: 1734567890 },
     { id: 4, name: '社交组', members: [], icon: '👫', groupType: 'social-container', isContainer: true, isDefault: false, createdAt: 1734567893 }
 ];
 
-// 社交子组（灵活创建，如"我的同学""老公同事"等）
-const DEFAULT_SOCIAL_SUBGROUPS = [
-    { id: 101, name: '朋友', members: ['张三', '李四', '我', '老公'], icon: '👫', groupType: 'social', parentGroup: '社交组', isDefault: false, createdAt: 1734567893 },
-    { id: 102, name: '同事', members: ['王经理', '我'], icon: '💼', groupType: 'social', parentGroup: '社交组', isDefault: false, createdAt: 1734567894 },
-    { id: 103, name: '亲戚', members: ['刘总', '我', '老公'], icon: '👪', groupType: 'social', parentGroup: '社交组', isDefault: false, createdAt: 1734567895 }
-];
+// 社交子组（灵活创建，如"我的同学""老公同事"等）——默认为空，由用户自行创建
+const DEFAULT_SOCIAL_SUBGROUPS = [];
 
-const DEFAULT_SOCIAL_MEMBERS = [
-    { id: 101, name: '张三', relationship: '朋友', isFamily: false, age: 35, place: '武汉', currentCity: '武汉', taste: '微辣', dietaryPreference: '不吃香菜', constitution: "平和质", constitutionDetail: "" },
-    { id: 102, name: '李四', relationship: '朋友', isFamily: false, age: 38, place: '北京', currentCity: '武汉', taste: '不辣', dietaryPreference: '素食为主', constitution: "平和质", constitutionDetail: "" },
-    { id: 103, name: '王经理', relationship: '同事', isFamily: false, age: 45, place: '上海', currentCity: '武汉', taste: '微辣', dietaryPreference: '', constitution: "平和质", constitutionDetail: "" },
-    { id: 104, name: '刘总', relationship: '亲戚', isFamily: false, age: 50, place: '深圳', currentCity: '武汉', taste: '清淡', dietaryPreference: '不吃葱姜', constitution: "平和质", constitutionDetail: "" }
-];
+const DEFAULT_SOCIAL_MEMBERS = [];
 
-const DEFAULT_SOCIAL_GROUPS = [
-    { id: 101, name: '朋友', members: ['张三', '李四', '我', '老公'], icon: '👫', groupType: 'social', subType: 'friends', isDefault: false, createdAt: 1734567893 },
-    { id: 102, name: '同事', members: ['王经理', '我'], icon: '💼', groupType: 'social', subType: 'colleagues', isDefault: false, createdAt: 1734567894 },
-    { id: 103, name: '亲戚', members: ['刘总', '我', '老公'], icon: '👪', groupType: 'social', subType: 'relatives', isDefault: false, createdAt: 1734567895 }
-];
+const DEFAULT_SOCIAL_GROUPS = [];
 
 const SOLAR_TERMS_2026 = {
     '01-05': { name: '小寒', season: '冬', diet: '温补', foods: ['羊肉', '核桃', '红枣', '姜'], dishes: ['羊肉汤', '核桃粥'], tip: '天气寒冷，注意温补' },
@@ -19838,10 +19819,8 @@ function getAllPeople() {
 function getFallbackDiningGroup() {
     let group = diningGroups.find(g => g.isDefault);
     if (!group) {
-        const hasChild = familyData.some(m => m.age < 18);
-        group = hasChild
-            ? { id: Date.now(), name: '小家', members: ['我', '老公', '儿子'], icon: '👨‍👩‍👦', type: 'core', isDefault: true, createdAt: Date.now() }
-            : { id: Date.now(), name: '夫妻二人组', members: ['我', '老公'], icon: '👩‍❤️‍👨', type: 'core', isDefault: true, createdAt: Date.now() };
+        // 新用户从"仅含我"的骨架开始，成员由用户自行添加
+        group = { id: Date.now(), name: '小家', members: ['我'], icon: '👨‍👩‍👦', type: 'core', isDefault: true, createdAt: Date.now() };
         diningGroups.unshift(group);
         lsSet('diningGroups', JSON.stringify(diningGroups));
     }
@@ -24657,7 +24636,7 @@ function generateAIResponse(text) {
                      cleanText.includes('吃啥') || cleanText.includes('吃什么') || cleanText.includes('吃点什么') ||
                      cleanText.includes('做啥') || cleanText.includes('做什么') || cleanText.includes('做点什么');
     const isPlan = !isUnsure && (isPlanningIntent(cleanText) || cleanText.includes('规划') || cleanText.includes('菜谱计划'));
-    const hasChild = DEFAULT_FAMILY.some(m => m.age < 18);
+    const hasChild = familyData.some(m => m.age !== null && m.age < 18);
 
     // ==================== 检查“节气推荐”（最高优先级） ====================
     const solarTerm = getSolarTermFromText(cleanText, dateInfo);
@@ -40099,24 +40078,9 @@ document.querySelectorAll('.knowledge-tag-item').forEach(tag => {
 
 
 // ============================================================
-// 7. 初始化（预置演示数据）
+// 7. 初始化（新用户从空数据开始，不注入任何演示数据）
 // ============================================================
-if (!lsGet('mealPlans')) {
-    const today = new Date();
-    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
-    const demo = {};
-    demo[dateToKey(today)] = {
-        breakfast: [{ id: 1, name: '小米粥', forWhom: '适合全家', taste: '清淡', ingredients: ['小米','红枣'], reason: '养胃暖身，适合早餐', completed: false, addedAt: Date.now(), solarTerm: '小暑', groupName: '小家' }],
-        lunch: [{ id: 2, name: '番茄牛腩面', forWhom: '适合全家', taste: '酸甜', ingredients: ['番茄','牛腩','面条'], reason: '酸甜开胃，营养丰富', completed: false, addedAt: Date.now(), solarTerm: '小暑', groupName: '小家' }],
-        dinner: [{ id: 3, name: '清蒸鲈鱼', forWhom: '适合全家', taste: '低脂', ingredients: ['鲈鱼','葱','姜'], reason: '低脂高蛋白，适合晚餐', completed: false, addedAt: Date.now(), solarTerm: '小暑', groupName: '小家' }]
-    };
-    demo[dateToKey(tomorrow)] = {
-        breakfast: [{ id: 4, name: '豆浆油条', forWhom: '适合全家', taste: '经典', ingredients: ['黄豆','面粉'], reason: '经典搭配，营养均衡', completed: false, addedAt: Date.now(), solarTerm: '小暑', groupName: '小家' }],
-        lunch: [{ id: 5, name: '红烧排骨', forWhom: '适合全家', taste: '家常', ingredients: ['排骨','冰糖','生抽'], reason: '家常下饭，老少皆宜', completed: false, addedAt: Date.now(), solarTerm: '小暑', groupName: '小家' }],
-        dinner: [{ id: 6, name: '冬瓜排骨汤', forWhom: '适合全家', taste: '清鲜', ingredients: ['冬瓜','排骨'], reason: '清热解暑，消暑佳品', completed: false, addedAt: Date.now(), solarTerm: '小暑', groupName: '小家' }]
-    };
-    lsSet('mealPlans', JSON.stringify(demo));
-}
+if (!lsGet('mealPlans')) lsSet('mealPlans', JSON.stringify({}));
 if (!lsGet('mealRecords')) lsSet('mealRecords', JSON.stringify([]));
 if (!lsGet('familyData')) lsSet('familyData', JSON.stringify(DEFAULT_FAMILY));
 familyData = JSON.parse(lsGet('familyData'));
@@ -40260,29 +40224,70 @@ if (!lsGet('diningGroupsV7_rename')) {
     } catch(e) {}
     lsSet('diningGroupsV7_rename', 'true');
 }
-// V8: 确保小家默认成员（我、老公、儿子）存在于familyData和小家就餐组中
-if (!lsGet('diningGroupsV8_xiaojia_fix')) {
-    // 1. 确保familyData中存在默认小家成员
-    const existingNames = new Set(familyData.map(m => m.name));
-    DEFAULT_FAMILY.forEach(dm => {
-        if (dm.name === '我' || dm.name === '老公' || dm.name === '儿子') {
-            if (!existingNames.has(dm.name)) {
-                familyData.push({ ...dm });
-                existingNames.add(dm.name);
+// V9: 清理历史版本误注入的演示数据（我/老公/儿子/父亲、张三李四等），仅当指纹与演示数据完全一致时才清除，不碰用户自建数据
+// 白名单：开发者本人的家庭（三仁佳欢/fam_69390597）真实数据与演示数据同源，必须跳过清理
+if (!lsGet('diningGroupsV9_demo_cleanup')) {
+    var _lu = null;
+    try { _lu = JSON.parse(localStorage.getItem('jj_login_user') || 'null'); } catch (e) {}
+    var isDevFamily = _lu && (_lu.name === '三仁佳欢' || _lu.id === 'fam_69390597');
+    if (!isDevFamily) {
+        try {
+        // 1. 清理 familyData 中指纹完全匹配演示数据的成员
+        const demoFingerprints = {
+            '老公': { age: 57, place: '武汉', constitution: '气郁质' },
+            '儿子': { age: 16, place: '武汉', constitution: '湿热质' },
+            '父亲': { age: 80, place: '济南', constitution: '阴虚质' }
+        };
+        const removedNames = new Set();
+        familyData = familyData.filter(m => {
+            const fp = demoFingerprints[m.name];
+            if (fp && m.age === fp.age && m.place === fp.place && m.constitution === fp.constitution) {
+                removedNames.add(m.name);
+                return false; // 演示数据，删除
             }
-        }
-    });
-    lsSet('familyData', JSON.stringify(familyData));
-    // 2. 确保小家就餐组成员列表完整
-    const xjGroup = diningGroups.find(g => g.name === '小家');
-    if (xjGroup) {
-        const defaultXiaojiaNames = ['我', '老公', '儿子'];
-        defaultXiaojiaNames.forEach(n => {
-            if (!xjGroup.members.includes(n)) xjGroup.members.push(n);
+            return true;
         });
+        // "我"成员：若字段与演示数据完全一致，清空演示字段（保留成员本身）
+        const meDemo = { age: 50, place: '武汉', taste: '微辣', dietaryPreference: '喜欢吃牛肉，不吃葱姜', healthConcerns: '日常保健，注意营养均衡' };
+        familyData.forEach(m => {
+            if (m.name === '我' && m.age === meDemo.age && m.place === meDemo.place && m.taste === meDemo.taste && m.dietaryPreference === meDemo.dietaryPreference) {
+                m.age = null; m.place = ''; m.currentCity = ''; m.taste = ''; m.dietaryPreference = ''; m.healthConcerns = '';
+            }
+        });
+        // 2. 清理演示社交成员（张三/李四/王经理/刘总）
+        const demoSocialNames = ['张三', '李四', '王经理', '刘总'];
+        familyData = familyData.filter(m => !(demoSocialNames.includes(m.name) && m.isFamily === false && [101,102,103,104].includes(m.id)));
+        lsSet('familyData', JSON.stringify(familyData));
+        // 3. 清理演示联系人
+        const demoContactNames = ['老公的大哥', '老公的二哥', '老公的妹妹'];
+        contactsData = contactsData.filter(c => !demoContactNames.includes(c.name));
+        lsSet('contactsData', JSON.stringify(contactsData));
+        // 4. 清理演示就餐组（女方家族/男方家族）
+        diningGroups = diningGroups.filter(g => !['女方家族', '男方家族'].includes(g.name));
+        // 5. 从就餐组成员中移除已被清理的演示成员
+        diningGroups.forEach(g => {
+            if (Array.isArray(g.members)) {
+                g.members = g.members.filter(n => !removedNames.has(n) && !demoSocialNames.includes(n));
+            }
+        });
+        lsSet('diningGroups', JSON.stringify(diningGroups));
+        // 6. 清理演示菜谱（小米粥/番茄牛腩面/清蒸鲈鱼/豆浆油条/红烧排骨/冬瓜排骨汤）
+        const demoDishNames = ['小米粥', '番茄牛腩面', '清蒸鲈鱼', '豆浆油条', '红烧排骨', '冬瓜排骨汤'];
+        const plans = JSON.parse(lsGet('mealPlans') || '{}');
+        let planChanged = false;
+        Object.keys(plans).forEach(dateKey => {
+            ['breakfast', 'lunch', 'dinner'].forEach(meal => {
+                if (Array.isArray(plans[dateKey][meal])) {
+                    const before = plans[dateKey][meal].length;
+                    plans[dateKey][meal] = plans[dateKey][meal].filter(item => !(demoDishNames.includes(item.name) && item.solarTerm === '小暑' && [1,2,3,4,5,6].includes(item.id)));
+                    if (plans[dateKey][meal].length !== before) planChanged = true;
+                }
+            });
+        });
+        if (planChanged) lsSet('mealPlans', JSON.stringify(plans));
+        } catch (e) { console.warn('V9 cleanup failed:', e); }
     }
-    lsSet('diningGroups', JSON.stringify(diningGroups));
-    lsSet('diningGroupsV8_xiaojia_fix', 'true');
+    lsSet('diningGroupsV9_demo_cleanup', 'true');
 }
 const storedCurrentGroup = lsGet('currentDiningGroup');
 if (!storedCurrentGroup || !diningGroups.some(g => g.name === storedCurrentGroup)) {
