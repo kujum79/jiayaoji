@@ -10,11 +10,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Supabase SDK（用户登录系统） -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Supabase SDK（本地化部署，避免 jsdelivr 在国内被墙/连接关闭） -->
+    <script src="images/supabase.js"></script>
     <style>
         /* ====== 全局样式 ====== */
         * { box-sizing: border-box; }
+        /* 禁止手机浏览器自动放大文字（华为/小米等自带浏览器会按系统字体放大，挤坏布局） */
+        html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
         body {
             margin: 0;
             min-height: 100vh;
@@ -586,6 +588,7 @@
             display: flex;
             flex-direction: column;
             overflow-y: auto;
+            overflow-x: hidden;   /* 禁止内容区横向平移（弱机浏览器放大文字导致的超宽兜底） */
             padding: 16px 16px 100px;
         }
         .page-panel { display: none; animation: fadeIn 0.2s ease; }
@@ -2063,7 +2066,7 @@
     .prep-buy-query-row { display:flex; gap:6px; align-items:center; margin-bottom:10px; }
     .prep-buy-query-row input { flex:1; padding:8px 10px; border:1px solid #E5E7EB; border-radius:10px; font-size:13px; box-sizing:border-box; background:#fff; min-width:0; }
     .prep-buy-query-row input:focus { outline:none; border-color:#10B981; }
-    .prep-buy-query-btn { padding:8px 12px; border:none; border-radius:999px; background:#10B981; color:#fff; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .prep-buy-query-btn { padding:8px 10px; border:none; border-radius:999px; background:#10B981; color:#fff; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap; flex-shrink:0; }
     .prep-buy-query-btn:active { background:#059669; }
     .prep-buy-query-btn.prep-buy-clear-btn { background:#F3F4F6; color:#374151; }
     .prep-buy-query-btn.prep-buy-clear-btn:active { background:#E5E7EB; }
@@ -2103,7 +2106,7 @@
     .mode-btn-accent { color:#059669; background:#ECFDF5; border:1px solid #A7F3D0; font-weight:700; }
     .mode-btn-accent:active { background:#D1FAE5; }
     .prep-ingr-rec-header { display:flex; align-items:center; gap:8px; margin:0 0 10px; }
-    .prep-ingr-rec-header h3 { margin:0; font-size:15px; color:#1F2937; font-weight:800; }
+    .prep-ingr-rec-header h3 { margin:0; font-size:15px; color:#1F2937; font-weight:800; flex:1 1 auto; min-width:0; line-height:1.25; }
     .ingr-rec-term-info { font-size:12px; color:#065F46; background:#ECFDF5; border:1px solid #A7F3D0; border-radius:8px; padding:5px 10px; margin-bottom:8px; font-weight:600; line-height:1.5; }
     .ingr-rec-section { border:none; border-radius:0; background:transparent; padding:0; margin-bottom:12px; box-sizing:border-box; }
     .ingr-rec-sec-title { font-size:14px; font-weight:800; color:#065F46; margin:0 0 8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
@@ -2147,7 +2150,7 @@
     .ingr-rec-kb-item .vis-public { color:#047857; background:#D1FAE5; }
     .ingr-rec-kb-item .ingr-rec-kb-item-cats { font-size:10px; color:#4B5563; margin-top:2px; line-height:1.4; }
     .ingr-rec-kb-ai-section { padding:8px 0; }
-    .prep-ingr-rec-header .right-btn { margin-left:auto; padding:6px 14px; background:#F97316; color:#fff; border:none; border-radius:999px; font-size:12px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(249,115,22,0.25); }
+    .prep-ingr-rec-header .right-btn { margin-left:auto; flex-shrink:0; white-space:nowrap; padding:6px 14px; background:#F97316; color:#fff; border:none; border-radius:999px; font-size:12px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(249,115,22,0.25); }
     .prep-ingr-rec-header .right-btn[disabled], .prep-ingr-rec-header .right-btn.is-disabled { background:#E5E7EB; color:#9CA3AF; box-shadow:none; cursor:not-allowed; }
     .prep-ingr-rec-header .right-btn:active:not([disabled]) { background:#EA580C; }
     .ingr-rec-kb-ai-results { margin-top:8px; }
@@ -2409,7 +2412,7 @@
     .fridge-category-content .fridge-item { padding: 10px 4px; }
 
     /* ===== 推荐首页 ===== */
-    .rec-home { flex:1; min-height:0; overflow-y:auto; padding:0 0 16px; }
+    .rec-home { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:0 0 16px; }
     .rec-summary-bar { display:flex; gap:8px; padding:10px 12px; }
     .rec-summary-card { flex:1; text-align:center; padding:10px 6px; border-radius:10px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
     .rec-summary-num { font-size:20px; font-weight:700; }
@@ -3152,29 +3155,105 @@
 </head>
 <body>
 
-<!-- ====== Supabase 登录页（邮箱+密码） ====== -->
-<div id="loginPage" style="position:fixed;inset:0;z-index:100003;background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 40%,#FED7AA 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;">
-    <div style="background:#fff;border-radius:20px;padding:32px 24px;width:100%;max-width:340px;text-align:center;box-shadow:0 12px 40px rgba(234,88,12,0.15);">
+<!-- ====== 启动闪屏：文件较大，弱网下加载期间统一显示此页，就绪后自动切换到 APP/登录页 ====== -->
+<div id="bootSplash" style="position:fixed;inset:0;z-index:100006;background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 40%,#FED7AA 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;">
+    <style>@keyframes bootPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.18);opacity:.65}}</style>
+    <div style="font-size:58px;animation:bootPulse 1.2s ease-in-out infinite;">🍳</div>
+    <div style="margin-top:14px;font-size:16px;font-weight:800;color:#9A3412;">家肴记</div>
+    <div style="margin-top:8px;font-size:13px;color:#B45309;">正在加载，请稍候…</div>
+</div>
+
+<!-- ====== 登录页（标签页切换：家庭登录 / 邮箱登录） ====== -->
+<div id="loginPage" style="position:fixed;inset:0;z-index:100003;background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 40%,#FED7AA 100%);display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;overflow-y:auto;">
+    <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:340px;text-align:center;box-shadow:0 12px 40px rgba(234,88,12,0.15);box-sizing:border-box;">
         <div style="font-size:48px;margin-bottom:8px;">🍳</div>
         <div style="font-size:22px;font-weight:800;color:#9A3412;margin-bottom:4px;">家肴记</div>
-        <div style="font-size:13px;color:#9CA3AF;margin-bottom:24px;">AI 家庭膳食助理</div>
-        <input id="loginEmail" type="email" maxlength="60" placeholder="请输入邮箱" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;" />
-        <input id="loginPassword" type="password" maxlength="40" placeholder="请输入密码" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
-        <button id="loginBtn" onclick="doLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录</button>
-        <div id="loginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.5;"></div>
-        <div id="switchToRegister" onclick="switchLoginRegister()" style="font-size:13px;color:#EA580C;margin-top:14px;cursor:pointer;text-decoration:underline;">还没有账号？点此注册</div>
-        <div style="font-size:11px;color:#9CA3AF;margin-top:10px;line-height:1.5;">登录即表示同意家肴记服务条款</div>
+        <div style="font-size:13px;color:#9CA3AF;margin-bottom:18px;">AI 家庭膳食助理</div>
+        <!-- 登录方式标签页 -->
+        <div style="display:flex;gap:6px;margin-bottom:16px;background:#FFF7ED;border-radius:12px;padding:4px;">
+            <div id="tabFamily" onclick="switchLoginTab('family')" style="flex:1;padding:8px 0;font-size:14px;font-weight:700;text-align:center;border-radius:9px;cursor:pointer;background:#fff;color:#9A3412;box-shadow:0 1px 4px rgba(234,88,12,0.15);">🏠 家庭登录</div>
+            <div id="tabEmail" onclick="switchLoginTab('email')" style="flex:1;padding:8px 0;font-size:14px;font-weight:600;text-align:center;border-radius:9px;cursor:pointer;color:#9CA3AF;">📧 邮箱登录</div>
+        </div>
+        <!-- 家庭登录面板（默认显示） -->
+        <div id="loginPanelFamily">
+            <input id="familyLoginName" type="text" maxlength="20" placeholder="家庭名称" onkeydown="if(event.key==='Enter')doFamilyLogin()" style="width:100%;padding:10px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+            <input id="familyLoginPass" type="password" maxlength="40" placeholder="家庭密码" onkeydown="if(event.key==='Enter')doFamilyLogin()" style="width:100%;padding:10px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+            <button id="familyLoginBtn" onclick="doFamilyLogin()" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#D97706;border:none;border-radius:12px;cursor:pointer;">家庭登录</button>
+            <div id="familyLoginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.6;"></div>
+            <div id="toggleFamilySetup" onclick="toggleFamilySetupBox()" style="font-size:12px;color:#EA580C;margin-top:10px;cursor:pointer;text-decoration:underline;">首次使用？用家庭码开通密码登录</div>
+            <div id="familySetupBox" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed #FED7AA;">
+                <input id="familySetupName" type="text" maxlength="20" placeholder="家庭名称" style="width:100%;padding:10px 14px;font-size:14px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:8px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+                <input id="familySetupCode" type="text" maxlength="8" placeholder="8位家庭码（向家庭创建者索取）" style="width:100%;padding:10px 14px;font-size:14px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:8px;outline:none;background:#FFFBEB;color:#1F2937;text-transform:uppercase;box-sizing:border-box;" />
+                <input id="familySetupPass1" type="password" maxlength="40" placeholder="设置家庭密码（至少6位）" style="width:100%;padding:10px 14px;font-size:14px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:8px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+                <input id="familySetupPass2" type="password" maxlength="40" placeholder="确认密码" style="width:100%;padding:10px 14px;font-size:14px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+                <button id="familySetupBtn" onclick="doFamilySetup()" style="width:100%;padding:10px;font-size:14px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:10px;cursor:pointer;">开通并保存</button>
+            </div>
+        </div>
+        <!-- 邮箱登录面板（点标签切换显示） -->
+        <div id="loginPanelEmail" style="display:none;">
+            <input id="loginEmail" type="email" maxlength="60" placeholder="请输入邮箱" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;" />
+            <input id="loginPassword" type="password" maxlength="40" placeholder="请输入密码" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
+            <button id="loginBtn" onclick="doLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录</button>
+            <div id="loginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.5;"></div>
+            <div id="switchToRegister" onclick="switchLoginRegister()" style="font-size:13px;color:#EA580C;margin-top:14px;cursor:pointer;text-decoration:underline;">还没有账号？点此注册</div>
+            <div style="font-size:11px;color:#9CA3AF;margin-top:10px;line-height:1.5;">登录即表示同意家肴记服务条款</div>
+        </div>
     </div>
 </div>
 
-<!-- ====== 创建家庭页 ====== -->
+<script>
+// 登录页加载保护：本文件较大，慢网络下登录页先渲染而功能脚本尚未解析完成，
+// 此期间点击按钮本会"毫无反应"。这里拦截点击并给出加载提示，避免误导用户。
+(function() {
+    function bootToast(msg) {
+        var t = document.getElementById('bootToast');
+        if (!t) {
+            t = document.createElement('div');
+            t.id = 'bootToast';
+            t.style.cssText = 'position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:rgba(31,41,55,0.9);color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;z-index:100005;max-width:80vw;text-align:center;';
+            document.body.appendChild(t);
+        }
+        t.textContent = msg;
+        t.style.display = 'block';
+        clearTimeout(t._tm);
+        t._tm = setTimeout(function() { t.style.display = 'none'; }, 2500);
+    }
+    var lp = document.getElementById('loginPage');
+    if (lp) {
+        lp.addEventListener('click', function(e) {
+            if (!window.__bootReady) {
+                e.preventDefault();
+                e.stopPropagation();
+                bootToast('⏳ 页面正在加载，请稍候几秒再操作…');
+            }
+        }, true);
+    }
+})();
+</script>
+
+<!-- ====== 创建/加入家庭页 ====== -->
 <div id="createFamilyPage" style="position:fixed;inset:0;z-index:100003;background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 40%,#FED7AA 100%);display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;">
     <div style="background:#fff;border-radius:20px;padding:32px 24px;width:100%;max-width:340px;text-align:center;box-shadow:0 12px 40px rgba(234,88,12,0.15);">
         <div style="font-size:48px;margin-bottom:8px;">🏠</div>
-        <div style="font-size:22px;font-weight:800;color:#9A3412;margin-bottom:4px;">创建家庭</div>
-        <div style="font-size:13px;color:#9CA3AF;margin-bottom:24px;">为您的家庭起个名字，开始记录膳食</div>
-        <input id="familyNameInput" type="text" maxlength="20" placeholder="如：幸福之家" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
-        <button id="createFamilyBtn" onclick="doCreateFamily()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">创建家庭</button>
+        <div style="font-size:22px;font-weight:800;color:#9A3412;margin-bottom:4px;">家肴记</div>
+        <div style="font-size:13px;color:#9CA3AF;margin-bottom:18px;">创建自己的家庭，或加入家人的家庭</div>
+        <!-- 创建/加入 标签页 -->
+        <div style="display:flex;gap:6px;margin-bottom:16px;background:#FFF7ED;border-radius:12px;padding:4px;">
+            <div id="cfpTabCreate" onclick="toggleCreateFamilyPanel('create')" style="flex:1;padding:8px 0;font-size:14px;font-weight:700;text-align:center;border-radius:9px;cursor:pointer;background:#fff;color:#9A3412;box-shadow:0 1px 4px rgba(234,88,12,0.15);">🏠 创建家庭</div>
+            <div id="cfpTabJoin" onclick="toggleCreateFamilyPanel('join')" style="flex:1;padding:8px 0;font-size:14px;font-weight:600;text-align:center;border-radius:9px;cursor:pointer;color:#9CA3AF;">🤝 加入家庭</div>
+        </div>
+        <!-- 创建面板（默认显示） -->
+        <div id="cfpPanelCreate">
+            <input id="familyNameInput" type="text" maxlength="20" placeholder="如：幸福之家" onkeydown="if(event.key==='Enter')doCreateFamily()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
+            <button id="createFamilyBtn" onclick="doCreateFamily()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">创建家庭</button>
+            <div style="font-size:11px;color:#9CA3AF;margin-top:10px;line-height:1.5;">创建后将生成8位家庭码，可分享给家人加入</div>
+        </div>
+        <!-- 加入面板 -->
+        <div id="cfpPanelJoin" style="display:none;">
+            <input id="pageJoinCode" type="text" maxlength="8" placeholder="输入8位家庭码" onkeydown="if(event.key==='Enter')joinFamilyFromPage()" style="width:100%;padding:12px 14px;font-size:18px;letter-spacing:4px;text-align:center;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;text-transform:uppercase;font-family:monospace;" />
+            <button onclick="joinFamilyFromPage()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#D97706;border:none;border-radius:12px;cursor:pointer;">🤝 加入家庭</button>
+            <div style="font-size:11px;color:#9CA3AF;margin-top:10px;line-height:1.5;">请向家庭创建者索取8位家庭码<br>（创建者：我家 → 设置 → 🔑 家庭码 → 复制）</div>
+        </div>
     </div>
 </div>
 
@@ -4518,8 +4597,8 @@
         <div class="fridge-result-card">
             <div class="fridge-result-title" id="fridgeResultTitle" style="display:flex;align-items:center;gap:8px;">
                 <button onclick="closeFridgeResult()" style="background:none;border:none;font-size:26px;font-weight:600;color:#374151;cursor:pointer;padding:2px 8px;line-height:1;border-radius:6px;">&lt;</button>
-                <span id="fridgeResultTitleText">现有食材推荐菜谱</span>
-                <button type="button" id="addSchemesToPlanTopBtn" style="display:none;margin-left:auto;padding:6px 14px;background:#16A34A;color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">✅ 添加到食记计划</button>
+                <span id="fridgeResultTitleText" style="flex:1 1 auto;min-width:0;font-size:15px;line-height:1.3;">现有食材推荐菜谱</span>
+                <button type="button" id="addSchemesToPlanTopBtn" style="display:none;margin-left:auto;flex-shrink:0;padding:6px 10px;background:#16A34A;color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">✅ 添加到食记计划</button>
             </div>
             <div id="fridgeResultContent"></div>
         </div>
@@ -4534,6 +4613,15 @@ const SUPABASE_KEY = 'sb_publishable_hnSosJoSD9SNMnNrT_G9XQ_VAqtcmBy';
 var sb = null;
 try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch(e) { console.warn('Supabase init failed:', e); }
 
+// 给 Supabase/网络调用加超时保护，防止弱网/被墙时按钮永久卡在"登录中…"
+function withTimeout(promise, ms, label) {
+    var t = label || '请求';
+    return new Promise(function(resolve, reject) {
+        var timer = setTimeout(function() { reject(new Error(t + '超时（' + ms/1000 + '秒），请检查网络或刷新重试')); }, ms);
+        promise.then(function(v) { clearTimeout(timer); resolve(v); }).catch(function(e) { clearTimeout(timer); reject(e); });
+    });
+}
+
 // 当前登录用户与家庭信息（缓存在 localStorage）
 function getLoginUser() { try { return JSON.parse(localStorage.getItem('jj_login_user') || 'null'); } catch(e) { return null; } }
 function setLoginUser(u) { localStorage.setItem('jj_login_user', JSON.stringify(u||null)); }
@@ -4541,8 +4629,12 @@ function getLoginFamily() { try { return JSON.parse(localStorage.getItem('jj_log
 function setLoginFamily(f) { localStorage.setItem('jj_login_family', JSON.stringify(f||null)); }
 function clearLogin() { localStorage.removeItem('jj_login_user'); localStorage.removeItem('jj_login_family'); }
 
+// 隐藏启动闪屏（页面就绪、目标界面已确定时调用）
+function hideBootSplash() { var bs = document.getElementById('bootSplash'); if (bs) bs.style.display = 'none'; }
+
 // 显示登录页（隐藏APP主界面）
 function showLoginPage() {
+    hideBootSplash();
     var lp = document.getElementById('loginPage');
     var fp = document.getElementById('createFamilyPage');
     var app = document.getElementById('appRoot');
@@ -4552,6 +4644,7 @@ function showLoginPage() {
 }
 // 显示创建家庭页
 function showCreateFamilyPage() {
+    hideBootSplash();
     var lp = document.getElementById('loginPage');
     var fp = document.getElementById('createFamilyPage');
     var app = document.getElementById('appRoot');
@@ -4561,6 +4654,7 @@ function showCreateFamilyPage() {
 }
 // 显示APP主界面
 function showAppRoot() {
+    hideBootSplash();
     var lp = document.getElementById('loginPage');
     var fp = document.getElementById('createFamilyPage');
     var app = document.getElementById('appRoot');
@@ -4615,6 +4709,8 @@ async function doRegister() {
             setLoginUser({ id: u.id, email: u.email || email, aud: u.aud });
             showToast('注册成功，已自动登录');
             await afterLoginCheck();
+            // 重载页面：按当前账号的家庭命名空间重新加载本地数据
+            location.reload();
         } else if (u && !res.data.session) {
             // 注册成功但需要邮箱确认
             showErr('注册成功，请到邮箱点击确认链接后再登录');
@@ -4659,12 +4755,16 @@ async function doLogin() {
     try {
         var btn = document.getElementById('loginBtn');
         if (btn) { btn.disabled = true; btn.textContent = '登录中…'; }
-        var res = await sb.auth.signInWithPassword({ email: email, password: pwd });
+        var res = await withTimeout(sb.auth.signInWithPassword({ email: email, password: pwd }), 15000, '邮箱登录');
         if (res && res.error) throw res.error;
         var u = (res && res.data && res.data.user) || null;
         setLoginUser({ id: u && u.id, email: (u && u.email) || email, aud: u && u.aud });
-        showToast('登录成功');
         await afterLoginCheck();
+        // 家庭命名空间未变化（同一家庭重复登录）→ 留在已显示的主界面，不整页重载（弱网下重载易中断）
+        // 仅当登录到了不同的家庭时才重载，以按新家庭命名空间重新加载本地数据
+        if (getFamilyId() !== window.__bootFamilyId) {
+            location.reload();
+        }
     } catch(e) {
         var msg = e && e.message || '邮箱或密码错误';
         if (msg.indexOf('Invalid login credentials') > -1) {
@@ -4685,7 +4785,7 @@ async function afterLoginCheck() {
     if (getFamilyId()) { showAppRoot(); return; }
     try {
         // 查询 families 表（owner_id = 当前登录用户 uuid）
-        var r = await sb.from('families').select('id,family_name,owner_id,family_code').eq('owner_id', u.id).maybeSingle();
+        var r = await withTimeout(sb.from('families').select('id,family_name,owner_id,family_code').eq('owner_id', u.id).maybeSingle(), 15000, '家庭查询');
         if (r && r.data) {
             setLoginFamily({ id: r.data.id, name: r.data.family_name, owner_id: r.data.owner_id });
             // 同步本地家庭码（老家庭无码则补生成并回写；回写失败不影响进入）
@@ -4698,7 +4798,7 @@ async function afterLoginCheck() {
             showAppRoot();
             return;
         }
-    } catch(e) { console.warn('query family failed:', e); }
+    } catch(e) { console.warn('query family failed:', e); if (getFamilyId()) { showAppRoot(); return; } }
     // 无家庭 → 创建家庭页
     showCreateFamilyPage();
 }
@@ -4721,7 +4821,7 @@ async function doCreateFamily() {
             setLoginFamily({ id: r.data.id, name: r.data.family_name, owner_id: r.data.owner_id });
             setFamilyId(code);   // 本地家庭码同步设置, 避免登录后再弹"创建/加入家庭"浮层
             showToast('家庭创建成功');
-            showAppRoot();
+            location.reload();   // 重载后按新家庭命名空间加载数据，启动恢复直接进入主界面
         }
     } catch(e) {
         var msg = e && e.message || '未知错误';
@@ -4730,6 +4830,20 @@ async function doCreateFamily() {
         } else if (msg.indexOf('family_code') > -1 || msg.indexOf('PGRST204') > -1) {
             msg = '缺少 family_code 字段，请先在 Supabase 后台执行：alter table families add column if not exists family_code text;';
         } else if (msg.indexOf('duplicate key') > -1 || msg.indexOf('23505') > -1) {
+            // 已有家庭（重复创建）→ 自动取回现有家庭并进入，而非让用户手动刷新
+            try {
+                var u2 = getLoginUser();
+                var q2 = await sb.from('families').select('id,family_name,owner_id,family_code').eq('owner_id', u2.id).maybeSingle();
+                if (q2 && q2.data) {
+                    setLoginFamily({ id: q2.data.id, name: q2.data.family_name, owner_id: q2.data.owner_id });
+                    var c2 = q2.data.family_code || generateFamilyCode();
+                    if (!q2.data.family_code) { try { await sb.from('families').update({ family_code: c2 }).eq('id', q2.data.id); } catch(e3) {} }
+                    setFamilyId(c2);
+                    showToast('已回到您的家庭：' + q2.data.family_name);
+                    location.reload();
+                    return;
+                }
+            } catch(e4) {}
             msg = '您已创建过家庭，请刷新页面重试';
         }
         showToast('创建失败：' + msg);
@@ -4743,6 +4857,109 @@ function doLogout() {
     clearLogin();
     showLoginPage();
     showToast('已退出登录');
+}
+
+// ==================== 家庭快捷登录（家庭名称+密码，无需邮箱） ====================
+// 登录页标签页切换：family=家庭登录（默认），email=邮箱登录/注册
+function switchLoginTab(tab) {
+    var f = document.getElementById('loginPanelFamily');
+    var e = document.getElementById('loginPanelEmail');
+    var tf = document.getElementById('tabFamily');
+    var te = document.getElementById('tabEmail');
+    var familyActive = (tab === 'family');
+    if (f) f.style.display = familyActive ? 'block' : 'none';
+    if (e) e.style.display = familyActive ? 'none' : 'block';
+    if (tf) {
+        tf.style.background = familyActive ? '#fff' : 'transparent';
+        tf.style.color = familyActive ? '#9A3412' : '#9CA3AF';
+        tf.style.fontWeight = familyActive ? '700' : '600';
+        tf.style.boxShadow = familyActive ? '0 1px 4px rgba(234,88,12,0.15)' : 'none';
+    }
+    if (te) {
+        te.style.background = familyActive ? 'transparent' : '#fff';
+        te.style.color = familyActive ? '#9CA3AF' : '#9A3412';
+        te.style.fontWeight = familyActive ? '600' : '700';
+        te.style.boxShadow = familyActive ? 'none' : '0 1px 4px rgba(234,88,12,0.15)';
+    }
+}
+
+function toggleFamilySetupBox() {
+    var box = document.getElementById('familySetupBox');
+    if (box) box.style.display = (box.style.display === 'none' || !box.style.display) ? 'block' : 'none';
+}
+
+// 首次开通：凭家庭码为家庭设置登录密码（服务端校验家庭码后写入 pass_hash）
+async function doFamilySetup() {
+    if (!sb) { showToast('服务未就绪，请刷新重试'); return; }
+    var name = ((document.getElementById('familySetupName') || {}).value || '').trim();
+    var code = ((document.getElementById('familySetupCode') || {}).value || '').trim().toUpperCase();
+    var p1 = ((document.getElementById('familySetupPass1') || {}).value || '').trim();
+    var p2 = ((document.getElementById('familySetupPass2') || {}).value || '').trim();
+    if (!name || !code) { showToast('请填写家庭名称和家庭码'); return; }
+    if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) { showToast('家庭码格式不正确'); return; }
+    if (p1.length < 6) { showToast('密码至少6位'); return; }
+    if (p1 !== p2) { showToast('两次输入的密码不一致'); return; }
+    var btn = document.getElementById('familySetupBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '开通中…'; }
+    try {
+        var r = await sb.rpc('family_setup_pass', { p_code: code, p_pass: p1 });
+        if (r.error) throw r.error;
+        if (r.data === 'OK') {
+            showToast('✅ 开通成功，请用家庭名称+密码登录');
+            var ln = document.getElementById('familyLoginName');
+            if (ln) ln.value = name;
+            toggleFamilySetupBox();
+        } else if (r.data === 'CODE_NOT_FOUND') {
+            showToast('家庭码不存在，请核对后重试');
+        } else if (r.data === 'PASS_TOO_SHORT') {
+            showToast('密码至少6位');
+        } else {
+            showToast('开通失败：' + (r.data || '未知原因'));
+        }
+    } catch(e) {
+        showToast('开通失败：' + ((e && e.message) || '请稍后重试'));
+    }
+    if (btn) { btn.disabled = false; btn.textContent = '开通并保存'; }
+}
+
+// 家庭快捷登录：验证通过后以该家庭的本地数据命名空间进入APP
+async function doFamilyLogin() {
+    if (!sb) { showToast('服务未就绪，请刷新重试'); return; }
+    var name = ((document.getElementById('familyLoginName') || {}).value || '').trim();
+    var pass = ((document.getElementById('familyLoginPass') || {}).value || '').trim();
+    var errBox = document.getElementById('familyLoginErrBox');
+    function showErr(msg) {
+        showToast(msg);
+        if (errBox) { errBox.innerHTML = msg; errBox.style.display = 'block'; }
+    }
+    function clearErr() { if (errBox) { errBox.textContent = ''; errBox.style.display = 'none'; } }
+    clearErr();
+    if (!name || !pass) { showErr('请输入家庭名称和密码'); return; }
+    var btn = document.getElementById('familyLoginBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '登录中…'; }
+    try {
+        var r = await withTimeout(sb.rpc('family_login', { p_name: name, p_pass: pass }), 15000, '家庭登录');
+        if (r.error) throw r.error;
+        var rows = r.data || [];
+        if (rows.length === 0) {
+            showErr('家庭名称或密码不正确。<br>若该家庭尚未开通密码登录，请点下方"首次使用？用家庭码开通密码登录"先开通。');
+            return;
+        }
+        if (rows.length > 1) { showErr('存在多个同名家庭，请使用邮箱登录'); return; }
+        var row = rows[0];
+        setLoginUser({ id: 'fam_' + row.family_code, familySession: true, name: row.family_name });
+        setLoginFamily({ name: row.family_name, code: row.family_code });
+        setFamilyId(row.family_code);
+        showToast('登录成功');
+        location.reload();  // 重载后按该家庭命名空间加载本地数据，启动恢复直接进入主界面
+    } catch(e) {
+        var msg = (e && e.message) || '';
+        if (msg.indexOf('schema cache') > -1 || msg.indexOf('404') > -1 || msg.indexOf('Not Found') > -1) {
+            msg = '服务端函数未创建，请先在 Supabase 后台执行 family_login/family_setup_pass 的 SQL';
+        }
+        showErr('家庭登录失败：' + (msg || '请确认已开通家庭密码登录'));
+    }
+    if (btn) { btn.disabled = false; btn.textContent = '家庭登录'; }
 }
 
 // ==================== 数据迁移：mealPlans + mealRecords → dietCalendar ====================
@@ -4890,11 +5107,18 @@ function generateFamilyCode() {
 }
 
 // ===== 家庭数据隔离层 =====
+// 家庭码按登录账号隔离存储（familyId_<用户id>），避免同一设备上切换账号后
+// 沿用上一个账号的家庭数据（历史 bug：B 登录后看到 A 的家庭数据）。
 function getFamilyId() {
-    return localStorage.getItem('familyId') || null;
+    var u = null;
+    try { u = JSON.parse(localStorage.getItem('jj_login_user') || 'null'); } catch(e) { u = null; }
+    if (u && u.id) { return localStorage.getItem('familyId_' + u.id) || null; }
+    return null;
 }
 function setFamilyId(id) {
-    localStorage.setItem('familyId', id);
+    var u = null;
+    try { u = JSON.parse(localStorage.getItem('jj_login_user') || 'null'); } catch(e) { u = null; }
+    if (u && u.id) { localStorage.setItem('familyId_' + u.id, id); }
 }
 function familyKey(key) {
     var fid = getFamilyId();
@@ -5015,9 +5239,8 @@ function createFamily() {
     hideFamilyOverlay();
     location.reload();
 }
-function joinFamily() {
-    var codeInput = document.getElementById('joinFamilyCode');
-    var code = codeInput ? codeInput.value.trim().toUpperCase() : '';
+function joinFamily(codeArg) {
+    var code = (typeof codeArg === 'string' && codeArg ? codeArg : (function(){ var el = document.getElementById('joinFamilyCode'); return el ? el.value : ''; })()).trim().toUpperCase();
     if (!code || code.length !== 8) { showToast('请输入8位家庭码'); return; }
     var validChars = /^[A-HJ-NP-Z2-9]{8}$/;
     if (!validChars.test(code)) { showToast('家庭码格式不正确'); return; }
@@ -5026,6 +5249,36 @@ function joinFamily() {
     hideFamilyOverlay();
     location.reload();
 }
+// 创建家庭页：创建/加入 标签页切换
+function toggleCreateFamilyPanel(panel) {
+    var cp = document.getElementById('cfpPanelCreate');
+    var jp = document.getElementById('cfpPanelJoin');
+    var tc = document.getElementById('cfpTabCreate');
+    var tj = document.getElementById('cfpTabJoin');
+    var isCreate = (panel === 'create');
+    if (cp) cp.style.display = isCreate ? 'block' : 'none';
+    if (jp) jp.style.display = isCreate ? 'none' : 'block';
+    if (tc) {
+        tc.style.background = isCreate ? '#fff' : 'transparent';
+        tc.style.color = isCreate ? '#9A3412' : '#9CA3AF';
+        tc.style.fontWeight = isCreate ? '700' : '600';
+        tc.style.boxShadow = isCreate ? '0 1px 4px rgba(234,88,12,0.15)' : 'none';
+    }
+    if (tj) {
+        tj.style.background = isCreate ? 'transparent' : '#fff';
+        tj.style.color = isCreate ? '#9CA3AF' : '#9A3412';
+        tj.style.fontWeight = isCreate ? '600' : '700';
+        tj.style.boxShadow = isCreate ? 'none' : '0 1px 4px rgba(234,88,12,0.15)';
+    }
+}
+// 创建家庭页"加入家庭"入口：读取页面输入框并走统一加入流程
+function joinFamilyFromPage() {
+    var el = document.getElementById('pageJoinCode');
+    joinFamily(el ? el.value : '');
+}
+// 登录页/创建家庭页的全部交互处理函数至此已就绪（无需等待整个文件解析完），
+// 提前放行交互，避免弱网下几十秒的"页面正在加载"提示
+window.__bootReady = true;
 function toggleFamilyPanel(panel) {
     var createPanel = document.getElementById('createFamilyPanel');
     var joinPanel = document.getElementById('joinFamilyPanel');
@@ -19488,6 +19741,12 @@ function renderFamily() {
                 开启后，每天18:00将自动检查并提示您规划明日三餐食谱
             </div>
         </div>
+        <div style="margin-top:12px;padding:10px 12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;display:flex;align-items:center;justify-content:space-between;">
+            <div style="font-size:12px;color:#92400E;">🔑 家庭码：<b>${getFamilyId() || '未设置'}</b></div>
+            <button onclick="copyFamilyCode()" style="padding:5px 10px;font-size:12px;font-weight:600;color:#92400E;background:#FEF3C7;border:none;border-radius:8px;cursor:pointer;">📋 复制</button>
+        </div>
+        <button onclick="doLogout()" style="width:100%;padding:12px;background:white;border:1px solid #FECACA;border-radius:12px;font-size:13px;font-weight:600;color:#DC2626;cursor:pointer;">🚪 退出登录</button>
+        <div style="font-size:11px;color:#9CA3AF;margin-top:6px;text-align:center;">退出后可用邮箱或家庭名称重新登录</div>
     </div>`);
 
     // 设置区域展开/折叠
@@ -27375,7 +27634,7 @@ function showKnowledgeDetail(id) {
     const hasInlineImages = (item.content || '').includes('[图片');
     const allImages = (item.images && item.images.length > 0) ? item.images : (item.image ? [item.image] : []);
 
-    if (!hasInlineImages) {
+    if (!hasInlineImages && !(item.mainCategory === 'dining-out' && allImages.length === 0)) {
         if (allImages.length === 1) {
             // 单张图片：显示大图
             bodyHtml += `<div style="margin-bottom:10px;">${getKnowledgeImageHtml(item, 'large')}</div>`;
@@ -27461,22 +27720,34 @@ function showKnowledgeDetail(id) {
             </div>
         `;
         if (item.signatureDishes && item.signatureDishes.length > 0) {
-            const dishesHtml = item.signatureDishes.map(d => {
+            const PER_PAGE = 7;
+            const totalPages = Math.ceil(item.signatureDishes.length / PER_PAGE);
+            window._kDishPage = 0;
+            window._kDishCount = item.signatureDishes.length;
+            const dishesHtml = item.signatureDishes.map((d, i) => {
                 const sigBadge = d.isSignature ? '<span style="background:#FEF3C7;color:#D97706;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;margin-left:4px;">招牌</span>' : '';
                 const typeBadge = d.dishType ? '<span style="background:#DBEAFE;color:#2563EB;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:4px;">' + escapeHtml(d.dishType) + '</span>' : '';
                 const flavorBadge = d.dishFlavor ? '<span style="background:#FCE7F3;color:#DB2777;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:4px;">' + escapeHtml(d.dishFlavor) + '</span>' : '';
                 const cookingBadge = d.dishCooking ? '<span style="background:#D1FAE5;color:#059669;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:4px;">' + escapeHtml(d.dishCooking) + '</span>' : '';
                 const priceStr = d.price ? ' ¥' + escapeHtml(String(d.price)) : '';
                 const remarkStr = d.remark ? '<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">📝 ' + escapeHtml(d.remark) + '</div>' : '';
-                return '<div style="background:#FAFAFA;border:1px solid #F3F4F6;border-radius:6px;padding:6px 8px;margin-bottom:4px;">' +
+                return '<div class="k-dish-row" data-idx="' + i + '" style="background:#FAFAFA;border:1px solid #F3F4F6;border-radius:6px;padding:6px 8px;margin-bottom:4px;display:' + (i < PER_PAGE ? 'flex' : 'none') + ';align-items:flex-start;gap:6px;">' +
+                    '<input type="checkbox" class="dish-plan-check" data-name="' + escapeHtml(d.name) + '" style="margin:2px 0 0 0;flex-shrink:0;cursor:pointer;" />' +
+                    '<div style="flex:1;">' +
                     '<div style="font-size:13px;color:#374151;font-weight:500;">' + escapeHtml(d.name) + sigBadge + typeBadge + flavorBadge + cookingBadge + '<span style="color:#F97316;font-weight:600;margin-left:4px;">' + priceStr + '</span></div>' +
                     remarkStr +
+                    '</div>' +
                 '</div>';
             }).join('');
+            const pageCtrl = totalPages > 1 ? '<div style="display:flex;align-items:center;gap:8px;"><span id="dishPageInfo" style="font-size:11px;color:#9CA3AF;">第1/' + totalPages + '页</span><button id="dishNextPageBtn" onclick="knowledgeDishNextPage()" style="padding:2px 10px;background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">下一页 ›</button></div>' : '';
             bodyHtml += `
                 <div class="knowledge-detail-card">
-                    <h3>🥘 推荐菜品</h3>
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                        <h3 style="margin:0;">🥘 推荐菜品</h3>
+                        ${pageCtrl}
+                    </div>
                     ${dishesHtml}
+                    ${totalPages > 1 ? '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">💡 勾选菜品后点击底部「加入食记」</div>' : ''}
                 </div>
             `;
         }
@@ -27612,6 +27883,25 @@ function showKnowledgeDetail(id) {
     const editBtn = document.getElementById('knowledgeEditBtn');
     if (editBtn) {
         editBtn.style.display = (item.mainCategory === 'dining-out' || item.type === 'dining-out') ? 'block' : 'none';
+    }
+}
+
+// 推荐菜品分页：下一页（每页7道，翻到最后一位时隐藏按钮）
+function knowledgeDishNextPage() {
+    var per = 7;
+    var total = Math.ceil((window._kDishCount || 0) / per);
+    var page = (window._kDishPage || 0) + 1;
+    if (page >= total) return;
+    window._kDishPage = page;
+    document.querySelectorAll('#knowledgeDetailBody .k-dish-row').forEach(function(row) {
+        var idx = parseInt(row.getAttribute('data-idx'));
+        row.style.display = (idx >= page * per && idx < (page + 1) * per) ? 'flex' : 'none';
+    });
+    var info = document.getElementById('dishPageInfo');
+    if (info) info.textContent = '第' + (page + 1) + '/' + total + '页';
+    if (page >= total - 1) {
+        var btn = document.getElementById('dishNextPageBtn');
+        if (btn) btn.style.display = 'none';
     }
 }
 
@@ -28326,10 +28616,15 @@ function addToPlanFromKnowledge(id) {
     if (!item) return;
 
     const today = new Date();
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
     const todayKey = dateToKey(today);
-    const tomorrowKey = dateToKey(tomorrow);
+    const isDiningOut = item.mainCategory === 'dining-out' || item.type === 'dining-out';
+    const dishes = (isDiningOut && item.signatureDishes && item.signatureDishes.length > 0) ? item.signatureDishes : null;
+
+    // 详情页勾选状态带入弹窗（默认勾选）
+    const detailChecked = [];
+    document.querySelectorAll('#knowledgeDetailBody .dish-plan-check:checked').forEach(function(cb) {
+        detailChecked.push(cb.getAttribute('data-name'));
+    });
 
     // 关闭知识详情页
     closeKnowledgeDetail();
@@ -28340,6 +28635,41 @@ function addToPlanFromKnowledge(id) {
     overlay.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(31,41,55,0.5);display:flex;align-items:center;justify-content:center;padding:20px;';
     overlay.addEventListener('click', function(e) { if (e.target === this) overlay.remove(); });
 
+    // 菜品清单区（餐厅类：勾选+报价+共计；其他类型：保留菜名输入框）
+    let dishesSectionHtml = '';
+    if (dishes) {
+        const rows = dishes.map(function(d) {
+            const checked = detailChecked.indexOf(d.name) >= 0;
+            const priceNum = parseFloat(d.price);
+            const hasPrice = !isNaN(priceNum) && d.price !== '' && d.price !== null && d.price !== undefined;
+            // 属性：菜类 味道 烹饪方法 评价（同行，空格隔开）
+            const attrs = [];
+            if (d.dishType) attrs.push(d.dishType);
+            if (d.dishFlavor) attrs.push(d.dishFlavor);
+            if (d.dishCooking) attrs.push(d.dishCooking);
+            if (d.remark || d.dishRemark) attrs.push(d.remark || d.dishRemark);
+            const attrSpans = attrs.map(function(a) { return '<span style="font-size:11px;color:#6B7280;white-space:nowrap;">' + escapeHtml(a) + '</span>'; }).join('');
+            return '<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid #F9FAFB;cursor:pointer;flex-wrap:wrap;">' +
+                '<input type="checkbox" class="modal-dish-check" data-name="' + escapeHtml(d.name) + '" data-price="' + (hasPrice ? priceNum : '') + '" data-dish-type="' + escapeHtml(d.dishType || '') + '" data-dish-flavor="' + escapeHtml(d.dishFlavor || '') + '" data-dish-cooking="' + escapeHtml(d.dishCooking || '') + '" data-dish-remark="' + escapeHtml(d.remark || d.dishRemark || '') + '" ' + (checked ? 'checked' : '') + ' onchange="updateModalDishTotal()" style="margin:0;flex-shrink:0;cursor:pointer;" />' +
+                '<span style="font-size:13px;color:#374151;flex-shrink:0;">' + escapeHtml(d.name) + '</span>' +
+                (hasPrice ? '<span style="font-size:13px;color:#F97316;font-weight:600;flex-shrink:0;">¥' + escapeHtml(String(d.price)) + '</span>' : '') +
+                (attrSpans ? '<span style="display:inline-flex;gap:8px;min-width:0;flex-wrap:wrap;">' + attrSpans + '</span>' : '') +
+            '</label>';
+        }).join('');
+        dishesSectionHtml = `
+            <div style="margin-bottom:12px;">
+                <label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">菜名</label>
+                <div style="max-height:180px;overflow-y:auto;border:1px solid #E5E7EB;border-radius:8px;">${rows}</div>
+                <div id="modalDishTotal" style="margin-top:6px;font-size:14px;font-weight:700;color:#D97706;"></div>
+            </div>`;
+    } else {
+        dishesSectionHtml = `
+            <div style="margin-bottom:12px;">
+                <label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">菜名</label>
+                <input type="text" id="addToPlanDishName" value="${escapeHtml(cleanDishName(item.title))}" style="width:100%;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;" />
+            </div>`;
+    }
+
     const modal = document.createElement('div');
     modal.style.cssText = 'background:white;border-radius:16px;width:400px;max-width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.2);';
     modal.innerHTML = `
@@ -28348,33 +28678,26 @@ function addToPlanFromKnowledge(id) {
             <button onclick="document.getElementById('addToPlanOverlay').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9CA3AF;padding:0 4px;">✕</button>
         </div>
         <div style="flex:1;overflow-y:auto;padding:14px 16px;">
-            <div style="margin-bottom:10px;padding:10px;background:#F9FAFB;border-radius:8px;">
+            <div style="margin-bottom:12px;padding:10px;background:#F9FAFB;border-radius:8px;">
                 <div style="font-size:13px;font-weight:600;color:#374151;">📚 ${escapeHtml(item.title)}</div>
                 <div style="font-size:12px;color:#6B7280;margin-top:4px;">${escapeHtml((item.content || '').substring(0, 60))}${(item.content || '').length > 60 ? '...' : ''}</div>
+                ${isDiningOut ? `<div style="font-size:11px;color:#D97706;margin-top:6px;padding:4px 8px;background:#FEF3C7;border-radius:6px;">🍽️ 来源：在外就餐 · 将加入「外出就餐规划」</div>` : ''}
             </div>
-            <div style="margin-bottom:12px;">
-                <label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">选择日期</label>
-                <select id="addToPlanDate" style="width:100%;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;outline:none;background:white;box-sizing:border-box;">
-                    <option value="${todayKey}">今天（${formatDateShort(today)}）</option>
-                    <option value="${tomorrowKey}">明天（${formatDateShort(tomorrow)}）</option>
-                </select>
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+                <div style="flex:1;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">选择日期</label>
+                    <input type="date" id="addToPlanDate" value="${todayKey}" min="${todayKey}" style="width:100%;padding:8px 6px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;outline:none;background:white;box-sizing:border-box;" />
+                </div>
+                <div style="flex:1;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">选择餐次</label>
+                    <select id="addToPlanMeal" style="width:100%;padding:8px 6px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;outline:none;background:white;box-sizing:border-box;">
+                        <option value="breakfast">🍳 早餐</option>
+                        <option value="lunch" selected>🍱 午餐</option>
+                        <option value="dinner">🍽️ 晚餐</option>
+                    </select>
+                </div>
             </div>
-            <div style="margin-bottom:12px;">
-                <label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">选择餐次</label>
-                <select id="addToPlanMeal" style="width:100%;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;outline:none;background:white;box-sizing:border-box;">
-                    <option value="breakfast">🍳 早餐</option>
-                    <option value="lunch" selected>🍱 午餐</option>
-                    <option value="dinner">🍽️ 晚餐</option>
-                </select>
-            </div>
-            <div style="margin-bottom:12px;">
-                <label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">菜名</label>
-                <input type="text" id="addToPlanDishName" value="${escapeHtml(cleanDishName(item.title))}" style="width:100%;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;" />
-            </div>
-            <div style="margin-bottom:4px;">
-                <label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">备注（可选）</label>
-                <input type="text" id="addToPlanNote" value="来源：食知" placeholder="如：小暑节气推荐" style="width:100%;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;" />
-            </div>
+            ${dishesSectionHtml}
         </div>
         <div style="padding:12px 16px;border-top:1px solid #F3F4F6;flex-shrink:0;display:flex;gap:10px;justify-content:flex-end;">
             <button onclick="document.getElementById('addToPlanOverlay').remove()" style="padding:8px 20px;background:#F3F4F6;color:#6B7280;border:none;border-radius:8px;font-size:14px;cursor:pointer;">取消</button>
@@ -28383,41 +28706,125 @@ function addToPlanFromKnowledge(id) {
     `;
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+    updateModalDishTotal(); // 初始化共计金额
+}
+
+// 弹窗内勾选菜品后，实时更新左下角共计费用
+function updateModalDishTotal() {
+    var total = 0;
+    var hasAny = false;
+    document.querySelectorAll('#addToPlanOverlay .modal-dish-check:checked').forEach(function(cb) {
+        hasAny = true;
+        var p = parseFloat(cb.getAttribute('data-price'));
+        if (!isNaN(p)) total += p;
+    });
+    var el = document.getElementById('modalDishTotal');
+    if (el) el.textContent = hasAny ? ('共计：¥' + total.toFixed(2).replace(/\.00$/, '')) : '';
 }
 
 // 确认加入食记计划
 function confirmAddToPlan(knowledgeId) {
     const dateKey = document.getElementById('addToPlanDate').value;
-    const mealType = document.getElementById('addToPlanMeal').value;
-    const dishName = document.getElementById('addToPlanDishName').value.trim();
-    const note = document.getElementById('addToPlanNote').value.trim();
+    const mealTypeSelect = document.getElementById('addToPlanMeal');
+    const mealType = mealTypeSelect ? mealTypeSelect.value : 'lunch';
 
-    if (!dishName) {
-        showToast('请输入菜名');
+    if (!dateKey) {
+        showToast('请选择日期');
         return;
     }
 
-    const group = getDefaultDiningGroup();
-    const planItem = {
-        date: dateKey,
-        dateLabel: formatDateShort(new Date(dateKey + 'T00:00:00')),
-        mealType: mealType,
-        dishNames: [dishName],
-        groupName: group.name,
-        solarTerm: getSolarTermForDate(new Date(dateKey + 'T00:00:00')).name,
-        source: 'knowledge',
-        sourceId: knowledgeId,
-        note: note
-    };
+    const srcItem = dietKnowledge.find(k => k.id === knowledgeId);
+    const isDiningOut = srcItem && (srcItem.mainCategory === 'dining-out' || srcItem.type === 'dining-out');
 
-    addToPlan(planItem);
+    // 收集菜品（带价格）
+    let dishNames = [];
+    let dishesWithPrice = [];
+    const nameInput = document.getElementById('addToPlanDishName');
+    if (nameInput) {
+        const dishName = nameInput.value.trim();
+        if (!dishName) { showToast('请输入菜名'); return; }
+        dishNames = [dishName];
+        dishesWithPrice = [{ name: dishName, price: null }];
+    } else {
+        document.querySelectorAll('#addToPlanOverlay .modal-dish-check:checked').forEach(function(cb) {
+            var n = cb.getAttribute('data-name');
+            var p = cb.getAttribute('data-price');
+            dishNames.push(n);
+            dishesWithPrice.push({
+                name: n,
+                price: (p && !isNaN(parseFloat(p))) ? parseFloat(p) : null,
+                dishType: cb.getAttribute('data-dish-type') || '',
+                dishFlavor: cb.getAttribute('data-dish-flavor') || '',
+                dishCooking: cb.getAttribute('data-dish-cooking') || '',
+                remark: cb.getAttribute('data-dish-remark') || ''
+            });
+        });
+        if (dishNames.length === 0) { showToast('请至少勾选一道菜品'); return; }
+    }
+
+    // 分流：餐厅类 → 写入 diningOutPlans；其他 → 写入三餐计划
+    if (isDiningOut) {
+        // === 写入外出就餐规划（diningOutPlans） ===
+        var allDOP = JSON.parse(lsGet('diningOutPlans') || '{}');
+        var existing = allDOP[dateKey] || {};
+
+        // 同一天同餐厅则合并菜品，不同餐厅则新增一个餐厅卡片
+        var restaurantName = srcItem.title;
+        var found = null;
+        if (Array.isArray(existing.restaurants)) {
+            found = existing.restaurants.find(function(r) { return r.name === restaurantName; });
+        }
+        if (!found) {
+            if (!Array.isArray(existing.restaurants)) existing.restaurants = [];
+            found = {
+                name: restaurantName,
+                address: srcItem.address || '',
+                phone: srcItem.phone || '',
+                source: 'knowledge',
+                sourceId: knowledgeId,
+                dishes: [],
+                createdAt: Date.now()
+            };
+            existing.restaurants.push(found);
+        }
+        // 合并菜品（按名去重）
+        dishesWithPrice.forEach(function(d) {
+            if (!found.dishes.some(function(x) { return x.name === d.name; })) {
+                found.dishes.push(d);
+            }
+        });
+        // 同步 mealType
+        existing.mealType = mealType;
+        allDOP[dateKey] = existing;
+        lsSet('diningOutPlans', JSON.stringify(allDOP));
+
+        var total = dishesWithPrice.reduce(function(s, d) { return s + (d.price || 0); }, 0);
+        var toastMsg = `✅ "${restaurantName}" ${dishesWithPrice.length}道菜加入${formatDateShort(new Date(dateKey + 'T00:00:00'))}外出就餐规划`;
+        if (total > 0) toastMsg += ` · 共计¥${total}`;
+        showToast(toastMsg);
+    } else {
+        // === 写入三餐计划（mealPlans / dietCalendar）===
+        const note = '来源：食知';
+        const group = getDefaultDiningGroup();
+        const planItem = {
+            date: dateKey,
+            dateLabel: formatDateShort(new Date(dateKey + 'T00:00:00')),
+            mealType: mealType,
+            dishNames: dishNames,
+            groupName: group.name,
+            solarTerm: getSolarTermForDate(new Date(dateKey + 'T00:00:00')).name,
+            source: 'knowledge',
+            sourceId: knowledgeId,
+            note: note
+        };
+        addToPlan(planItem);
+        const mealLabels = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
+        showToast(`✅ 已将"${dishNames.join('、')}"加入${formatDateShort(new Date(dateKey + 'T00:00:00'))}${mealLabels[mealType]}`);
+    }
 
     // 关闭模态框
     const overlay = document.getElementById('addToPlanOverlay');
     if (overlay) overlay.remove();
-
-    const mealLabels = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
-    showToast(`✅ 已将"${dishName}"加入${formatDateShort(new Date(dateKey + 'T00:00:00'))}${mealLabels[mealType]}`);
 }
 
 // ============================================================
@@ -28910,6 +29317,7 @@ function showPlanGeneratingBanner(on) {
         el.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:100006;background:#FFF7ED;color:#9A3412;border:1px solid #FED7AA;padding:9px 18px;border-radius:24px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 4px 14px rgba(249,115,22,0.25);pointer-events:none;max-width:90vw;';
         el.innerHTML = '<span style="width:14px;height:14px;border:2px solid #FDBA74;border-top-color:#F97316;border-radius:50%;display:inline-block;animation:planGenSpin 0.8s linear infinite;flex-shrink:0;"></span><span>食谱计划生成中…首次生成约需1分钟，请稍候</span>';
         document.body.appendChild(el);
+        updatePlanBannerVisibility(); // 仅在"食记"页面显示
         if (!document.getElementById('planGenSpinStyle')) {
             var st = document.createElement('style');
             st.id = 'planGenSpinStyle';
@@ -28919,6 +29327,17 @@ function showPlanGeneratingBanner(on) {
     } else if (el) {
         el.remove();
     }
+}
+
+// "食谱计划生成中"横幅仅在"食记"页面显示：切到其他页面自动隐藏，切回后若仍在生成则继续显示
+function updatePlanBannerVisibility() {
+    const el = document.getElementById('planGeneratingBanner');
+    if (!el) return;
+    const diary = document.getElementById('panelDiary');
+    const mainApp = document.getElementById('mainApp');
+    const onDiary = !!(diary && diary.classList.contains('active'));
+    const appShown = !!(mainApp && mainApp.style.display === 'flex');
+    el.style.display = (onDiary && appShown) ? 'flex' : 'none';
 }
 
 async function generateMultiDayRecommendation(days) {
@@ -33268,15 +33687,6 @@ function openDiningOutPlanModal() {
             </div>
         </div>
 
-        <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:10px;margin-bottom:10px;">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                <div style="font-size:11px;font-weight:600;color:#166534;flex-shrink:0;">从食知文库添加</div>
-                <input type="text" id="knowledgeSearchInput" placeholder="搜索已记录的餐厅..." style="flex:1;min-width:0;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;" oninput="searchKnowledgeRestaurants(this.value)">
-                <button onclick="aiRecommendFromKnowledge()" id="knAiRecommendBtn" style="background:#F97316;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;flex-shrink:0;">推荐餐厅</button>
-            </div>
-            <div id="knowledgeRestaurantList" style="max-height:120px;overflow-y:auto;"></div>
-        </div>
-
         <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:10px;margin-bottom:10px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                 <div style="font-size:11px;font-weight:600;color:#1E40AF;">─── ✏️ 手动添加 ───</div>
@@ -33295,13 +33705,27 @@ function openDiningOutPlanModal() {
             </div>
         </div>
 
+        <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:10px;margin-bottom:10px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <div style="font-size:11px;font-weight:600;color:#166534;flex-shrink:0;">从食知文库添加</div>
+                <input type="text" id="knowledgeSearchInput" placeholder="搜索已记录的餐厅..." style="flex:1;min-width:0;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:11px;" oninput="searchKnowledgeRestaurants(this.value)">
+                <button onclick="aiRecommendFromKnowledge()" id="knAiRecommendBtn" style="background:#F97316;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;flex-shrink:0;">推荐餐厅</button>
+            </div>
+            <div id="knowledgeRestaurantList" style="max-height:120px;overflow-y:auto;"></div>
+        </div>
+
         <div id="selectedRestaurantArea" style="margin-bottom:10px;"></div>
     `;
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    if (existingPlan.restaurant) {
+    if (existingPlan.restaurants && existingPlan.restaurants.length > 0) {
+        // 多餐厅结构：默认选中第一个（同时把列表暴露给 area 下方渲染）
+        diningOutPlanData.selectedRestaurant = existingPlan.restaurants[0];
+        diningOutPlanData._existingRestaurants = existingPlan.restaurants;
+        renderSelectedRestaurant();
+    } else if (existingPlan.restaurant) {
         diningOutPlanData.selectedRestaurant = {
             name: existingPlan.restaurant,
             address: existingPlan.address || '',
@@ -33309,9 +33733,11 @@ function openDiningOutPlanModal() {
             source: existingPlan.source || 'manual',
             reason: existingPlan.reason || ''
         };
+        diningOutPlanData._existingRestaurants = null;
         renderSelectedRestaurant();
     } else {
         diningOutPlanData.selectedRestaurant = null;
+        diningOutPlanData._existingRestaurants = null;
     }
 }
 
@@ -34071,13 +34497,21 @@ function renderSelectedRestaurant() {
     var dishesHtml = '';
     var total = 0;
     if (r.dishes && r.dishes.length > 0) {
-        dishesHtml = r.dishes.map(function(d) {
+        dishesHtml = r.dishes.map(function(d, i) {
             var price = parseFloat(d.price) || 0;
-            total += price;
-            return '<div style="display:flex;align-items:center;gap:4px;padding:3px 6px;background:#F9FAFB;border-radius:4px;margin-bottom:2px;">' +
-                '<span style="flex:1;font-size:11px;color:#374151;">' + escapeHtml(d.name) + '</span>' +
-                (price > 0 ? '<span style="font-size:10px;color:#F97316;">¥' + price + '</span>' : '') +
-                '<button onclick="removeDishFromPlan(' + r.dishes.indexOf(d) + ')" style="background:none;border:none;color:#EF4444;font-size:12px;cursor:pointer;padding:0 2px;">×</button>' +
+            if (price > 0) total += price; // 默认全勾选，初始总价含全部菜品
+            // 属性：菜类 味道 烹饪方法 评价（同行，空格隔开）
+            var attrs = [];
+            if (d.dishType) attrs.push(d.dishType);
+            if (d.dishFlavor) attrs.push(d.dishFlavor);
+            if (d.dishCooking) attrs.push(d.dishCooking);
+            if (d.remark || d.dishRemark) attrs.push(d.remark || d.dishRemark);
+            var attrSpans = attrs.map(function(a) { return '<span style="font-size:10px;color:#6B7280;white-space:nowrap;">' + escapeHtml(a) + '</span>'; }).join('');
+            return '<div style="display:flex;align-items:center;gap:8px;padding:3px 6px;background:#F9FAFB;border-radius:4px;margin-bottom:2px;flex-wrap:wrap;">' +
+                '<input type="checkbox" class="dining-out-dish-check" data-idx="' + i + '" checked onchange="recalcDiningOutTotal()" style="margin:0;flex-shrink:0;cursor:pointer;" />' +
+                '<span style="font-size:11px;color:#374151;flex-shrink:0;">' + escapeHtml(d.name) + '</span>' +
+                (price > 0 ? '<span style="font-size:11px;color:#F97316;font-weight:600;flex-shrink:0;">¥' + price + '</span>' : '') +
+                (attrSpans ? '<span style="display:inline-flex;gap:8px;min-width:0;flex-wrap:wrap;">' + attrSpans + '</span>' : '') +
             '</div>';
         }).join('');
     }
@@ -34092,7 +34526,7 @@ function renderSelectedRestaurant() {
         '<div style="font-size:10px;color:#9CA3AF;">来源：' + (sourceLabels[r.source] || r.source) + (r.reason ? ' · ' + escapeHtml(r.reason) : '') + '</div>' +
         (r.address ? '<div style="font-size:10px;color:#6B7280;margin-top:2px;">📍 ' + escapeHtml(r.address) + '</div>' : '') +
         (dishesHtml ? '<div style="margin-top:6px;"><div style="font-size:10px;font-weight:600;color:#6B7280;margin-bottom:4px;">菜品列表</div>' + dishesHtml +
-            (total > 0 ? '<div style="font-size:10px;color:#F97316;font-weight:600;margin-top:4px;">总价：¥' + total + (peopleCount > 0 ? ' · 人均：¥' + Math.round(total/peopleCount) : '') + '</div>' : '') +
+            '<div id="diningOutDishTotal" style="font-size:10px;color:#F97316;font-weight:600;margin-top:4px;">' + (total > 0 ? '总价：¥' + total + (peopleCount > 0 ? ' · 人均：¥' + Math.round(total/peopleCount) : '') : '') + '</div>' +
         '</div>' : '') +
         '<div style="margin-top:6px;">' +
             '<input type="text" id="addDishInput" placeholder="添加菜品" style="width:60%;padding:3px 6px;border:1px solid #E5E7EB;border-radius:4px;font-size:11px;">' +
@@ -34115,11 +34549,18 @@ function addDishToPlan() {
     document.getElementById('addDishPrice').value = '';
 }
 
-// 删除菜品
-function removeDishFromPlan(idx) {
-    if (!diningOutPlanData.selectedRestaurant || !diningOutPlanData.selectedRestaurant.dishes) return;
-    diningOutPlanData.selectedRestaurant.dishes.splice(idx, 1);
-    renderSelectedRestaurant();
+// 重算外出就餐总价：勾选的菜品计入，不勾选不计入
+function recalcDiningOutTotal() {
+    var r = diningOutPlanData.selectedRestaurant;
+    var totalEl = document.getElementById('diningOutDishTotal');
+    if (!r || !r.dishes || !totalEl) return;
+    var total = 0;
+    document.querySelectorAll('#selectedRestaurantArea .dining-out-dish-check:checked').forEach(function(cb) {
+        var idx = parseInt(cb.getAttribute('data-idx'));
+        if (r.dishes[idx]) total += parseFloat(r.dishes[idx].price) || 0;
+    });
+    var peopleCount = parseInt(document.getElementById('planPeople') && document.getElementById('planPeople').value) || 0;
+    totalEl.textContent = total > 0 ? '总价：¥' + total + (peopleCount > 0 ? ' · 人均：¥' + Math.round(total/peopleCount) : '') : '';
 }
 
 // 清除已选餐厅
@@ -34145,8 +34586,25 @@ function confirmDiningOutPlan() {
     var cuisine = document.getElementById('planCuisine').value;
     var taste = document.getElementById('planTaste').value;
 
-    // 保存到 diningOutPlans
+    // 保存到 diningOutPlans（兼容旧单餐厅 + 新多餐厅结构）
     var allPlans = JSON.parse(lsGet('diningOutPlans') || '{}');
+    var existingPlan = allPlans[dateStr] || {};
+    // 如果已有 restaurants 数组（多餐厅），把当前选中的餐厅合并进去
+    var restaurants = Array.isArray(existingPlan.restaurants) ? existingPlan.restaurants : [];
+    var found = restaurants.find(function(x) { return x.name === r.name; });
+    if (!found) {
+        found = { name: r.name, address: r.address || '', phone: r.phone || '', source: r.source || 'manual', reason: r.reason || '', dishes: r.dishes || [], createdAt: Date.now() };
+        restaurants.push(found);
+    } else {
+        found.address = r.address || found.address || '';
+        found.source = r.source || found.source || 'knowledge';
+        found.reason = r.reason || found.reason || '';
+        // 合并菜品
+        (r.dishes || []).forEach(function(d) {
+            if (!found.dishes.some(function(x) { return x.name === d.name; })) found.dishes.push(d);
+        });
+    }
+    // 同时保留顶层兼容字段（旧代码读 restaurant/dishes 不崩）
     allPlans[dateStr] = {
         mealType: mealType,
         scene: scene,
@@ -34155,12 +34613,13 @@ function confirmDiningOutPlan() {
         location: location,
         cuisine: cuisine,
         taste: taste,
-        restaurant: r.name,
-        address: r.address || '',
-        dishes: r.dishes || [],
+        restaurant: restaurants.length === 1 ? restaurants[0].name : (restaurants.map(function(x) { return x.name; }).join('、') + ' 等' + restaurants.length + '家'),
+        address: restaurants[0] ? (restaurants[0].address || '') : '',
+        dishes: restaurants.reduce(function(arr, x) { return arr.concat(x.dishes || []); }, []),
         source: r.source || 'manual',
         reason: r.reason || '',
-        createdAt: Date.now()
+        restaurants: restaurants,
+        createdAt: existingPlan.createdAt || Date.now()
     };
     lsSet('diningOutPlans', JSON.stringify(allPlans));
 
@@ -38355,7 +38814,7 @@ function switchHomePage() {
 }
 function switchTab(tab) {
     // 如果切到首页，走首页分支
-    if (tab === 'home') { switchHomePage(); return; }
+    if (tab === 'home') { switchHomePage(); updatePlanBannerVisibility(); return; }
     // 进任何子 Tab：首页滑出 + 主界面显示
     const hp = document.getElementById('pageHome');
     if (hp && hp.classList && !hp.classList.contains('slide-up')) hp.classList.add('slide-up');
@@ -38370,6 +38829,7 @@ function switchTab(tab) {
     document.querySelectorAll('.page-panel').forEach(el => el.classList.remove('active'));
     const map = { chat:'panelChat', knowledge:'panelKnowledge', diary:'panelDiary', fridge:'panelFridge', family:'panelFamily' };
     if (map[tab]) document.getElementById(map[tab]).classList.add('active');
+    updatePlanBannerVisibility(); // 生成中横幅仅在食记页显示
     // 子 Tab：顶栏 ➕ 与 ☰ 默认可见（首页隐藏的必须恢复）
     if (menuBtn && tab !== 'diary') { menuBtn.style.visibility = 'visible'; }
     if (clearBtn) clearBtn.style.visibility = 'visible';
@@ -40035,27 +40495,33 @@ async function recognizeFlyer(base64Image) {
 }
 
 function applyFlyerResult(data) {
-    if (data.name) document.getElementById('restaurantName').value = data.name;
-    if (data.address) document.getElementById('restaurantLocation').value = data.address;
-    if (data.phone) document.getElementById('restaurantPhone').value = data.phone;
+    // 多张宣传单 = 追加模式：已识别的内容不覆盖，新内容追加在后面
+    var setIfEmpty = function(id, val) {
+        if (!val) return;
+        var el = document.getElementById(id);
+        if (el && !el.value.trim()) el.value = val;
+    };
+    setIfEmpty('restaurantName', data.name);
+    setIfEmpty('restaurantLocation', data.address);
+    setIfEmpty('restaurantPhone', data.phone);
     var recognizedLeafCat = '';
     if (data.leafCategory) {
         var leafSel = document.getElementById('restaurantLeafCategory');
-        var leafMap = {'面食早点':'面食早点','快餐简餐':'快餐/简餐','家常菜馆':'家常菜馆','中餐厅（含8大菜系）':'中餐厅（含8大菜系）','火锅烧烤特色':'火锅/烧烤/特色','日韩料理':'日韩料理','东南亚风味':'东南亚风味','西餐自助':'西餐/自助','融合其他':'融合/其他'};
-        var mappedLeaf = leafMap[data.leafCategory] || data.leafCategory;
-        for (var i = 0; i < leafSel.options.length; i++) {
-            if (leafSel.options[i].value === mappedLeaf || leafSel.options[i].text === mappedLeaf) {
-                leafSel.selectedIndex = i;
-                recognizedLeafCat = leafSel.options[i].text;
-                break;
+        if (!leafSel.value) { // 已选过餐厅类型则保留，不覆盖
+            var leafMap = {'面食早点':'面食早点','快餐简餐':'快餐/简餐','家常菜馆':'家常菜馆','中餐厅（含8大菜系）':'中餐厅（含8大菜系）','火锅烧烤特色':'火锅/烧烤/特色','日韩料理':'日韩料理','东南亚风味':'东南亚风味','西餐自助':'西餐/自助','融合其他':'融合/其他'};
+            var mappedLeaf = leafMap[data.leafCategory] || data.leafCategory;
+            for (var i = 0; i < leafSel.options.length; i++) {
+                if (leafSel.options[i].value === mappedLeaf || leafSel.options[i].text === mappedLeaf) {
+                    leafSel.selectedIndex = i;
+                    recognizedLeafCat = leafSel.options[i].text;
+                    break;
+                }
             }
+            onRestaurantLeafCategoryChange();
         }
-        onRestaurantLeafCategoryChange();
     }
-    if (data.subCategory3) {
-        document.getElementById('restaurantSubCat3').value = data.subCategory3;
-    }
-    if (data.priceLevel) document.getElementById('restaurantPriceLevel').value = data.priceLevel;
+    setIfEmpty('restaurantSubCat3', data.subCategory3);
+    setIfEmpty('restaurantPriceLevel', data.priceLevel);
     var recognizedSceneTags = [];
     if (data.sceneTags) {
         var rawTags = data.sceneTags;
@@ -40064,13 +40530,14 @@ function applyFlyerResult(data) {
         }
         if (rawTags && rawTags.length > 0) {
             var validTags = ['亲子餐','家庭聚餐','生日宴','朋友聚会','情侣约会','婚宴','寿宴','商务宴请'];
-            document.querySelectorAll('.rest-scene-tag').forEach(function(btn) {
-                btn.classList.remove('active');
-                btn.style.cssText = 'padding:4px 10px;border:1px solid #E5E7EB;border-radius:8px;background:white;color:#6B7280;font-size:11px;cursor:pointer;';
+            // 合并模式：保留已选中的标签，仅追加新出现的标签
+            var existingTags = [];
+            document.querySelectorAll('.rest-scene-tag.active').forEach(function(btn) {
+                existingTags.push(btn.textContent.trim());
             });
             rawTags.forEach(function(tag) {
                 tag = tag.trim();
-                if (validTags.indexOf(tag) >= 0) {
+                if (validTags.indexOf(tag) >= 0 && existingTags.indexOf(tag) < 0) {
                     recognizedSceneTags.push(tag);
                     document.querySelectorAll('.rest-scene-tag').forEach(function(btn) {
                         if (btn.textContent.trim() === tag) {
@@ -40087,10 +40554,17 @@ function applyFlyerResult(data) {
     if (recognizedSceneTags.length > 0) descParts.push(recognizedSceneTags.join('、'));
     if (data.description) descParts.push(data.description);
     if (descParts.length > 0) {
-        document.getElementById('restaurantContent').value = descParts.join('；');
+        var contentEl = document.getElementById('restaurantContent');
+        var newDesc = descParts.join('；');
+        if (contentEl.value.trim()) {
+            if (contentEl.value.indexOf(newDesc) < 0) contentEl.value = contentEl.value.trim() + '；' + newDesc; // 追加，不覆盖
+        } else {
+            contentEl.value = newDesc;
+        }
     }
     if (data.dishes && data.dishes.length > 0) {
-        restaurantDishes = data.dishes.map(function(d) {
+        var existNames = restaurantDishes.map(function(d) { return (d.name || '').trim(); });
+        var newDishes = data.dishes.filter(function(d) { return d.name && existNames.indexOf((d.name || '').trim()) < 0; }).map(function(d) {
             return {
                 name: d.name || '',
                 price: d.price || '',
@@ -40101,7 +40575,10 @@ function applyFlyerResult(data) {
                 isSignature: false
             };
         });
-        renderDishList();
+        if (newDishes.length > 0) {
+            restaurantDishes = restaurantDishes.concat(newDishes);
+            renderDishList();
+        }
     }
 }
 
@@ -40711,19 +41188,37 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
     hook();
   }
 })();
+// ====== 启动闪屏超时兜底：8 秒后无论如何强制隐藏，防止网络/CDN/JS 异常导致永久白屏 ======
+(function bootSplashTimeout() {
+    setTimeout(function() {
+        var bs = document.getElementById('bootSplash');
+        if (bs && bs.style.display !== 'none') {
+            console.warn('[boot] 8 秒超时，强制隐藏启动闪屏');
+            bs.style.display = 'none';
+            // 尝试显示登录页（如果 initAuth 没跑到）
+            try { if (typeof showLoginPage === 'function') showLoginPage(); } catch(e) {}
+        }
+    }, 8000);
+})();
+
 // ====== 登录系统初始化：页面加载完成后判断登录状态 ======
 (function initAuth() {
     function start() {
+        // 记录启动时的家庭命名空间：登录后若家庭未变化则无需整页重载（弱网下重载易中断导致"退回登录页"）
+        window.__bootFamilyId = getFamilyId();
         var u = getLoginUser();
-        if (!u || !u.phone) { showLoginPage(); return; }
+        if (!u) { showLoginPage(); return; }
+        // 家庭快捷登录会话（无 Supabase 会话）：直接按已存储的家庭码进入主界面
+        if (u.familySession) { showAppRoot(); return; }
         // 已登录过，检查是否仍有有效 supabase 会话 + 家庭归属
         if (sb) {
-            sb.auth.getSession().then(function(s) {
-                if (!s.data || !s.data.session) {
-                    // 会话失效，尝试从 localStorage 恢复（OTP 登录会话可能过期）
-                    if (u && u.phone) { afterLoginCheck(); }
-                    else { clearLogin(); showLoginPage(); }
-                } else { afterLoginCheck(); }
+            withTimeout(sb.auth.getSession(), 10000, '会话检查').then(function(s) {
+                if (s && s.data && s.data.session) {
+                    afterLoginCheck();
+                } else {
+                    clearLogin();
+                    showLoginPage();
+                }
             }).catch(function() { afterLoginCheck(); });
         } else { afterLoginCheck(); }
     }
