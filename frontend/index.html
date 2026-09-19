@@ -3233,8 +3233,10 @@
             <input id="loginPassword" type="password" maxlength="40" placeholder="请输入密码" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
             <button id="loginBtn" onclick="doLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录</button>
             <div id="loginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.5;"></div>
-            <div id="switchToRegister" onclick="switchLoginRegister()" style="font-size:13px;color:#EA580C;margin-top:14px;cursor:pointer;text-decoration:underline;">还没有账号？点此注册</div>
-            <div id="forgotPwdLink" onclick="showForgotPassword()" style="font-size:12px;color:#9A3412;margin-top:8px;cursor:pointer;text-decoration:underline;text-align:right;">忘记密码？</div>
+            <div style="text-align:center;margin-top:14px;">
+                <div id="switchToRegister" onclick="switchLoginRegister()" style="font-size:13px;color:#EA580C;cursor:pointer;text-decoration:underline;display:inline-block;">还没有账号？点此注册</div>
+                <div id="forgotPwdLink" onclick="showForgotPassword()" style="font-size:12px;color:#9A3412;margin-left:14px;cursor:pointer;text-decoration:underline;display:inline-block;">忘记密码？</div>
+            </div>
             <div id="forgotPwdBox" style="display:none;margin-top:10px;padding:12px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;box-sizing:border-box;">
                 <div style="font-size:12px;color:#7A4A21;margin-bottom:8px;">输入注册邮箱，将发送密码重置链接：</div>
                 <input id="forgotEmail" type="email" maxlength="60" placeholder="注册邮箱" onkeydown="if(event.key==='Enter')sendResetEmail()" style="width:100%;padding:9px 12px;font-size:14px;border:1px solid #FED7AA;border-radius:8px;margin-bottom:8px;outline:none;background:#fff;color:#1F2937;box-sizing:border-box;" />
