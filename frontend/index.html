@@ -5143,8 +5143,9 @@ async function doFamilyLogin() {
             msg = '服务端函数未创建，请先在 Supabase 后台执行 family_login/family_setup_pass 的 SQL';
         }
         showErr('家庭登录失败：' + (msg || '请确认已开通家庭密码登录'));
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '家庭登录'; }
     }
-    if (btn) { btn.disabled = false; btn.textContent = '家庭登录'; }
 }
 
 // ==================== 数据迁移：mealPlans + mealRecords → dietCalendar ====================
