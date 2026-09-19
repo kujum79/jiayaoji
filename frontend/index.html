@@ -3215,7 +3215,9 @@
             <input id="familyLoginPass" type="password" maxlength="40" placeholder="家庭密码" onkeydown="if(event.key==='Enter')doFamilyLogin()" style="width:100%;padding:10px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
             <button id="familyLoginBtn" onclick="doFamilyLogin()" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#D97706;border:none;border-radius:12px;cursor:pointer;">家庭登录</button>
             <div id="familyLoginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.6;"></div>
-            <div id="toggleFamilySetup" onclick="toggleFamilySetupBox()" style="font-size:12px;color:#EA580C;margin-top:10px;cursor:pointer;text-decoration:underline;">首次使用？用家庭码开通密码登录</div>
+            <div style="text-align:center;margin-top:8px;">
+                <div id="toggleFamilySetup" onclick="toggleFamilySetupBox()" style="font-size:12px;color:#EA580C;cursor:pointer;text-decoration:underline;display:inline-block;">首次使用？用家庭码开通密码登录</div>
+            </div>
             <div id="familySetupBox" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed #FED7AA;">
                 <input id="familySetupName" type="text" maxlength="20" placeholder="家庭名称" style="width:100%;padding:10px 14px;font-size:14px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:8px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
                 <input id="familySetupCode" type="text" maxlength="8" placeholder="8位家庭码（向家庭创建者索取）" style="width:100%;padding:10px 14px;font-size:14px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:8px;outline:none;background:#FFFBEB;color:#1F2937;text-transform:uppercase;box-sizing:border-box;" />
@@ -3231,8 +3233,41 @@
             <button id="loginBtn" onclick="doLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录</button>
             <div id="loginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.5;"></div>
             <div id="switchToRegister" onclick="switchLoginRegister()" style="font-size:13px;color:#EA580C;margin-top:14px;cursor:pointer;text-decoration:underline;">还没有账号？点此注册</div>
+            <div id="forgotPwdLink" onclick="showForgotPassword()" style="font-size:12px;color:#9A3412;margin-top:8px;cursor:pointer;text-decoration:underline;text-align:right;">忘记密码？</div>
+            <div id="forgotPwdBox" style="display:none;margin-top:10px;padding:12px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;box-sizing:border-box;">
+                <div style="font-size:12px;color:#7A4A21;margin-bottom:8px;">输入注册邮箱，将发送密码重置链接：</div>
+                <input id="forgotEmail" type="email" maxlength="60" placeholder="注册邮箱" onkeydown="if(event.key==='Enter')sendResetEmail()" style="width:100%;padding:9px 12px;font-size:14px;border:1px solid #FED7AA;border-radius:8px;margin-bottom:8px;outline:none;background:#fff;color:#1F2937;box-sizing:border-box;" />
+                <button id="forgotSendBtn" onclick="sendResetEmail()" style="width:100%;padding:10px;font-size:13px;font-weight:700;color:#fff;background:#D97706;border:none;border-radius:9px;cursor:pointer;">发送重置邮件</button>
+                <div id="forgotMsg" style="display:none;font-size:11px;margin-top:8px;line-height:1.5;"></div>
+            </div>
             <div style="font-size:11px;color:#9CA3AF;margin-top:10px;line-height:1.5;">登录即表示同意家肴记服务条款</div>
         </div>
+    </div>
+</div>
+
+<!-- ====== 忘记密码·设置新密码弹窗（重置邮件链接回跳后显示） ====== -->
+<div id="resetPwdModal" style="position:fixed;inset:0;z-index:100007;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;">
+    <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:320px;box-shadow:0 12px 40px rgba(0,0,0,0.2);">
+        <div style="font-size:17px;font-weight:800;color:#7A4A21;margin-bottom:6px;text-align:center;">🔐 设置新密码</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-bottom:16px;text-align:center;">这是您通过重置邮件打开的安全会话</div>
+        <input id="resetPwd1" type="password" maxlength="40" placeholder="新密码（至少6位）" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <input id="resetPwd2" type="password" maxlength="40" placeholder="确认新密码" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <button id="resetPwdBtn" onclick="doSetNewPassword()" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">确认修改</button>
+        <div id="resetPwdMsg" style="display:none;font-size:12px;margin-top:10px;line-height:1.5;text-align:center;"></div>
+    </div>
+</div>
+
+<!-- ====== 家庭密码重置弹窗（凭家庭码直接设置新密码，无需邮箱） ====== -->
+<div id="familyResetModal" style="position:fixed;inset:0;z-index:100006;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeFamilyResetModal()">
+    <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:320px;box-shadow:0 12px 40px rgba(0,0,0,0.2);">
+        <div style="font-size:17px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">🔑 重置家庭密码</div>
+        <div style="font-size:11px;color:#9CA3AF;margin-bottom:14px;text-align:center;">凭 8 位家庭码即可重置密码，无需邮箱</div>
+        <input id="familyResetCode" type="text" maxlength="8" placeholder="8 位家庭码" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;text-transform:uppercase;letter-spacing:2px;box-sizing:border-box;" />
+        <input id="familyResetPass1" type="password" maxlength="40" placeholder="新密码（至少 6 位）" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <input id="familyResetPass2" type="password" maxlength="40" placeholder="确认新密码" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <button id="familyResetBtn" onclick="doFamilyReset()" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">重置密码</button>
+        <div id="familyResetMsg" style="display:none;font-size:12px;margin-top:10px;line-height:1.5;text-align:center;"></div>
+        <div onclick="closeFamilyResetModal()" style="font-size:12px;color:#9CA3AF;margin-top:10px;text-align:center;cursor:pointer;text-decoration:underline;">取消</div>
     </div>
 </div>
 
@@ -4923,6 +4958,63 @@ function toggleFamilySetupBox() {
     if (box) box.style.display = (box.style.display === 'none' || !box.style.display) ? 'block' : 'none';
 }
 
+// ====== 忘记密码（邮箱登录）：发送 Supabase 重置邮件 ======
+function showForgotPassword() {
+    var box = document.getElementById('forgotPwdBox');
+    if (!box) return;
+    var emailInput = document.getElementById('loginEmail');
+    var fe = document.getElementById('forgotEmail');
+    if (emailInput && emailInput.value && !fe.value) fe.value = emailInput.value;
+    var show = (box.style.display === 'none' || !box.style.display);
+    box.style.display = show ? 'block' : 'none';
+    var msg = document.getElementById('forgotMsg');
+    if (msg) msg.style.display = 'none';
+}
+
+async function sendResetEmail() {
+    if (!sb) { showToast('服务未就绪，请稍候'); return; }
+    var email = ((document.getElementById('forgotEmail') || {}).value || '').trim().toLowerCase();
+    var msg = document.getElementById('forgotMsg');
+    var btn = document.getElementById('forgotSendBtn');
+    function fmsg(t, c) { if (msg) { msg.innerHTML = t; msg.style.color = c; msg.style.display = 'block'; } }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { fmsg('请输入有效的邮箱地址', '#DC2626'); return; }
+    if (btn) { btn.disabled = true; btn.textContent = '发送中…'; }
+    try {
+        var r = await withTimeout(sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + '/' }), 15000, '发送重置邮件');
+        if (r && r.error) throw r.error;
+        fmsg('📧 重置邮件已发送到 <b>' + email.replace(/</g, '&lt;') + '</b><br>请到邮箱点击"重置密码"链接（未收到请检查垃圾邮件）', '#15803D');
+    } catch(e) {
+        fmsg('发送失败：' + ((e && e.message) || '请稍后再试'), '#DC2626');
+    }
+    if (btn) { btn.disabled = false; btn.textContent = '发送重置邮件'; }
+}
+
+// 重置邮件链接回跳（URL 带 #access_token=...&type=recovery）：supabase-js 自动建立会话后弹出设新密码窗
+async function doSetNewPassword() {
+    if (!sb) return;
+    var p1 = ((document.getElementById('resetPwd1') || {}).value || '').trim();
+    var p2 = ((document.getElementById('resetPwd2') || {}).value || '').trim();
+    var msg = document.getElementById('resetPwdMsg');
+    function rmsg(t, c) { if (msg) { msg.textContent = t; msg.style.color = c; msg.style.display = 'block'; } }
+    if (p1.length < 6) { rmsg('密码至少 6 位', '#DC2626'); return; }
+    if (p1 !== p2) { rmsg('两次输入的密码不一致', '#DC2626'); return; }
+    var btn = document.getElementById('resetPwdBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '提交中…'; }
+    try {
+        var r = await withTimeout(sb.auth.updateUser({ password: p1 }), 15000, '更新密码');
+        if (r && r.error) throw r.error;
+        rmsg('✅ 密码已重置，正在进入…', '#15803D');
+        setTimeout(function() {
+            var m = document.getElementById('resetPwdModal');
+            if (m) m.style.display = 'none';
+            afterLoginCheck();
+        }, 900);
+    } catch(e) {
+        rmsg('修改失败：' + ((e && e.message) || '链接可能已过期，请重新发送重置邮件'), '#DC2626');
+        if (btn) { btn.disabled = false; btn.textContent = '确认修改'; }
+    }
+}
+
 // 首次开通：凭家庭码为家庭设置登录密码（服务端校验家庭码后写入 pass_hash）
 async function doFamilySetup() {
     if (!sb) { showToast('服务未就绪，请刷新重试'); return; }
@@ -4955,6 +5047,64 @@ async function doFamilySetup() {
         showToast('开通失败：' + ((e && e.message) || '请稍后重试'));
     }
     if (btn) { btn.disabled = false; btn.textContent = '开通并保存'; }
+}
+
+// ====== 家庭密码重置（凭家庭码直接设置新密码，无需邮箱） ======
+function openFamilyResetModal() {
+    var m = document.getElementById('familyResetModal');
+    if (!m) return;
+    m.style.display = 'flex';
+    // 预填已在"首次开通"里输入过的家庭码（如果有）
+    var sc = document.getElementById('familySetupCode');
+    var rc = document.getElementById('familyResetCode');
+    if (sc && sc.value && sc.value.trim() && rc && !rc.value) rc.value = sc.value.trim().toUpperCase();
+}
+function closeFamilyResetModal() {
+    var m = document.getElementById('familyResetModal');
+    if (m) m.style.display = 'none';
+    // 清空表单
+    ['familyResetCode','familyResetPass1','familyResetPass2'].forEach(function(id) {
+        var el = document.getElementById(id); if (el) el.value = '';
+    });
+    var msg = document.getElementById('familyResetMsg'); if (msg) { msg.style.display = 'none'; msg.textContent = ''; }
+}
+async function doFamilyReset() {
+    if (!sb) { showToast('服务未就绪，请稍候'); return; }
+    var code = ((document.getElementById('familyResetCode') || {}).value || '').trim().toUpperCase();
+    var p1 = ((document.getElementById('familyResetPass1') || {}).value || '').trim();
+    var p2 = ((document.getElementById('familyResetPass2') || {}).value || '').trim();
+    var msg = document.getElementById('familyResetMsg');
+    function rmsg(t, c) { if (msg) { msg.textContent = t; msg.style.color = c; msg.style.display = 'block'; } }
+    if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) { rmsg('家庭码格式不正确（8 位字母数字，无 I/O/U）', '#DC2626'); return; }
+    if (p1.length < 6) { rmsg('密码至少 6 位', '#DC2626'); return; }
+    if (p1 !== p2) { rmsg('两次输入的密码不一致', '#DC2626'); return; }
+    var btn = document.getElementById('familyResetBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '重置中…'; }
+    try {
+        var r = await withTimeout(sb.rpc('family_reset_pass', { p_code: code, p_pass: p1 }), 15000, '重置家庭密码');
+        if (r && r.error) throw r.error;
+        if (r && r.data === 'OK') {
+            rmsg('✅ 密码已重置，请用新密码登录', '#15803D');
+            // 同时回填到登录输入框，方便用户立即登录
+            var lp = document.getElementById('familyLoginPass');
+            if (lp) lp.value = p1;
+            setTimeout(closeFamilyResetModal, 1500);
+        } else if (r.data === 'CODE_NOT_FOUND') {
+            rmsg('家庭码不存在，请核对后重试', '#DC2626');
+        } else if (r.data === 'PASS_TOO_SHORT') {
+            rmsg('密码至少 6 位', '#DC2626');
+        } else {
+            rmsg('重置失败：' + (r.data || '未知原因'), '#DC2626');
+        }
+    } catch(e) {
+        var em = (e && e.message) || '';
+        if (em.indexOf('family_reset_pass') > -1 || em.indexOf('function') > -1) {
+            rmsg('服务端未配置 family_reset_pass 函数，请先在 Supabase 后台执行 SQL（见下方说明）', '#DC2626');
+        } else {
+            rmsg('重置失败：' + em, '#DC2626');
+        }
+    }
+    if (btn) { btn.disabled = false; btn.textContent = '重置密码'; }
 }
 
 // 家庭快捷登录：验证通过后以该家庭的本地数据命名空间进入APP
@@ -5347,14 +5497,43 @@ function showFamilyCodeInfo() {
 }
 function copyFamilyCode() {
     var fid = getFamilyId();
-    if (!fid) return;
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(fid).then(function() { showToast('✅ 家庭码已复制'); });
+    if (!fid) { showToast('未找到家庭码'); return; }
+    showToast('📋 正在复制 ' + fid + ' …');
+    // 1. 优先 Clipboard API（HTTPS + 现代浏览器）
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(fid).then(function() {
+            showToast('✅ 家庭码已复制：' + fid);
+        }).catch(function() {
+            // Clipboard API 失败 → 强制降级到 textarea + execCommand
+            doCopyViaTextarea(fid);
+        });
     } else {
+        doCopyViaTextarea(fid);
+    }
+}
+// 降级：textarea + execCommand（兼容旧浏览器/移动端微信等内置浏览器）
+function doCopyViaTextarea(text) {
+    try {
         var ta = document.createElement('textarea');
-        ta.value = fid; document.body.appendChild(ta); ta.select();
-        try { document.execCommand('copy'); showToast('✅ 家庭码已复制'); } catch(e) { showToast('复制失败，请手动复制'); }
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        ta.style.left = '-9999px';
+        ta.style.top = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, text.length);
+        var ok = document.execCommand('copy');
         document.body.removeChild(ta);
+        if (ok) {
+            showToast('✅ 家庭码已复制：' + text);
+        } else {
+            // 双重保险失败：弹窗让用户手动长按选择
+            alert('自动复制失败，请长按选中下面的家庭码手动复制：\n\n' + text);
+        }
+    } catch(e) {
+        alert('自动复制失败，请长按选中下面的家庭码手动复制：\n\n' + text);
     }
 }
 
@@ -41244,6 +41423,17 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
     function start() {
         // 记录启动时的家庭命名空间：登录后若家庭未变化则无需整页重载（弱网下重载易中断导致"退回登录页"）
         window.__bootFamilyId = getFamilyId();
+        // 密码重置邮件回跳：URL 带 #...type=recovery，supabase-js 会自动建立会话，弹出"设置新密码"窗并跳过正常启动
+        try {
+            if ((location.hash || '').indexOf('type=recovery') > -1) {
+                var rm = document.getElementById('resetPwdModal');
+                if (rm) {
+                    rm.style.display = 'flex';
+                    setTimeout(function() { try { history.replaceState(null, '', location.pathname + location.search); } catch (e2) {} }, 3000);
+                    return;
+                }
+            }
+        } catch (e) {}
         var u = getLoginUser();
         if (!u) { showLoginPage(); return; }
         // 家庭快捷登录会话（无 Supabase 会话）：直接按已存储的家庭码进入主界面
