@@ -5099,8 +5099,22 @@ async function doCreateFamily() {
 function doLogout() {
     if (sb) { try { sb.auth.signOut(); } catch(e) {} }
     clearLogin();
+    // 登出后: 1) 内存家庭数据回退到未登录浏览态(getFamilyId 为 null → familyKey 走全局 key);
+    // 2) 立即重渲染"我家"页——否则页面上残留登录时渲染的旧 DOM(家庭码/成员/地址等),
+    //    且 switchTab('family') 不重渲染, 用户再进"我家"仍会看到上一账号的家庭信息.
+    resetFamilyMemoryToGuest();
     showAppRootGuest();
     showToast('已退出登录');
+}
+// 未登录浏览态的内存数据重置 + "我家"页重渲染
+function resetFamilyMemoryToGuest() {
+    try { familyData = JSON.parse(lsGet('familyData')) || [...DEFAULT_FAMILY, ...DEFAULT_SOCIAL_MEMBERS]; } catch(e) { familyData = [...DEFAULT_FAMILY, ...DEFAULT_SOCIAL_MEMBERS]; }
+    try { contactsData = JSON.parse(lsGet('contactsData')) || DEFAULT_CONTACTS; } catch(e) { contactsData = DEFAULT_CONTACTS; }
+    try { diningGroups = JSON.parse(lsGet('diningGroups')) || [...DEFAULT_DINING_GROUPS, ...DEFAULT_SOCIAL_SUBGROUPS]; } catch(e) { diningGroups = [...DEFAULT_DINING_GROUPS, ...DEFAULT_SOCIAL_SUBGROUPS]; }
+    familyHomeAddress = lsGet('familyHomeAddress') || '';
+    shoppingDay = lsGet('shoppingDay') || '6';
+    selectedFamilyMemberName = null;
+    try { renderFamily(); } catch(e) {}
 }
 
 // ==================== 家庭快捷登录（家庭名称+密码，无需邮箱） ====================
@@ -20148,12 +20162,15 @@ function renderFamily() {
                 开启后，每天18:00将自动检查并提示您规划明日三餐食谱
             </div>
         </div>
+        ${isLogined() ? `
         <div style="margin-top:12px;padding:10px 12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;display:flex;align-items:center;justify-content:space-between;">
             <div style="font-size:12px;color:#92400E;">🔑 家庭码：<b>${getFamilyId() || '未设置'}</b></div>
             <button onclick="copyFamilyCode()" style="padding:5px 10px;font-size:12px;font-weight:600;color:#92400E;background:#FEF3C7;border:none;border-radius:8px;cursor:pointer;">📋 复制</button>
         </div>
         <button onclick="doLogout()" style="width:100%;padding:12px;background:white;border:1px solid #FECACA;border-radius:12px;font-size:13px;font-weight:600;color:#DC2626;cursor:pointer;">🚪 退出登录</button>
-        <div style="font-size:11px;color:#9CA3AF;margin-top:6px;text-align:center;">退出后可用邮箱或家庭名称重新登录</div>
+        <div style="font-size:11px;color:#9CA3AF;margin-top:6px;text-align:center;">退出后可用邮箱或家庭名称重新登录</div>` : `
+        <button onclick="showLoginPage()" style="width:100%;padding:12px;background:#F97316;border:none;border-radius:12px;font-size:13px;font-weight:600;color:white;cursor:pointer;margin-top:12px;">登录 / 注册</button>
+        <div style="font-size:11px;color:#9CA3AF;margin-top:6px;text-align:center;">登录后可管理家庭信息与成员，当前为浏览模式</div>`}
     </div>`);
 
     // 设置区域展开/折叠
