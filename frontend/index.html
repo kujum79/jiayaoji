@@ -3317,7 +3317,7 @@
         </div>
         <!-- 家庭登录面板（默认隐藏，邮箱登录为默认） -->
         <div id="loginPanelFamily" style="display:none;">
-            <input id="familyLoginName" type="text" maxlength="20" placeholder="家庭名称" onkeydown="if(event.key==='Enter')doFamilyLogin()" style="width:100%;padding:10px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+            <input id="familyLoginName" type="text" maxlength="20" placeholder="家庭名称或家庭码" onkeydown="if(event.key==='Enter')doFamilyLogin()" style="width:100%;padding:10px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
             <input id="familyLoginPass" type="password" maxlength="40" placeholder="家庭密码" onkeydown="if(event.key==='Enter')doFamilyLogin()" style="width:100%;padding:10px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
             <button id="familyLoginBtn" onclick="doFamilyLogin()" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#D97706;border:none;border-radius:12px;cursor:pointer;">家庭登录</button>
             <div id="familyLoginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.6;"></div>
@@ -4822,7 +4822,9 @@ function updateHomeAuthBtn() {
     if (!btn) return;
     var u = getLoginUser();
     if (u) {
-        var name = u.familyName || u.family_name || u.nickname || (u.email ? String(u.email).split('@')[0] : '') || '我家';
+        // 家庭会话优先显示家庭名称（登录时存于 loginFamily.name），如"三仁佳欢"
+        var fam = getLoginFamily ? getLoginFamily() : null;
+        var name = (u.familySession && fam && fam.name) || u.familyName || u.family_name || u.name || u.nickname || (u.email ? String(u.email).split('@')[0] : '') || '我家';
         btn.textContent = name;
         btn.title = '点击进入"我家"';
     } else {
@@ -5252,7 +5254,7 @@ async function doFamilyLogin() {
     }
     function clearErr() { if (errBox) { errBox.textContent = ''; errBox.style.display = 'none'; } }
     clearErr();
-    if (!name || !pass) { showErr('请输入家庭名称和密码'); return; }
+    if (!name || !pass) { showErr('请输入家庭名称（或家庭码）和密码'); return; }
     var btn = document.getElementById('familyLoginBtn');
     if (btn) { btn.disabled = true; btn.textContent = '登录中…'; }
     try {
@@ -5263,7 +5265,7 @@ async function doFamilyLogin() {
             showErr('家庭名称或密码不正确。<br>若该家庭尚未开通密码登录，请点下方"首次使用？用家庭码开通密码登录"先开通。');
             return;
         }
-        if (rows.length > 1) { showErr('存在多个同名家庭，请使用邮箱登录'); return; }
+        if (rows.length > 1) { showErr('存在多个同名家庭，请在上面的输入框中改输入<b>家庭码</b>登录（家庭码唯一，可在"我家"页查看）'); return; }
         var row = rows[0];
         setLoginUser({ id: 'fam_' + row.family_code, familySession: true, name: row.family_name });
         setLoginFamily({ name: row.family_name, code: row.family_code });
