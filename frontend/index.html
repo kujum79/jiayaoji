@@ -117,6 +117,8 @@
         }
         .home-logo.is-fallback {
             padding: 10px !important;
+            /* 视觉保底: 极端情况下微信内核连内嵌 SVG 都不渲染时, 至少显示暖橙渐变圆盘而非纯白圆 */
+            background: radial-gradient(circle at 50% 42%, #FFF7ED 0%, #FED7AA 55%, #FDBA74 100%) !important;
         }
         .home-title { font-size: 36px; font-weight: 700; color: #1F2937; letter-spacing: 2px; }
         .home-sub { font-size: 16px; color: #7A4A21; margin-top: 16px; text-align: center; line-height: 1.6; }
@@ -41499,7 +41501,11 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
   function realSrcFresh(){ return REAL_SRC + '&_=' + Date.now(); }   // 版本参数 + 时间戳双保险
 
   function tryFallback(img, reason){
-    if (!img || img.__logoFallbackTimes >= 2) return;
+    if (!img) return;
+    // 守卫1: 自愈已切回真图且未再次报错时, 真图可能仍在加载(naturalWidth 暂为 0),
+    // 此时超时/可见性等检查不得误判切兜底, 否则会把已恢复的 LOGO 又打回兜底态且不再自愈.
+    if (img.__realRecovered && !img.__realErrorAfterRecover) return;
+    if (img.__logoFallbackTimes >= 3) return;
     if (img.classList && img.classList.contains('is-fallback')) return;   // 已是兜底态不重复切
     // 切换到 data-uri SVG 兜底
     img.__logoFallbackTimes = (img.__logoFallbackTimes|0) + 1;
@@ -41509,13 +41515,24 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
       img.classList.add('is-fallback');
       img.setAttribute('aria-label', '家肴记 (兜底LOGO, 原因: ' + reason + ')');
     } catch (e) { /* noop */ }
+    // 统一在此安排自愈: onerror/超时/补漏/可见性任何路径切了兜底, 都必须安排切回真图的探测,
+    // 否则弱网超时切兜底后会永久停在兜底态(部分微信内核 SVG data-uri 渲染异常 → LOGO 一直空白).
+    img.__realRecovered = false;      // 重启自愈链
+    img.__realRetryCount = 0;
+    clearTimeout(img.__healTimer);
+    img.__healTimer = setTimeout(function(){ retryReal(img); }, 2000);
   }
 
   // 自愈: 后台用独立 Image 探测真实 PNG, 一旦可加载成功就切回真图.
   // 场景: 微信内置浏览器冷启动慢被误判超时切了 SVG 兜底(部分微信内核对 data-uri SVG
   // 渲染异常 → 用户看到纯白圆), 或弱网短暂失败后网络恢复. 探测走缓存, 代价极小.
-  function retryReal(img, tag){
-    if (!img || img.__retryingReal || img.__realRecovered) return;
+  // 弱网下次数可能不够: 失败后自动重试, 最多 4 次探测(约 2s/4.5s/7s/9.5s), 成功即停.
+  function retryReal(img){
+    if (!img || img.__realRecovered) return;
+    if (img.__retryingReal) return;
+    var attempt = (img.__realRetryCount|0) + 1;
+    if (attempt > 4) return;
+    img.__realRetryCount = attempt;
     img.__retryingReal = true;
     var probe = new Image();
     probe.onload = function(){
@@ -41527,17 +41544,23 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
         img.removeAttribute('srcset');
         img.setAttribute('src', realSrcFresh());   // 时间戳绕过可能的坏缓存
         img.setAttribute('aria-label', '家肴记');
+        // 真图切回后挂一次性错误监听: 若真图再次加载失败, 标记后允许重新走兜底
+        img.addEventListener('error', function onErr(){
+          img.removeEventListener('error', onErr);
+          img.__realErrorAfterRecover = true;
+        });
       } catch (e) { /* noop */ }
     };
-    probe.onerror = function(){ img.__retryingReal = false; };
+    probe.onerror = function(){
+      img.__retryingReal = false;
+      // 失败自动重试(间隔递增), 弱网/微信冷启动下多给几次机会
+      setTimeout(function(){ retryReal(img); }, 1500 + attempt * 1000);
+    };
     probe.src = realSrcFresh();
   }
 
   window._logoFallback = function(reason){
-    var img = this;
-    tryFallback(img, reason || 'onerror');
-    // 兜底后稍作等待即自愈探测, 不再永久停留在兜底态
-    setTimeout(function(){ retryReal(img, 'after-fallback'); }, 2500);
+    tryFallback(this, reason || 'onerror');
   };
 
   function isImgOk(img){
@@ -41561,13 +41584,15 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
     setTimeout(function(){
       if (img.classList.contains('is-fallback')) retryReal(img, 'auto');
     }, 2500);
-    // iOS/微信 后台切回经常触发资源取消: 未兜底则原样重试, 已兜底则走自愈探测
+    // iOS/微信 后台切回经常触发资源取消: 兜底态走自愈探测; 已自愈成功则不折腾;
+    // 未兜底未自愈(真图加载中/失败)则强刷一次
     var visCount = 0;
     document.addEventListener && document.addEventListener('visibilitychange', function(){
       if (document.visibilityState === 'visible' && visCount < 2) {
         visCount++;
         try {
-          if (img.classList.contains('is-fallback')) { retryReal(img, 'visible'); return; }
+          if (img.classList.contains('is-fallback')) { retryReal(img); return; }
+          if (img.__realRecovered) return;   // 自愈已完成, 真图正常/加载中, 强刷反而引入误判
           img.removeAttribute('srcset');
           img.setAttribute('src', realSrcFresh());
           setTimeout(function(){
