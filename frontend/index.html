@@ -8,8 +8,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="format-detection" content="telephone=no,email=no,address=no" />
     <title>家肴记 - AI 家庭膳食助理</title>
-    <!-- 首页 LOGO 预加载 & 兼容修复：手机上避免 2048x2048 大图延迟/逐行扫出/弱网下载失败 空白 -->
-    <link rel="preload" as="image" href="images/logo.png" imagesrcset="images/logo.png 1x" />
+    <!-- 首页 LOGO 预加载 & 兼容修复：?v=2 绕开微信 WebView 可能残留的旧大图/坏响应磁盘缓存 -->
+    <link rel="preload" as="image" href="images/logo.png?v=2" imagesrcset="images/logo.png?v=2 1x" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -293,10 +293,10 @@
             opacity: 0.85;
             overflow: hidden; text-overflow: ellipsis; min-width: 0;
         }
-        /* 窄屏：节气按钮独占一行，保证"白露节气 · 饮食指南（日期）"完整显示 */
+        /* 窄屏：节气按钮独占一行且强制单行，保证"白露节气 · 饮食指南（日期）"不换行 */
         @media (max-width: 430px) {
-            .solar-term-guide-btn { flex-basis: 100%; padding: 5px 10px; gap: 8px; white-space: normal; }
-            .solar-term-guide-btn div:first-child { font-size: 12px; letter-spacing: 0.2px; }
+            .solar-term-guide-btn { flex-basis: 100%; padding: 5px 8px; gap: 6px; white-space: nowrap; }
+            .solar-term-guide-btn div:first-child { font-size: 12px; letter-spacing: 0; }
             .solar-term-guide-btn div:last-child { font-size: 10px; }
             .knowledge-dropdown-wrapper { flex-shrink: 0; }
         }
@@ -925,9 +925,12 @@
             font-size: 18px;
             flex-shrink: 0;
         }
-        .member-info { flex: 1; }
-        .member-info .name { font-weight: 600; overflow-wrap: break-word; word-break: break-all; }
-        .member-info .detail { font-size: 13px; color: #6B7280; overflow-wrap: break-word; word-break: break-all; }
+        .member-info { flex: 1; min-width: 0; }
+        .member-info .name { font-weight: 600; overflow-wrap: break-word; }
+        .member-info .detail { font-size: 13px; color: #6B7280; overflow-wrap: break-word; }
+        /* 成员详情按「籍贯／现住／口味」整段断行，段内不拆字 */
+        .d-seg { display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+        .rel-tag, .constitution-tag { white-space: nowrap; }
         .family-section-title {
             margin: 14px 0 8px;
             color: #C2410C;
@@ -1141,6 +1144,11 @@
                 max-height: 100vh;
                 height: 100vh;
             }
+            /* 我家·成员卡：393px 等中等宽度手机也压缩，防拥挤换行 */
+            .member-card { padding: 10px; gap: 10px; }
+            .member-avatar { width: 36px; height: 36px; font-size: 15px; }
+            .member-info .name { font-size: 14px; }
+            .member-info .detail { font-size: 12px; line-height: 1.6; }
         }
         /* ====== 窄屏适配（≤375px，如 iPhone SE / 旧安卓小屏） ====== */
         @media (max-width: 375px) {
@@ -1989,6 +1997,15 @@
     .prep-param-row .prep-servings-right { margin-left:auto; flex-shrink:0; }
     .prep-param-row .prep-servings-right b { color:#DC2626; margin-left:2px; }
     .prep-param-row .prep-servings-btn { padding:5px 9px; font-size:12px; min-height:28px; }
+    @media (max-width: 430px) {
+        /* 中等宽度手机（360-410px）：采购期与用餐人数同行显示，压缩防换行 */
+        .prep-param-row { flex-wrap: nowrap; }
+        .prep-cycle-sel { gap: 4px; }
+        .prep-cycle-sel label { font-size: 12px; }
+        .prep-cycle-sel select { max-width: 62px; font-size: 12px; }
+        .prep-servings { font-size: 12px; gap: 4px; }
+        .prep-param-row .prep-servings-btn { padding: 5px 7px; font-size: 11px; min-height: 26px; }
+    }
     @media (max-width: 410px) {
         .prep-cycle-sel { font-size:12px; padding:4px 5px; }
         .prep-cycle-sel label { font-size:12px; }
@@ -2818,21 +2835,21 @@
     .diary-top-actions { margin-left:auto; display:flex; align-items:center; gap:6px; flex-shrink:0; }
     .diary-top-actions button { background:#FFF7ED; color:#F97316; border:1px solid #FED7AA; border-radius:8px; padding:4px 10px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
     @media (max-width: 430px) {
-        .diary-nav-btn { padding:4px 6px; font-size:13px; }
-        .diary-date-text { font-size:14px; letter-spacing:-0.2px; }
-        .diary-date-nav { gap:5px; padding-bottom:2px; }
-        .diary-top-actions { gap:4px; }
+        .diary-date-nav { flex-wrap: nowrap; gap:5px; padding-bottom:2px; }
+        .diary-nav-btn { padding:3px 5px; font-size:12px; }
+        .diary-date-text { font-size:13px; letter-spacing:-0.2px; }
+        .diary-top-actions { gap:4px; flex-shrink:0; }
         .diary-top-actions button { padding:4px 6px; font-size:11px; }
         /* 日期中心区优先保留空间，防"2026年9月19日"被截断 */
-        .diary-date-center { flex:1 1 auto; }
+        .diary-date-center { flex:1 1 auto; min-width:0; overflow:hidden; }
         /* 星期+今天 这一行也防挤 */
         .diary-week-text { font-size:11px; }
         .diary-today-btn-inline { font-size:11px; }
     }
     @media (max-width: 375px) {
-        .diary-date-text { font-size:13px; }
+        .diary-date-text { font-size:12px; }
         .diary-top-actions button { padding:3px 5px; font-size:10px; }
-        .diary-nav-btn { padding:3px 6px; font-size:12px; }
+        .diary-nav-btn { padding:3px 4px; font-size:11px; }
         /* 确认计划/记录实际 按钮更紧凑 */
         .diary-meal-actions { gap:4px; }
         .diary-meal-actions button { padding:3px 8px; font-size:10px; }
@@ -3476,7 +3493,7 @@
         </div>
         <div class="home-logo-wrap" id="homeLogoWrap">
             <span class="home-logo-circle" aria-hidden="true"></span>
-            <img src="images/logo.png"
+            <img src="images/logo.png?v=2"
                  class="home-logo"
                  id="homeLogo"
                  alt="家肴记"
@@ -3485,7 +3502,7 @@
                  loading="eager"
                  decoding="async"
                  fetchpriority="high"
-                 srcset="images/logo.png 1x"
+                 srcset="images/logo.png?v=2 1x"
                  onerror="window._logoFallback && window._logoFallback.call(this, 'onerror');"
                  onclick="switchHomePage()"
                  title="点击回到首页">
@@ -19806,7 +19823,7 @@ function renderFamily() {
             <div class="member-avatar">${selMember.name[0]}</div>
             <div class="member-info">
                 <div class="name">${selMember.name} · ${selMember.age}岁 <span class="rel-tag" style="background:${relColor}18; color:${relColor}; border:1px solid ${relColor}40;">${relIcon} ${rel}</span>${constitution ? ' <span class="constitution-tag">' + escapeHtml(constitution) + '</span>' : ''}</div>
-                <div class="detail">籍贯：${selMember.place} ｜ 现住：${selMember.currentCity} ｜ 口味：${selMember.taste}</div>
+                <div class="detail"><span class="d-seg">籍贯：${selMember.place || ''}</span><span class="d-seg"> ｜ 现住：${selMember.currentCity || ''}</span><span class="d-seg"> ｜ 口味：${selMember.taste || ''}</span></div>
                 <div class="detail">饮食要求：${selMember.dietaryPreference || '未填写'}</div>
             </div>
             <button data-id="${selMember.id}" class="edit-member" style="background:none;border:none;color:#F97316;font-size:14px;cursor:pointer;">✎</button>
@@ -22831,7 +22848,7 @@ function renderFamilyGroupPanel() {
                         ${constitution ? '<span style="font-size:11px;color:#065F46;background:#ECFDF5;padding:1px 6px;border-radius:8px;margin-left:4px;">' + escapeHtml(constitution) + '</span>' : ''}
                     </div>
                     <div style="font-size:11px;color:#6B7280;margin-top:2px;">
-                        ${m.place ? '籍贯：' + escapeHtml(m.place) : ''}${m.place && m.currentCity ? ' ｜ ' : ''}${m.currentCity ? '现住：' + escapeHtml(m.currentCity) : ''}${(m.place || m.currentCity) && m.taste ? ' ｜ ' : ''}${m.taste ? '口味：' + escapeHtml(m.taste) : ''}
+                        ${m.place ? '<span class="d-seg">籍贯：' + escapeHtml(m.place) + '</span>' : ''}${m.place && m.currentCity ? ' ｜ ' : ''}${m.currentCity ? '<span class="d-seg">现住：' + escapeHtml(m.currentCity) + '</span>' : ''}${(m.place || m.currentCity) && m.taste ? ' ｜ ' : ''}${m.taste ? '<span class="d-seg">口味：' + escapeHtml(m.taste) + '</span>' : ''}
                     </div>
                     ${m.dietaryPreference ? '<div style="font-size:11px;color:#6B7280;">饮食：' + escapeHtml(m.dietaryPreference) + '</div>' : ''}
                 </div>
@@ -41476,9 +41493,12 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
         'font-weight="700" font-size="20" letter-spacing="8" fill="#EA580C" fill-opacity="0.85">JIA YAO JI</text>'+
 '</svg>';
   var URI = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(SVG_XML);
+  var REAL_SRC = 'images/logo.png?v=2';   // 与 <img>/preload 的版本参数一致
+  function realSrcFresh(){ return REAL_SRC + '&_=' + Date.now(); }   // 版本参数 + 时间戳双保险
 
   function tryFallback(img, reason){
     if (!img || img.__logoFallbackTimes >= 2) return;
+    if (img.classList && img.classList.contains('is-fallback')) return;   // 已是兜底态不重复切
     // 切换到 data-uri SVG 兜底
     img.__logoFallbackTimes = (img.__logoFallbackTimes|0) + 1;
     try {
@@ -41489,33 +41509,67 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
     } catch (e) { /* noop */ }
   }
 
+  // 自愈: 后台用独立 Image 探测真实 PNG, 一旦可加载成功就切回真图.
+  // 场景: 微信内置浏览器冷启动慢被误判超时切了 SVG 兜底(部分微信内核对 data-uri SVG
+  // 渲染异常 → 用户看到纯白圆), 或弱网短暂失败后网络恢复. 探测走缓存, 代价极小.
+  function retryReal(img, tag){
+    if (!img || img.__retryingReal || img.__realRecovered) return;
+    img.__retryingReal = true;
+    var probe = new Image();
+    probe.onload = function(){
+      img.__retryingReal = false;
+      if (img.__realRecovered) return;
+      img.__realRecovered = true;
+      try {
+        img.classList.remove('is-fallback');
+        img.removeAttribute('srcset');
+        img.setAttribute('src', realSrcFresh());   // 时间戳绕过可能的坏缓存
+        img.setAttribute('aria-label', '家肴记');
+      } catch (e) { /* noop */ }
+    };
+    probe.onerror = function(){ img.__retryingReal = false; };
+    probe.src = realSrcFresh();
+  }
+
   window._logoFallback = function(reason){
-    tryFallback(this, reason || 'onerror');
+    var img = this;
+    tryFallback(img, reason || 'onerror');
+    // 兜底后稍作等待即自愈探测, 不再永久停留在兜底态
+    setTimeout(function(){ retryReal(img, 'after-fallback'); }, 2500);
   };
+
+  function isImgOk(img){
+    try { return !!(img.complete && img.naturalWidth && img.naturalWidth > 20); }
+    catch (e) { return false; }
+  }
 
   function schedule(img){
     if (!img) return;
-    // 500ms 超时兜底 (2G/3G/微信首包慢)
+    // 补漏: onerror 可能早于本脚本执行(解析时即失败, 那时 window._logoFallback 还未定义),
+    // 初始化时检查 img 是否已处于"加载完毕但无内容"的坏状态, 补一次兜底.
     setTimeout(function(){
-      var ok = false;
-      try { ok = !!(img.complete && img.naturalWidth && img.naturalWidth > 20); }
-      catch (e) { ok = false; }
-      if (!ok) tryFallback(img, 'timeout>500ms');
-    }, 500);
-    // iOS 后台切回经常触发资源取消, 最多自动重试 1 次
+      if (!isImgOk(img) && img.complete) tryFallback(img, 'init-broken');
+    }, 0);
+    // 3s 超时兜底 (微信内置浏览器冷启动 DNS/TLS/首包常超 500ms, 旧值 500ms 会把
+    // 正在正常加载的大概率成功的请求误判失败, 提前切 SVG 兜底反而显示不出来)
+    setTimeout(function(){
+      if (!isImgOk(img)) tryFallback(img, 'timeout>3000ms');
+    }, 3000);
+    // 自愈定时: 若 2.5s 时已处于兜底态, 后台探测真实 PNG 尝试切回
+    setTimeout(function(){
+      if (img.classList.contains('is-fallback')) retryReal(img, 'auto');
+    }, 2500);
+    // iOS/微信 后台切回经常触发资源取消: 未兜底则原样重试, 已兜底则走自愈探测
     var visCount = 0;
     document.addEventListener && document.addEventListener('visibilitychange', function(){
-      if (document.visibilityState === 'visible' && visCount < 1) {
+      if (document.visibilityState === 'visible' && visCount < 2) {
         visCount++;
         try {
-          if (img.classList.contains('is-fallback')) return;
+          if (img.classList.contains('is-fallback')) { retryReal(img, 'visible'); return; }
           img.removeAttribute('srcset');
-          img.setAttribute('src', 'images/logo.png?_=' + Date.now());
+          img.setAttribute('src', realSrcFresh());
           setTimeout(function(){
-            try {
-              var ok = img.complete && img.naturalWidth && img.naturalWidth > 20;
-              if (!ok) tryFallback(img, 'visible-retry-failed');
-            } catch (e) { tryFallback(img, 'visible-retry-exception'); }
+            if (!isImgOk(img)) tryFallback(img, 'visible-retry-failed');
           }, 800);
         } catch (e) { tryFallback(img, 'visible-retry-exception'); }
       }
