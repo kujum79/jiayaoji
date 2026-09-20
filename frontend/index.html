@@ -9,7 +9,7 @@
     <meta name="format-detection" content="telephone=no,email=no,address=no" />
     <title>家肴记 - AI 家庭膳食助理</title>
     <!-- 首页 LOGO 预加载 & 兼容修复：?v=2 绕开微信 WebView 可能残留的旧大图/坏响应磁盘缓存 -->
-    <link rel="preload" as="image" href="images/logo.png?v=2" imagesrcset="images/logo.png?v=2 1x" />
+    <link rel="preload" as="image" href="images/logo.png?v=3" imagesrcset="images/logo.png?v=3 1x" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -3497,7 +3497,7 @@
         </div>
         <div class="home-logo-wrap" id="homeLogoWrap">
             <span class="home-logo-circle" aria-hidden="true"></span>
-            <img src="images/logo.png?v=2"
+            <img src="images/logo.png?v=3"
                  class="home-logo"
                  id="homeLogo"
                  alt="家肴记"
@@ -3506,7 +3506,7 @@
                  loading="eager"
                  decoding="async"
                  fetchpriority="high"
-                 srcset="images/logo.png?v=2 1x"
+                 srcset="images/logo.png?v=3 1x"
                  onerror="window._logoFallback && window._logoFallback.call(this, 'onerror');"
                  onclick="switchHomePage()"
                  title="点击回到首页">
@@ -41497,7 +41497,7 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
         'font-weight="700" font-size="20" letter-spacing="8" fill="#EA580C" fill-opacity="0.85">JIA YAO JI</text>'+
 '</svg>';
   var URI = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(SVG_XML);
-  var REAL_SRC = 'images/logo.png?v=2';   // 与 <img>/preload 的版本参数一致
+  var REAL_SRC = 'images/logo.png?v=3';   // 与 <img>/preload 的版本参数一致
   function realSrcFresh(){ return REAL_SRC + '&_=' + Date.now(); }   // 版本参数 + 时间戳双保险
 
   function tryFallback(img, reason){
