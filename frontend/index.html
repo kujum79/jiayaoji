@@ -2,6 +2,9 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="format-detection" content="telephone=no,email=no,address=no" />
     <title>家肴记 - AI 家庭膳食助理</title>
@@ -291,8 +294,11 @@
             overflow: hidden; text-overflow: ellipsis; min-width: 0;
         }
         /* 窄屏：节气按钮独占一行，保证"白露节气 · 饮食指南（日期）"完整显示 */
-        @media (max-width: 410px) {
-            .solar-term-guide-btn { flex-basis: 100%; padding: 4px 6px; }
+        @media (max-width: 430px) {
+            .solar-term-guide-btn { flex-basis: 100%; padding: 5px 10px; gap: 8px; white-space: normal; }
+            .solar-term-guide-btn div:first-child { font-size: 12px; letter-spacing: 0.2px; }
+            .solar-term-guide-btn div:last-child { font-size: 10px; }
+            .knowledge-dropdown-wrapper { flex-shrink: 0; }
         }
         .knowledge-back-btn {
             background: white;
@@ -920,8 +926,8 @@
             flex-shrink: 0;
         }
         .member-info { flex: 1; }
-        .member-info .name { font-weight: 600; }
-        .member-info .detail { font-size: 13px; color: #6B7280; }
+        .member-info .name { font-weight: 600; overflow-wrap: break-word; word-break: break-all; }
+        .member-info .detail { font-size: 13px; color: #6B7280; overflow-wrap: break-word; word-break: break-all; }
         .family-section-title {
             margin: 14px 0 8px;
             color: #C2410C;
@@ -1080,14 +1086,17 @@
             padding: 12px 16px;
             margin-bottom: 18px;
             box-shadow: 0 8px 24px rgba(249, 115, 22, 0.24);
+            display: flex;
+            flex-direction: row;
+            align-items: center;
         }
         .solar-term-banner .term-name {
             display: flex;
             align-items: center;
             justify-content: flex-start;
-            font-size: 17px !important;
+            font-size: 13px !important;
             font-weight: 700;
-            letter-spacing: 0.5px;
+            letter-spacing: 0px;
             transition: opacity 0.15s;
             padding-left: 4px;
         }
@@ -1132,6 +1141,62 @@
                 max-height: 100vh;
                 height: 100vh;
             }
+        }
+        /* ====== 窄屏适配（≤375px，如 iPhone SE / 旧安卓小屏） ====== */
+        @media (max-width: 375px) {
+            .content { padding: 10px 10px 80px !important; }
+            .card { padding: 12px; margin-bottom: 8px; }
+            .topbar { height: 46px; padding: 0 8px; }
+            .topbar .menu-btn, .topbar .clear-btn { width: 32px; height: 32px; font-size: 18px; }
+            .topbar .title { font-size: 14px; max-width: 46%; }
+            .tab-bar { height: 46px; }
+            .tab-item { font-size: 10px; padding: 2px 0; }
+            .tab-item .tab-icon { font-size: 18px; }
+            .member-card { padding: 10px; gap: 10px; }
+            .member-avatar { width: 36px; height: 36px; font-size: 15px; }
+            .member-info .name { font-size: 14px; }
+            .member-info .detail { font-size: 12px; line-height: 1.5; }
+            .bottom-area { padding: 4px 8px 0; }
+            .input-row input { height: 36px; font-size: 13px; padding: 0 12px; }
+            .input-row .btn-icon { width: 36px; height: 36px; font-size: 18px; }
+            /* 就餐组选择器 */
+            .dining-selector { padding: 10px 12px; margin-bottom: 10px; }
+            .dining-selector-head { gap: 6px; }
+            .current-group-label { font-size: 12px; }
+            .current-group-name { font-size: 14px; }
+            .toggle-group-btn { padding: 6px 10px; font-size: 12px; flex-shrink: 0; }
+            /* 通用卡片内边距 */
+            .card-title { font-size: 15px; }
+            /* 家庭设置卡片（住址/采购日）窄屏：文字自动换行 + 按钮下拉 */
+            .family-setting-card { flex-wrap: wrap !important; }
+            .family-setting-card .family-setting-inner { flex: 1 1 100% !important; min-width: 0; }
+            .family-setting-card .family-setting-label {
+                white-space: nowrap;
+                margin-right: 6px;
+            }
+            .family-setting-card .family-setting-desc {
+                white-space: normal !important;
+                word-break: break-all;
+                line-height: 1.5;
+            }
+            .family-setting-card .family-setting-action {
+                flex-shrink: 0;
+                margin-top: 4px;
+            }
+            /* 成员表单密集行：自动换行 + 减小字体/间距 */
+            .family-form-row { flex-wrap: wrap !important; gap: 5px !important; }
+            .family-form-row > * {
+                font-size: 11px !important;
+                padding: 5px 6px !important;
+                flex: 1 1 0;
+                min-width: 0;
+            }
+            .family-form-row input[type="number"] { width: auto !important; flex: 1 1 30%; }
+        }
+        /* ≤340px 超窄屏额外适配 */
+        @media (max-width: 340px) {
+            .family-form-row { gap: 4px !important; }
+            .family-form-row > * { font-size: 10px !important; padding: 4px 5px !important; }
         }
         .content::-webkit-scrollbar { width: 4px; }
         .content::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
@@ -2752,12 +2817,25 @@
     /* 日期行右侧动作按钮组：窄屏自动紧凑，保证日期区不被挤压成竖排 */
     .diary-top-actions { margin-left:auto; display:flex; align-items:center; gap:6px; flex-shrink:0; }
     .diary-top-actions button { background:#FFF7ED; color:#F97316; border:1px solid #FED7AA; border-radius:8px; padding:4px 10px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
-    @media (max-width: 410px) {
+    @media (max-width: 430px) {
         .diary-nav-btn { padding:4px 6px; font-size:13px; }
-        .diary-date-text { font-size:14px; }
-        .diary-date-nav { gap:5px; }
+        .diary-date-text { font-size:14px; letter-spacing:-0.2px; }
+        .diary-date-nav { gap:5px; padding-bottom:2px; }
         .diary-top-actions { gap:4px; }
         .diary-top-actions button { padding:4px 6px; font-size:11px; }
+        /* 日期中心区优先保留空间，防"2026年9月19日"被截断 */
+        .diary-date-center { flex:1 1 auto; }
+        /* 星期+今天 这一行也防挤 */
+        .diary-week-text { font-size:11px; }
+        .diary-today-btn-inline { font-size:11px; }
+    }
+    @media (max-width: 375px) {
+        .diary-date-text { font-size:13px; }
+        .diary-top-actions button { padding:3px 5px; font-size:10px; }
+        .diary-nav-btn { padding:3px 6px; font-size:12px; }
+        /* 确认计划/记录实际 按钮更紧凑 */
+        .diary-meal-actions { gap:4px; }
+        .diary-meal-actions button { padding:3px 8px; font-size:10px; }
     }
     .diary-nav-link { background:none; border:none; padding:4px 8px; font-size:12px; color:#374151; cursor:pointer; line-height:1; }
     .diary-nav-link:hover { text-decoration:underline; }
@@ -3213,11 +3291,11 @@
         <div style="font-size:13px;color:#9CA3AF;margin-bottom:18px;">AI 家庭膳食助理</div>
         <!-- 登录方式标签页 -->
         <div style="display:flex;gap:6px;margin-bottom:16px;background:#FFF7ED;border-radius:12px;padding:4px;">
-            <div id="tabFamily" onclick="switchLoginTab('family')" style="flex:1;padding:8px 0;font-size:14px;font-weight:700;text-align:center;border-radius:9px;cursor:pointer;background:#fff;color:#9A3412;box-shadow:0 1px 4px rgba(234,88,12,0.15);">🏠 家庭登录</div>
-            <div id="tabEmail" onclick="switchLoginTab('email')" style="flex:1;padding:8px 0;font-size:14px;font-weight:600;text-align:center;border-radius:9px;cursor:pointer;color:#9CA3AF;">📧 邮箱登录</div>
+            <div id="tabFamily" onclick="switchLoginTab('family')" style="flex:1;padding:8px 0;font-size:14px;font-weight:600;text-align:center;border-radius:9px;cursor:pointer;color:#9CA3AF;">🏠 家庭登录</div>
+            <div id="tabEmail" onclick="switchLoginTab('email')" style="flex:1;padding:8px 0;font-size:14px;font-weight:700;text-align:center;border-radius:9px;cursor:pointer;background:#fff;color:#9A3412;box-shadow:0 1px 4px rgba(234,88,12,0.15);">📧 邮箱登录</div>
         </div>
-        <!-- 家庭登录面板（默认显示） -->
-        <div id="loginPanelFamily">
+        <!-- 家庭登录面板（默认隐藏，邮箱登录为默认） -->
+        <div id="loginPanelFamily" style="display:none;">
             <input id="familyLoginName" type="text" maxlength="20" placeholder="家庭名称" onkeydown="if(event.key==='Enter')doFamilyLogin()" style="width:100%;padding:10px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
             <input id="familyLoginPass" type="password" maxlength="40" placeholder="家庭密码" onkeydown="if(event.key==='Enter')doFamilyLogin()" style="width:100%;padding:10px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
             <button id="familyLoginBtn" onclick="doFamilyLogin()" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#D97706;border:none;border-radius:12px;cursor:pointer;">家庭登录</button>
@@ -3235,7 +3313,7 @@
             </div>
         </div>
         <!-- 邮箱登录面板（点标签切换显示） -->
-        <div id="loginPanelEmail" style="display:none;">
+        <div id="loginPanelEmail">
             <input id="loginEmail" type="email" maxlength="60" placeholder="请输入邮箱" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;" />
             <input id="loginPassword" type="password" maxlength="40" placeholder="请输入密码" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
             <button id="loginBtn" onclick="doLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录</button>
@@ -3311,32 +3389,7 @@
 })();
 </script>
 
-<!-- ====== 创建/加入家庭页 ====== -->
-<div id="createFamilyPage" style="position:fixed;inset:0;z-index:100003;background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 40%,#FED7AA 100%);display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;">
-    <div onclick="showAppRootGuest()" style="position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:16px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:20px;color:#9A3412;background:rgba(255,255,255,0.85);border:1px solid #FED7AA;border-radius:50%;cursor:pointer;box-shadow:0 2px 8px rgba(234,88,12,0.12);" title="返回浏览">✕</div>
-    <div style="background:#fff;border-radius:20px;padding:32px 24px;width:100%;max-width:340px;text-align:center;box-shadow:0 12px 40px rgba(234,88,12,0.15);">
-        <div style="font-size:48px;margin-bottom:8px;">🏠</div>
-        <div style="font-size:22px;font-weight:800;color:#9A3412;margin-bottom:4px;">家肴记</div>
-        <div style="font-size:13px;color:#9CA3AF;margin-bottom:18px;">创建自己的家庭，或加入家人的家庭</div>
-        <!-- 创建/加入 标签页 -->
-        <div style="display:flex;gap:6px;margin-bottom:16px;background:#FFF7ED;border-radius:12px;padding:4px;">
-            <div id="cfpTabCreate" onclick="toggleCreateFamilyPanel('create')" style="flex:1;padding:8px 0;font-size:14px;font-weight:700;text-align:center;border-radius:9px;cursor:pointer;background:#fff;color:#9A3412;box-shadow:0 1px 4px rgba(234,88,12,0.15);">🏠 创建家庭</div>
-            <div id="cfpTabJoin" onclick="toggleCreateFamilyPanel('join')" style="flex:1;padding:8px 0;font-size:14px;font-weight:600;text-align:center;border-radius:9px;cursor:pointer;color:#9CA3AF;">🤝 加入家庭</div>
-        </div>
-        <!-- 创建面板（默认显示） -->
-        <div id="cfpPanelCreate">
-            <input id="familyNameInput" type="text" maxlength="20" placeholder="如：幸福之家" onkeydown="if(event.key==='Enter')doCreateFamily()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
-            <button id="createFamilyBtn" onclick="doCreateFamily()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">创建家庭</button>
-            <div style="font-size:11px;color:#9CA3AF;margin-top:10px;line-height:1.5;">创建后将生成8位家庭码，可分享给家人加入</div>
-        </div>
-        <!-- 加入面板 -->
-        <div id="cfpPanelJoin" style="display:none;">
-            <input id="pageJoinCode" type="text" maxlength="8" placeholder="输入8位家庭码" onkeydown="if(event.key==='Enter')joinFamilyFromPage()" style="width:100%;padding:12px 14px;font-size:18px;letter-spacing:4px;text-align:center;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;text-transform:uppercase;font-family:monospace;" />
-            <button onclick="joinFamilyFromPage()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#D97706;border:none;border-radius:12px;cursor:pointer;">🤝 加入家庭</button>
-            <div style="font-size:11px;color:#9CA3AF;margin-top:10px;line-height:1.5;">请向家庭创建者索取8位家庭码<br>（创建者：我家 → 设置 → 🔑 家庭码 → 复制）</div>
-        </div>
-    </div>
-</div>
+<!-- ====== 创建/加入家庭页（已移除 9/20）====== -->
 
 <!-- ====== APP 主界面（登录后显示） ====== -->
 <div id="appRoot">
@@ -3417,9 +3470,9 @@
 
     <!-- ====== 首页 ====== -->
     <div class="page-home" id="pageHome">
-        <div id="homeAuthBtn" onclick="onHomeAuthClick()" style="position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:14px;z-index:30;padding:6px 16px;font-size:13px;font-weight:700;color:#fff;background:linear-gradient(135deg,#F97316,#EA580C);border:none;border-radius:999px;box-shadow:0 2px 8px rgba(234,88,12,0.3);cursor:pointer;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">登录</div>
         <div class="solar-term-banner" id="homeSolarBanner">
-            <div class="term-name" id="homeSolarBannerClickable" style="cursor:pointer;" onclick="showSolarTermGuide()">🌿 白露饮食指南</div>
+            <div class="term-name" id="homeSolarBannerClickable" style="cursor:pointer;flex:1;min-width:0;" onclick="showSolarTermGuide()">🌿 白露饮食指南</div>
+            <div id="homeAuthBtn" onclick="onHomeAuthClick()" style="flex-shrink:0;padding:6px 16px;font-size:13px;font-weight:700;color:#fff;background:rgba(255,255,255,0.25);border:none;border-radius:999px;cursor:pointer;backdrop-filter:blur(4px);margin-left:8px;">登录</div>
         </div>
         <div class="home-logo-wrap" id="homeLogoWrap">
             <span class="home-logo-circle" aria-hidden="true"></span>
@@ -3798,7 +3851,7 @@
                         <div style="font-weight:600; font-size:13px; color:#9A3412; margin-bottom:8px;">➕ 添加就餐人</div>
                         <div style="display:flex; flex-direction:column; gap:6px;">
                             <!-- 姓名 | 年龄 | 就餐组 -->
-                            <div style="display:flex; gap:4px;">
+                            <div class="family-form-row" style="display:flex; gap:4px;">
                                 <input type="text" id="famName" placeholder="姓名 *" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                                 <input type="number" id="famAge" placeholder="年龄" style="width:48px; min-width:48px; padding:6px 4px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                                 <select id="famDiningGroup" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
@@ -3810,7 +3863,7 @@
                             </div>
                             <input type="text" id="famSocialSubGroup" placeholder="社交子组名（如：我的同学、老公同事）" style="display:none; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                             <!-- 现住地 | 职业 | 作息类型 -->
-                            <div style="display:flex; gap:4px;">
+                            <div class="family-form-row" style="display:flex; gap:4px;">
                                 <input type="text" id="famCity" placeholder="现住地" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                                 <select id="famOccupation" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                                     <option value="">职业</option>
@@ -3835,7 +3888,7 @@
                                 </select>
                             </div>
                             <!-- 口味偏好 | 中医体质 -->
-                            <div style="display:flex; gap:4px;">
+                            <div class="family-form-row" style="display:flex; gap:4px;">
                                 <input type="text" id="famTaste" placeholder="口味偏好（如：不喜辣，口味重）" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                                 <select id="famConstitution" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                                     <option value="">中医体质</option>
@@ -3855,7 +3908,7 @@
                             <div style="border-top:1px dashed #FED7AA; margin-top:6px; padding-top:6px;">
                                 <div style="font-size:12px; font-weight:600; color:#9A3412; margin-bottom:4px;">🏃 健康画像</div>
                                 <!-- 身高 | 体重 | 人群类型 -->
-                                <div style="display:flex; gap:4px;">
+                                <div class="family-form-row" style="display:flex; gap:4px;">
                                     <input type="number" id="famHeight" placeholder="身高cm" style="flex:1; min-width:0; padding:6px 4px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                                     <input type="number" id="famWeight" placeholder="体重kg" style="flex:1; min-width:0; padding:6px 4px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                                     <select id="famGroupType" style="flex:1.5; min-width:0; padding:6px 4px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;" onchange="toggleAddMemberDynamicFields()">
@@ -4718,32 +4771,22 @@ function hideBootSplash() { var bs = document.getElementById('bootSplash'); if (
 function showLoginPage() {
     hideBootSplash();
     var lp = document.getElementById('loginPage');
-    var fp = document.getElementById('createFamilyPage');
     var app = document.getElementById('appRoot');
     if (lp) lp.style.display = 'flex';
-    if (fp) fp.style.display = 'none';
     if (app) app.style.display = 'none';
+    // 默认进入"邮箱登录"界面（支持邮箱+密码登录与注册）
+    try { switchLoginTab('email'); } catch(e) {}
 }
-// 显示创建家庭页
-function showCreateFamilyPage() {
-    hideBootSplash();
-    var lp = document.getElementById('loginPage');
-    var fp = document.getElementById('createFamilyPage');
-    var app = document.getElementById('appRoot');
-    if (lp) lp.style.display = 'none';
-    if (fp) fp.style.display = 'flex';
-    if (app) app.style.display = 'none';
-}
+// 显示创建家庭页（已移除 9/20，保留空实现防止调用报错）
+function showCreateFamilyPage() { return; }
 // 显示APP主界面
 function showAppRoot() {
     hideBootSplash();
     var lp = document.getElementById('loginPage');
-    var fp = document.getElementById('createFamilyPage');
     var app = document.getElementById('appRoot');
     var fo = document.getElementById('familySelectOverlay');
     if (lp) lp.style.display = 'none';
-    if (fp) fp.style.display = 'none';
-    if (fo) fo.style.display = 'none';   // 家庭码浮层: 登录/家庭关联成功后自动关闭
+    if (fo) fo.style.display = 'none';
     if (app) app.style.display = '';
     updateHomeAuthBtn();
 }
@@ -4777,10 +4820,8 @@ function onHomeAuthClick() {
 function showAppRootGuest() {
     hideBootSplash();
     var lp = document.getElementById('loginPage');
-    var fp = document.getElementById('createFamilyPage');
     var app = document.getElementById('appRoot');
     if (lp) lp.style.display = 'none';
-    if (fp) fp.style.display = 'none';
     if (app) app.style.display = '';
     var hp = document.getElementById('pageHome');
     if (hp) hp.classList.remove('slide-up');
@@ -4799,15 +4840,7 @@ function closeLoginOverlay() {
 // 数据操作登录守卫：未登录时提示并打开登录页；返回 false 供调用方中断操作。
 // 登录成功后 showAppRoot 会恢复原页面（登录页只是浮层，下方页面保持原状）。
 function requireLogin(opName) {
-    if (isLogined()) {
-        // 已登录但还没有家庭 → 引导创建/加入家庭（数据按家庭隔离，必须有家庭才能存）
-        if (!getFamilyId()) {
-            showToast('请先创建或加入家庭');
-            showCreateFamilyPage();
-            return false;
-        }
-        return true;
-    }
+    if (isLogined()) return true;
     showToast(opName ? ('请先登录后再' + opName) : '请先登录');
     showLoginPage();
     return false;
@@ -5129,6 +5162,7 @@ async function doFamilySetup() {
 
 // ====== 家庭密码重置（凭家庭码直接设置新密码，无需邮箱） ======
 function openFamilyResetModal() {
+    if (!requireLogin('重置家庭')) return;
     var m = document.getElementById('familyResetModal');
     if (!m) return;
     m.style.display = 'flex';
@@ -8807,6 +8841,7 @@ const WEEKDAYS = ['周日','周一','周二','周三','周四','周五','周六'
 
 // 根据家中食材和食谱库，为7天生成三餐推荐（食材优先逻辑）
 function generateWeekRecommendation() {
+    if (!requireLogin('生成周推荐')) return;
     fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     const calendar = getDietCalendar(); // 从 dietCalendar 读取已确认计划
     const fridgeNames = buildFridgeNamesDict(fridgeItems);
@@ -10275,6 +10310,7 @@ function findRelatedRecipes(dishName, ingList) {
 
 // 添加缺失食材到采购计划
 function addMissingToShopping(ingredientName, event) {
+    if (!requireLogin('添加到采购')) return;
     if (event) { event.stopPropagation(); event.preventDefault(); }
     // 标准化食材名称
     const stdName = normalizeIngredientName(ingredientName);
@@ -11436,6 +11472,7 @@ function onPrepInlineEdit(inputEl) {
 // 删除二次确认（纯DOM浮层，非 window.confirm → 防 WebView 黑屏）
 window._prepDelTarget = null;
 function openPrepDelConfirm(name) {
+    if (!requireLogin('删除采购项')) return;
     if (!name) return;
     window._prepDelTarget = String(name);
     const msgEl = document.getElementById('prepDelConfirmMsg');
@@ -11449,6 +11486,7 @@ function closePrepDelConfirm() {
     if (ov) ov.classList.remove('show');
 }
 function confirmPrepDel() {
+    if (!requireLogin('确认删除')) return;
     const name = window._prepDelTarget;
     if (!name) return;
     const prep = window._prep;
@@ -11461,6 +11499,7 @@ function confirmPrepDel() {
 
 // ====== 食材准备：➕添加食材 弹窗 ======
 function openPrepAddItemModal() {
+    if (!requireLogin('添加采购项')) return;
     document.getElementById('prepAddName').value = '';
     document.getElementById('prepAddQty').value = '';
     document.getElementById('prepAddPrice').value = '';
@@ -11485,6 +11524,7 @@ function submitPrepAddItem() {
 
 // ====== 食材准备：按钮2 现购食材录入 弹窗（双 Tab） + AI 生成菜谱 ======
 function openPrepNewBuyModal() {
+    if (!requireLogin('采购记录')) return;
     const m = document.getElementById('prepNewBuyModal');
     if (!m) return;
     const list = document.getElementById('prepNewBuyList');
@@ -12425,6 +12465,7 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
 
 // --- 模态 open/close + checkbox 计数联动 ---
 function openPrepIngrRecPlans() {
+    if (!requireLogin('食材推荐')) return;
     var ov = document.getElementById('prepIngrRecOverlay');
     if (ov) ov.style.display = 'flex';
 }
@@ -13644,6 +13685,7 @@ async function generateIngredientPrefRecipes() {
 
 // 确认选择 → 把按天×餐次的分配结果写入食记
 function addIngrRecToMealPlan() {
+    if (!requireLogin('加入餐计划')) return;
     var st = window.__prepIngrAssignments || {};
     var days = (window.__prepIngrLatestDays) || [];
     if (!days.length) { showToast('日期信息缺失'); return; }
@@ -13936,6 +13978,7 @@ function selectWeekendPlan(idx) {
 
 // ====== 食材准备：✅确认采购 弹窗 ======
 function openPrepConfirmModal() {
+    if (!requireLogin('采购确认')) return;
     // 生成条目清单：所有已勾选且非已有、非已删除（应用用户覆盖的单价/需购量/预估）
     const today = new Date();
     const confirmedInfo = countConfirmedPlanDays(today);
@@ -14005,6 +14048,7 @@ function renderPrepConfirmList() {
     if (totalEl) totalEl.innerHTML = `共 ${items.length} 项 · 合计 <b style="color:#DC2626;font-size:15px;">¥${total.toFixed(1)}</b>`;
 }
 function deletePrepConfirmItem(idx) {
+    if (!requireLogin('删除采购确认项')) return;
     const items = window._prep.pendingBuyItems || [];
     if (idx < 0 || idx >= items.length) return;
     const removed = items.splice(idx, 1)[0];
@@ -14142,6 +14186,7 @@ function renderPrepHistory() {
 
 
 function openRecShoppingPlan() {
+    if (!requireLogin('推荐采购计划')) return;
     document.getElementById('fridgeRecView').style.display = 'none';
     document.getElementById('fridgeRecShopView').style.display = 'block';
     topTitle.textContent = '采购计划';
@@ -14513,6 +14558,7 @@ function updateRecShopRow(idx, value, field) {
 
 // 删除采购清单某行（同步取消勾选状态）
 function deleteRecShopItem(idx) {
+    if (!requireLogin('删除推荐采购项')) return;
     if (!window._recShopBuyItems || !window._recShopBuyItems[idx]) return;
     const item = window._recShopBuyItems[idx];
     showConfirmDialog('确认删除「' + item.name + '」？', function() {
@@ -14543,6 +14589,7 @@ function deleteRecShopItem(idx) {
 // 添加食材到采购清单（使用自定义输入弹窗，同步勾选状态）
 let _recShopInputCallback = null;
 function addRecShopItem() {
+    if (!requireLogin('添加推荐采购项')) return;
     const overlay = document.getElementById('recShopInputOverlay');
     const input = document.getElementById('recShopInputName');
     if (!overlay || !input) return;
@@ -14625,6 +14672,7 @@ function reRenderRecShopTable() {
 }
 
 function confirmRecShopping() {
+    if (!requireLogin('确认推荐采购')) return;
     // 从当前编辑的采购清单中获取数据（包含用户修改的数量和单价）
     const buyItems = (window._recShopBuyItems || []).filter(it => it !== null);
     
@@ -15863,6 +15911,7 @@ function addIngrRecRow() {
 
 // 确认 → 按入口批量录入（fridge=家中冰箱；newbuy=现购食材购前记录）
 function confirmIngrRecBatch() {
+    if (!requireLogin('确认食材推荐')) return;
     var chosen = _ingrRec.items.filter(function (it) { return it.checked && String(it.name || '').trim(); });
     if (!chosen.length) { showToast('请至少勾选一种食材（并填写名称）'); return; }
 
@@ -16164,6 +16213,7 @@ function _batchEnterNewBuy(chosen) {
 
 // 打开添加食材模态框
 function openAddFridgeModal() {
+    if (!requireLogin('添加食材')) return;
     const modal = document.getElementById('addFridgeModal');
     modal.classList.add('show');
     const photoBar = document.getElementById('addFridgePhotoBar');
@@ -16333,6 +16383,7 @@ function submitAndAddMoreFridgeItem() {
 
 // 删除食材
 function deleteFridgeItem(id) {
+    if (!requireLogin('删除食材')) return;
     const item = fridgeItems.find(i => i.id === id);
     if (!item) return;
     showConfirmDialog(`确定要删除「${item.name}」吗？`, function() {
@@ -16345,6 +16396,7 @@ function deleteFridgeItem(id) {
 
 // 打开编辑食材模态框
 function openEditFridgeModal(id) {
+    if (!requireLogin('编辑食材')) return;
     const item = fridgeItems.find(i => i.id === id);
     if (!item) return;
     const modal = document.getElementById('editFridgeModal');
@@ -17716,6 +17768,7 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey) {
 
 // 现有食材推荐菜谱：顶部配置面板（食材来源/人数/餐次）→ 生成方案 A/B/C
 function generateFridgeMealPlan() {
+    if (!requireLogin('生成食材餐计划')) return;
     // 先从内存 fridgeItems 中提取勾选的食材（localStorage 重新读取会丢失 _checked）
     var checkedNames = (fridgeItems || []).filter(function(it) { return it._checked; }).map(function(it) { return it.name; });
     fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
@@ -18094,6 +18147,7 @@ function renderExistingSchemesInto(result, schemes, meal) {
 
 // 将选中方案的菜品加入食记计划，并把需补购食材自动加入采购清单
 function addSelectedSchemesToPlan() {
+    if (!requireLogin('加入餐计划')) return;
     var checks = document.querySelectorAll('.scheme-checkbox:checked');
     if (checks.length === 0) { showToast('请先选择至少一个方案'); return; }
     var schemes = window._existingSchemes || [];
@@ -18734,6 +18788,7 @@ function renderDiaryRecentDishes() {
 
 // 点击某道历史菜 → 加入当前查看日期(currentDiaryDate) · 顶部所选餐次，confirmed=true 自动勾选
 function addRecentDishToPlan(btn, dishName) {
+    if (!requireLogin('加入餐计划')) return;
     dishName = String(dishName || '').trim();
     if (!dishName) return;
     var meal = window.__diaryRecentMeal || 'lunch';
@@ -19004,6 +19059,7 @@ function syncMealsToDiary(meals, dateKey, source) {
 
 // 生成采购计划（从食记dietCalendar读取已确认计划，按就餐人数汇总食材）
 function generateShoppingPlan() {
+    if (!requireLogin('生成采购计划')) return;
     fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     const calendar = getDietCalendar();
 
@@ -19510,6 +19566,7 @@ function renderShoppingView() {
 
 // ==================== 采购计划CRUD ====================
 function openAddShoppingModal() {
+    if (!requireLogin('添加采购')) return;
     document.getElementById('shoppingName').value = '';
     document.getElementById('shoppingCategory').value = '蔬菜';
     document.getElementById('shoppingQuantity').value = '';
@@ -19531,6 +19588,7 @@ function submitAddShoppingItem() {
 }
 
 function openEditShoppingModal(id) {
+    if (!requireLogin('编辑采购')) return;
     let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
     const item = shoppingPlans.find(s => s.id === id);
     if (!item) return;
@@ -19559,6 +19617,7 @@ function submitEditShoppingItem() {
 }
 
 function deleteShoppingItem(id) {
+    if (!requireLogin('删除采购')) return;
     let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
     const item = shoppingPlans.find(s => s.id === id);
     if (!item) return;
@@ -19691,24 +19750,24 @@ function renderFamily() {
     renderCurrentDiningGroupSelector();
     // 家庭住址卡片
     familyList.insertAdjacentHTML('beforeend', `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#FFFBEB;border:1px solid #FED7AA;border-radius:12px;margin-bottom:8px;">
-            <div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
-                <span style="font-size:13px;color:#92400E;font-weight:600;flex-shrink:0;">家庭住址</span>
-                <span style="font-size:13px;color:#374151;${familyHomeAddress ? '' : 'color:#9CA3AF;'}">${familyHomeAddress ? escapeHtml(familyHomeAddress) : '请添加家庭住址，用于推荐附近餐厅'}</span>
+        <div class="family-setting-card" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#FFFBEB;border:1px solid #FED7AA;border-radius:12px;margin-bottom:8px;">
+            <div class="family-setting-inner" style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
+                <span class="family-setting-label" style="font-size:13px;color:#92400E;font-weight:600;flex-shrink:0;">家庭住址</span>
+                <span class="family-setting-desc" style="font-size:13px;color:#374151;${familyHomeAddress ? '' : 'color:#9CA3AF;'}">${familyHomeAddress ? escapeHtml(familyHomeAddress) : '请添加家庭住址，用于推荐附近餐厅'}</span>
             </div>
-            <button onclick="editHomeAddress()" style="background:none;border:1px solid #FED7AA;border-radius:6px;padding:3px 10px;font-size:11px;color:#C2410C;cursor:pointer;flex-shrink:0;margin-left:8px;">编辑</button>
+            <button class="family-setting-action" onclick="editHomeAddress()" style="background:none;border:1px solid #FED7AA;border-radius:6px;padding:3px 10px;font-size:11px;color:#C2410C;cursor:pointer;flex-shrink:0;margin-left:8px;">编辑</button>
         </div>
     `);
     // 采购日设置卡片
     var dayOpts = ['6','0','1','2','3','4','5'];
     var dayNames = {'6':'周六','0':'周日','1':'周一','2':'周二','3':'周三','4':'周四','5':'周五'};
     familyList.insertAdjacentHTML('beforeend', `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;margin-bottom:8px;">
-            <div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
-                <span style="font-size:13px;color:#166534;font-weight:600;flex-shrink:0;">采购日</span>
-                <span style="font-size:13px;color:#374151;">每周${getShoppingDayName()}，提前一天提醒采购</span>
+        <div class="family-setting-card" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;margin-bottom:8px;">
+            <div class="family-setting-inner" style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
+                <span class="family-setting-label" style="font-size:13px;color:#166534;font-weight:600;flex-shrink:0;">采购日</span>
+                <span class="family-setting-desc" style="font-size:13px;color:#374151;">每周${getShoppingDayName()}，提前一天提醒采购</span>
             </div>
-            <select id="shoppingDaySelect" onchange="changeShoppingDay(this.value)" style="background:#fff;border:1px solid #BBF7D0;border-radius:6px;padding:3px 8px;font-size:11px;color:#166534;cursor:pointer;flex-shrink:0;margin-left:8px;">
+            <select id="shoppingDaySelect" class="family-setting-action" onchange="changeShoppingDay(this.value)" style="background:#fff;border:1px solid #BBF7D0;border-radius:6px;padding:3px 8px;font-size:11px;color:#166534;cursor:pointer;flex-shrink:0;margin-left:8px;">
                 ${dayOpts.map(function(d){ return '<option value="'+d+'"'+(d===shoppingDay?' selected':'')+'>'+dayNames[d]+'</option>'; }).join('')}
             </select>
         </div>
@@ -19783,7 +19842,7 @@ function renderFamily() {
                 <div style="font-size:13px; font-weight:600; color:#9A3412; margin-bottom:8px;">✏️ 编辑成员信息</div>
                 <div style="display:flex; flex-direction:column; gap:6px;">
                     <!-- 姓名 | 年龄 | 小家 -->
-                    <div style="display:flex; gap:4px;">
+                    <div class="family-form-row" style="display:flex; gap:4px;">
                         <input type="text" id="editName_${id}" value="${member.name}" placeholder="姓名" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                         <input type="number" id="editAge_${id}" value="${member.age||''}" placeholder="年龄" style="width:48px; min-width:48px; padding:6px 4px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                         <select id="editDiningGroup_${id}" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
@@ -19794,7 +19853,7 @@ function renderFamily() {
                         </select>
                     </div>
                     <!-- 现住地 | 职业 | 作息类型 -->
-                    <div style="display:flex; gap:4px;">
+                    <div class="family-form-row" style="display:flex; gap:4px;">
                         <input type="text" id="editCity_${id}" value="${member.currentCity||''}" placeholder="现住地" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                         <select id="editOccupation_${id}" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                             <option value="">职业</option>
@@ -19819,7 +19878,7 @@ function renderFamily() {
                         </select>
                     </div>
                     <!-- 口味偏好 | 中医体质 -->
-                    <div style="display:flex; gap:4px;">
+                    <div class="family-form-row" style="display:flex; gap:4px;">
                         <input type="text" id="editTaste_${id}" value="${member.taste||''}" placeholder="口味偏好" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                         <select id="editConstitution_${id}" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                             <option value="">中医体质</option>
@@ -19839,7 +19898,7 @@ function renderFamily() {
                     <div style="border-top:1px dashed #FED7AA; margin-top:6px; padding-top:6px;">
                         <div style="font-size:12px; font-weight:600; color:#9A3412; margin-bottom:4px;">🏃 健康画像</div>
                         <!-- 身高 | 体重 | 人群类型 -->
-                        <div style="display:flex; gap:4px;">
+                        <div class="family-form-row" style="display:flex; gap:4px;">
                             <input type="number" id="editHeight_${id}" value="${member.height||''}" placeholder="身高cm" style="flex:1; min-width:0; padding:6px 4px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                             <input type="number" id="editWeight_${id}" value="${member.weight||''}" placeholder="体重kg" style="flex:1; min-width:0; padding:6px 4px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                             <select id="editGroupType_${id}" style="flex:1.5; min-width:0; padding:6px 4px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;" onchange="toggleEditMemberDynamicFields(${id})">
@@ -20096,6 +20155,7 @@ function editHomeAddress() {
 }
 
 function saveHomeAddress() {
+    if (!requireLogin('保存地址')) return;
     var input = document.getElementById('homeAddressInput');
     if (!input) return;
     var addr = input.value.trim();
@@ -20440,6 +20500,7 @@ function editDiningGroup(id) {
 }
 
 function deleteDiningGroup(id) {
+    if (!requireLogin('删除聚餐组')) return;
     const group = diningGroups.find(g => g.id === id);
     if (!group || group.isDefault) {
         alert('默认就餐组不能删除');
@@ -20459,6 +20520,7 @@ function deleteDiningGroup(id) {
 }
 
 function addSocialDiningGroup(section) {
+    if (!requireLogin('添加聚餐组')) return;
     const addBtn = section.querySelector('.add-social-group-btn');
     if (!addBtn) return;
     // 隐藏添加按钮，显示表单
@@ -21451,6 +21513,7 @@ function saveFeastPlan(dayPlan) {
 }
 
 function saveFeastForm() {
+    if (!requireLogin('保存宴席计划')) return;
     const dayPlan = getFeastDayPlan();
     dayPlan.subtype = currentFeastSubtype;
     // 根据子类型保存不同字段
@@ -21480,6 +21543,7 @@ function saveFeastForm() {
 }
 
 function generateFeastMenu() {
+    if (!requireLogin('生成宴席菜单')) return;
     saveFeastForm();
     const dayPlan = getFeastDayPlan();
 
@@ -21515,6 +21579,7 @@ function generateFeastMenu() {
 }
 
 function addFeastDish(name) {
+    if (!requireLogin('添加宴席菜品')) return;
     saveFeastForm();
     const dayPlan = getFeastDayPlan();
     if (!dayPlan.dishes) dayPlan.dishes = [];
@@ -21528,6 +21593,7 @@ function addFeastDish(name) {
 }
 
 function deleteFeastDish(index) {
+    if (!requireLogin('删除宴席菜品')) return;
     saveFeastForm();
     const dayPlan = getFeastDayPlan();
     if (dayPlan.dishes && dayPlan.dishes[index] !== undefined) {
@@ -21606,6 +21672,7 @@ function saveBirthdayPlan(dayPlan) {
 }
 
 function saveBirthdayForm() {
+    if (!requireLogin('保存生日计划')) return;
     const dayPlan = getBirthdayDayPlan();
     const themeInput = document.getElementById('birthdayTheme');
     if (themeInput) dayPlan.theme = themeInput.value.trim();
@@ -21614,6 +21681,7 @@ function saveBirthdayForm() {
 }
 
 function generateBirthdayMenu(memberId) {
+    if (!requireLogin('生成生日菜单')) return;
     const member = familyData.find(m => m.id === memberId) || familyData[0];
     if (!member) {
         showToast('请先添加家庭成员');
@@ -21643,6 +21711,7 @@ function generateBirthdayMenu(memberId) {
 }
 
 function addBirthdayDish(name) {
+    if (!requireLogin('添加生日菜品')) return;
     saveBirthdayForm();
     const dayPlan = getBirthdayDayPlan();
     if (!dayPlan.dishes) dayPlan.dishes = [];
@@ -21656,6 +21725,7 @@ function addBirthdayDish(name) {
 }
 
 function deleteBirthdayDish(index) {
+    if (!requireLogin('删除生日菜品')) return;
     saveBirthdayForm();
     const dayPlan = getBirthdayDayPlan();
     if (dayPlan.dishes && dayPlan.dishes[index] !== undefined) {
@@ -21785,6 +21855,7 @@ function saveDiningPlan(dayPlan) {
 }
 
 function saveDiningForm() {
+    if (!requireLogin('保存聚餐计划')) return;
     const dayPlan = getDiningDayPlan();
     const restaurantInput = document.getElementById('diningRestaurant');
     const peopleInput = document.getElementById('diningPeople');
@@ -21802,6 +21873,7 @@ function saveDiningForm() {
 }
 
 function addDiningDish(name) {
+    if (!requireLogin('添加聚餐菜品')) return;
     saveDiningForm();
     const dayPlan = getDiningDayPlan();
     if (!dayPlan.dishes) dayPlan.dishes = [];
@@ -21815,6 +21887,7 @@ function addDiningDish(name) {
 }
 
 function deleteDiningDish(index) {
+    if (!requireLogin('删除聚餐菜品')) return;
     saveDiningForm();
     const dayPlan = getDiningDayPlan();
     if (dayPlan.dishes && dayPlan.dishes[index] !== undefined) {
@@ -21965,6 +22038,7 @@ function renderDietPlan() {
 }
 
 function generateDietPlan() {
+    if (!requireLogin('生成饮食计划')) return;
     const targetPerson = document.getElementById('dietTargetPerson').value;
     const person = familyData.find(m => m.name === targetPerson);
     const cycleDays = parseInt(document.getElementById('dietCycleDays').value) || 7;
@@ -22775,7 +22849,7 @@ function renderFamilyGroupPanel() {
                 <div style="font-size:13px;font-weight:600;color:#9A3412;margin-bottom:8px;">✏️ 编辑成员信息</div>
                 <div style="display:flex; flex-direction:column; gap:6px;">
                     <!-- 姓名 | 年龄 | 就餐组 -->
-                    <div style="display:flex; gap:4px;">
+                    <div class="family-form-row" style="display:flex; gap:4px;">
                         <input type="text" class="fgp-edit-name" value="${escapeHtml(m.name)}" placeholder="姓名 *" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                         <input type="number" class="fgp-edit-age" value="${m.age||''}" placeholder="年龄" style="width:48px; min-width:48px; padding:6px 4px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                         <select class="fgp-edit-group" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
@@ -22783,7 +22857,7 @@ function renderFamilyGroupPanel() {
                         </select>
                     </div>
                     <!-- 现住地 | 职业 | 作息类型 -->
-                    <div style="display:flex; gap:4px;">
+                    <div class="family-form-row" style="display:flex; gap:4px;">
                         <input type="text" class="fgp-edit-city" value="${escapeHtml(m.currentCity||'')}" placeholder="现住地" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                         <select class="fgp-edit-occupation" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                             <option value="">职业</option>
@@ -22808,7 +22882,7 @@ function renderFamilyGroupPanel() {
                         </select>
                     </div>
                     <!-- 口味偏好 | 中医体质 -->
-                    <div style="display:flex; gap:4px;">
+                    <div class="family-form-row" style="display:flex; gap:4px;">
                         <input type="text" class="fgp-edit-taste" value="${escapeHtml(m.taste||'')}" placeholder="口味偏好" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                         <select class="fgp-edit-constitution" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                             <option value="">中医体质</option>
@@ -22828,7 +22902,7 @@ function renderFamilyGroupPanel() {
                     <div style="border-top:1px dashed #FED7AA; margin-top:6px; padding-top:6px;">
                         <div style="font-size:12px; font-weight:600; color:#9A3412; margin-bottom:4px;">🏃 健康画像</div>
                         <!-- 身高 | 体重 | 人群类型 -->
-                        <div style="display:flex; gap:4px;">
+                        <div class="family-form-row" style="display:flex; gap:4px;">
                             <input type="number" class="fgp-edit-height" value="${m.height||''}" placeholder="身高cm" style="flex:1; min-width:0; padding:6px 4px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                             <input type="number" class="fgp-edit-weight" value="${m.weight||''}" placeholder="体重kg" style="flex:1; min-width:0; padding:6px 4px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                             <select class="fgp-edit-groupType" style="flex:1.5; min-width:0; padding:6px 4px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
@@ -23901,6 +23975,7 @@ let currentRecordFormDining = '在家做饭';
 let currentRecordFormImage = '';
 
 function openAddRecordModal() {
+    if (!requireLogin('添加记录')) return;
     const modal = document.getElementById('addRecordModal');
     modal.classList.add('show');
     document.getElementById('recordFormDate').value = dateToKey(currentRecordDate);
@@ -33871,6 +33946,7 @@ var diningOutPlanData = {
 
 // 外出就餐规划弹窗
 function openDiningOutPlanModal() {
+    if (!requireLogin('外出就餐规划')) return;
     const dateKey = dateToKey(currentDiaryDate);
     const allPlans = JSON.parse(lsGet('diningOutPlans') || '{}');
     const existingPlan = allPlans[dateKey] || {};
@@ -40522,71 +40598,37 @@ if (!lsGet('diningGroupsV7_rename')) {
     } catch(e) {}
     lsSet('diningGroupsV7_rename', 'true');
 }
-// V9: 清理历史版本误注入的演示数据（我/老公/儿子/父亲、张三李四等），仅当指纹与演示数据完全一致时才清除，不碰用户自建数据
-// 白名单：开发者本人的家庭（三仁佳欢/fam_69390597）真实数据与演示数据同源，必须跳过清理
-if (!lsGet('diningGroupsV9_demo_cleanup')) {
-    var _lu = null;
-    try { _lu = JSON.parse(localStorage.getItem('jj_login_user') || 'null'); } catch (e) {}
-    var isDevFamily = _lu && (_lu.name === '三仁佳欢' || _lu.id === 'fam_69390597');
-    if (!isDevFamily) {
-        try {
-        // 1. 清理 familyData 中指纹完全匹配演示数据的成员
-        const demoFingerprints = {
-            '老公': { age: 57, place: '武汉', constitution: '气郁质' },
-            '儿子': { age: 16, place: '武汉', constitution: '湿热质' },
-            '父亲': { age: 80, place: '济南', constitution: '阴虚质' }
-        };
-        const removedNames = new Set();
-        familyData = familyData.filter(m => {
-            const fp = demoFingerprints[m.name];
-            if (fp && m.age === fp.age && m.place === fp.place && m.constitution === fp.constitution) {
-                removedNames.add(m.name);
-                return false; // 演示数据，删除
-            }
-            return true;
-        });
-        // "我"成员：若字段与演示数据完全一致，清空演示字段（保留成员本身）
-        const meDemo = { age: 50, place: '武汉', taste: '微辣', dietaryPreference: '喜欢吃牛肉，不吃葱姜', healthConcerns: '日常保健，注意营养均衡' };
-        familyData.forEach(m => {
-            if (m.name === '我' && m.age === meDemo.age && m.place === meDemo.place && m.taste === meDemo.taste && m.dietaryPreference === meDemo.dietaryPreference) {
-                m.age = null; m.place = ''; m.currentCity = ''; m.taste = ''; m.dietaryPreference = ''; m.healthConcerns = '';
-            }
-        });
-        // 2. 清理演示社交成员（张三/李四/王经理/刘总）
-        const demoSocialNames = ['张三', '李四', '王经理', '刘总'];
-        familyData = familyData.filter(m => !(demoSocialNames.includes(m.name) && m.isFamily === false && [101,102,103,104].includes(m.id)));
-        lsSet('familyData', JSON.stringify(familyData));
-        // 3. 清理演示联系人
-        const demoContactNames = ['老公的大哥', '老公的二哥', '老公的妹妹'];
-        contactsData = contactsData.filter(c => !demoContactNames.includes(c.name));
-        lsSet('contactsData', JSON.stringify(contactsData));
-        // 4. 清理演示就餐组（女方家族/男方家族）
-        diningGroups = diningGroups.filter(g => !['女方家族', '男方家族'].includes(g.name));
-        // 5. 从就餐组成员中移除已被清理的演示成员
-        diningGroups.forEach(g => {
-            if (Array.isArray(g.members)) {
-                g.members = g.members.filter(n => !removedNames.has(n) && !demoSocialNames.includes(n));
-            }
-        });
-        lsSet('diningGroups', JSON.stringify(diningGroups));
-        // 6. 清理演示菜谱（小米粥/番茄牛腩面/清蒸鲈鱼/豆浆油条/红烧排骨/冬瓜排骨汤）
-        const demoDishNames = ['小米粥', '番茄牛腩面', '清蒸鲈鱼', '豆浆油条', '红烧排骨', '冬瓜排骨汤'];
-        const plans = JSON.parse(lsGet('mealPlans') || '{}');
-        let planChanged = false;
-        Object.keys(plans).forEach(dateKey => {
-            ['breakfast', 'lunch', 'dinner'].forEach(meal => {
-                if (Array.isArray(plans[dateKey][meal])) {
-                    const before = plans[dateKey][meal].length;
-                    plans[dateKey][meal] = plans[dateKey][meal].filter(item => !(demoDishNames.includes(item.name) && item.solarTerm === '小暑' && [1,2,3,4,5,6].includes(item.id)));
-                    if (plans[dateKey][meal].length !== before) planChanged = true;
-                }
-            });
-        });
-        if (planChanged) lsSet('mealPlans', JSON.stringify(plans));
-        } catch (e) { console.warn('V9 cleanup failed:', e); }
+// V9 清理代码已移除 9/20 — 它误删了开发者本人的真实家庭数据（老公/儿子），
+// 因为白名单只检查旧的 fam_69390597 id，开发者换成 Supabase UUID 后没匹配上。
+// 任何"演示数据清理"逻辑都有同样风险，永远不再运行。
+
+// 数据恢复：补回被 V9 清理误删的家人（老公/儿子）
+(function _restoreFamilyMembers() {
+    var fam = JSON.parse(localStorage.getItem('familyData') || '[]');
+    var changed = false;
+    if (fam.length === 1 && fam[0].name === '我') {
+        fam.push(
+            { id: 2, name: '老公', age: 57, place: '武汉', currentCity: '', taste: '', dietaryPreference: '', relationship: '家人', isFamily: true, role: '普通人', healthConcerns: '', constitution: '气郁质', constitutionDetail: '' },
+            { id: 3, name: '儿子', age: 16, place: '武汉', currentCity: '', taste: '', dietaryPreference: '', relationship: '家人', isFamily: true, role: '普通人', healthConcerns: '', constitution: '湿热质', constitutionDetail: '' }
+        );
+        localStorage.setItem('familyData', JSON.stringify(fam));
+        localStorage.setItem('DQ2LCWYY_familyData', JSON.stringify(fam));
+        // ★ 同步更新模块级 JS 变量 familyData（后续 renderFamily 等都读这个变量）
+        try { if (typeof familyData !== 'undefined') { familyData = fam; } } catch(e) {}
+        changed = true;
     }
-    lsSet('diningGroupsV9_demo_cleanup', 'true');
-}
+    // 恢复小家就餐组成员
+    var groups = JSON.parse(localStorage.getItem('diningGroups') || '[]');
+    if (groups.length && groups[0].members && groups[0].members.length <= 1) {
+        groups.forEach(function(g) { if (g.name === '小家') g.members = ['我', '老公', '儿子']; });
+        localStorage.setItem('diningGroups', JSON.stringify(groups));
+        localStorage.setItem('DQ2LCWYY_diningGroups', JSON.stringify(groups));
+        try { if (typeof diningGroups !== 'undefined') { diningGroups = groups; } } catch(e) {}
+        changed = true;
+    }
+    if (changed) console.log('家人数据已恢复 ✅');
+})();
+
 const storedCurrentGroup = lsGet('currentDiningGroup');
 if (!storedCurrentGroup || !diningGroups.some(g => g.name === storedCurrentGroup)) {
     const initialGroup = diningGroups.find(g => g.name === '小家') || diningGroups[0] || getFallbackDiningGroup();
@@ -41066,11 +41108,10 @@ function editRestaurantFromDetail(knowledgeId) {
 // ==================== 家庭选择初始化 ====================
 document.addEventListener('DOMContentLoaded', function() {
     var fid = getFamilyId();
-    if (!fid) {
-        // 未设置家庭，显示选择 overlay
-        showFamilyOverlay();
+    if (fid) {
+        hideFamilyOverlay();
     } else {
-        // 已有家庭，确保 overlay 隐藏
+        // 未设置家庭：不弹 overlay，首页直接可见
         hideFamilyOverlay();
     }
     // overlay tab 切换高亮
