@@ -3206,6 +3206,7 @@
 
 <!-- ====== 登录页（标签页切换：家庭登录 / 邮箱登录） ====== -->
 <div id="loginPage" style="position:fixed;inset:0;z-index:100003;background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 40%,#FED7AA 100%);display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;overflow-y:auto;">
+    <div id="loginPageCloseBtn" onclick="closeLoginOverlay()" style="position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:16px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:20px;color:#9A3412;background:rgba(255,255,255,0.85);border:1px solid #FED7AA;border-radius:50%;cursor:pointer;box-shadow:0 2px 8px rgba(234,88,12,0.12);" title="返回浏览">✕</div>
     <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:340px;text-align:center;box-shadow:0 12px 40px rgba(234,88,12,0.15);box-sizing:border-box;">
         <div style="font-size:48px;margin-bottom:8px;">🍳</div>
         <div style="font-size:22px;font-weight:800;color:#9A3412;margin-bottom:4px;">家肴记</div>
@@ -3415,6 +3416,7 @@
 
     <!-- ====== 首页 ====== -->
     <div class="page-home" id="pageHome">
+        <div id="homeAuthBtn" onclick="onHomeAuthClick()" style="position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:14px;z-index:30;padding:6px 16px;font-size:13px;font-weight:700;color:#fff;background:linear-gradient(135deg,#F97316,#EA580C);border:none;border-radius:999px;box-shadow:0 2px 8px rgba(234,88,12,0.3);cursor:pointer;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">登录</div>
         <div class="solar-term-banner" id="homeSolarBanner">
             <div class="term-name" id="homeSolarBannerClickable" style="cursor:pointer;" onclick="showSolarTermGuide()">🌿 白露饮食指南</div>
         </div>
@@ -4742,6 +4744,64 @@ function showAppRoot() {
     if (fp) fp.style.display = 'none';
     if (fo) fo.style.display = 'none';   // 家庭码浮层: 登录/家庭关联成功后自动关闭
     if (app) app.style.display = '';
+    updateHomeAuthBtn();
+}
+
+// ==================== 首页优先 + 未登录浏览模式 ====================
+// 是否已登录（本地有登录用户即视为已登录）
+function isLogined() { return !!getLoginUser(); }
+
+// 更新首页右上角按钮：未登录显示"登录"，已登录显示家庭名称
+function updateHomeAuthBtn() {
+    var btn = document.getElementById('homeAuthBtn');
+    if (!btn) return;
+    var u = getLoginUser();
+    if (u) {
+        var name = u.familyName || u.family_name || u.nickname || (u.email ? String(u.email).split('@')[0] : '') || '我家';
+        btn.textContent = name;
+        btn.title = '点击进入"我家"';
+    } else {
+        btn.textContent = '登录';
+        btn.title = '点击登录';
+    }
+}
+
+// 首页右上角按钮点击：未登录→打开登录页；已登录→进入"我家"
+function onHomeAuthClick() {
+    if (isLogined()) { switchTab('family'); return; }
+    showLoginPage();
+}
+
+// 未登录浏览模式：显示首页可自由浏览，不强制登录
+function showAppRootGuest() {
+    hideBootSplash();
+    var lp = document.getElementById('loginPage');
+    var fp = document.getElementById('createFamilyPage');
+    var app = document.getElementById('appRoot');
+    if (lp) lp.style.display = 'none';
+    if (fp) fp.style.display = 'none';
+    if (app) app.style.display = '';
+    var hp = document.getElementById('pageHome');
+    if (hp) hp.classList.remove('slide-up');
+    updateHomeAuthBtn();
+}
+
+// 关闭登录浮层返回浏览（未登录时右上角✕）
+function closeLoginOverlay() {
+    var lp = document.getElementById('loginPage');
+    if (lp) lp.style.display = 'none';
+    var app = document.getElementById('appRoot');
+    if (app) app.style.display = '';
+    updateHomeAuthBtn();
+}
+
+// 数据操作登录守卫：未登录时提示并打开登录页；返回 false 供调用方中断操作。
+// 登录成功后 showAppRoot 会恢复原页面（登录页只是浮层，下方页面保持原状）。
+function requireLogin(opName) {
+    if (isLogined()) return true;
+    showToast(opName ? ('请先登录后再' + opName) : '请先登录');
+    showLoginPage();
+    return false;
 }
 
 // 切换登录/注册模式（isRegister=true 显示注册文案，false 显示登录文案）
@@ -4934,7 +4994,7 @@ async function doCreateFamily() {
 function doLogout() {
     if (sb) { try { sb.auth.signOut(); } catch(e) {} }
     clearLogin();
-    showLoginPage();
+    showAppRootGuest();
     showToast('已退出登录');
 }
 
@@ -18238,6 +18298,7 @@ function fillFridgeFromShoppingPlansForDishThenDeduct(dishName) {
 // dayOffset: 0=今天 1=明天 2=后天；confirmed=false，来源 source=existing/shopping/weekend/ai，库存预扣由食记「确认计划」统一驱动。
 // 返回 { added, duplicate, insufficient:[], dayLabel, mealLabel, dishName, source }；不切页、不关菜谱浮层，便于连续加入多道菜。
 function addToPlanFromFridge(dish, mealType, source, dayOffset) {
+    if (!requireLogin('加入计划')) return;
     mealType = mealType || 'lunch';
     dayOffset = Number(dayOffset) || 0;
     var validSrc = /^(existing|shopping|weekend|ai|preferred|manual)$/.test(String(source||'')) ? String(source) : 'existing';
@@ -18490,6 +18551,7 @@ function diaryToggleDishConfirmed(dateKey, mealType, dishName, checked) {
 }
 // 食记页面：餐级「✅ 确认计划」按钮 —— 同步 DOM 勾选框 → dishMeta.confirmed；重算整餐 state；统一驱动 reserve/unreserve
 function confirmDiaryMealPlan(mealType, dateKey) {
+    if (!requireLogin('确认计划')) return;
     try {
         var cal = getDietCalendar();
         if (!dateKey) dateKey = (typeof currentDiaryDate !== 'undefined' && currentDiaryDate) ? dateToKey(currentDiaryDate) : dateToKey(new Date());
@@ -19500,6 +19562,7 @@ function deleteShoppingItem(id) {
 }
 
 function toggleShoppingPurchased(id) {
+    if (!requireLogin('勾选采购')) return;
     let shoppingPlans = JSON.parse(lsGet('shoppingPlans')) || [];
     const item = shoppingPlans.find(s => s.id === id);
     if (!item) return;
@@ -19540,6 +19603,7 @@ function toggleShoppingPurchased(id) {
 function closeShoppingToFridgeModal() { document.getElementById('shoppingToFridgeModal').classList.remove('show'); }
 
 function confirmShoppingToFridge() {
+    if (!requireLogin('确认采购入库')) return;
     const id = parseFloat(document.getElementById('shopToFridgeId').value);
     const name = document.getElementById('shopToFridgeName').value;
     const storage = document.getElementById('shopToFridgeStorage').value;
@@ -25146,6 +25210,7 @@ function queuePlanFromText(text) {
 }
 
 function addToPlan(planItem) {
+    if (!requireLogin('加入三餐计划')) return;
     if (!planItem || !planItem.dishNames || planItem.dishNames.length === 0) return 0;
     const key = planItem.date;
     const mealType = planItem.mealType || 'lunch';
@@ -28819,6 +28884,7 @@ function saveNewKnowledge() {
 }
 
 function addToPlanFromKnowledge(id) {
+    if (!requireLogin('加入食记')) return;
     const item = dietKnowledge.find(k => k.id === id);
     if (!item) return;
 
@@ -28931,6 +28997,7 @@ function updateModalDishTotal() {
 
 // 确认加入食记计划
 function confirmAddToPlan(knowledgeId) {
+    if (!requireLogin('加入食记')) return;
     const dateKey = document.getElementById('addToPlanDate').value;
     const mealTypeSelect = document.getElementById('addToPlanMeal');
     const mealType = mealTypeSelect ? mealTypeSelect.value : 'lunch';
@@ -32583,6 +32650,7 @@ function copyDiaryMeal(mealKey) {
 // 加餐：食记记录页"📝记录加餐"弹窗
 // ============================================================
 function openDiarySnackRecordModal(editId) {
+    if (!requireLogin('记录加餐')) return;
     var dk = dateToKey(currentDiaryDate);
     var plannedItems = getPlannedSnacks(dk).filter(function(s){ return !s.isRecorded; });
     var timeOpts = SNACK_TIME_SLOTS.map(function(t){ return '<option value="'+t+'">'+t+'</option>'; }).join('');
@@ -34778,6 +34846,7 @@ function clearSelectedRestaurant() {
 
 // 确认规划
 function confirmDiningOutPlan() {
+    if (!requireLogin('确认外出就餐规划')) return;
     var r = diningOutPlanData.selectedRestaurant;
     if (!r || !r.name) {
         showToast('请先选择或添加餐厅');
@@ -38436,6 +38505,7 @@ function openDiaryPlanModal(mealKey) {
 
 // 记录弹窗（支持在家做饭/外出就餐切换）
 function openDiaryRecordModal(mealKey) {
+    if (!requireLogin('记录实际就餐')) return;
     const dateKey = dateToKey(currentDiaryDate);
     const data = getMealData(dateKey, mealKey);
     const planDishes = (data.plan && data.plan.dishes) ? data.plan.dishes : [];
@@ -41442,7 +41512,7 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
             }
         } catch (e) {}
         var u = getLoginUser();
-        if (!u) { showLoginPage(); return; }
+        if (!u) { showAppRootGuest(); return; }
         // 家庭快捷登录会话（无 Supabase 会话）：直接按已存储的家庭码进入主界面
         if (u.familySession) { showAppRoot(); return; }
         // 已登录过，检查是否仍有有效 supabase 会话 + 家庭归属
@@ -41452,7 +41522,7 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
                     afterLoginCheck();
                 } else {
                     clearLogin();
-                    showLoginPage();
+                    showAppRootGuest();
                 }
             }).catch(function() { afterLoginCheck(); });
         } else { afterLoginCheck(); }
