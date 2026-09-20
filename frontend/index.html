@@ -5023,7 +5023,7 @@ async function doCreateFamily() {
             setLoginFamily({ id: r.data.id, name: r.data.family_name, owner_id: r.data.owner_id });
             setFamilyId(code);   // 本地家庭码同步设置, 避免登录后再弹"创建/加入家庭"浮层
             showToast('家庭创建成功');
-            location.reload();   // 重载后按新家庭命名空间加载数据，启动恢复直接进入主界面
+            showAppRoot();   // 软切换进主界面，避免弱网下整页重载几十秒
         }
     } catch(e) {
         var msg = e && e.message || '未知错误';
@@ -5042,7 +5042,7 @@ async function doCreateFamily() {
                     if (!q2.data.family_code) { try { await sb.from('families').update({ family_code: c2 }).eq('id', q2.data.id); } catch(e3) {} }
                     setFamilyId(c2);
                     showToast('已回到您的家庭：' + q2.data.family_name);
-                    location.reload();
+                    showAppRoot();   // 软切换进主界面，避免弱网下整页重载几十秒
                     return;
                 }
             } catch(e4) {}
@@ -5269,7 +5269,9 @@ async function doFamilyLogin() {
         setLoginFamily({ name: row.family_name, code: row.family_code });
         setFamilyId(row.family_code);
         showToast('登录成功');
-        location.reload();  // 重载后按该家庭命名空间加载本地数据，启动恢复直接进入主界面
+        // 软切换直接进主界面（等效于 reload 后 initAuth 的 familySession 分支）:
+        // 弱网下整页重载 2.3MB 巨页需几十秒, 且启动流程无批量数据加载步骤, reload 无必要.
+        showAppRoot();
     } catch(e) {
         var msg = (e && e.message) || '';
         if (msg.indexOf('schema cache') > -1 || msg.indexOf('404') > -1 || msg.indexOf('Not Found') > -1) {
