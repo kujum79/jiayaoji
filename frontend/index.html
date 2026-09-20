@@ -1084,9 +1084,15 @@
         .solar-term-banner .term-name {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            font-size: 16px !important;
+            justify-content: center;
+            font-size: 17px !important;
             font-weight: 700;
+            text-align: center;
+            letter-spacing: 0.5px;
+            transition: opacity 0.15s;
+        }
+        .solar-term-banner .term-name:active {
+            opacity: 0.75;
         }
         .solar-term-banner .term-diet {
             font-size: 14px;
@@ -3410,7 +3416,7 @@
     <!-- ====== 首页 ====== -->
     <div class="page-home" id="pageHome">
         <div class="solar-term-banner" id="homeSolarBanner">
-            <div class="term-name"><span id="homeSolarName">🌞 大暑节气</span><button class="solar-term-link" id="homeSolarBtn">🌿 节气饮食指南</button></div>
+            <div class="term-name" id="homeSolarBannerClickable" style="cursor:pointer;" onclick="showSolarTermGuide()">🌿 白露饮食指南</div>
         </div>
         <div class="home-logo-wrap" id="homeLogoWrap">
             <span class="home-logo-circle" aria-hidden="true"></span>
@@ -6997,8 +7003,7 @@ const homeAttachBtn = document.getElementById('homeAttachBtn');
 const homeAttachBar = document.getElementById('homeAttachBar');
 const homeVoiceBtn = document.getElementById('homeVoiceBtn');
 const homeVoicePanel = document.getElementById('homeVoicePanel');
-const homeSolarName = document.getElementById('homeSolarName');
-const homeSolarBtn = document.getElementById('homeSolarBtn');
+const homeSolarBannerClickable = document.getElementById('homeSolarBannerClickable');
 const mainInput = document.getElementById('mainInput');
 const mainSend = document.getElementById('mainSendBtn');
 const mainAttachBtn = document.getElementById('mainAttachBtn');
@@ -19581,7 +19586,7 @@ function confirmShoppingToFridge() {
 
 function renderHomeSolarTerm() {
     const term = getSolarTermForDate(new Date());
-    homeSolarName.textContent = `🌞 ${term.name}节气`;
+    if (homeSolarBannerClickable) homeSolarBannerClickable.textContent = `🌿 ${term.name}饮食指南`;
 }
 
 function renderChat() {
@@ -26661,6 +26666,13 @@ function selectKnowledgeCategory(catId) {
 
 // 显示节气饮食指南
 function showSolarTermGuide() {
+    // 进入主应用界面（从首页点击时）
+    if (homePage && !homePage.classList.contains('slide-up')) {
+        homePage.classList.add('slide-up');
+        if (mainApp) mainApp.style.display = 'flex';
+    }
+    // 切换到食知Tab，显示节气食材+明日三餐推荐首页
+    switchTab('knowledge');
     switchKnowledgeView('home');
 }
 
@@ -39505,16 +39517,7 @@ document.getElementById('voiceTextInput').addEventListener('keydown', function(e
 document.getElementById('voiceTextOverlay').addEventListener('click', function(e) {
     if (e.target === this) closeVoiceTextModal();
 });
-homeSolarBtn.addEventListener('click', function() {
-    // 进入主应用界面
-    if (!homePage.classList.contains('slide-up')) {
-        homePage.classList.add('slide-up');
-        mainApp.style.display = 'flex';
-    }
-    // 切换到食知Tab，显示节气食材+明日三餐推荐首页
-    switchTab('knowledge');
-    switchKnowledgeView('home');
-});
+if (homeSolarBannerClickable) homeSolarBannerClickable.addEventListener('click', showSolarTermGuide);
 
 document.querySelectorAll('.tab-item').forEach(tab => {
     tab.addEventListener('click', function() { switchTab(this.dataset.tab); });
