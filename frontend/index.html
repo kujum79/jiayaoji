@@ -5261,6 +5261,14 @@ async function doFamilyLogin() {
         var r = await withTimeout(sb.rpc('family_login', { p_name: name, p_pass: pass }), 15000, '家庭登录');
         if (r.error) throw r.error;
         var rows = r.data || [];
+        if (rows.length !== 1) {
+            // 重名多行 / 未匹配: 尝试升级版函数 family_login_v2(支持家庭码匹配, 码唯一, 需在 Supabase 创建).
+            // v2 未创建时静默跳过, 不影响原有登录路径.
+            try {
+                var r2 = await withTimeout(sb.rpc('family_login_v2', { p_name: name, p_pass: pass }), 15000, '家庭登录');
+                if (!r2.error && (r2.data || []).length >= 1) rows = r2.data;
+            } catch (e2) { /* v2 未创建, 走原提示 */ }
+        }
         if (rows.length === 0) {
             showErr('家庭名称或密码不正确。<br>若该家庭尚未开通密码登录，请点下方"首次使用？用家庭码开通密码登录"先开通。');
             return;
