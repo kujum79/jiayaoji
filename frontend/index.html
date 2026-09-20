@@ -287,20 +287,32 @@
             font-size: 13px;
             font-weight: 600;
             color: #15803D;
-            overflow: hidden; text-overflow: ellipsis; min-width: 0;
+            white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1;
         }
         .solar-term-guide-btn div:last-child {
             font-size: 11px;
             color: #15803D;
             opacity: 0.85;
-            overflow: hidden; text-overflow: ellipsis; min-width: 0;
+            white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1;
         }
         /* 窄屏：节气按钮独占一行且强制单行，保证"白露节气 · 饮食指南（日期）"不换行 */
         @media (max-width: 430px) {
-            .solar-term-guide-btn { flex-basis: 100%; padding: 5px 8px; gap: 6px; white-space: nowrap; }
+            .solar-term-guide-btn { flex-basis: 100%; padding: 5px 8px; gap: 6px; white-space: nowrap; flex-wrap: nowrap; }
             .solar-term-guide-btn div:first-child { font-size: 12px; letter-spacing: 0; }
             .solar-term-guide-btn div:last-child { font-size: 10px; }
             .knowledge-dropdown-wrapper { flex-shrink: 0; }
+        }
+        @media (max-width: 375px) {
+            .solar-term-guide-btn { padding: 4px 6px; gap: 4px; }
+            .solar-term-guide-btn div:first-child { font-size: 11px; }
+            .solar-term-guide-btn div:last-child { font-size: 9.5px; }
+        }
+        @media (max-width: 340px) {
+            .solar-term-guide-btn { padding: 4px 4px; gap: 3px; }
+            .solar-term-guide-btn div:first-child { font-size: 10px; }
+            .solar-term-guide-btn div:last-child { font-size: 9px; }
         }
         .knowledge-back-btn {
             background: white;
@@ -2854,7 +2866,12 @@
         .diary-nav-btn { padding:3px 4px; font-size:11px; }
         /* 确认计划/记录实际 按钮更紧凑 */
         .diary-meal-actions { gap:4px; }
-        .diary-meal-actions button { padding:3px 8px; font-size:10px; }
+        .diary-meal-actions button, .diary-plan-btn { padding:3px 6px; font-size:10px; }
+    }
+    @media (max-width: 340px) {
+        .diary-meal-actions { gap:3px; }
+        .diary-meal-actions button, .diary-plan-btn { padding:2px 5px; font-size:9.5px; }
+        .diary-meal-label { font-size:14px; }
     }
     .diary-nav-link { background:none; border:none; padding:4px 8px; font-size:12px; color:#374151; cursor:pointer; line-height:1; }
     .diary-nav-link:hover { text-decoration:underline; }
@@ -2883,6 +2900,7 @@
             display: flex;
             gap: 6px;
             flex-shrink: 0;
+            flex-wrap: nowrap;   /* 按钮组内部永不换行，靠窄屏压缩字号/内边距容纳 */
         }
         .diary-meal-actions button {
             background: #FFF7ED;
@@ -2895,6 +2913,28 @@
             white-space: nowrap;   /* 防窄屏下"确认计划/记录实际"断成两行 */
         }
         .diary-meal-actions button:hover { background: #FFEDD5; }
+        /* 确认计划按钮（原内联样式改 class，否则媒体查询压缩永远不生效——内联优先级更高） */
+        .diary-plan-btn {
+            background: #FFF7ED;
+            border: 1px solid #FED7AA;
+            border-radius: 8px;
+            padding: 3px 10px;
+            font-size: 11px;
+            color: #EA580C;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .diary-plan-btn-disabled {
+            background: #F3F4F6;
+            border: 1px solid #E5E7EB;
+            color: #9CA3AF;
+            cursor: not-allowed;
+        }
+        /* 窄屏 430-376 区间: 先压缩一档（此前该区间无任何压缩规则） */
+        @media (max-width: 430px) {
+            .diary-meal-actions { gap: 5px; }
+            .diary-meal-actions button, .diary-plan-btn { padding: 3px 8px; font-size: 10.5px; letter-spacing: 0; }
+        }
         .diary-section {
             font-size: 12px;
             padding: 8px 10px;
@@ -3632,7 +3672,7 @@
                         </div>
                         <button class="solar-term-guide-btn" onclick="showSolarTermGuide()">
                             <div><span id="solarTermNameText">大暑</span>节气 · 饮食指南</div>
-                            <div style="font-size:11px;opacity:0.85;" id="solarTermDateRangeText">（7月23日-8月7日）</div>
+                            <div id="solarTermDateRangeText">（7月23日-8月7日）</div>
                         </button>
                     </div>
                     <!-- 非默认模式：显示返回按钮 -->
@@ -32511,14 +32551,14 @@ function renderDiary() {
                 + _renderMealNutritionSummary(allDishes);
             // 确认计划按钮放到 meal-actions 中渲染（见下方 meal header 构造）
             window.__diaryPlanBtnHtml = planConfirmedLocal
-                ? '<button disabled style="background:#F3F4F6;border:1px solid #E5E7EB;border-radius:8px;padding:3px 10px;font-size:11px;color:#9CA3AF;cursor:not-allowed;white-space:nowrap;">' + btnLabel + '</button>'
-                : '<button onclick="confirmDiaryMealPlan(\'' + escapeAttr(meal.key) + '\',\'' + escapeAttr(dateKey) + '\')" style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:3px 10px;font-size:11px;color:#EA580C;cursor:pointer;white-space:nowrap;">' + btnLabel + '</button>';
+                ? '<button disabled class="diary-plan-btn diary-plan-btn-disabled">' + btnLabel + '</button>'
+                : '<button onclick="confirmDiaryMealPlan(\'' + escapeAttr(meal.key) + '\',\'' + escapeAttr(dateKey) + '\')" class="diary-plan-btn">' + btnLabel + '</button>';
             planClass = 'diary-section-plan';
         } else {
             planHtml = '<div class="diary-source-group" style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px 8px;flex:1 1 0;min-width:120px;margin:0;padding:0;background:transparent;border:none;border-radius:0;">'
                 + '<div class="diary-empty-source">（暂无计划，点 ☰ 选择食谱）</div>'
                 + '</div>';
-            window.__diaryPlanBtnHtml = '<button disabled style="background:#F3F4F6;border:1px solid #E5E7EB;border-radius:8px;padding:3px 10px;font-size:11px;color:#9CA3AF;cursor:not-allowed;white-space:nowrap;">✅ 确认计划</button>';
+            window.__diaryPlanBtnHtml = '<button disabled class="diary-plan-btn diary-plan-btn-disabled">✅ 确认计划</button>';
             planClass = 'diary-section-empty';
         }
         // 为兼容"旧的 planConfirmed 判定"和后续 statusBadge/planSet 对比：仍统一用 planConfirmed
