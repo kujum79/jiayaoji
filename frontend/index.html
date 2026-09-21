@@ -32553,9 +32553,10 @@ function renderDiary() {
             var dm = (data.plan && data.plan.dishMeta) ? data.plan.dishMeta : {};
             const RDR_STAPLES = ['米饭','白米饭','面','馒头','包子','饼','吐司','面包','三明治','麦片','玉米','红薯','紫薯','南瓜','饭','炒饭','煲仔饭','意面','馄饨','蒸饺','水饺','芝麻糊'];
             const RDR_SOUPS = ['汤','羹','粥'];
-            // 纯主食/简餐过滤: "米饭"/"白米饭"/"粥" 等每餐默认有的基础主食不单独显示
+            // 纯主食过滤: "米饭"/"白米饭" 是默认每餐都有的基础主食, 不单独显示。
+            // 注意: 粥类(食疗粥/养生粥等)是实际菜品, 必须显示, 不在隐藏之列。
             // (保留"扬州炒饭"/"牛肉面"等有实际菜品名的主食)
-            const HIDDEN_STAPLES = ['米饭','白米饭','粥'];
+            const HIDDEN_STAPLES = ['米饭','白米饭'];
             function isHiddenStaple(dn){ return HIDDEN_STAPLES.some(function(k){ return (dn||'').trim() === k; }); }
             function isRdrStaple(dn){ return RDR_STAPLES.some(function(k){ return (dn||'').indexOf(k)>=0; }); }
             function isRdrSoup(dn){ return RDR_SOUPS.some(function(k){ return (dn||'').indexOf(k)>=0; }); }
@@ -35881,12 +35882,12 @@ function _buildMealPlanPrompt(dateStr, ctx, styleCount) {
     if (hasExisting) {
         p += '方案一：快手风（简单快做，15分钟内可完成）\n';
         p += '方案二：养生风（注重营养搭配，当季养生）\n';
-        p += '每个方案含早餐3道、午餐3道、晚餐3道。\n\n';
+        p += '每个方案含早餐3道、午餐4道、晚餐4道。午餐和晚餐必须包含1道主食（如米饭），且主食外至少有3道菜品（荤素搭配，其中1道为汤或羹）。\n\n';
     } else {
         p += '方案A：家常风（日常家庭菜品，口味适中，食材易得）\n';
         p += '方案B：快手风（简单快做，15分钟内可完成）\n';
         p += '方案C：养生风（注重营养搭配，当季养生）\n';
-        p += '每个方案含早餐3道、午餐3道、晚餐3道。\n\n';
+        p += '每个方案含早餐3道、午餐4道、晚餐4道。午餐和晚餐必须包含1道主食（如米饭），且主食外至少有3道菜品（荤素搭配，其中1道为汤或羹）。\n\n';
     }
     p += '请综合参考以下信息进行推荐：\n\n';
     if (ctx.userInput) p += '【用户指令】'+ctx.userInput+'\n\n';
