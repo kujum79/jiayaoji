@@ -3925,7 +3925,7 @@
                             <input type="text" id="famSocialSubGroup" placeholder="社交子组名（如：我的同学、老公同事）" style="display:none; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                             <!-- 现住地 | 职业 | 作息类型 -->
                             <div class="family-form-row" style="display:flex; gap:4px;">
-                                <input type="text" id="famCity" placeholder="现住地" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
+                                <input type="text" id="famCity" value="" placeholder="现住地" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                                 <select id="famOccupation" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                                     <option value="">职业</option>
                                     <option value="学生">学生</option>
@@ -19923,7 +19923,7 @@ function renderFamily() {
             <div class="member-avatar">${selMember.name[0]}</div>
             <div class="member-info">
                 <div class="name">${selMember.name} · ${selMember.age}岁 <span class="rel-tag" style="background:${relColor}18; color:${relColor}; border:1px solid ${relColor}40;">${relIcon} ${rel}</span>${constitution ? ' <span class="constitution-tag">' + escapeHtml(constitution) + '</span>' : ''}</div>
-                <div class="detail"><span class="d-seg">籍贯：${selMember.place || ''}</span><span class="d-seg"> ｜ 现住：${selMember.currentCity || ''}</span><span class="d-seg"> ｜ 口味：${selMember.taste || ''}</span></div>
+                <div class="detail"><span class="d-seg">现住：${selMember.currentCity || ''}</span><span class="d-seg"> ｜ 口味：${selMember.taste || ''}</span></div>
                 <div class="detail">饮食要求：${selMember.dietaryPreference || '未填写'}</div>
             </div>
             <button data-id="${selMember.id}" class="edit-member" style="background:none;border:none;color:#F97316;font-size:14px;cursor:pointer;">✎</button>
@@ -20391,7 +20391,6 @@ function renderCurrentDiningGroupSelector() {
                         <input type="number" class="sub-member-age" placeholder="年龄" style="width:55px;padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">
                     </div>
                     <div style="display:flex;gap:6px;margin-top:5px;">
-                        <input type="text" class="sub-member-place" placeholder="籍贯" style="flex:1;padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">
                         <input type="text" class="sub-member-city" value="${extractCityFromAddress(familyHomeAddress)}" placeholder="现住地" style="flex:1;padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">
                     </div>
                     <input type="text" class="sub-member-taste" placeholder="口味偏好（如：微辣、清淡）" style="width:100%;box-sizing:border-box;padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;margin-top:5px;">
@@ -22951,7 +22950,7 @@ function renderFamilyGroupPanel() {
                         ${constitution ? '<span style="font-size:11px;color:#065F46;background:#ECFDF5;padding:1px 6px;border-radius:8px;margin-left:4px;">' + escapeHtml(constitution) + '</span>' : ''}
                     </div>
                     <div style="font-size:11px;color:#6B7280;margin-top:2px;">
-                        ${m.place ? '<span class="d-seg">籍贯：' + escapeHtml(m.place) + '</span>' : ''}${m.place && m.currentCity ? ' ｜ ' : ''}${m.currentCity ? '<span class="d-seg">现住：' + escapeHtml(m.currentCity) + '</span>' : ''}${(m.place || m.currentCity) && m.taste ? ' ｜ ' : ''}${m.taste ? '<span class="d-seg">口味：' + escapeHtml(m.taste) + '</span>' : ''}
+                        ${m.currentCity ? '<span class="d-seg">现住：' + escapeHtml(m.currentCity) + '</span>' : ''}${m.currentCity && m.taste ? ' ｜ ' : ''}${m.taste ? '<span class="d-seg">口味：' + escapeHtml(m.taste) + '</span>' : ''}
                     </div>
                     ${m.dietaryPreference ? '<div style="font-size:11px;color:#6B7280;">饮食：' + escapeHtml(m.dietaryPreference) + '</div>' : ''}
                 </div>
