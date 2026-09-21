@@ -39324,10 +39324,15 @@ function switchTab(tab) {
     // 食记页：显示顶栏 ☰ 选择食谱按钮（无边框）
     var diaryTopBtn = document.getElementById('diaryRecipePickerTopBtn');
     if (diaryTopBtn) diaryTopBtn.style.display = (tab === 'diary') ? 'block' : 'none';
+    // 切到食记Tab时渲染
     if (tab === 'diary') {
         renderDiary();
         // === AI自动提取：进入食记时自动检测是否需要生成推荐 ===
         autoCheckAndRecommend();
+    }
+    // 切到我家Tab时渲染(登录态变化后需重新判定显示壳/真实内容)
+    if (tab === 'family') {
+        renderFamily();
     }
     const titles = { chat:'AI对话', knowledge:'饮食问答', diary:'三餐计划、记录', fridge:'食材准备', family:'我家' };
     if (tab === 'knowledge' && currentKnowledgeViewMode === 'guide') {
