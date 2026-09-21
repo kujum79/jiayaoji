@@ -3378,47 +3378,67 @@
         <div style="font-size:48px;margin-bottom:8px;">🍳</div>
         <div style="font-size:22px;font-weight:800;color:#9A3412;margin-bottom:4px;">家肴记</div>
         <div style="font-size:13px;color:#9CA3AF;margin-bottom:18px;">AI 家庭膳食助理</div>
-        <!-- 登录方式标签页 -->
-        <div style="display:flex;gap:6px;margin-bottom:16px;background:#FFF7ED;border-radius:12px;padding:4px;">
-            <div id="tabFamily" onclick="switchLoginTab('family')" style="flex:1;padding:8px 0;font-size:14px;font-weight:600;text-align:center;border-radius:9px;cursor:pointer;color:#9CA3AF;">🏠 家庭登录</div>
-            <div id="tabEmail" onclick="switchLoginTab('email')" style="flex:1;padding:8px 0;font-size:14px;font-weight:700;text-align:center;border-radius:9px;cursor:pointer;background:#fff;color:#9A3412;box-shadow:0 1px 4px rgba(234,88,12,0.15);">📧 邮箱登录</div>
+        <!-- 家庭码登录（唯一登录方式）：输入家庭码即可进入家庭 -->
+        <div id="loginPanelFamilyCode">
+            <input id="familyCodeInput" type="text" maxlength="8" placeholder="请输入 8 位家庭码" onkeydown="if(event.key==='Enter')doFamilyCodeLogin()" style="width:100%;padding:12px 14px;font-size:17px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;letter-spacing:3px;text-transform:uppercase;box-sizing:border-box;" />
+            <button id="familyCodeLoginBtn" onclick="doFamilyCodeLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">进入家庭</button>
+            <div id="familyCodeErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.6;"></div>
+            <div style="font-size:11px;color:#9CA3AF;margin-top:12px;line-height:1.5;">不知道家庭码？请向家庭创建者索取<br>（创建者在"我家"→"设置"中可查看家庭码）</div>
+            <div style="font-size:11px;color:#9CA3AF;margin-top:8px;">登录即表示同意家肴记服务条款</div>
         </div>
-        <!-- 家庭登录面板（默认隐藏，邮箱登录为默认） -->
-        <div id="loginPanelFamily" style="display:none;">
-            <input id="familyLoginName" type="text" maxlength="20" placeholder="家庭名称或家庭码" onkeydown="if(event.key==='Enter')doFamilyLogin()" style="width:100%;padding:10px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
-            <input id="familyLoginPass" type="password" maxlength="40" placeholder="家庭密码" onkeydown="if(event.key==='Enter')doFamilyLogin()" style="width:100%;padding:10px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
-            <button id="familyLoginBtn" onclick="doFamilyLogin()" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#D97706;border:none;border-radius:12px;cursor:pointer;">家庭登录</button>
-            <div id="familyLoginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.6;"></div>
-            <div style="text-align:center;margin-top:8px;">
-                <div id="toggleFamilySetup" onclick="toggleFamilySetupBox()" style="font-size:12px;color:#EA580C;cursor:pointer;text-decoration:underline;display:inline-block;">首次使用？用家庭码开通密码登录</div>
-                <div onclick="openFamilyResetModal()" style="font-size:12px;color:#EA580C;cursor:pointer;text-decoration:underline;display:inline-block;margin-left:14px;">忘记密码？</div>
-            </div>
-            <div id="familySetupBox" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed #FED7AA;">
-                <input id="familySetupName" type="text" maxlength="20" placeholder="家庭名称" style="width:100%;padding:10px 14px;font-size:14px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:8px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
-                <input id="familySetupCode" type="text" maxlength="8" placeholder="8位家庭码（向家庭创建者索取）" style="width:100%;padding:10px 14px;font-size:14px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:8px;outline:none;background:#FFFBEB;color:#1F2937;text-transform:uppercase;box-sizing:border-box;" />
-                <input id="familySetupPass1" type="password" maxlength="40" placeholder="设置家庭密码（至少6位）" style="width:100%;padding:10px 14px;font-size:14px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:8px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
-                <input id="familySetupPass2" type="password" maxlength="40" placeholder="确认密码" style="width:100%;padding:10px 14px;font-size:14px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
-                <button id="familySetupBtn" onclick="doFamilySetup()" style="width:100%;padding:10px;font-size:14px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:10px;cursor:pointer;">开通并保存</button>
-            </div>
+        <!-- 底部小字：创建家庭入口 -->
+        <div style="text-align:center;margin-top:16px;font-size:13px;color:#6B7280;">
+            还没有家庭？<span onclick="startCreateFamilyFlow()" style="color:#EA580C;cursor:pointer;text-decoration:underline;font-weight:600;">创建家庭</span>
         </div>
-        <!-- 邮箱登录面板（点标签切换显示） -->
-        <div id="loginPanelEmail">
-            <input id="loginEmail" type="email" maxlength="60" placeholder="请输入邮箱" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;" />
-            <input id="loginPassword" type="password" maxlength="40" placeholder="请输入密码" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
-            <button id="loginBtn" onclick="doLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录</button>
-            <div id="loginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.5;"></div>
-            <div style="text-align:center;margin-top:14px;">
-                <div id="switchToRegister" onclick="switchLoginRegister()" style="font-size:13px;color:#EA580C;cursor:pointer;text-decoration:underline;display:inline-block;">还没有账号？点此注册</div>
-                <div id="forgotPwdLink" onclick="showForgotPassword()" style="font-size:12px;color:#9A3412;margin-left:14px;cursor:pointer;text-decoration:underline;display:inline-block;">忘记密码？</div>
-            </div>
-            <div id="forgotPwdBox" style="display:none;margin-top:10px;padding:12px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;box-sizing:border-box;">
-                <div style="font-size:12px;color:#7A4A21;margin-bottom:8px;">输入注册邮箱，将发送密码重置链接：</div>
-                <input id="forgotEmail" type="email" maxlength="60" placeholder="注册邮箱" onkeydown="if(event.key==='Enter')sendResetEmail()" style="width:100%;padding:9px 12px;font-size:14px;border:1px solid #FED7AA;border-radius:8px;margin-bottom:8px;outline:none;background:#fff;color:#1F2937;box-sizing:border-box;" />
-                <button id="forgotSendBtn" onclick="sendResetEmail()" style="width:100%;padding:10px;font-size:13px;font-weight:700;color:#fff;background:#D97706;border:none;border-radius:9px;cursor:pointer;">发送重置邮件</button>
-                <div id="forgotMsg" style="display:none;font-size:11px;margin-top:8px;line-height:1.5;"></div>
-            </div>
-            <div style="font-size:11px;color:#9CA3AF;margin-top:10px;line-height:1.5;">登录即表示同意家肴记服务条款</div>
+    </div>
+</div>
+
+<!-- ====== 邮箱账号弹窗（备用登录 + 创建家庭第一步，从登录页移出） ====== -->
+<div id="emailAccountModal" style="position:fixed;inset:0;z-index:100010;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeEmailAccountModal()">
+    <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:340px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
+        <div id="emailModalTitle" style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;">📧 邮箱登录</div>
+        <div id="emailModalSub" style="font-size:12px;color:#9CA3AF;margin-bottom:16px;">用于换设备后恢复账号并关联原家庭</div>
+        <input id="loginEmail" type="email" maxlength="60" placeholder="请输入邮箱" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;" />
+        <input id="loginPassword" type="password" maxlength="40" placeholder="请输入密码" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
+        <button id="loginBtn" onclick="doLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录</button>
+        <div id="loginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.5;"></div>
+        <div style="text-align:center;margin-top:14px;">
+            <div id="switchToRegister" onclick="switchLoginRegister()" style="font-size:13px;color:#EA580C;cursor:pointer;text-decoration:underline;display:inline-block;">还没有账号？点此注册</div>
+            <div id="forgotPwdLink" onclick="showForgotPassword()" style="font-size:12px;color:#9A3412;margin-left:14px;cursor:pointer;text-decoration:underline;display:inline-block;">忘记密码？</div>
         </div>
+        <div id="forgotPwdBox" style="display:none;margin-top:10px;padding:12px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;box-sizing:border-box;">
+            <div style="font-size:12px;color:#7A4A21;margin-bottom:8px;">输入注册邮箱，将发送密码重置链接：</div>
+            <input id="forgotEmail" type="email" maxlength="60" placeholder="注册邮箱" onkeydown="if(event.key==='Enter')sendResetEmail()" style="width:100%;padding:9px 12px;font-size:14px;border:1px solid #FED7AA;border-radius:8px;margin-bottom:8px;outline:none;background:#fff;color:#1F2937;box-sizing:border-box;" />
+            <button id="forgotSendBtn" onclick="sendResetEmail()" style="width:100%;padding:10px;font-size:13px;font-weight:700;color:#fff;background:#D97706;border:none;border-radius:9px;cursor:pointer;">发送重置邮件</button>
+            <div id="forgotMsg" style="display:none;font-size:11px;margin-top:8px;line-height:1.5;"></div>
+        </div>
+        <div style="font-size:11px;color:#9CA3AF;margin-top:10px;">登录即表示同意家肴记服务条款</div>
+        <div onclick="closeEmailAccountModal()" style="font-size:12px;color:#9CA3AF;margin-top:12px;cursor:pointer;text-decoration:underline;">返回</div>
+    </div>
+</div>
+
+<!-- ====== 创建家庭弹窗（邮箱注册成功后第 2 步：填写家庭名称） ====== -->
+<div id="createFamilyModal" style="position:fixed;inset:0;z-index:100011;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;">
+    <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:320px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
+        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;">🏠 创建家庭</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-bottom:16px;">第 2 步：给您的家庭起个名字</div>
+        <input id="familyNameInput" type="text" maxlength="20" placeholder="家庭名称（如：三仁佳欢）" onkeydown="if(event.key==='Enter')doCreateFamily()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <button id="createFamilyBtn" onclick="doCreateFamily()" style="width:100%;padding:13px;font-size:15px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">创建家庭</button>
+        <div style="font-size:11px;color:#9CA3AF;margin-top:10px;line-height:1.5;">创建后将生成唯一家庭码<br>把家庭码告诉家人，他们就能加入你家</div>
+    </div>
+</div>
+
+<!-- ====== 家庭码展示弹窗（创建成功后展示，告知家人加入） ====== -->
+<div id="familyCodeShowModal" style="position:fixed;inset:0;z-index:100012;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;">
+    <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:320px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
+        <div style="font-size:36px;margin-bottom:6px;">🎉</div>
+        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;">家庭创建成功</div>
+        <div id="fcShowName" style="font-size:13px;color:#6B7280;margin-bottom:14px;"></div>
+        <div style="font-size:12px;color:#9CA3AF;margin-bottom:6px;">您的家庭码</div>
+        <div id="fcShowCode" style="font-size:30px;font-weight:800;color:#EA580C;letter-spacing:5px;background:#FFF7ED;border:1px dashed #FED7AA;border-radius:12px;padding:12px 8px;margin-bottom:8px;font-family:monospace;"></div>
+        <button onclick="copyFamilyCodeById('fcShowCode')" style="padding:6px 14px;font-size:12px;font-weight:600;color:#92400E;background:#FEF3C7;border:none;border-radius:8px;cursor:pointer;margin-bottom:12px;">📋 复制家庭码</button>
+        <div style="font-size:12px;color:#15803D;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:8px 10px;line-height:1.6;margin-bottom:14px;">💡 把家庭码告诉家人，他们就能加入你家</div>
+        <button onclick="closeFamilyCodeShowModal()" style="width:100%;padding:13px;font-size:15px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">进入家肴记</button>
     </div>
 </div>
 
@@ -4862,8 +4882,11 @@ function showLoginPage() {
     var app = document.getElementById('appRoot');
     if (lp) lp.style.display = 'flex';
     if (app) app.style.display = 'none';
-    // 默认进入"邮箱登录"界面（支持邮箱+密码登录与注册）
-    try { switchLoginTab('email'); } catch(e) {}
+    // 家庭码登录为唯一主登录方式：清空旧输入与错误提示
+    var ci = document.getElementById('familyCodeInput');
+    var eb = document.getElementById('familyCodeErrBox');
+    if (eb) { eb.textContent = ''; eb.style.display = 'none'; }
+    setTimeout(function() { try { if (ci) ci.focus(); } catch(e) {} }, 150);
 }
 // 显示创建家庭页（已移除 9/20，保留空实现防止调用报错）
 function showCreateFamilyPage() { return; }
@@ -4980,12 +5003,11 @@ async function doRegister() {
         // 注册成功（部分配置需邮箱确认，这里先尝试直接登录态）
         var u = (res && res.data && res.data.user) || null;
         if (u && res.data.session) {
-            // 有会话 → 直接登录
+            // 有会话 → 注册成功，进入"创建家庭"第 2 步（填写家庭名称）
             setLoginUser({ id: u.id, email: u.email || email, aud: u.aud });
-            showToast('注册成功，已自动登录');
-            await afterLoginCheck();
-            // 重载页面：按当前账号的家庭命名空间重新加载本地数据
-            location.reload();
+            closeEmailAccountModal();
+            showToast('注册成功，请创建您的家庭');
+            openCreateFamilyModal();
         } else if (u && !res.data.session) {
             // 注册成功但需要邮箱确认
             showErr('注册成功，请到邮箱点击确认链接后再登录');
@@ -5034,6 +5056,7 @@ async function doLogin() {
         if (res && res.error) throw res.error;
         var u = (res && res.data && res.data.user) || null;
         setLoginUser({ id: u && u.id, email: (u && u.email) || email, aud: u && u.aud });
+        closeEmailAccountModal();   // 备用邮箱登录成功，关闭邮箱弹窗
         await afterLoginCheck();
         // 家庭命名空间未变化（同一家庭重复登录）→ 留在已显示的主界面，不整页重载（弱网下重载易中断）
         // 仅当登录到了不同的家庭时才重载，以按新家庭命名空间重新加载本地数据
@@ -5095,8 +5118,10 @@ async function doCreateFamily() {
         if (r && r.data) {
             setLoginFamily({ id: r.data.id, name: r.data.family_name, owner_id: r.data.owner_id });
             setFamilyId(code);   // 本地家庭码同步设置, 避免登录后再弹"创建/加入家庭"浮层
+            closeCreateFamilyModal();
             showToast('家庭创建成功');
             showAppRoot();   // 软切换进主界面，避免弱网下整页重载几十秒
+            showFamilyCodeModal(code, r.data.family_name);   // 展示家庭码，告知家人加入
         }
     } catch(e) {
         var msg = e && e.message || '未知错误';
@@ -5114,8 +5139,10 @@ async function doCreateFamily() {
                     var c2 = q2.data.family_code || generateFamilyCode();
                     if (!q2.data.family_code) { try { await sb.from('families').update({ family_code: c2 }).eq('id', q2.data.id); } catch(e3) {} }
                     setFamilyId(c2);
+                    closeCreateFamilyModal();
                     showToast('已回到您的家庭：' + q2.data.family_name);
                     showAppRoot();   // 软切换进主界面，避免弱网下整页重载几十秒
+                    showFamilyCodeModal(c2, q2.data.family_name);   // 已有家庭 → 同样展示家庭码
                     return;
                 }
             } catch(e4) {}
@@ -5167,33 +5194,148 @@ function extractCityFromAddress(addr) {
     return '';
 }
 
-// ==================== 家庭快捷登录（家庭名称+密码，无需邮箱） ====================
-// 登录页标签页切换：family=家庭登录（默认），email=邮箱登录/注册
-function switchLoginTab(tab) {
-    var f = document.getElementById('loginPanelFamily');
-    var e = document.getElementById('loginPanelEmail');
-    var tf = document.getElementById('tabFamily');
-    var te = document.getElementById('tabEmail');
-    var familyActive = (tab === 'family');
-    if (f) f.style.display = familyActive ? 'block' : 'none';
-    if (e) e.style.display = familyActive ? 'none' : 'block';
-    if (tf) {
-        tf.style.background = familyActive ? '#fff' : 'transparent';
-        tf.style.color = familyActive ? '#9A3412' : '#9CA3AF';
-        tf.style.fontWeight = familyActive ? '700' : '600';
-        tf.style.boxShadow = familyActive ? '0 1px 4px rgba(234,88,12,0.15)' : 'none';
-    }
-    if (te) {
-        te.style.background = familyActive ? 'transparent' : '#fff';
-        te.style.color = familyActive ? '#9CA3AF' : '#9A3412';
-        te.style.fontWeight = familyActive ? '600' : '700';
-        te.style.boxShadow = familyActive ? 'none' : '0 1px 4px rgba(234,88,12,0.15)';
-    }
-}
+// 登录页已重构为"家庭码登录"单一面板（原"家庭登录/邮箱登录"标签页已移除）
+// 邮箱登录改为备用方式：入口在"我家"→设置，或登录页"创建家庭"流程第 1 步
 
 function toggleFamilySetupBox() {
     var box = document.getElementById('familySetupBox');
     if (box) box.style.display = (box.style.display === 'none' || !box.style.display) ? 'block' : 'none';
+}
+
+// ==================== 家庭码登录（主登录方式：仅凭 8 位家庭码进入家庭） ====================
+async function doFamilyCodeLogin() {
+    if (!sb) { showToast('登录服务未就绪，请刷新重试'); return; }
+    var inp = document.getElementById('familyCodeInput');
+    var code = ((inp || {}).value || '').trim().toUpperCase();
+    var errBox = document.getElementById('familyCodeErrBox');
+    function showErr(msg) {
+        showToast(msg);
+        if (errBox) { errBox.textContent = msg; errBox.style.display = 'block'; }
+    }
+    function clearErr() { if (errBox) { errBox.textContent = ''; errBox.style.display = 'none'; } }
+    clearErr();
+    if (!code) { showErr('请输入家庭码'); return; }
+    if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) { showErr('家庭码为 8 位大写字母/数字（不含 I、O），请检查后重试'); return; }
+    var btn = document.getElementById('familyCodeLoginBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '进入中…'; }
+    // 统一进入逻辑：建立家庭会话并进入主界面
+    function enterFamily(name) {
+        setLoginUser({ id: 'fam_' + code, familySession: true, name: name });
+        setLoginFamily({ name: name, code: code });
+        setFamilyId(code);
+        try { localStorage.setItem('familyName_' + code, name); } catch(e) {}
+        showToast('已进入家庭：' + name);
+        showAppRoot();
+    }
+    try {
+        // 1) 本地凭证优先：本机曾用此家庭码登录过（缓存了家庭名）→ 直接进入，无需网络
+        var localName = null;
+        try { localName = localStorage.getItem('familyName_' + code); } catch(e) {}
+        if (localName) { enterFamily(localName); return; }
+        // 2) Supabase RPC 查询（security definer，不受 RLS 限制）
+        try {
+            var r = await withTimeout(sb.rpc('family_code_login', { p_code: code }), 15000, '家庭登录');
+            if (!r.error) {
+                var rows = r.data || [];
+                if (rows.length >= 1 && rows[0].family_name) { enterFamily(rows[0].family_name); return; }
+                showErr('家庭码无效，请检查后重试');
+                return;
+            }
+            // RPC 不存在等错误 → 落到 3) 直查
+        } catch(eRpc) { /* RPC 未创建 → 走直查兜底 */ }
+        // 3) 直查 families 表（若匿名查询策略放行则可用）
+        var q = await withTimeout(sb.from('families').select('id,family_name,family_code').eq('family_code', code).maybeSingle(), 15000, '家庭登录');
+        if (q && q.data && q.data.family_name) { enterFamily(q.data.family_name); return; }
+        showErr('家庭码无效，请检查后重试');
+    } catch(e) {
+        showErr('网络异常，请检查网络后重试');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '进入家庭'; }
+    }
+}
+
+// ==================== 创建家庭流程（登录页"创建家庭"→ 邮箱注册 → 填家庭名 → 展示家庭码） ====================
+function startCreateFamilyFlow() {
+    // 第 1 步：邮箱注册（复用邮箱账号弹窗，切到注册模式）
+    openEmailAccountModal('create');
+}
+
+// 邮箱账号弹窗：mode='create' → 注册模式（创建家庭第1步）；缺省 → 登录模式（备用恢复入口）
+function openEmailAccountModal(mode) {
+    var m = document.getElementById('emailAccountModal');
+    if (!m) return;
+    m.style.display = 'flex';
+    var isReg = (mode === 'create');
+    setEmailPanelMode(isReg);
+    var t = document.getElementById('emailModalTitle');
+    var s = document.getElementById('emailModalSub');
+    if (t) t.textContent = isReg ? '📧 创建家庭 · 第 1 步' : '📧 邮箱登录';
+    if (s) s.textContent = isReg ? '注册邮箱账号，用于创建和管理您的家庭' : '用于换设备后恢复账号并关联原家庭';
+    var eb = document.getElementById('loginErrBox');
+    if (eb) { eb.textContent = ''; eb.style.display = 'none'; }
+}
+function closeEmailAccountModal() {
+    var m = document.getElementById('emailAccountModal');
+    if (m) m.style.display = 'none';
+}
+
+// 邮箱面板 登录/注册 模式直接设置（不翻转）
+function setEmailPanelMode(isRegister) {
+    _isRegisterMode = !!isRegister;
+    var btn = document.getElementById('loginBtn');
+    var switchEl = document.getElementById('switchToRegister');
+    if (_isRegisterMode) {
+        if (btn) { btn.textContent = '注册'; btn.setAttribute('onclick', 'doRegister()'); }
+        if (switchEl) switchEl.textContent = '已有账号？点此登录';
+    } else {
+        if (btn) { btn.textContent = '登录'; btn.setAttribute('onclick', 'doLogin()'); }
+        if (switchEl) switchEl.textContent = '还没有账号？点此注册';
+    }
+}
+
+// 创建家庭弹窗（邮箱注册成功后第 2 步）
+function openCreateFamilyModal() {
+    var m = document.getElementById('createFamilyModal');
+    if (!m) return;
+    m.style.display = 'flex';
+    var ni = document.getElementById('familyNameInput');
+    if (ni) { ni.value = ''; setTimeout(function() { try { ni.focus(); } catch(e) {} }, 150); }
+}
+function closeCreateFamilyModal() {
+    var m = document.getElementById('createFamilyModal');
+    if (m) m.style.display = 'none';
+}
+
+// 家庭码展示弹窗（创建成功后展示给用户，告知家人加入）
+function showFamilyCodeModal(code, familyName) {
+    var m = document.getElementById('familyCodeShowModal');
+    if (!m) return;
+    var c = document.getElementById('fcShowCode');
+    var n = document.getElementById('fcShowName');
+    if (c) c.textContent = code || (getFamilyId() || '');
+    if (n) n.textContent = familyName ? ('家庭名称：' + familyName) : '';
+    m.style.display = 'flex';
+}
+function closeFamilyCodeShowModal() {
+    var m = document.getElementById('familyCodeShowModal');
+    if (m) m.style.display = 'none';
+}
+// 按元素 id 复制家庭码（展示弹窗用）
+function copyFamilyCodeById(elId) {
+    var el = document.getElementById(elId);
+    var code = el ? (el.textContent || '').trim() : '';
+    if (!code) { showToast('未获取到家庭码'); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(function() { showToast('✅ 已复制：' + code); }, function() { fallbackCopyCode(code); });
+    } else { fallbackCopyCode(code); }
+}
+function fallbackCopyCode(code) {
+    var ta = document.createElement('textarea');
+    ta.value = code;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); showToast('✅ 已复制：' + code); } catch(e) { showToast('复制失败，请手动记录：' + code); }
+    document.body.removeChild(ta);
 }
 
 // ====== 忘记密码（邮箱登录）：发送 Supabase 重置邮件 ======
@@ -20230,9 +20372,10 @@ function renderFamily() {
             <button onclick="copyFamilyCode()" style="padding:5px 10px;font-size:12px;font-weight:600;color:#92400E;background:#FEF3C7;border:none;border-radius:8px;cursor:pointer;">📋 复制</button>
         </div>
         <button onclick="doLogout()" style="width:100%;padding:12px;background:white;border:1px solid #FECACA;border-radius:12px;font-size:13px;font-weight:600;color:#DC2626;cursor:pointer;">🚪 退出登录</button>
-        <div style="font-size:11px;color:#9CA3AF;margin-top:6px;text-align:center;">退出后可用邮箱或家庭名称重新登录</div>` : `
+        <div style="font-size:11px;color:#9CA3AF;margin-top:6px;text-align:center;">退出后凭家庭码即可重新登录</div>` : `
         <button onclick="showLoginPage()" style="width:100%;padding:12px;background:#F97316;border:none;border-radius:12px;font-size:13px;font-weight:600;color:white;cursor:pointer;margin-top:12px;">登录 / 注册</button>
-        <div style="font-size:11px;color:#9CA3AF;margin-top:6px;text-align:center;">登录后可管理家庭信息与成员，当前为浏览模式</div>`}
+        <button onclick="openEmailAccountModal()" style="width:100%;padding:11px;background:white;border:1px solid #FED7AA;border-radius:12px;font-size:13px;font-weight:600;color:#9A3412;cursor:pointer;margin-top:8px;">📧 邮箱登录（换设备恢复账号）</button>
+        <div style="font-size:11px;color:#9CA3AF;margin-top:6px;text-align:center;">主登录方式为家庭码；邮箱登录用于换设备后恢复账号</div>`}
     </div>`);
 
     // 设置区域展开/折叠
