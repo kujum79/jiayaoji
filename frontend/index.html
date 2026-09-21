@@ -4850,11 +4850,8 @@ function showAppRoot() {
     if (fo) fo.style.display = 'none';
     if (app) app.style.display = '';
     updateHomeAuthBtn();
-    // 登录/创建家庭后软切换时, 强制重渲染当前Tab, 确保我家页的登录壳被替换为真实内容
-    // (showAppRoot 本身只切可见性, 不会触发 tab 内容重渲染)
-    if (typeof currentTab !== 'undefined' && currentTab === 'family') {
-        try { renderFamily(); } catch(e) {}
-    }
+    // 登录/创建家庭后, 强制回到首页(用户应从首页开始浏览, 而非停留在登录前的任意Tab)
+    try { switchTab('home'); } catch(e) {}
 }
 
 // ==================== 首页优先 + 未登录浏览模式 ====================
