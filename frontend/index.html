@@ -282,7 +282,7 @@
             background: #FFFBEB;
         }
         .solar-term-guide-btn {
-            flex: 1;
+            flex: 0 0 auto;   /* 宽度正好包住文字，不拉满整行 */
             background: linear-gradient(135deg, #F0FDF4, #DCFCE7);
             border: 1px solid #BBF7D0;
             border-radius: 8px;
@@ -315,9 +315,9 @@
             opacity: 0.85;
             white-space: nowrap;
         }
-        /* 窄屏：节气按钮独占一行且强制单行，保证"白露节气 · 饮食指南（日期）"不换行 */
+        /* 窄屏：节气按钮保持紧凑（宽度包住文字），强制单行不换行 */
         @media (max-width: 430px) {
-            .solar-term-guide-btn { flex-basis: 100%; padding: 5px 8px; gap: 6px; white-space: nowrap; flex-wrap: nowrap; }
+            .solar-term-guide-btn { padding: 5px 8px; gap: 6px; white-space: nowrap; flex-wrap: nowrap; }
             .solar-term-guide-btn div:first-child { font-size: 12px; letter-spacing: 0; }
             .solar-term-guide-btn #solarTermDateRangeText { font-size: 10px; }
             .knowledge-dropdown-wrapper { flex-shrink: 0; }
@@ -3560,7 +3560,7 @@
     <!-- ====== 首页 ====== -->
     <div class="page-home" id="pageHome">
         <div class="solar-term-banner" id="homeSolarBanner">
-            <div class="term-name" id="homeSolarBannerClickable" style="cursor:pointer;flex:1;min-width:0;" onclick="showSolarTermGuide()">🌿 白露饮食指南</div>
+            <div class="term-name" id="homeSolarBannerClickable" style="cursor:pointer;flex:1;min-width:0;" onclick="showSolarTermGuide()">白露食养</div>
             <div id="homeAuthBtn" onclick="onHomeAuthClick()" style="flex-shrink:0;padding:6px 12px;font-size:12px;font-weight:700;color:#fff;background:rgba(255,255,255,0.25);border:none;border-radius:999px;cursor:pointer;backdrop-filter:blur(4px);margin-left:8px;white-space:nowrap;">登录</div>
         </div>
         <div class="home-logo-wrap" id="homeLogoWrap">
@@ -3699,7 +3699,7 @@
                             </div>
                         </div>
                         <button class="solar-term-guide-btn" onclick="showSolarTermGuide()">
-                            <div><span id="solarTermNameText">大暑</span>节气 · 饮食指南<span id="solarTermDateRangeText">（7月23日-8月7日）</span></div>
+                            <div><span id="solarTermNameText">大暑</span>节气饮食指南<span id="solarTermDateRangeText">（7月23日-8月7日）</span></div>
                         </button>
                     </div>
                     <!-- 非默认模式：显示返回按钮 -->
@@ -19855,7 +19855,8 @@ function confirmShoppingToFridge() {
 
 function renderHomeSolarTerm() {
     const term = getSolarTermForDate(new Date());
-    if (homeSolarBannerClickable) homeSolarBannerClickable.textContent = `🌿 ${term.name}饮食指南`;
+    // 节气名动态拼接（白露食养/秋分食养...），随节气自动切换
+    if (homeSolarBannerClickable) homeSolarBannerClickable.textContent = `${term.name}食养`;
 }
 
 function renderChat() {
@@ -26029,7 +26030,7 @@ function renderKnowledgeHome() {
             <div style="display:flex;align-items:center;gap:8px;">
                 <button onclick="backToKnowledgeChat()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#15803D;padding:0 4px;flex-shrink:0;" title="返回对话">＜</button>
                 <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;">
-                    <span style="font-size:18px;font-weight:700;color:#15803D;">🌿 ${escapeHtml(termName)}节气 · 饮食指南</span>
+                    <span style="font-size:18px;font-weight:700;color:#15803D;">${escapeHtml(termName)}节气饮食指南</span>
                     ${dateRange ? `<span style="font-size:12px;color:#6B7280;">${dateRange}</span>` : ''}
                 </div>
             </div>
