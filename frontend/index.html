@@ -19833,6 +19833,17 @@ function renderChat() {
 
 function renderFamily() {
     try {
+    // 未登录浏览模式: 不渲染任何家庭成员/就餐组/家庭码信息(默认成员含"老公、儿子", 属于演示数据,
+    // 退出登录后不应显示), 只显示登录引导壳
+    if (!isLogined()) {
+        familyList.innerHTML = '<div style="text-align:center;padding:30px 16px;background:white;border:1px solid #F3F4F6;border-radius:12px;margin-bottom:10px;">'
+            + '<div style="font-size:34px;">🏠</div>'
+            + '<div style="font-size:15px;font-weight:700;color:#374151;margin:8px 0 4px;">还未登录</div>'
+            + '<div style="font-size:12px;color:#9CA3AF;margin-bottom:14px;">登录后可管理家庭成员、家庭住址、采购日等信息</div>'
+            + '<button onclick="showLoginPage()" style="padding:10px 28px;background:#F97316;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">登录 / 注册</button>'
+            + '</div>';
+        return;
+    }
     familyList.innerHTML = '';
     renderCurrentDiningGroupSelector();
     // 家庭住址卡片
