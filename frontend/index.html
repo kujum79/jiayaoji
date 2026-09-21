@@ -8,6 +8,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="format-detection" content="telephone=no,email=no,address=no" />
     <title>家肴记 - AI 家庭膳食助理</title>
+    <script>
+    /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
+    (function () {
+        function lockFont() {
+            try {
+                if (window.WeixinJSBridge && typeof WeixinJSBridge.invoke === 'function') {
+                    WeixinJSBridge.invoke('setFontSizeCallback', { 'fontSize': 1 });
+                    WeixinJSBridge.on('menu:setfont', function () {
+                        WeixinJSBridge.invoke('setFontSizeCallback', { 'fontSize': 1 });
+                    });
+                }
+            } catch (e) {}
+        }
+        lockFont();
+        document.addEventListener('WeixinJSBridgeReady', lockFont, false);
+    })();
+    </script>
     <!-- 首页 LOGO 预加载 & 兼容修复：?v=2 绕开微信 WebView 可能残留的旧大图/坏响应磁盘缓存 -->
     <link rel="preload" as="image" href="images/logo.png?v=3" imagesrcset="images/logo.png?v=3 1x" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -19,10 +36,11 @@
         /* ====== 全局样式 ====== */
         * { box-sizing: border-box; }
         /* 禁止手机浏览器自动放大文字（华为/小米等自带浏览器会按系统字体放大，挤坏布局） */
-        html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+        html { -webkit-text-size-adjust: 100% !important; text-size-adjust: 100% !important; }
         body {
             margin: 0;
             min-height: 100vh;
+            max-height: 999999px;   /* 禁安卓 Chrome/微信X5 内核 font-boosting（系统字体放大时自动加大文字块） */
             overflow: hidden;   /* 隐藏首页右/下页面级滚动条, 滚动全部交给内部容器 */
             display: flex;
             align-items: center;
@@ -1116,6 +1134,10 @@
             letter-spacing: 0px;
             transition: opacity 0.15s;
             padding-left: 4px;
+            /* 防拆字："白露饮食指南"永远单行（右侧过长时整体压缩/截尾，不允许词内换行） */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .solar-term-banner .term-name:active {
             opacity: 0.75;
@@ -2152,12 +2174,18 @@
         background: #FFF7ED; color: #7A4A21;
         font-size: 12px; font-weight: 700; letter-spacing: -0.2px;
         cursor: pointer;
-        /* 宽度不足时自动换行完整显示，禁止 ellipsis 截断按钮名 */
-        white-space: normal; text-align: center; line-height: 1.4; overflow: hidden;
+        /* 按钮名永不拆字（"现有食材食谱"不许折成两行）；窄屏靠缩小字号适配 */
+        white-space: nowrap; text-align: center; line-height: 1.4; overflow: hidden; text-overflow: ellipsis;
         box-sizing: border-box;
     }
-    @media (max-width: 410px) {
-        .prep-ai-btn { padding: 8px 2px; font-size: 11px; }
+    @media (max-width: 430px) {
+        .prep-ai-btn { padding: 8px 2px; font-size: 11.5px; }
+    }
+    @media (max-width: 375px) {
+        .prep-ai-btn { font-size: 10.5px; letter-spacing: -0.3px; }
+    }
+    @media (max-width: 340px) {
+        .prep-ai-btn { font-size: 10px; padding: 8px 1px; }
     }
     .prep-ai-btn:active { background: #FFEDD5; border-color: #FDBA74; }
     .prep-ai-btn.ai-btn-existing { background: #FFF7ED; color: #9A3412; border-color: #FED7AA; }
@@ -2386,7 +2414,7 @@
     .freshness-urgent { background:#FEE2E2; color:#991B1B; }
     .fridge-tag-need { background:#FEF3C7; color:#92400E; }
     .fridge-recipe-actions { display:flex; gap:6px; margin-top:8px; flex-wrap:nowrap; }
-    .fridge-recipe-actions button { flex:1 1 0; min-width:0; padding:7px 6px; border-radius:8px; font-size:12px; cursor:pointer; border:1px solid transparent; font-weight:700; white-space:normal; line-height:1.35; }
+    .fridge-recipe-actions button { flex:1 1 0; min-width:0; padding:7px 6px; border-radius:8px; font-size:12px; cursor:pointer; border:1px solid transparent; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.35; }
     .fridge-recipe-actions .btn-tonight  { background:#059669; color:#fff; border-color:#047857; }
     .fridge-recipe-actions .btn-tonight:active { background:#047857; }
     .fridge-recipe-actions .btn-plan { background:#fff; color:#374151; border-color:#D1D5DB; }
@@ -2851,7 +2879,7 @@
     @media (max-width: 430px) {
         .diary-date-nav { flex-wrap: nowrap; gap:5px; padding-bottom:2px; }
         .diary-nav-btn { padding:3px 5px; font-size:12px; }
-        .diary-date-text { font-size:13px; letter-spacing:-0.2px; }
+        .diary-date-text { font-size:13px; letter-spacing:-0.4px; }
         .diary-top-actions { gap:4px; flex-shrink:0; }
         .diary-top-actions button { padding:4px 6px; font-size:11px; }
         /* 日期中心区优先保留空间，防"2026年9月19日"被截断 */
@@ -3533,7 +3561,7 @@
     <div class="page-home" id="pageHome">
         <div class="solar-term-banner" id="homeSolarBanner">
             <div class="term-name" id="homeSolarBannerClickable" style="cursor:pointer;flex:1;min-width:0;" onclick="showSolarTermGuide()">🌿 白露饮食指南</div>
-            <div id="homeAuthBtn" onclick="onHomeAuthClick()" style="flex-shrink:0;padding:6px 16px;font-size:13px;font-weight:700;color:#fff;background:rgba(255,255,255,0.25);border:none;border-radius:999px;cursor:pointer;backdrop-filter:blur(4px);margin-left:8px;">登录</div>
+            <div id="homeAuthBtn" onclick="onHomeAuthClick()" style="flex-shrink:0;padding:6px 12px;font-size:12px;font-weight:700;color:#fff;background:rgba(255,255,255,0.25);border:none;border-radius:999px;cursor:pointer;backdrop-filter:blur(4px);margin-left:8px;white-space:nowrap;">登录</div>
         </div>
         <div class="home-logo-wrap" id="homeLogoWrap">
             <span class="home-logo-circle" aria-hidden="true"></span>
@@ -4867,6 +4895,8 @@ function updateHomeAuthBtn() {
         // 家庭会话优先显示家庭名称（登录时存于 loginFamily.name），如"三仁佳欢"
         var fam = getLoginFamily ? getLoginFamily() : null;
         var name = (u.familySession && fam && fam.name) || u.familyName || u.family_name || u.name || u.nickname || (u.email ? String(u.email).split('@')[0] : '') || '我家';
+        // 纯手机号/长邮箱名太长，会挤换行首页"白露饮食指南"横幅 → 显示"我家"（点击本就进入我家）
+        if (/^1\d{10}$/.test(name)) name = '我家';
         btn.textContent = name;
         btn.title = '点击进入"我家"';
     } else {
