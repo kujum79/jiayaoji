@@ -5116,6 +5116,25 @@ function resetFamilyMemoryToGuest() {
     selectedFamilyMemberName = null;
     try { renderFamily(); } catch(e) {}
 }
+// 从家庭住址中提取城市信息(用于成员"现住地"自动填充)
+// 支持格式: "北京市朝阳区xxx"、"上海市浦东新区xxx"、"杭州市西湖区xxx"、"江苏省南京市鼓楼区xxx"
+function extractCityFromAddress(addr) {
+    if (!addr) return '';
+    addr = String(addr).trim();
+    // 直辖市: 北京市/上海市/天津市/重庆市 → 取"XX市"即可
+    var m = addr.match(/^(北京|上海|天津|重庆)市/);
+    if (m) return m[1] + '市';
+    // 省辖市: 江苏省南京市xxx → 取"南京市"
+    m = addr.match(/省([^省市县区]+?)市/);
+    if (m) return m[1] + '市';
+    // 自治州/地区: 延边朝鲜族自治州/阿坝藏族羌族自治州 → 取自治州
+    m = addr.match(/([^省市县区]+?(?:自治州|地区|盟))/);
+    if (m) return m[1];
+    // 简单兜底: 取到第一个"市/州/地区/盟"之前
+    m = addr.match(/^(.+?)(?:市|自治州|地区|盟)/);
+    if (m) return m[1];
+    return '';
+}
 
 // ==================== 家庭快捷登录（家庭名称+密码，无需邮箱） ====================
 // 登录页标签页切换：family=家庭登录（默认），email=邮箱登录/注册
@@ -19952,7 +19971,7 @@ function renderFamily() {
                     </div>
                     <!-- 现住地 | 职业 | 作息类型 -->
                     <div class="family-form-row" style="display:flex; gap:4px;">
-                        <input type="text" id="editCity_${id}" value="${member.currentCity||''}" placeholder="现住地" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
+                        <input type="text" id="editCity_${id}" value="${member.currentCity||extractCityFromAddress(familyHomeAddress)}" placeholder="现住地" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                         <select id="editOccupation_${id}" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                             <option value="">职业</option>
                             <option value="学生"${member.occupation==='学生'?' selected':''}>学生</option>
@@ -20373,7 +20392,7 @@ function renderCurrentDiningGroupSelector() {
                     </div>
                     <div style="display:flex;gap:6px;margin-top:5px;">
                         <input type="text" class="sub-member-place" placeholder="籍贯" style="flex:1;padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">
-                        <input type="text" class="sub-member-city" placeholder="现住地" style="flex:1;padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">
+                        <input type="text" class="sub-member-city" value="${extractCityFromAddress(familyHomeAddress)}" placeholder="现住地" style="flex:1;padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">
                     </div>
                     <input type="text" class="sub-member-taste" placeholder="口味偏好（如：微辣、清淡）" style="width:100%;box-sizing:border-box;padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;margin-top:5px;">
                     <input type="text" class="sub-member-diet" placeholder="饮食要求（如：不吃香菜）" style="width:100%;box-sizing:border-box;padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;margin-top:5px;">
@@ -22959,7 +22978,7 @@ function renderFamilyGroupPanel() {
                     </div>
                     <!-- 现住地 | 职业 | 作息类型 -->
                     <div class="family-form-row" style="display:flex; gap:4px;">
-                        <input type="text" class="fgp-edit-city" value="${escapeHtml(m.currentCity||'')}" placeholder="现住地" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
+                        <input type="text" class="fgp-edit-city" value="${escapeHtml(m.currentCity||extractCityFromAddress(familyHomeAddress))}" placeholder="现住地" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                         <select class="fgp-edit-occupation" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px;">
                             <option value="">职业</option>
                             <option value="学生"${m.occupation==='学生'?' selected':''}>学生</option>
@@ -32532,14 +32551,20 @@ function renderDiary() {
         }
         if (hasPlan) {
             var dm = (data.plan && data.plan.dishMeta) ? data.plan.dishMeta : {};
-            const RDR_STAPLES = ['米饭','面','馒头','包子','饼','吐司','面包','三明治','麦片','玉米','红薯','紫薯','南瓜','饭','炒饭','煲仔饭','意面','馄饨','蒸饺','水饺','芝麻糊'];
+            const RDR_STAPLES = ['米饭','白米饭','面','馒头','包子','饼','吐司','面包','三明治','麦片','玉米','红薯','紫薯','南瓜','饭','炒饭','煲仔饭','意面','馄饨','蒸饺','水饺','芝麻糊'];
             const RDR_SOUPS = ['汤','羹','粥'];
+            // 纯主食/简餐过滤: "米饭"/"白米饭"/"粥" 等每餐默认有的基础主食不单独显示
+            // (保留"扬州炒饭"/"牛肉面"等有实际菜品名的主食)
+            const HIDDEN_STAPLES = ['米饭','白米饭','粥'];
+            function isHiddenStaple(dn){ return HIDDEN_STAPLES.some(function(k){ return (dn||'').trim() === k; }); }
             function isRdrStaple(dn){ return RDR_STAPLES.some(function(k){ return (dn||'').indexOf(k)>=0; }); }
             function isRdrSoup(dn){ return RDR_SOUPS.some(function(k){ return (dn||'').indexOf(k)>=0; }); }
             var allDishes = [];
             data.plan.dishes.forEach(function(d, idx){
                 var n = typeof d === 'string' ? d : ((d && d.name) || '');
                 if (!n) return;
+                // 过滤掉纯主食(米饭/白米饭/粥), 这些是默认每餐都有的, 不需要在计划里单独列出
+                if (isHiddenStaple(n)) return;
                 var meta = typeof getDishMetaSafe === 'function' ? getDishMetaSafe(data.plan, n) : (dm[n] || { source: 'ai', confirmed: false });
                 if (!/^(existing|shopping|weekend|ai|preferred|manual)$/.test(String(meta.source||''))) meta.source = 'ai';
                 if (typeof meta.confirmed !== 'boolean') meta.confirmed = false;
@@ -40066,6 +40091,9 @@ clearBtn.addEventListener('click', function() {
         // 我家页面：显示添加成员表单，隐藏其他版块
         document.getElementById('familyList').style.display = 'none';
         document.getElementById('addMemberForm').style.display = 'block';
+        // 自动填充现住地为家庭住址中的城市(若家庭住址已设置)
+        var famCityEl = document.getElementById('famCity');
+        if (famCityEl && !famCityEl.value) famCityEl.value = extractCityFromAddress(familyHomeAddress);
         document.getElementById('famName').focus();
         return;
     }
