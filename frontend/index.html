@@ -308,29 +308,29 @@
             white-space: nowrap;
             overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1;
         }
-        .solar-term-guide-btn div:last-child {
+        /* 日期范围：跟随标题的行内 span（与标题同一文本流，永不分离/换行） */
+        .solar-term-guide-btn #solarTermDateRangeText {
             font-size: 11px;
             color: #15803D;
             opacity: 0.85;
             white-space: nowrap;
-            overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1;
         }
         /* 窄屏：节气按钮独占一行且强制单行，保证"白露节气 · 饮食指南（日期）"不换行 */
         @media (max-width: 430px) {
             .solar-term-guide-btn { flex-basis: 100%; padding: 5px 8px; gap: 6px; white-space: nowrap; flex-wrap: nowrap; }
             .solar-term-guide-btn div:first-child { font-size: 12px; letter-spacing: 0; }
-            .solar-term-guide-btn div:last-child { font-size: 10px; }
+            .solar-term-guide-btn #solarTermDateRangeText { font-size: 10px; }
             .knowledge-dropdown-wrapper { flex-shrink: 0; }
         }
         @media (max-width: 375px) {
             .solar-term-guide-btn { padding: 4px 6px; gap: 4px; }
             .solar-term-guide-btn div:first-child { font-size: 11px; }
-            .solar-term-guide-btn div:last-child { font-size: 9.5px; }
+            .solar-term-guide-btn #solarTermDateRangeText { font-size: 9.5px; }
         }
         @media (max-width: 340px) {
             .solar-term-guide-btn { padding: 4px 4px; gap: 3px; }
             .solar-term-guide-btn div:first-child { font-size: 10px; }
-            .solar-term-guide-btn div:last-child { font-size: 9px; }
+            .solar-term-guide-btn #solarTermDateRangeText { font-size: 9px; }
         }
         .knowledge-back-btn {
             background: white;
@@ -3699,8 +3699,7 @@
                             </div>
                         </div>
                         <button class="solar-term-guide-btn" onclick="showSolarTermGuide()">
-                            <div><span id="solarTermNameText">大暑</span>节气 · 饮食指南</div>
-                            <div id="solarTermDateRangeText">（7月23日-8月7日）</div>
+                            <div><span id="solarTermNameText">大暑</span>节气 · 饮食指南<span id="solarTermDateRangeText">（7月23日-8月7日）</span></div>
                         </button>
                     </div>
                     <!-- 非默认模式：显示返回按钮 -->
