@@ -5377,64 +5377,12 @@ function extractCityFromAddress(addr) {
     return '';
 }
 
-// 登录页已重构为"家庭码登录"单一面板（原"家庭登录/邮箱登录"标签页已移除）
-// 邮箱登录改为备用方式：入口在"我家"→设置，或登录页"创建家庭"流程第 1 步
+// 登录页主面板为"家庭名称 + 家庭密码"登录；邮箱登录为换设备备用入口（登录页"邮箱登录"按钮）
+// "创建家庭"流程：登录页"注册"→ 邮箱注册 + 创建家庭一次完成
 
 function toggleFamilySetupBox() {
     var box = document.getElementById('familySetupBox');
     if (box) box.style.display = (box.style.display === 'none' || !box.style.display) ? 'block' : 'none';
-}
-
-// ==================== 家庭码登录（主登录方式：仅凭 8 位家庭码进入家庭） ====================
-async function doFamilyCodeLogin() {
-    if (!sb) { showToast('登录服务未就绪，请刷新重试'); return; }
-    var inp = document.getElementById('familyCodeInput');
-    var code = ((inp || {}).value || '').trim().toUpperCase();
-    var errBox = document.getElementById('familyCodeErrBox');
-    function showErr(msg) {
-        showToast(msg);
-        if (errBox) { errBox.textContent = msg; errBox.style.display = 'block'; }
-    }
-    function clearErr() { if (errBox) { errBox.textContent = ''; errBox.style.display = 'none'; } }
-    clearErr();
-    if (!code) { showErr('请输入家庭码'); return; }
-    if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) { showErr('家庭码为 8 位大写字母/数字（不含 I、O），请检查后重试'); return; }
-    var btn = document.getElementById('familyCodeLoginBtn');
-    if (btn) { btn.disabled = true; btn.textContent = '进入中…'; }
-    // 统一进入逻辑：建立家庭会话并进入主界面
-    function enterFamily(name) {
-        setLoginUser({ id: 'fam_' + code, familySession: true, name: name });
-        setLoginFamily({ name: name, code: code });
-        setFamilyId(code);
-        try { localStorage.setItem('familyName_' + code, name); } catch(e) {}
-        showToast('已进入家庭：' + name);
-        showAppRoot();
-    }
-    try {
-        // 1) 本地凭证优先：本机曾用此家庭码登录过（缓存了家庭名）→ 直接进入，无需网络
-        var localName = null;
-        try { localName = localStorage.getItem('familyName_' + code); } catch(e) {}
-        if (localName) { enterFamily(localName); return; }
-        // 2) Supabase RPC 查询（security definer，不受 RLS 限制）
-        try {
-            var r = await withTimeout(sb.rpc('family_code_login', { p_code: code }), 15000, '家庭登录');
-            if (!r.error) {
-                var rows = r.data || [];
-                if (rows.length >= 1 && rows[0].family_name) { enterFamily(rows[0].family_name); return; }
-                showErr('家庭码无效，请检查后重试');
-                return;
-            }
-            // RPC 不存在等错误 → 落到 3) 直查
-        } catch(eRpc) { /* RPC 未创建 → 走直查兜底 */ }
-        // 3) 直查 families 表（若匿名查询策略放行则可用）
-        var q = await withTimeout(sb.from('families').select('id,family_name,family_code').eq('family_code', code).maybeSingle(), 15000, '家庭登录');
-        if (q && q.data && q.data.family_name) { enterFamily(q.data.family_name); return; }
-        showErr('家庭码无效，请检查后重试');
-    } catch(e) {
-        showErr('网络异常，请检查网络后重试');
-    } finally {
-        if (btn) { btn.disabled = false; btn.textContent = '进入家庭'; }
-    }
 }
 
 // ==================== 创建家庭流程（登录页"创建家庭"→ 邮箱注册 → 填家庭名 → 展示家庭码） ====================
