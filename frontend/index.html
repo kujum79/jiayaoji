@@ -3386,25 +3386,32 @@
             <div id="familyLoginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.6;"></div>
             <!-- 三按钮并排一行：注册 / 邮箱登录 / 忘记密码 -->
             <div style="display:flex;gap:8px;margin-top:14px;">
-                <button onclick="openEmailAccountModal('create')" style="flex:1;padding:10px 2px;font-size:12px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">注册</button>
+                <button onclick="openCombinedRegisterModal()" style="flex:1;padding:10px 2px;font-size:12px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">注册</button>
                 <button onclick="openEmailAccountModal()" style="flex:1;padding:10px 2px;font-size:12px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">邮箱登录</button>
                 <button onclick="openFamilyResetModal()" style="flex:1;padding:10px 2px;font-size:12px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">忘记密码？</button>
             </div>
-            <div style="font-size:11px;color:#9CA3AF;margin-top:10px;">家人加入？<span onclick="switchLoginPanel('code')" style="color:#EA580C;cursor:pointer;text-decoration:underline;">凭家庭码进入</span></div>
-            <div style="font-size:11px;color:#9CA3AF;margin-top:6px;">登录即表示同意家肴记服务条款</div>
+            <div style="font-size:11px;color:#9CA3AF;margin-top:10px;">登录即表示同意家肴记服务条款</div>
         </div>
-        <!-- 副面板：家庭码登录（家人加入用，默认隐藏） -->
-        <div id="loginPanelFamilyCode" style="display:none;">
-            <input id="familyCodeInput" type="text" maxlength="8" placeholder="请输入 8 位家庭码" onkeydown="if(event.key==='Enter')doFamilyCodeLogin()" style="width:100%;padding:12px 14px;font-size:17px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;letter-spacing:3px;text-transform:uppercase;box-sizing:border-box;" />
-            <button id="familyCodeLoginBtn" onclick="doFamilyCodeLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">进入家庭</button>
-            <div id="familyCodeErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.6;"></div>
-            <div style="font-size:11px;color:#9CA3AF;margin-top:12px;line-height:1.5;">家庭码在创建者"我家"→"设置"中可查看复制</div>
-            <div style="font-size:11px;color:#9CA3AF;margin-top:8px;"><span onclick="switchLoginPanel('main')" style="color:#EA580C;cursor:pointer;text-decoration:underline;">返回家庭名称登录</span></div>
-        </div>
-        <!-- 底部小字：创建家庭入口 -->
-        <div style="text-align:center;margin-top:16px;font-size:13px;color:#6B7280;">
-            还没有家庭？<span onclick="startCreateFamilyFlow()" style="color:#EA580C;cursor:pointer;text-decoration:underline;font-weight:600;">创建家庭</span>
-        </div>
+    </div>
+</div>
+
+<!-- ====== 合并注册弹窗（邮箱注册 + 创建家庭 一次完成） ====== -->
+<div id="combinedRegisterModal" style="position:fixed;inset:0;z-index:100013;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeCombinedRegisterModal()">
+    <div style="background:#fff;border-radius:20px;padding:24px 20px;width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;max-height:92vh;overflow-y:auto;">
+        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">📧 注册并创建家庭</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-bottom:16px;text-align:center;">一步完成注册，开始使用家肴记</div>
+        <!-- 账号信息区 -->
+        <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:6px;">① 账号信息</div>
+        <input id="regEmail" type="email" maxlength="60" placeholder="邮箱" onkeydown="if(event.key==='Enter')doCombinedRegister()" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <input id="regEmailPass" type="password" maxlength="40" placeholder="密码（至少 6 位）" onkeydown="if(event.key==='Enter')doCombinedRegister()" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <!-- 创建家庭区 -->
+        <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:6px;margin-top:4px;">② 创建家庭</div>
+        <input id="regFamilyName" type="text" maxlength="20" placeholder="家庭名称（如：三仁佳欢）" onkeydown="if(event.key==='Enter')doCombinedRegister()" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <input id="regFamilyPass" type="password" maxlength="40" placeholder="家庭密码（至少 6 位）" onkeydown="if(event.key==='Enter')doCombinedRegister()" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <input id="regFamilyPass2" type="password" maxlength="40" placeholder="确认家庭密码" onkeydown="if(event.key==='Enter')doCombinedRegister()" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <button id="regCombinedBtn" onclick="doCombinedRegister()" style="width:100%;padding:13px;font-size:15px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">注册并创建家庭</button>
+        <div id="regCombinedErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.6;"></div>
+        <div onclick="closeCombinedRegisterModal()" style="font-size:12px;color:#9CA3AF;margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline;">返回</div>
     </div>
 </div>
 
@@ -4924,6 +4931,108 @@ function switchLoginPanel(which) {
 }
 // 显示创建家庭页（已移除 9/20，保留空实现防止调用报错）
 function showCreateFamilyPage() { return; }
+
+// ====== 合并注册弹窗（邮箱注册 + 创建家庭 一次完成） ======
+function openCombinedRegisterModal() {
+    var m = document.getElementById('combinedRegisterModal');
+    if (!m) return;
+    m.style.display = 'flex';
+    var eb = document.getElementById('regCombinedErrBox');
+    if (eb) { eb.textContent = ''; eb.style.display = 'none'; }
+    ['regEmail','regEmailPass','regFamilyName','regFamilyPass','regFamilyPass2'].forEach(function(id) {
+        var el = document.getElementById(id); if (el) el.value = '';
+    });
+    setTimeout(function() { try { var re = document.getElementById('regEmail'); if (re) re.focus(); } catch(e) {} }, 150);
+}
+function closeCombinedRegisterModal() {
+    var m = document.getElementById('combinedRegisterModal');
+    if (m) m.style.display = 'none';
+}
+// 合并注册主函数：signUp + insert families → 进入首页
+async function doCombinedRegister() {
+    if (!sb) { showToast('服务未就绪，请刷新重试'); return; }
+    var email = ((document.getElementById('regEmail') || {}).value || '').trim().toLowerCase();
+    var ePass = ((document.getElementById('regEmailPass') || {}).value || '').trim();
+    var fName = ((document.getElementById('regFamilyName') || {}).value || '').trim();
+    var fPass1 = ((document.getElementById('regFamilyPass') || {}).value || '').trim();
+    var fPass2 = ((document.getElementById('regFamilyPass2') || {}).value || '').trim();
+    var errBox = document.getElementById('regCombinedErrBox');
+    function showErr(msg) {
+        showToast(msg);
+        if (errBox) { errBox.innerHTML = msg; errBox.style.display = 'block'; }
+    }
+    function clearErr() { if (errBox) { errBox.textContent = ''; errBox.style.display = 'none'; } }
+    clearErr();
+    // 表单校验
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showErr('请输入正确的邮箱'); return; }
+    if (ePass.length < 6) { showErr('邮箱密码至少 6 位'); return; }
+    if (!fName) { showErr('请输入家庭名称'); return; }
+    if (fPass1.length < 6) { showErr('家庭密码至少 6 位'); return; }
+    if (fPass1 !== fPass2) { showErr('两次输入的家庭密码不一致'); return; }
+    var btn = document.getElementById('regCombinedBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '注册中…'; }
+    try {
+        // 1) Supabase Auth signUp
+        var res = await sb.auth.signUp({ email: email, password: ePass });
+        if (res && res.error) throw res.error;
+        var u = (res && res.data && res.data.user) || null;
+        if (!u) { showErr('注册异常，请稍后重试'); return; }
+        // 2) 注册成功（部分配置需邮箱确认）→ 立即尝试登录态
+        if (!res.data.session) {
+            showErr('注册成功，请到邮箱点击确认链接后再登录');
+            return;
+        }
+        // 3) 创建 families 记录
+        var code = generateFamilyCode();
+        var famData = {
+            family_name: fName,
+            owner_id: u.id,
+            family_code: code,
+            owner_email: email,        // 关键：存 owner 邮箱，供后续家庭名称登录用
+            created_at: new Date().toISOString()
+        };
+        // 防重名：同名已存在则加后缀
+        var insertData = { ...famData };
+        var r = await sb.from('families').insert(insertData).select().single();
+        if (r && r.error) {
+            // 重名 → 自动加 "(2)" 后缀再试
+            if (r.error.code === '23505' || (r.error.message || '').indexOf('duplicate') > -1) {
+                insertData.family_name = fName + '(2)';
+                r = await sb.from('families').insert(insertData).select().single();
+                if (r && r.error) throw r.error;
+                fName = insertData.family_name;
+            } else {
+                throw r.error;
+            }
+        }
+        if (r && r.data) {
+            setLoginUser({ id: u.id, email: email, aud: u.aud });
+            setLoginFamily({ id: r.data.id, name: fName, owner_id: u.id });
+            setFamilyId(code);
+            try { localStorage.setItem('familyName_' + code, fName); } catch(e) {}
+            closeCombinedRegisterModal();
+            showToast('注册成功，欢迎加入家肴记！');
+            showAppRoot();
+            showFamilyCodeModal(code, fName);
+        }
+    } catch(e) {
+        var msg = e && e.message || '未知错误';
+        if (msg.indexOf('rate limit') > -1 || msg.indexOf('over_email_send_rate_limit') > -1) {
+            msg = '注册过于频繁，请稍后再试（每小时限3次）';
+        } else if (msg.indexOf('already') > -1 && msg.indexOf('registered') > -1) {
+            msg = '该邮箱已注册，请直接登录';
+        } else if (msg.indexOf('weak') > -1 || msg.indexOf('password') > -1) {
+            msg = '密码强度不足，请使用更复杂的密码';
+        } else if (msg.indexOf('row-level security') > -1 || msg.indexOf('42501') > -1) {
+            msg = '数据库权限策略未放行，请在 Supabase 后台为 families 表添加 RLS 策略（允许认证用户插入自己的家庭）';
+        } else if (msg.indexOf('owner_email') > -1 || msg.indexOf('PGRST204') > -1) {
+            msg = '缺少 owner_email 字段，请先在 Supabase 后台执行：alter table families add column if not exists owner_email text;';
+        }
+        showErr('注册失败：' + msg);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '注册并创建家庭'; }
+    }
+}
 // 显示APP主界面
 function showAppRoot() {
     hideBootSplash();
@@ -5539,7 +5648,7 @@ async function doFamilyReset() {
     if (btn) { btn.disabled = false; btn.textContent = '重置密码'; }
 }
 
-// 家庭快捷登录：验证通过后以该家庭的本地数据命名空间进入APP
+// 家庭登录（新逻辑：家庭名称 → families 查 owner_email → Supabase Auth signInWithPassword）
 async function doFamilyLogin() {
     if (!sb) { showToast('服务未就绪，请刷新重试'); return; }
     var name = ((document.getElementById('familyLoginName') || {}).value || '').trim();
@@ -5551,41 +5660,41 @@ async function doFamilyLogin() {
     }
     function clearErr() { if (errBox) { errBox.textContent = ''; errBox.style.display = 'none'; } }
     clearErr();
-    if (!name || !pass) { showErr('请输入家庭名称（或家庭码）和密码'); return; }
+    if (!name || !pass) { showErr('请输入家庭名称和密码'); return; }
     var btn = document.getElementById('familyLoginBtn');
     if (btn) { btn.disabled = true; btn.textContent = '登录中…'; }
     try {
-        var r = await withTimeout(sb.rpc('family_login', { p_name: name, p_pass: pass }), 15000, '家庭登录');
-        if (r.error) throw r.error;
-        var rows = r.data || [];
-        if (rows.length !== 1) {
-            // 重名多行 / 未匹配: 尝试升级版函数 family_login_v2(支持家庭码匹配, 码唯一, 需在 Supabase 创建).
-            // v2 未创建时静默跳过, 不影响原有登录路径.
-            try {
-                var r2 = await withTimeout(sb.rpc('family_login_v2', { p_name: name, p_pass: pass }), 15000, '家庭登录');
-                if (!r2.error && (r2.data || []).length >= 1) rows = r2.data;
-            } catch (e2) { /* v2 未创建, 走原提示 */ }
-        }
-        if (rows.length === 0) {
-            showErr('家庭名称或密码不正确。<br>若该家庭尚未设置密码，请点"忘记密码？"凭家庭码设置。');
+        // 1) families 表按名称查 owner_email
+        var q = await withTimeout(sb.from('families').select('id,family_name,family_code,owner_id,owner_email').eq('family_name', name), 15000, '家庭查询');
+        if (q && q.data && q.data.length === 0) { showErr('家庭名称或密码错误'); return; }
+        if (q && q.data && q.data.length > 1) { showErr('存在多个同名家庭，请联系创建者确认具体名称'); return; }
+        var fam = q && q.data && q.data[0];
+        if (!fam) { showErr('家庭名称或密码错误'); return; }
+        var ownerEmail = fam.owner_email;
+        if (!ownerEmail) {
+            // 兜底：owner_id 作为邮箱查询失败时提示（极少数旧数据无 owner_email 字段/值）
+            showErr('该家庭尚未绑定邮箱，请联系创建者或改用"邮箱登录"');
             return;
         }
-        if (rows.length > 1) { showErr('存在多个同名家庭，请在登录页点"家人加入？凭家庭码进入"，用家庭码登录（家庭码唯一，创建者可在"我家"→"设置"查看）'); return; }
-        var row = rows[0];
-        setLoginUser({ id: 'fam_' + row.family_code, familySession: true, name: row.family_name });
-        setLoginFamily({ name: row.family_name, code: row.family_code });
-        setFamilyId(row.family_code);
-        try { localStorage.setItem('familyName_' + row.family_code, row.family_name); } catch(e) {}
+        // 2) 用 owner 邮箱 + 用户输入的密码 → Supabase Auth 原生登录
+        var res = await withTimeout(sb.auth.signInWithPassword({ email: ownerEmail, password: pass }), 15000, '家庭登录');
+        if (res && res.error) throw res.error;
+        var u = (res && res.data && res.data.user) || null;
+        if (!u) { showErr('家庭名称或密码错误'); return; }
+        // 3) 登录成功：建立会话、关联家庭
+        setLoginUser({ id: u.id, email: u.email || ownerEmail, aud: u.aud });
+        setLoginFamily({ id: fam.id, name: fam.family_name, owner_id: fam.owner_id });
+        var code = fam.family_code || generateFamilyCode();
+        if (!fam.family_code) { try { await sb.from('families').update({ family_code: code }).eq('id', fam.id); } catch(e2) {} }
+        setFamilyId(code);
+        try { localStorage.setItem('familyName_' + code, fam.family_name); } catch(e) {}
         showToast('登录成功');
-        // 软切换直接进主界面（等效于 reload 后 initAuth 的 familySession 分支）:
-        // 弱网下整页重载 2.3MB 巨页需几十秒, 且启动流程无批量数据加载步骤, reload 无必要.
-        showAppRoot();
+        showAppRoot();   // 软切换进主界面
     } catch(e) {
         var msg = (e && e.message) || '';
-        if (msg.indexOf('schema cache') > -1 || msg.indexOf('404') > -1 || msg.indexOf('Not Found') > -1) {
-            msg = '服务端函数未创建，请先在 Supabase 后台执行 family_login/family_setup_pass 的 SQL';
-        }
-        showErr('家庭登录失败：' + (msg || '请确认已开通家庭密码登录'));
+        if (msg.indexOf('Invalid login credentials') > -1) { msg = '家庭名称或密码错误'; }
+        else if (msg.indexOf('Email not confirmed') > -1) { msg = '该家庭邮箱尚未确认，请联系创建者先完成邮箱确认'; }
+        showErr(msg || '登录失败，请稍后重试');
     } finally {
         if (btn) { btn.disabled = false; btn.textContent = '进入家庭'; }
     }
