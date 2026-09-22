@@ -5648,7 +5648,7 @@ async function doFamilyReset() {
     if (btn) { btn.disabled = false; btn.textContent = '重置密码'; }
 }
 
-// 家庭登录（新逻辑：家庭名称 → families 查 owner_email → Supabase Auth signInWithPassword）
+// 家庭登录（家庭名称 → families 查 owner_email → Supabase Auth signInWithPassword）
 async function doFamilyLogin() {
     if (!sb) { showToast('服务未就绪，请刷新重试'); return; }
     var name = ((document.getElementById('familyLoginName') || {}).value || '').trim();
@@ -5663,37 +5663,60 @@ async function doFamilyLogin() {
     if (!name || !pass) { showErr('请输入家庭名称和密码'); return; }
     var btn = document.getElementById('familyLoginBtn');
     if (btn) { btn.disabled = true; btn.textContent = '登录中…'; }
+
+    // 统一进入逻辑
+    function enterFamily(fam, u) {
+        setLoginUser({ id: u.id, email: u.email || fam.owner_email, aud: u.aud });
+        setLoginFamily({ id: fam.id, name: fam.family_name, owner_id: fam.owner_id });
+        var code = fam.family_code || generateFamilyCode();
+        if (!fam.family_code) { try { sb.from('families').update({ family_code: code }).eq('id', fam.id); } catch(e2) {} }
+        setFamilyId(code);
+        try { localStorage.setItem('familyName_' + code, fam.family_name); } catch(e) {}
+        showToast('登录成功');
+        showAppRoot();
+    }
+
     try {
-        // 1) families 表按名称查 owner_email
-        var q = await withTimeout(sb.from('families').select('id,family_name,family_code,owner_id,owner_email').eq('family_name', name), 15000, '家庭查询');
-        if (q && q.data && q.data.length === 0) { showErr('家庭名称或密码错误'); return; }
-        if (q && q.data && q.data.length > 1) { showErr('存在多个同名家庭，请联系创建者确认具体名称'); return; }
-        var fam = q && q.data && q.data[0];
+        // 1) 查家庭：RPC 优先（security definer，绕过 RLS），REST 直查兜底
+        var fam = null;
+        // 路径A: RPC family_get_owner_email（绕过 RLS，需在 Supabase 创建）
+        try {
+            var rpcR = await withTimeout(sb.rpc('family_get_owner_email', { p_name: name }), 15000, '家庭查询');
+            if (!rpcR.error && rpcR.data) {
+                var rows = Array.isArray(rpcR.data) ? rpcR.data : [rpcR.data];
+                if (rows.length === 0) { showErr('家庭名称或密码错误'); return; }
+                if (rows.length > 1) { showErr('存在多个同名家庭，请联系创建者确认具体名称'); return; }
+                fam = rows[0];
+            }
+        } catch(eRpc) { /* RPC 未创建 → 走 REST 兜底 */ }
+        // 路径B: REST 直查 families 表（若 RLS 放行匿名查询则可用）
+        if (!fam) {
+            var q = await withTimeout(sb.from('families').select('id,family_name,family_code,owner_id,owner_email').eq('family_name', name), 15000, '家庭查询');
+            if (q && q.data && q.data.length === 0) { showErr('家庭名称或密码错误'); return; }
+            if (q && q.data && q.data.length > 1) { showErr('存在多个同名家庭，请联系创建者确认具体名称'); return; }
+            fam = q && q.data && q.data[0];
+        }
         if (!fam) { showErr('家庭名称或密码错误'); return; }
+
+        // 2) 拿到 owner_email
         var ownerEmail = fam.owner_email;
         if (!ownerEmail) {
-            // 兜底：owner_id 作为邮箱查询失败时提示（极少数旧数据无 owner_email 字段/值）
-            showErr('该家庭尚未绑定邮箱，请联系创建者或改用"邮箱登录"');
+            showErr('该家庭尚未绑定邮箱（owner_email 为空）。请先在 Supabase 后台执行 SQL 补充 owner_email 字段并回填，或临时改用"邮箱登录"入口');
             return;
         }
-        // 2) 用 owner 邮箱 + 用户输入的密码 → Supabase Auth 原生登录
+
+        // 3) 用 owner 邮箱 + 密码 → Supabase Auth 原生登录
         var res = await withTimeout(sb.auth.signInWithPassword({ email: ownerEmail, password: pass }), 15000, '家庭登录');
         if (res && res.error) throw res.error;
         var u = (res && res.data && res.data.user) || null;
         if (!u) { showErr('家庭名称或密码错误'); return; }
-        // 3) 登录成功：建立会话、关联家庭
-        setLoginUser({ id: u.id, email: u.email || ownerEmail, aud: u.aud });
-        setLoginFamily({ id: fam.id, name: fam.family_name, owner_id: fam.owner_id });
-        var code = fam.family_code || generateFamilyCode();
-        if (!fam.family_code) { try { await sb.from('families').update({ family_code: code }).eq('id', fam.id); } catch(e2) {} }
-        setFamilyId(code);
-        try { localStorage.setItem('familyName_' + code, fam.family_name); } catch(e) {}
-        showToast('登录成功');
-        showAppRoot();   // 软切换进主界面
+
+        // 4) 登录成功
+        enterFamily(fam, u);
     } catch(e) {
         var msg = (e && e.message) || '';
         if (msg.indexOf('Invalid login credentials') > -1) { msg = '家庭名称或密码错误'; }
-        else if (msg.indexOf('Email not confirmed') > -1) { msg = '该家庭邮箱尚未确认，请联系创建者先完成邮箱确认'; }
+        else if (msg.indexOf('Email not confirmed') > -1) { msg = '该家庭邮箱尚未确认，请先到注册邮箱点击确认链接，或临时改用"邮箱登录"入口'; }
         showErr(msg || '登录失败，请稍后重试');
     } finally {
         if (btn) { btn.disabled = false; btn.textContent = '进入家庭'; }
