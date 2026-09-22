@@ -20232,24 +20232,24 @@ function renderFamily() {
     renderCurrentDiningGroupSelector();
     // 家庭住址卡片
     familyList.insertAdjacentHTML('beforeend', `
-        <div class="family-setting-card" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#FFFBEB;border:1px solid #FED7AA;border-radius:12px;margin-bottom:8px;">
-            <div class="family-setting-inner" style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
-                <span class="family-setting-label" style="font-size:13px;color:#92400E;font-weight:600;flex-shrink:0;">家庭住址</span>
-                <span class="family-setting-desc" style="font-size:13px;color:#374151;${familyHomeAddress ? '' : 'color:#9CA3AF;'}">${familyHomeAddress ? escapeHtml(familyHomeAddress) : '请添加家庭住址，用于推荐附近餐厅'}</span>
+        <div class="family-setting-card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px;background:#FFFBEB;border:1px solid #FED7AA;border-radius:12px;margin-bottom:8px;">
+            <div class="family-setting-inner" style="flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:6px;overflow:hidden;">
+                <span class="family-setting-label" style="font-size:13px;color:#92400E;font-weight:600;flex:0 0 auto;white-space:nowrap;">家庭住址</span>
+                <span class="family-setting-desc" style="font-size:13px;color:#374151;${familyHomeAddress ? '' : 'color:#9CA3AF;'};overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex:1 1 auto;min-width:0;">${familyHomeAddress ? escapeHtml(familyHomeAddress) : '请添加家庭住址，用于推荐附近餐厅'}</span>
             </div>
-            <button class="family-setting-action" onclick="editHomeAddress()" style="background:none;border:1px solid #FED7AA;border-radius:6px;padding:3px 10px;font-size:11px;color:#C2410C;cursor:pointer;flex-shrink:0;margin-left:8px;">编辑</button>
+            <button class="family-setting-action" onclick="editHomeAddress()" style="background:none;border:1px solid #FED7AA;border-radius:6px;padding:3px 10px;font-size:11px;color:#C2410C;cursor:pointer;flex:0 0 auto;white-space:nowrap;">编辑</button>
         </div>
     `);
     // 采购日设置卡片
     var dayOpts = ['6','0','1','2','3','4','5'];
     var dayNames = {'6':'周六','0':'周日','1':'周一','2':'周二','3':'周三','4':'周四','5':'周五'};
     familyList.insertAdjacentHTML('beforeend', `
-        <div class="family-setting-card" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;margin-bottom:8px;">
-            <div class="family-setting-inner" style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
-                <span class="family-setting-label" style="font-size:13px;color:#166534;font-weight:600;flex-shrink:0;">采购日</span>
-                <span class="family-setting-desc" style="font-size:13px;color:#374151;">每周${getShoppingDayName()}，提前一天提醒采购</span>
+        <div class="family-setting-card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;margin-bottom:8px;">
+            <div class="family-setting-inner" style="flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:6px;overflow:hidden;">
+                <span class="family-setting-label" style="font-size:13px;color:#166534;font-weight:600;flex:0 0 auto;white-space:nowrap;">采购日</span>
+                <span class="family-setting-desc" style="font-size:13px;color:#374151;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex:1 1 auto;min-width:0;">每周${getShoppingDayName()}，提前一天提醒采购</span>
             </div>
-            <select id="shoppingDaySelect" class="family-setting-action" onchange="changeShoppingDay(this.value)" style="background:#fff;border:1px solid #BBF7D0;border-radius:6px;padding:3px 8px;font-size:11px;color:#166534;cursor:pointer;flex-shrink:0;margin-left:8px;">
+            <select id="shoppingDaySelect" class="family-setting-action" onchange="changeShoppingDay(this.value)" style="background:#fff;border:1px solid #BBF7D0;border-radius:6px;padding:3px 8px;font-size:11px;color:#166534;cursor:pointer;flex:0 0 auto;white-space:nowrap;">
                 ${dayOpts.map(function(d){ return '<option value="'+d+'"'+(d===shoppingDay?' selected':'')+'>'+dayNames[d]+'</option>'; }).join('')}
             </select>
         </div>
