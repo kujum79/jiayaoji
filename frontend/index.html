@@ -3388,7 +3388,7 @@
             <div style="display:flex;gap:8px;margin-top:14px;">
                 <button onclick="openCombinedRegisterModal()" style="flex:1;padding:10px 2px;font-size:12px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">注册</button>
                 <button onclick="openEmailAccountModal()" style="flex:1;padding:10px 2px;font-size:12px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">邮箱登录</button>
-                <button onclick="openFamilyResetModal()" style="flex:1;padding:10px 2px;font-size:12px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">忘记密码？</button>
+                <button onclick="openForgotPasswordFromLogin()" style="flex:1;padding:10px 2px;font-size:12px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">忘记密码？</button>
             </div>
             <div style="font-size:11px;color:#9CA3AF;margin-top:10px;">登录即表示同意家肴记服务条款</div>
         </div>
@@ -5599,6 +5599,13 @@ function openFamilyResetModal() {
     var sc = document.getElementById('familySetupCode');
     var rc = document.getElementById('familyResetCode');
     if (sc && sc.value && sc.value.trim() && rc && !rc.value) rc.value = sc.value.trim().toUpperCase();
+}
+// 登录页"忘记密码"入口：走 Supabase Auth 邮箱重置（与登录校验同一密码体系）
+// 注意：旧的"凭家庭码重置 pass_hash"通道与 Auth 登录不通，已弃用
+function openForgotPasswordFromLogin() {
+    closeFamilyResetModal();
+    openEmailAccountModal();   // 打开邮箱登录弹窗（登录模式）
+    showForgotPassword();      // 自动展开"发送重置邮件"区
 }
 function closeFamilyResetModal() {
     var m = document.getElementById('familyResetModal');
