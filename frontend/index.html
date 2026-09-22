@@ -5262,7 +5262,7 @@ async function doCreateFamily() {
         var btn = document.getElementById('createFamilyBtn');
         if (btn) { btn.disabled = true; btn.textContent = '创建中…'; }
         var code = generateFamilyCode();
-        var r = await sb.from('families').insert({ family_name: name, owner_id: u.id, family_code: code }).select().single();
+        var r = await sb.from('families').insert({ family_name: name, owner_id: u.id, family_code: code, owner_email: u.email || '' }).select().single();
         if (r && r.error) throw r.error;
         if (r && r.data) {
             // 服务端写入家庭密码 hash（以后凭"家庭名称+密码"登录）；失败不阻塞进入，可稍后凭家庭码开通
@@ -5686,9 +5686,9 @@ async function doFamilyLogin() {
     try {
         // 1) 查家庭：RPC 优先（security definer，绕过 RLS），REST 直查兜底
         var fam = null;
-        // 路径A: RPC family_get_owner_email（绕过 RLS，需在 Supabase 创建）
+        // 路径A: RPC get_family_email（绕过 RLS，需在 Supabase 创建）
         try {
-            var rpcR = await withTimeout(sb.rpc('family_get_owner_email', { p_name: name }), 15000, '家庭查询');
+            var rpcR = await withTimeout(sb.rpc('get_family_email', { family_name_input: name }), 15000, '家庭查询');
             if (!rpcR.error && rpcR.data) {
                 var rows = Array.isArray(rpcR.data) ? rpcR.data : [rpcR.data];
                 if (rows.length === 0) { showErr('家庭名称或密码错误'); return; }
