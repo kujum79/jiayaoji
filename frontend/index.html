@@ -3384,11 +3384,11 @@
             <input id="familyLoginPass" type="password" maxlength="40" placeholder="家庭密码" onkeydown="if(event.key==='Enter')doFamilyLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;box-sizing:border-box;" />
             <button id="familyLoginBtn" onclick="doFamilyLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">进入家庭</button>
             <div id="familyLoginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#DC2626;text-align:center;line-height:1.6;"></div>
-            <!-- 三按钮并排一行：注册 / 邮箱登录 / 忘记密码 -->
+            <!-- 三按钮并排一行：注册 / 邮箱登录 / 忘记家庭密码 -->
             <div style="display:flex;gap:8px;margin-top:14px;">
                 <button onclick="openCombinedRegisterModal()" style="flex:1;padding:10px 2px;font-size:12px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">注册</button>
                 <button onclick="openEmailAccountModal()" style="flex:1;padding:10px 2px;font-size:12px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">邮箱登录</button>
-                <button onclick="openForgotPasswordFromLogin()" style="flex:1;padding:10px 2px;font-size:12px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">忘记密码？</button>
+                <button onclick="openForgotPasswordFromLogin()" style="flex:1;padding:10px 2px;font-size:12px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">忘记家庭密码？</button>
             </div>
             <div style="font-size:11px;color:#9CA3AF;margin-top:10px;">登录即表示同意家肴记服务条款</div>
         </div>
@@ -3481,11 +3481,11 @@
 <!-- ====== 家庭密码重置弹窗（凭家庭码直接设置新密码，无需邮箱） ====== -->
 <div id="familyResetModal" style="position:fixed;inset:0;z-index:100006;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeFamilyResetModal()">
     <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:320px;box-shadow:0 12px 40px rgba(0,0,0,0.2);">
-        <div style="font-size:17px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">🔑 重置家庭密码</div>
-        <div style="font-size:11px;color:#9CA3AF;margin-bottom:14px;text-align:center;">凭 8 位家庭码即可重置密码，无需邮箱</div>
-        <input id="familyResetCode" type="text" maxlength="8" placeholder="8 位家庭码" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;text-transform:uppercase;letter-spacing:2px;box-sizing:border-box;" />
-        <input id="familyResetPass1" type="password" maxlength="40" placeholder="新密码（至少 6 位）" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
-        <input id="familyResetPass2" type="password" maxlength="40" placeholder="确认新密码" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <div style="font-size:17px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">🔑 家庭密码重置</div>
+        <div style="font-size:11px;color:#9CA3AF;margin-bottom:14px;text-align:center;">凭 8 位家庭码即可重置密码，无需邮箱（新密码至少 6 位）</div>
+        <input id="familyResetCode" type="text" maxlength="8" placeholder="请输入家庭码" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;text-transform:uppercase;letter-spacing:2px;box-sizing:border-box;" />
+        <input id="familyResetPass1" type="password" maxlength="40" placeholder="请输入新密码" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <input id="familyResetPass2" type="password" maxlength="40" placeholder="请确认新密码" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
         <button id="familyResetBtn" onclick="doFamilyReset()" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">重置密码</button>
         <div id="familyResetMsg" style="display:none;font-size:12px;margin-top:10px;line-height:1.5;text-align:center;"></div>
         <div onclick="closeFamilyResetModal()" style="font-size:12px;color:#9CA3AF;margin-top:10px;text-align:center;cursor:pointer;text-decoration:underline;">取消</div>
@@ -5058,8 +5058,10 @@ function updateHomeAuthBtn() {
     var u = getLoginUser();
     if (u) {
         // 家庭会话优先显示家庭名称（登录时存于 loginFamily.name），如"三仁佳欢"
+        // 注意：家庭名称+密码登录（doFamilyLogin）写入的会话无 familySession 标记，
+        // 不能以它为前置条件，否则会错误回落到邮箱前缀
         var fam = getLoginFamily ? getLoginFamily() : null;
-        var name = (u.familySession && fam && fam.name) || u.familyName || u.family_name || u.name || u.nickname || (u.email ? String(u.email).split('@')[0] : '') || '我家';
+        var name = (fam && fam.name) || u.familyName || u.family_name || u.name || u.nickname || (u.email ? String(u.email).split('@')[0] : '') || '我家';
         // 纯手机号/长邮箱名太长，会挤换行首页"白露饮食指南"横幅 → 显示"我家"（点击本就进入我家）
         if (/^1\d{10}$/.test(name)) name = '我家';
         btn.textContent = name;
@@ -5223,19 +5225,43 @@ async function afterLoginCheck() {
     var u = getLoginUser();
     if (!u) { showAppRootGuest(); return; }
     // 已通过"加入家庭"持有本地家庭码 → 直接进主界面，不再询问
-    if (getFamilyId()) { showAppRoot(); return; }
+    if (getFamilyId()) {
+        // 旧版本会话可能只存了 {id,owner_id}（曾因 RPC 缺 family_name 字段）→ 补全家庭名称，保证右上角显示
+        var famInfo = getLoginFamily();
+        if (famInfo && !famInfo.name && sb) {
+            var fid = getFamilyId();
+            var cachedName = null;
+            try { cachedName = localStorage.getItem('familyName_' + fid); } catch(e) {}
+            if (cachedName && cachedName !== 'undefined') {
+                famInfo.name = cachedName; setLoginFamily(famInfo);
+            } else {
+                // 本地无缓存 → 按家庭码异步补查（不阻塞进入），查到后刷新右上角
+                sb.from('families').select('family_name').eq('family_code', fid).maybeSingle()
+                    .then(function(r2) {
+                        if (r2 && r2.data && r2.data.family_name) {
+                            var fi = getLoginFamily() || {};
+                            fi.name = r2.data.family_name;
+                            setLoginFamily(fi);
+                            updateHomeAuthBtn();
+                        }
+                    });
+            }
+        }
+        showAppRoot();
+        return;
+    }
     try {
         // 查询 families 表（owner_id = 当前登录用户 uuid）
         var r = await withTimeout(sb.from('families').select('id,family_name,owner_id,family_code').eq('owner_id', u.id).maybeSingle(), 15000, '家庭查询');
         if (r && r.data) {
             setLoginFamily({ id: r.data.id, name: r.data.family_name, owner_id: r.data.owner_id });
-            // 同步本地家庭码（老家庭无码则补生成并回写；回写失败不影响进入）
+            // 登录只读取数据库家庭码，绝不重新生成/回写（否则每次登录换码，家人手中旧码失效）
             var code = r.data.family_code;
-            if (!code) {
-                code = generateFamilyCode();
-                try { await sb.from('families').update({ family_code: code }).eq('id', r.data.id); } catch(e2) {}
+            if (code) {
+                setFamilyId(code);
+            } else {
+                showToast('⚠️ 该家庭尚未生成家庭码，请联系家庭创建者');
             }
-            if (code) setFamilyId(code);
             showAppRoot();
             return;
         }
@@ -5290,8 +5316,9 @@ async function doCreateFamily() {
                 var q2 = await sb.from('families').select('id,family_name,owner_id,family_code').eq('owner_id', u2.id).maybeSingle();
                 if (q2 && q2.data) {
                     setLoginFamily({ id: q2.data.id, name: q2.data.family_name, owner_id: q2.data.owner_id });
-                    var c2 = q2.data.family_code || generateFamilyCode();
-                    if (!q2.data.family_code) { try { await sb.from('families').update({ family_code: c2 }).eq('id', q2.data.id); } catch(e3) {} }
+                    // 只读取数据库已有家庭码，绝不重新生成/回写（否则家人手中旧码失效）
+                    var c2 = q2.data.family_code;
+                    if (!c2) { showToast('您已创建过家庭，但该家庭尚未生成家庭码，请联系管理员处理'); return; }
                     // 已有家庭但可能没设过密码 → 顺手补设（失败不阻塞）
                     try { await sb.rpc('family_setup_pass', { p_code: c2, p_pass: p1 }); } catch(e5) {}
                     setFamilyId(c2);
@@ -5600,12 +5627,12 @@ function openFamilyResetModal() {
     var rc = document.getElementById('familyResetCode');
     if (sc && sc.value && sc.value.trim() && rc && !rc.value) rc.value = sc.value.trim().toUpperCase();
 }
-// 登录页"忘记密码"入口：走 Supabase Auth 邮箱重置（与登录校验同一密码体系）
-// 注意：旧的"凭家庭码重置 pass_hash"通道与 Auth 登录不通，已弃用
+// 登录页"忘记家庭密码"入口：凭家庭码直接重置密码（无需邮箱）
+// 注意：family_reset_pass 必须使用新版定义（同步更新 auth.users.encrypted_password，见根目录 family_reset_pass.sql）；
+// 旧版只写 families.pass_hash，与 Auth 登录校验不通（重置成功后新密码也登录不上），不可回退
 function openForgotPasswordFromLogin() {
-    closeFamilyResetModal();
-    openEmailAccountModal();   // 打开邮箱登录弹窗（登录模式）
-    showForgotPassword();      // 自动展开"发送重置邮件"区
+    closeEmailAccountModal();
+    openFamilyResetModal();    // 打开"家庭密码重置"弹窗（家庭码 + 新密码 + 确认新密码）
 }
 function closeFamilyResetModal() {
     var m = document.getElementById('familyResetModal');
@@ -5641,13 +5668,15 @@ async function doFamilyReset() {
             rmsg('家庭码不存在，请核对后重试', '#DC2626');
         } else if (r.data === 'PASS_TOO_SHORT') {
             rmsg('密码至少 6 位', '#DC2626');
+        } else if (r.data === 'USER_NOT_FOUND') {
+            rmsg('该家庭未绑定可重置的账号，请联系家庭创建者处理', '#DC2626');
         } else {
             rmsg('重置失败：' + (r.data || '未知原因'), '#DC2626');
         }
     } catch(e) {
         var em = (e && e.message) || '';
         if (em.indexOf('family_reset_pass') > -1 || em.indexOf('function') > -1) {
-            rmsg('服务端未配置 family_reset_pass 函数，请先在 Supabase 后台执行 SQL（见下方说明）', '#DC2626');
+            rmsg('服务端函数未更新：请在 Supabase SQL Editor 执行项目根目录 family_reset_pass.sql 后重试', '#DC2626');
         } else {
             rmsg('重置失败：' + em, '#DC2626');
         }
@@ -5673,12 +5702,19 @@ async function doFamilyLogin() {
 
     // 统一进入逻辑
     function enterFamily(fam, u) {
+        // 家庭名称兜底：登录输入的 name 就是家庭名称（按它查询的），
+        // 防止 get_family_email RPC 等来源缺 family_name 字段时右上角错误显示成邮箱前缀
+        var famName = fam.family_name || name;
         setLoginUser({ id: u.id, email: u.email || fam.owner_email, aud: u.aud });
-        setLoginFamily({ id: fam.id, name: fam.family_name, owner_id: fam.owner_id });
-        var code = fam.family_code || generateFamilyCode();
-        if (!fam.family_code) { try { sb.from('families').update({ family_code: code }).eq('id', fam.id); } catch(e2) {} }
-        setFamilyId(code);
-        try { localStorage.setItem('familyName_' + code, fam.family_name); } catch(e) {}
+        setLoginFamily({ id: fam.id, name: famName, owner_id: fam.owner_id });
+        // 登录只读取数据库家庭码，绝不重新生成/回写（否则每次登录换码，家人手中旧码失效）
+        var code = fam.family_code;
+        if (code) {
+            setFamilyId(code);
+            try { localStorage.setItem('familyName_' + code, famName); } catch(e) {}
+        } else {
+            showToast('⚠️ 该家庭尚未生成家庭码，请联系家庭创建者');
+        }
         showToast('登录成功');
         showAppRoot();
     }
@@ -5818,6 +5854,43 @@ function migrateToDietCalendar() {
 
 // 页面加载时执行迁移
 migrateToDietCalendar();
+
+// ==================== 数据清洗：已保存计划中的纯米饭类菜品 ====================
+// 历史生成的计划里含"米饭/大米饭"等单调主食；新生成已从源头过滤（stripPlainRiceFromPlan + prompt），
+// 这里对 localStorage 已存的 dietCalendar 做一次性清洗，让"食记"页旧数据也干净。
+// 只清洗 plan（计划），不动 actual（用户实际吃了什么的记录）。
+function migrateStripPlainRice() {
+    if (lsGet('dietRiceStripped_v1')) return;
+    try {
+        var calendar = JSON.parse(lsGet('dietCalendar') || '{}');
+        var EX = { '米饭': 1, '大米饭': 1, '白米饭': 1, '蒸米饭': 1 };
+        var changed = false;
+        Object.keys(calendar).forEach(function(date) {
+            var day = calendar[date];
+            if (!day) return;
+            Object.keys(day).forEach(function(meal) {
+                var slot = day[meal];
+                if (!slot || !slot.plan || !Array.isArray(slot.plan.dishes)) return;
+                var before = slot.plan.dishes.length;
+                slot.plan.dishes = slot.plan.dishes.filter(function(d) {
+                    var nm = (typeof d === 'string') ? d : ((d && d.name) || '');
+                    return !EX[String(nm).trim()];
+                });
+                if (slot.plan.dishes.length !== before) {
+                    changed = true;
+                    // 全部被过滤 → 该餐视为无计划，避免食记页显示空计划卡
+                    if (slot.plan.dishes.length === 0) slot.plan = null;
+                }
+            });
+        });
+        if (changed) {
+            lsSet('dietCalendar', JSON.stringify(calendar));
+            console.log('✅ 已清洗历史计划中的纯米饭类菜品');
+        }
+    } catch(e) { console.warn('清洗米饭类菜品失败:', e); }
+    lsSet('dietRiceStripped_v1', 'true');
+}
+migrateStripPlainRice();
 
 // ==================== 数据迁移：营养食疗子分类改名 ====================
 // 常见疾病营养 → 慢病调理；乳母营养 → 产后调理（同步到 tags/fineCategory/leafCategory/title）
@@ -30241,7 +30314,7 @@ async function generateMultiDayRecommendation(days) {
         + '- 每天菜品需包含：主食、蛋白质、蔬菜\n'
         + '- 荤素搭配合理，避免全荤或全素\n'
         + '- 7天内菜品尽量不重复，避免连续两天出现相同菜\n'
-        + '【菜品排序规则】每餐菜品列表中：第一道必须是主食（米饭/杂粮饭/面条/粥/馒头/饼等）；第二道推荐汤类菜品（如排骨汤/鱼汤/豆腐汤/蛋花汤/羹类等，若无汤类则推荐蔬菜类）；第三道及以后为主菜/副菜\n'
+        + '【菜品排序规则】每餐菜品列表中：第一道必须是主食（杂粮饭/糙米饭/面条/粥/馒头/饼/薯类等，禁止纯白米饭类：米饭/大米饭/白米饭/蒸米饭，因其营养单一）；第二道推荐汤类菜品（如排骨汤/鱼汤/豆腐汤/蛋花汤/羹类等，若无汤类则推荐蔬菜类）；第三道及以后为主菜/副菜\n'
         + '【菜名全局唯一】同一菜品名称在全部餐次和日期中合计最多出现1次（主食除外，主食可重复）\n'
         + '【独立水果】若水果类摄入不足，必须在三餐中安排独立水果菜品（如苹果/蓝莓/草莓等，不依赖奶类饮品混合）';
 
@@ -30580,6 +30653,30 @@ function generateHistorySummary(history) {
 }
 
 // 调用阿里云通义千问API
+// 过滤 AI 方案中的纯白米饭类菜品（米饭/大米饭/白米饭/蒸米饭）
+// 历史决策：仅隐藏纯米饭类单调主食，粥、杂粮饭、糙米饭、炒饭等正常保留
+function stripPlainRiceFromPlan(plan) {
+    try {
+        var EX = { '米饭': 1, '大米饭': 1, '白米饭': 1, '蒸米饭': 1 };
+        if (plan && Array.isArray(plan.days)) {
+            plan.days.forEach(function(day) {
+                var meals = day && day.meals;
+                if (!meals) return;
+                Object.keys(meals).forEach(function(k) {
+                    var m = meals[k];
+                    if (m && Array.isArray(m.dishes)) {
+                        m.dishes = m.dishes.filter(function(d) {
+                            var nm = (typeof d === 'string') ? d : ((d && d.name) || '');
+                            return !EX[String(nm).trim()];
+                        });
+                    }
+                });
+            });
+        }
+    } catch(e) { console.warn('过滤米饭类菜品失败:', e); }
+    return plan;
+}
+
 async function callAliyunQwenApi(systemPrompt, userMessage, opts) {
     // opts.mode：AI推荐模式（RECOMMEND_MODES 枚举值），随 /plan 后端代理下发；
     // 直连阿里云的回退请求不携带该字段（第三方接口不识别自定义参数，避免被拒）
@@ -30607,7 +30704,7 @@ async function callAliyunQwenApi(systemPrompt, userMessage, opts) {
         // 尝试提取JSON
         let jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
-            try { return JSON.parse(jsonMatch[0]); } catch(e) {}
+            try { return stripPlainRiceFromPlan(JSON.parse(jsonMatch[0])); } catch(e) {}
         }
         return { rawText: content };
     } catch(proxyErr) {
@@ -30641,7 +30738,7 @@ async function callAliyunQwenApi(systemPrompt, userMessage, opts) {
     if (!content) throw new Error('API返回内容为空');
     let jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-        try { return JSON.parse(jsonMatch[0]); } catch(e) {}
+        try { return stripPlainRiceFromPlan(JSON.parse(jsonMatch[0])); } catch(e) {}
     }
     return { rawText: content };
 }
@@ -31215,7 +31312,8 @@ function getGroupTypeConstraints(members) {
 function getDishCountByMembers(memberCount) {
     if (memberCount <= 1) return { breakfast: '2道', lunch: '2道', dinner: '2道', breakNum: 2, lunchNum: 2, dinnerNum: 2 };
     if (memberCount === 2) return { breakfast: '2-3道', lunch: '3道', dinner: '3道', breakNum: 3, lunchNum: 3, dinnerNum: 3 };
-    if (memberCount <= 4) return { breakfast: '2-3道', lunch: '3道', dinner: '3道', breakNum: 3, lunchNum: 3, dinnerNum: 3 };
+    // 3-4 人家庭早餐保底 3 道（主食+蛋白质+水果/奶），避免 AI 取下限只给 2 道太单薄
+    if (memberCount <= 4) return { breakfast: '3道', lunch: '3道', dinner: '3道', breakNum: 3, lunchNum: 3, dinnerNum: 3 };
     return { breakfast: '3-4道', lunch: '4道', dinner: '4道', breakNum: 4, lunchNum: 4, dinnerNum: 4 };
 }
 
@@ -31381,7 +31479,7 @@ async function generateWeeklyAiMealRecommendation(days) {
         + '- 每天菜品需包含：主食、蛋白质、蔬菜\n'
         + '- 荤素搭配合理，避免全荤或全素\n'
         + '- 7天内菜品尽量不重复，避免连续两天出现相同菜\n'
-        + '【菜品排序规则】每餐菜品列表中：第一道必须是主食（米饭/杂粮饭/面条/粥/馒头/饼等）；第二道推荐汤类菜品（如排骨汤/鱼汤/豆腐汤/蛋花汤/羹类等，若无汤类则推荐蔬菜类）；第三道及以后为主菜/副菜\n'
+        + '【菜品排序规则】每餐菜品列表中：第一道必须是主食（杂粮饭/糙米饭/面条/粥/馒头/饼/薯类等，禁止纯白米饭类：米饭/大米饭/白米饭/蒸米饭，因其营养单一）；第二道推荐汤类菜品（如排骨汤/鱼汤/豆腐汤/蛋花汤/羹类等，若无汤类则推荐蔬菜类）；第三道及以后为主菜/副菜\n'
         + '【菜名全局唯一】同一菜品名称在全部餐次和日期中合计最多出现1次（主食除外，主食可重复）\n'
         + '【独立水果】若水果类摄入不足，必须在三餐中安排独立水果菜品（如苹果/蓝莓/草莓等，不依赖奶类饮品混合）';
 
@@ -36349,9 +36447,9 @@ function _buildQuickWeeklyPlan(weekDates, days) {
         ],
         lunch: [
             // 家常风午餐替换池（3套：4菜=主食+硬菜+素菜+汤）
-            [{name:'米饭',tag:'主食'},{name:'红烧排骨',tag:'硬菜'},{name:'清炒时蔬',tag:'素菜'},{name:'番茄蛋汤',tag:'汤品'}],
-            [{name:'米饭',tag:'主食'},{name:'回锅肉',tag:'硬菜'},{name:'蒜蓉空心菜',tag:'素菜'},{name:'紫菜蛋花汤',tag:'汤品'}],
-            [{name:'米饭',tag:'主食'},{name:'红烧肉',tag:'硬菜'},{name:'蚝油生菜',tag:'素菜'},{name:'冬瓜虾皮汤',tag:'汤品'}],
+            [{name:'杂粮饭',tag:'主食'},{name:'红烧排骨',tag:'硬菜'},{name:'清炒时蔬',tag:'素菜'},{name:'番茄蛋汤',tag:'汤品'}],
+            [{name:'杂粮饭',tag:'主食'},{name:'回锅肉',tag:'硬菜'},{name:'蒜蓉空心菜',tag:'素菜'},{name:'紫菜蛋花汤',tag:'汤品'}],
+            [{name:'杂粮饭',tag:'主食'},{name:'红烧肉',tag:'硬菜'},{name:'蚝油生菜',tag:'素菜'},{name:'冬瓜虾皮汤',tag:'汤品'}],
             // 快手风午餐替换池（3套：3菜=主食+拌菜+汤）
             [{name:'蛋炒饭',tag:'10分钟'},{name:'凉拌黄瓜',tag:'免开火'},{name:'紫菜蛋花汤',tag:'5分钟'}],
             [{name:'牛肉炒面',tag:'10分钟'},{name:'凉拌木耳',tag:'免开火'},{name:'冬瓜汤',tag:'5分钟'}],
@@ -36363,9 +36461,9 @@ function _buildQuickWeeklyPlan(weekDates, days) {
         ],
         dinner: [
             // 家常风晚餐替换池（3套：4菜=主食+优质蛋白+素菜+咸汤）
-            [{name:'米饭',tag:'主食'},{name:'清蒸鲈鱼',tag:'优质蛋白'},{name:'蒜蓉西兰花',tag:'素菜'},{name:'冬瓜排骨汤',tag:'汤品'}],
-            [{name:'米饭',tag:'主食'},{name:'红烧鲫鱼',tag:'优质蛋白'},{name:'蒜蓉娃娃菜',tag:'素菜'},{name:'紫菜虾滑汤',tag:'汤品'}],
-            [{name:'米饭',tag:'主食'},{name:'白切鸡',tag:'优质蛋白'},{name:'清炒荷兰豆',tag:'素菜'},{name:'萝卜丝鲫鱼汤',tag:'汤品'}],
+            [{name:'杂粮饭',tag:'主食'},{name:'清蒸鲈鱼',tag:'优质蛋白'},{name:'蒜蓉西兰花',tag:'素菜'},{name:'冬瓜排骨汤',tag:'汤品'}],
+            [{name:'杂粮饭',tag:'主食'},{name:'红烧鲫鱼',tag:'优质蛋白'},{name:'蒜蓉娃娃菜',tag:'素菜'},{name:'紫菜虾滑汤',tag:'汤品'}],
+            [{name:'杂粮饭',tag:'主食'},{name:'白切鸡',tag:'优质蛋白'},{name:'清炒荷兰豆',tag:'素菜'},{name:'萝卜丝鲫鱼汤',tag:'汤品'}],
             // 快手风晚餐替换池（3套：3菜=主食+蛋白+蔬菜）
             [{name:'番茄意面',tag:'15分钟'},{name:'煎荷包蛋',tag:'快速'},{name:'蔬菜沙拉',tag:'免煮'}],
             [{name:'黑椒牛柳意面',tag:'15分钟'},{name:'煎鸡排',tag:'快速'},{name:'凉拌西红柿',tag:'免煮'}],
@@ -36742,7 +36840,7 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
 
 function _getFallbackStyles() {
     return [
-        {name:'家常风',breakfast:[{name:'葱油拌面',tag:'主食'},{name:'小米南瓜粥',tag:'养胃'},{name:'水煮蛋',tag:'蛋白质'}],lunch:[{name:'米饭',tag:'主食'},{name:'红烧排骨',tag:'硬菜'},{name:'清炒时蔬',tag:'素菜'},{name:'番茄蛋汤',tag:'汤品'}],dinner:[{name:'米饭',tag:'主食'},{name:'清蒸鲈鱼',tag:'优质蛋白'},{name:'蒜蓉西兰花',tag:'素菜'},{name:'冬瓜排骨汤',tag:'汤品'}]},
+        {name:'家常风',breakfast:[{name:'葱油拌面',tag:'主食'},{name:'小米南瓜粥',tag:'养胃'},{name:'水煮蛋',tag:'蛋白质'}],lunch:[{name:'杂粮饭',tag:'主食'},{name:'红烧排骨',tag:'硬菜'},{name:'清炒时蔬',tag:'素菜'},{name:'番茄蛋汤',tag:'汤品'}],dinner:[{name:'杂粮饭',tag:'主食'},{name:'清蒸鲈鱼',tag:'优质蛋白'},{name:'蒜蓉西兰花',tag:'素菜'},{name:'冬瓜排骨汤',tag:'汤品'}]},
         {name:'快手风',breakfast:[{name:'三明治',tag:'5分钟'},{name:'牛奶麦片',tag:'免煮'},{name:'煎蛋',tag:'快速'}],lunch:[{name:'蛋炒饭',tag:'10分钟'},{name:'凉拌黄瓜',tag:'免开火'},{name:'紫菜蛋花汤',tag:'5分钟'}],dinner:[{name:'番茄意面',tag:'15分钟'},{name:'煎荷包蛋',tag:'快速'},{name:'水果沙拉',tag:'免煮'}]},
         {name:'养生风',breakfast:[{name:'红枣山药粥',tag:'补气'},{name:'蒸紫薯',tag:'粗粮'},{name:'核桃豆浆',tag:'健脑'}],lunch:[{name:'杂粮饭',tag:'粗粮'},{name:'银耳炖鸡',tag:'滋补'},{name:'木耳炒山药',tag:'清肺'}],dinner:[{name:'莲子百合粥',tag:'安神'},{name:'白灼秋葵',tag:'低脂'},{name:'枸杞银耳羹',tag:'润燥'}]}
     ];
