@@ -1,3 +1,5 @@
 name = "jiayaoji-git"
-pages_build_output_dir = "frontend"
 compatibility_date = "2024-05-01"
+
+[assets]
+directory = "./frontend"
