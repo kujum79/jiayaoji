@@ -20,10 +20,11 @@
 import base64
 import json
 import os
+import random
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 import httpx
 import requests
@@ -689,6 +690,266 @@ async def recognize_ingredients(file: UploadFile = File(...)):
     return {"ingredients": ingredients}
 
 
+# ========== 食材知识 AI 生成（仅超级管理员可用） ==========
+# 优先调用 DeepSeek（需环境变量 DEEPSEEK_API_KEY）；
+# 未配置 DeepSeek Key 时自动回退到阿里云 DashScope 的 OpenAI 兼容模式（协议一致，保证功能可用）。
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
+DEEPSEEK_MODEL = "deepseek-chat"
+FALLBACK_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+FALLBACK_MODEL = "qwen-turbo"
+
+# 医疗词汇黑名单：AI 返回内容中出现即删除（Prompt 已禁止，此处二次过滤兜底）
+_MEDICAL_BLOCK_WORDS = [
+    "治疗", "疗效", "治愈", "痊愈", "药用", "药效", "偏方", "主治", "消炎",
+    "抗癌", "防癌", "降压", "降血压", "降血糖", "降血脂", "处方", "诊断",
+    "康复", "止痛", "退烧", "忌口", "对症下药", "药膳",
+]
+
+
+class GenerateIngredientRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=30)
+    isAdmin: bool = False  # TODO 正式版：改为后端会话/令牌校验，前端标记仅作过渡
+
+
+class ExploreIngredientRequest(BaseModel):
+    """食记「认识这道菜」食材探索接口——面向所有用户开放。"""
+    name: str = Field(..., min_length=1, max_length=30, description="食材名")
+    ageStart: int = Field(default=9, ge=3, le=100, description="年龄下限")
+    ageEnd: int = Field(default=12, ge=3, le=100, description="年龄上限")
+    isStudentMode: bool = Field(default=False, description="学生模式：更简单语言")
+
+
+def _strip_medical_words(value: Any) -> Any:
+    """递归清洗：删除字符串中出现的医疗词汇（黑名单兜底过滤）。"""
+    if isinstance(value, str):
+        cleaned = value
+        for word in _MEDICAL_BLOCK_WORDS:
+            if word in cleaned:
+                cleaned = cleaned.replace(word, "")
+        return cleaned
+    if isinstance(value, list):
+        return [_strip_medical_words(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _strip_medical_words(v) for k, v in value.items()}
+    return value
+
+
+def _find_medical_words(value: Any, found: set) -> None:
+    """递归收集命中的医疗词（用于日志/响应提示）。"""
+    if isinstance(value, str):
+        for word in _MEDICAL_BLOCK_WORDS:
+            if word in value:
+                found.add(word)
+    elif isinstance(value, list):
+        for v in value:
+            _find_medical_words(v, found)
+    elif isinstance(value, dict):
+        for v in value.values():
+            _find_medical_words(v, found)
+
+
+# ========== 食材探索（食记「认识这道菜」） ==========
+@app.post("/explore-ingredient")
+async def explore_ingredient(req: ExploreIngredientRequest) -> Dict[str, Any]:
+    name = req.name.strip()
+    age_range = f"{req.ageStart}-{req.ageEnd}"
+    student = req.isStudentMode
+
+    system_prompt = "你是亲切的家庭饮食知识编辑，用简单口语介绍食材。只返回严格 JSON，不要 markdown 包裹。"
+    if student:
+        system_prompt = "你是儿童饮食启蒙老师，用童趣、简单的语言，多 emoji、避免难词。只返回严格 JSON。"
+
+    knowledge_style = "简短、口语化、像妈妈/老师聊天" if student else "清晰、实用，适合全家阅读"
+    fun_style = "一个有趣的小冷知识，简单又惊奇（适合孩子的好奇心）" if student else "一个有趣的冷知识，让人对这食材印象深刻"
+    question_style = "一个开放性引导问题，让小朋友愿意去厨房观察/尝试（用 emoji 让它更有趣）" if student else "（学生模式才提供，此处留空）"
+
+    user_prompt = f"""
+请介绍食材「{name}」，目标读者{age_range}岁（{'学生模式' if student else '普通家庭'}）。
+严格按以下 JSON 结构返回：
+{{
+  "name": "食材名",
+  "emoji": "一个最贴切的 emoji",
+  "knowledge": "📖 小知识：{knowledge_style}（80-150字），介绍它是什么、来自哪里、有什么营养",
+  "funFact": "🍽 有趣的事：{fun_style}（30-80字）",
+  "question": "✍️ 想一想：{question_style}",
+  "imagePrompt": "English prompt for a high quality, kid-friendly food photography of this ingredient"
+}}
+
+硬性要求：
+1. 全文禁止出现任何医疗词汇（治疗、疗效、药用、偏方、主治、消炎、抗癌、降压、降血糖、诊断、处方、忌口、康复等），只描述营养与饮食文化；
+2. 知识要积极正面，引导孩子愿意尝试；
+3. 语言简单，不用专业术语；
+4. emoji 放在对应开头，不要插在句子中间；
+5. question 字段只有学生模式才生成，非学生模式填空字符串 ""；
+6. 只返回 JSON。
+""".strip()
+
+    use_deepseek = bool(DEEPSEEK_API_KEY)
+    api_url = DEEPSEEK_API_URL if use_deepseek else FALLBACK_API_URL
+    api_key = DEEPSEEK_API_KEY if use_deepseek else ALIYUN_API_KEY
+    model = DEEPSEEK_MODEL if use_deepseek else FALLBACK_MODEL
+
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.6 if student else 0.4,
+        "max_tokens": 1200,
+        "response_format": {"type": "json_object"},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            response = await client.post(api_url, headers=headers, json=payload)
+            response.raise_for_status()
+    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+        # 后端挂了时前端会 fallback 到本地 mock
+        raise HTTPException(status_code=503, detail=f"AI 服务暂不可用：{str(exc)[:200]}")
+
+    try:
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+        result = extract_json_object(content)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="AI 返回格式异常")
+
+    # 医疗词过滤
+    found: set = set()
+    _find_medical_words(result, found)
+    result = _strip_medical_words(result)
+
+    # 字段规整
+    image_prompt = str(result.get("imagePrompt") or f"fresh {name} ingredient food photography")[:200]
+    image_url = (
+        f"https://image.pollinations.ai/prompt/{quote(image_prompt)}"
+        f"?width=640&height=480&nologo=true&seed={random.randint(1, 9999)}"
+    )
+
+    return {
+        "name": str(result.get("name") or name).strip(),
+        "emoji": str(result.get("emoji") or "🥗").strip(),
+        "knowledge": str(result.get("knowledge") or "").strip(),
+        "funFact": str(result.get("funFact") or "").strip(),
+        "question": str(result.get("question") or "").strip(),
+        "imageUrl": image_url,
+        "engine": model,
+    }
+
+
+@app.post("/generate-ingredient")
+async def generate_ingredient(req: GenerateIngredientRequest) -> Dict[str, Any]:
+    """
+    食材知识 AI 生成：特征 / 营养特点 / 主产地 / 营养成分表（100g）/ 1-8 道搭配方案 / 配图。
+    仅超级管理员可调用（当前由前端传 isAdmin 标记，正式版改为后端校验）。
+    """
+    # 1. 超管校验（过渡方案）
+    if not req.isAdmin:
+        raise HTTPException(status_code=403, detail="仅超级管理员可使用 AI 生成食材知识")
+
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="食材名称不能为空")
+
+    # 2. Prompt（见需求 SPEC）：严格 JSON + 禁止医疗词汇
+    system_prompt = (
+        "你是家庭饮食知识编辑，为家庭食谱应用撰写食材百科条目。"
+        "只返回严格 JSON，不要 markdown 包裹，不要任何解释文字。"
+    )
+    user_prompt = f"""
+请为食材「{name}」生成百科信息，严格按以下 JSON 结构返回：
+{{
+  "name": "食材名称",
+  "features": "特征（60-100字：外观、口感、常见品种）",
+  "nutrition": "营养特点（60-100字：主要营养素与膳食价值）",
+  "origin": "主产地（30字以内）",
+  "nutritionTable": [["成分", "含量（每100g可食部）"], ["能量", "xx kcal"], ...共5-8行],
+  "pairings": ["菜名：一句话搭配理由", ...1-8道家常搭配],
+  "imagePrompt": "English prompt for a high quality food photography of this ingredient"
+}}
+
+硬性要求：
+1. 全文禁止出现任何医疗词汇（如治疗、疗效、药用、偏方、主治、消炎、抗癌、降压、降血糖、处方、诊断、忌口、康复等），只描述营养与饮食搭配；
+2. 营养成分数值参照《中国食物成分表》的常识范围，不确定的成分不要编造，能量单位用 kcal；
+3. pairings 为 1-8 道家常菜搭配，每条格式如「番茄炒蛋：酸甜开胃，经典家常」；
+4. imagePrompt 为英文，描述该食材的真实摄影照片，不含文字元素；
+5. 只返回 JSON。
+""".strip()
+
+    use_deepseek = bool(DEEPSEEK_API_KEY)
+    api_url = DEEPSEEK_API_URL if use_deepseek else FALLBACK_API_URL
+    api_key = DEEPSEEK_API_KEY if use_deepseek else ALIYUN_API_KEY
+    model = DEEPSEEK_MODEL if use_deepseek else FALLBACK_MODEL
+
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.3,
+        "max_tokens": 2000,
+        "response_format": {"type": "json_object"},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            response = await client.post(api_url, headers=headers, json=payload)
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=502, detail=f"AI 服务错误：{exc.response.text[:300]}") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"无法连接 AI 服务：{str(exc)}") from exc
+
+    try:
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
+        raise HTTPException(status_code=502, detail="AI 返回格式异常") from exc
+
+    try:
+        result = extract_json_object(content)
+    except HTTPException:
+        raise HTTPException(status_code=502, detail="AI 未返回有效 JSON，请重试")
+
+    # 3. 医疗词二次过滤（黑名单兜底）
+    found: set = set()
+    _find_medical_words(result, found)
+    result = _strip_medical_words(result)
+    if found:
+        result["medicalWordsRemoved"] = sorted(found)
+
+    # 4. 字段规整
+    pairings = result.get("pairings") or []
+    if isinstance(pairings, str):
+        pairings = [p.strip() for p in re.split(r"[，,、\n]", pairings) if p.strip()]
+    pairings = [str(p).strip() for p in pairings if str(p).strip()][:8]
+    table = result.get("nutritionTable") or []
+    if not isinstance(table, list):
+        table = []
+    table = [[str(cell) for cell in row] if isinstance(row, (list, tuple)) else [str(row), ""] for row in table][:10]
+
+    # 5. pollinations.ai 配图 URL
+    image_prompt = str(result.get("imagePrompt") or f"fresh {name} ingredient food photography")[:300]
+    image_url = (
+        f"https://image.pollinations.ai/prompt/{quote(image_prompt)}"
+        f"?width=640&height=480&nologo=true&seed={random.randint(1, 9999)}"
+    )
+
+    return {
+        "name": str(result.get("name") or name).strip(),
+        "features": str(result.get("features") or "").strip(),
+        "nutrition": str(result.get("nutrition") or "").strip(),
+        "origin": str(result.get("origin") or "").strip(),
+        "nutritionTable": table,
+        "pairings": pairings,
+        "imageUrl": image_url,
+        "engine": model,
+    }
+
+
 # ========== 前端静态文件托管（用于 TRAE 预览面板直接打开 APP） ==========
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -700,10 +961,34 @@ if FRONTEND_DIR.exists():
         index_path = FRONTEND_DIR / "index.html"
         if not index_path.exists():
             raise HTTPException(status_code=404, detail="前端文件不存在")
-        return FileResponse(index_path, media_type="text/html")
+        return FileResponse(index_path, media_type="text/html", headers={"Cache-Control": "no-store"})
 
-    # 挂载前端目录的静态资源（css/js/图片等），放在最后注册以免覆盖 API 路由
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=False), name="frontend_static")
+    # 前端静态文件：用 catch-all GET 而非 app.mount("/")，避免 mount 抢掉所有 API 路由
+    @app.get("/{path:path}", include_in_schema=False)
+    async def serve_frontend(path: str):
+        """静态文件服务：API 路由优先匹配，未命中时回退到前端文件。"""
+        # 空路径或根路径 → index.html
+        if not path or path == "":
+            index_path = FRONTEND_DIR / "index.html"
+            if index_path.exists():
+                return FileResponse(index_path, media_type="text/html", headers={"Cache-Control": "no-store"})
+        # 检查是否是已注册的 API 路径（跳过）
+        api_paths = {
+            "health", "chat", "plan", "parse", "parse_voice", "parse_link",
+            "recognize_ingredients", "explore-ingredient", "generate-ingredient", "app",
+            "docs", "redoc", "openapi.json", "docs/oauth2-redirect"
+        }
+        if path in api_paths:
+            raise HTTPException(status_code=404, detail="Not Found")
+        # 尝试找前端目录下的文件
+        file_path = FRONTEND_DIR / path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+        # 都没找到 → 返回 index.html（SPA fallback）
+        index_path = FRONTEND_DIR / "index.html"
+        if index_path.exists():
+            return FileResponse(index_path, media_type="text/html", headers={"Cache-Control": "no-store"})
+        raise HTTPException(status_code=404, detail="Not Found")
 else:
     @app.get("/app", include_in_schema=False)
     async def serve_app_home():
