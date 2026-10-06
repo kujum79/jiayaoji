@@ -1,0 +1,14 @@
+# 家肴记后端依赖（不锁定版本，避免冲突）
+# - fastapi / uvicorn[standard]: Web 框架与 ASGI 服务器（启动: uvicorn main:app）
+# - httpx: AI 服务商路由调用（model_config.py）
+# - requests: 链接解析等 HTTP 请求（main.py）
+# - beautifulsoup4: 网页解析（import bs4）
+# - pydantic: 请求模型校验
+# - python-multipart: UploadFile 文件上传所需
+fastapi
+uvicorn[standard]
+httpx
+requests
+beautifulsoup4
+pydantic
+python-multipart

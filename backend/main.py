@@ -42,6 +42,13 @@ ALIYUN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-gener
 ALIYUN_MODEL = "qwen-turbo"  # 可选 qwen-plus, qwen-max, qwen-turbo（免费额度多）
 # ========================================
 
+# ========== 多模型路由层（model_config.py） ==========
+# 未配置环境变量时，沿用上面的内置 Key，保证现有调用不断服；
+# 换 Key / 加新服务商只需设置环境变量（DASHSCOPE_API_KEY 等）或改 model_config.py，无需动这里。
+os.environ.setdefault("ALIYUN_API_KEY", ALIYUN_API_KEY)
+from model_config import call_ai  # noqa: E402  （需在 setdefault 之后导入，确保能读到内置 Key）
+# ===================================================
+
 app = FastAPI(
     title="家肴记 - AI家庭膳食助理",
     description="Jiayaoji backend powered by FastAPI and Aliyun Qwen.",
@@ -75,6 +82,7 @@ class PlanRequest(BaseModel):
     user_prompt: str = Field(..., min_length=1)
     max_tokens: int = Field(default=8192, ge=100, le=32768)
     mode: Optional[str] = "seasonal"  # AI推荐模式（由前端 RECOMMEND_MODES 传入），缺省当季推荐
+    task_type: Optional[str] = None  # V119: 功能标识（plan/audit…），审核评分等走强档模型并计入用量统计
 
 
 class ChatResponse(BaseModel):
@@ -197,6 +205,7 @@ async def parse_voice(req: ParseVoiceRequest) -> Dict[str, Any]:
                 {"role": "user", "content": voice_text},
             ],
             json_mode=True,
+            task_type="parse_voice",
         )
         result = extract_json_object(content)
         # 确保返回的字段完整
@@ -281,43 +290,30 @@ def get_mode_directive(mode: Optional[str]) -> str:
     return f"{directive}并与下列要求保持一致。\n\n" if directive else ""
 
 
-# ========== 阿里云通义千问调用核心 ==========
-async def call_qwen(messages: List[Dict[str, str]], *, json_mode: bool = False, max_tokens: int = 8192) -> str:
-    headers = {
-        "Authorization": f"Bearer {ALIYUN_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": ALIYUN_MODEL,
-        "input": {"messages": messages},
-        "parameters": {
-            "result_format": "message",
-            "temperature": 0.7 if not json_mode else 0.2,
+# ========== AI 调用核心（V113 起走多模型路由层，失败自动降级下一家服务商；V115 起带 task_type 记录调用日志） ==========
+async def call_qwen(
+    messages: List[Dict[str, str]],
+    *,
+    json_mode: bool = False,
+    max_tokens: int = 8192,
+    task_type: str = "chat",
+) -> str:
+    """按 model_config.PROVIDERS 优先级路由调用（失败自动降级），每次调用记录成本日志。
+
+    task_type 为端点名（chat/plan/parse/parse_voice/parse_link），写入 ai_logs.jsonl 便于按功能统计。
+    保留原语义：json_mode 低温度、max_tokens 透传、失败抛 HTTPException(502) 中文详情。
+    """
+    try:
+        result = await call_ai("text", {
+            "task_type": task_type,
+            "messages": messages,
+            "json_mode": json_mode,
             "max_tokens": max_tokens,
-        }
-    }
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(ALIYUN_API_URL, headers=headers, json=payload)
-            response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        # 尝试解析错误响应体，可能是纯文本
-        error_detail = exc.response.text[:500]  # 截取前500字符防止过大
-        raise HTTPException(status_code=502, detail=f"阿里云 API 错误：{error_detail}") from exc
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"无法连接阿里云 API：{str(exc)}") from exc
-
-    # 安全解析 JSON
-    try:
-        data = response.json()
-    except json.JSONDecodeError as exc:
-        raw_text = response.text[:500]
-        raise HTTPException(status_code=502, detail=f"阿里云返回非 JSON 响应：{raw_text}") from exc
-
-    try:
-        return data["output"]["choices"][0]["message"]["content"].strip()
-    except (KeyError, IndexError, TypeError) as exc:
-        raise HTTPException(status_code=502, detail="阿里云 API 响应格式异常") from exc
+            "temperature": 0.2 if json_mode else 0.7,
+        })
+        return result["content"].strip()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"AI 服务调用失败：{exc}") from exc
 # ============================================
 
 
@@ -369,7 +365,8 @@ async def chat(req: ChatRequest) -> Dict[str, str]:
         [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": req.prompt},
-        ]
+        ],
+        task_type="chat",
     )
     return {"response": content}
 
@@ -379,6 +376,10 @@ async def plan(req: PlanRequest) -> Dict[str, str]:
     """食谱计划生成接口（前端同源调用，避免 CORS）"""
     # 前端已构建详细的五维上下文 system_prompt；mode 非默认时在其最前面追加模式侧重指令
     system_content = get_mode_directive(req.mode) + req.system_prompt
+    # V119: 功能标识白名单（只允许小写字母/下划线，防日志污染），缺省 plan
+    task_type = (req.task_type or "plan").strip()
+    if not re.fullmatch(r"[a-z_]{1,24}", task_type):
+        task_type = "plan"
     content = await call_qwen(
         [
             {"role": "system", "content": system_content},
@@ -386,6 +387,7 @@ async def plan(req: PlanRequest) -> Dict[str, str]:
         ],
         json_mode=False,
         max_tokens=req.max_tokens,
+        task_type=task_type,
     )
     return {"response": content}
 
@@ -411,6 +413,7 @@ JSON 格式必须严格符合：
             {"role": "user", "content": req.text},
         ],
         json_mode=True,
+        task_type="parse",
     )
     parsed = extract_json_object(content)
     return normalize_parse_result(parsed)
@@ -555,7 +558,7 @@ async def parse_link(req: ParseLinkRequest):
             {"role": "system", "content": "你是一个专业的饮食知识提取助手，只返回JSON，不要其他文字。"},
             {"role": "user", "content": prompt}
         ]
-        result_text = await call_qwen(messages, json_mode=True)
+        result_text = await call_qwen(messages, json_mode=True, task_type="parse_link")
         data = extract_json_object(result_text)
         # 确保字段存在
         title = data.get("title") or page_title or "未命名知识"
@@ -948,6 +951,54 @@ async def generate_ingredient(req: GenerateIngredientRequest) -> Dict[str, Any]:
         "imageUrl": image_url,
         "engine": model,
     }
+
+
+# ==================== V118: AI 用量监控 ====================
+@app.get("/ai/usage")
+def ai_usage(detail: int = 0, month: str = ""):
+    """AI 用量汇总：默认本月。含总调用/Token/成本、按服务商、按功能占比、预算状态；detail=1 附最近 50 条明细。"""
+    import time as _time
+    from model_config import get_ai_cost_summary, get_budget_status
+    m = (month or "").strip() or _time.strftime("%Y-%m")
+    summary = get_ai_cost_summary(month=m, recent_limit=50 if detail else 0)
+    total_calls = summary["total_calls"]
+
+    def _pct(calls: int) -> float:
+        return round(calls * 100.0 / total_calls, 1) if total_calls else 0.0
+
+    by_provider = [{"provider": k, **v, "pct": _pct(v["calls"])} for k, v in summary["by_provider"].items()]
+    by_provider.sort(key=lambda x: -x["calls"])
+    by_task = [{"task": k, **v, "pct": _pct(v["calls"])} for k, v in summary["by_task"].items()]
+    by_task.sort(key=lambda x: -x["calls"])
+    return {
+        "month": m,
+        "total_calls": total_calls,
+        "total_tokens": summary["total_tokens"],
+        "total_cost": round(summary["total_cost"], 4),
+        "by_provider": by_provider,
+        "by_task": by_task,
+        "budget": get_budget_status(),
+        "recent": summary.get("recent", []),
+    }
+
+
+@app.get("/ai/budget")
+def ai_budget_get():
+    from model_config import load_budget
+    return load_budget()
+
+
+@app.post("/ai/budget")
+def ai_budget_post(body: Dict[str, Any]):
+    from model_config import save_budget
+    try:
+        monthly = float((body or {}).get("monthly", 0) or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="预算格式错误")
+    if monthly < 0:
+        raise HTTPException(status_code=400, detail="预算不能为负数")
+    save_budget(monthly)
+    return {"monthly": monthly}
 
 
 # ========== 前端静态文件托管（用于 TRAE 预览面板直接打开 APP） ==========

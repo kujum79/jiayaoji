@@ -8,7 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="format-detection" content="telephone=no,email=no,address=no" />
     <title>家肴记 · AI 家庭膳食助理</title>
-    <script>console.log('%c家肴记前端版本: 2026-10-05-V112（首页食记卡＋→状态标签间距 8px，与标签→确认对称）', 'color:#F97316;font-weight:bold;font-size:14px;');</script>
+    <script>console.log('%c家肴记前端版本: 2026-10-06-V119（Agnes 免费模型首选：apihub 域名/flash+pro 双档/审核走 pro/图像视频路由+pollinations 降级/.env 支持）', 'color:#F97316;font-weight:bold;font-size:14px;');</script>
     <script>
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
@@ -16025,15 +16025,7 @@ async function generateIngredientPrefRecipes() {
             var servings = (family && family.length) ? family.length : 2;
             var _dcCnt = getDishCountByMembers(servings); // 每餐道数按人数（1人=2道）
             var NEED_CAP = { breakfast: _dcCnt.breakNum, lunch: _dcCnt.lunchNum, dinner: _dcCnt.dinnerNum };
-            var familyText = family.map(function(m){
-                if (!m) return '';
-                var parts = [];
-                var who = String(m.name||m.relation||'家人');
-                ['dietaryPreference','taste','diet','allergies'].forEach(function(k){
-                    if (typeof m[k] === 'string' && m[k].trim()) parts.push(k + ':' + m[k]);
-                });
-                return who + (parts.length ? '（' + parts.join('；') + '）' : '');
-            }).filter(Boolean).join('，');
+            var familyText = _familyBriefCompact(family); // V117: 压缩档案缓存
             var topLiked = liked.slice(0, 8).map(x => x.name + (x.reason[0] ? ('('+x.reason[0]+')') : '')).join('、') || '（暂无高频爱吃）';
             var daysText = days.map(function(d){ return `${d.dateKey}=${d.label}${formatDateShort(d.date)}`; }).join('、');
             // 按推荐模式分化 sys prompt 策略；当季食材作为基础层自动融入所有模式
@@ -16448,11 +16440,13 @@ async function generateIngredientPrefRecipes() {
         // 当前时节
         var term = getSolarTermForDate ? getSolarTermForDate() : null;
         var solarName = term ? term.name : '';
-        // 家庭档案
+        // 家庭档案（V117: 压缩档案缓存）
         var familyText = '';
         try {
-            var fam = typeof lsGet === 'function' ? lsGet('familyMembers', []) : [];
-            familyText = fam.slice(0, 3).map(function(m){ return m.name+'('+m.age+'岁,'+(m.taste||'')+')'; }).join('、');
+            var raw = typeof lsGet === 'function' ? lsGet('familyMembers', null) : null;
+            var fam = Array.isArray(raw) ? raw : (typeof raw === 'string' ? (JSON.parse(raw || '[]') || []) : []);
+            if (!fam.length && typeof lsGet === 'function') { try { fam = JSON.parse(lsGet('familyData') || '[]') || []; } catch (e2) {} }
+            familyText = _familyBriefCompact(fam);
         } catch(e) {}
 
         // 各模式对应知识库分类
@@ -19654,7 +19648,7 @@ function openAddFridgeModal() {
     document.getElementById('fridgeUnit').value = '';
     document.getElementById('fridgePurchaseDate').value = new Date().toISOString().slice(0, 10);
     document.getElementById('fridgeExpiryDate').value = '';
-    // emoji自动补全 + 自动填充保质期 + 自动匹配单位
+    // emoji自动补全 + 自动填充保质期 + 自动匹配单位 + 本地规则引擎自动分类（V115，无 AI 调用）
     const nameInput = document.getElementById('fridgeName');
     nameInput.oninput = function() {
         const val = this.value.trim();
@@ -19662,6 +19656,9 @@ function openAddFridgeModal() {
             const emoji = guessFoodEmoji(val);
             this.setAttribute('placeholder', emoji + ' ' + val);
         }
+        // V115: 食材分类本地查表（营养表优先 + 关键词兜底），查不到保持当前值
+        const autoCat = classifyIngredient(val);
+        if (autoCat) document.getElementById('fridgeCategory').value = autoCat;
         autoFillAddFridgeExpiry();
         autoGuessFridgeUnit(val);
     };
@@ -21206,7 +21203,10 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                 healthProfiles = collectMemberHealthProfiles(dineMembers) || '';
                 healthRules = getGroupTypeConstraints(dineMembers) || '';
             } catch(e) { healthProfiles = ''; healthRules = ''; }
-            var sys = '你是家肴记的家庭饮食策划。请在当前节气时令的基础上，根据家庭成员偏好与健康状态推荐菜谱，优先选用当季食材。仅返回严格 JSON：{ byDate: { "' + dateKey + '": { "' + mealKey + '": [{dish:"菜名",reason:"15-28字说明"}] } } }，每餐 ' + _needN + ' 道菜（' + _fmN + '人家庭，宁少勿多，不得超出），菜名必须是真实家常菜，reason 必须中文。若某道菜是因成员健康状态而推荐，reason 中必须含"适合生长发育期/适合术后恢复期/适合慢病调理/适合孕期/适合产后调理"等对应字样。重要搭配禁忌：同一餐次中流质类（菜名含"粥/稀饭/豆浆/米糊/羹/甜汤"）和汤类（菜名含"汤"）不可同时出现超过 1 道流质，请自动替换其中之一为炒菜或凉拌类。';
+            var sys = '你是家肴记饮食策划。只返回 JSON：{byDate:{"' + dateKey + '":{"' + mealKey + '":[{dish:"菜名",reason:"15-28字"}]}}}。'
+                + '每餐' + _needN + '道（' + _fmN + '人，宁少勿多）；菜名真实家常菜，reason 中文。'
+                + '结合节气与成员健康，优先当季；健康推荐菜 reason 含"适合生长发育期/术后/慢病/孕期/产后"。'
+                + '流质（粥/豆浆/羹/甜汤）与汤同餐≤1道，超出换炒菜/凉拌。';
             var usr = '当前节气：' + (solarTermName || '无') + '；目标日期：' + dateKey + '；餐次：' + mealKey
                 + '；近30天爱吃食材：' + (liked.slice(0,3).map(function(x){return x.name;}).join('、') || '无')
                 + (healthProfiles ? ('；家庭成员健康状态：\n' + healthProfiles) : '')
@@ -21253,20 +21253,10 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
 async function _auditRecipeApi(recipe, family, context) {
     var dishName = (recipe && (recipe.dish || recipe.name)) || '';
     if (!dishName) return { passed: true, totalScore: null, dimensions: null, issues: [], suggestions: [] };
-    var famBrief = (family || []).map(function(m){
-        return [m.name, m.age ? m.age + '岁' : '', m.constitution || '', m.taste || '', m.allergies ? ('过敏:' + m.allergies) : ''].filter(Boolean).join('/');
-    }).join('；') || '普通三口之家';
-    var sys = '你是家庭饮食审核专家。请按五个维度为食谱打分，仅返回严格 JSON：'
-        + '{ "passed": true/false, "totalScore": 0-100, '
-        + '"dimensions": ['
-        + '{"name":"营养均衡","score":0-30,"max":30,"reason":"扣分原因，无扣分给空字符串"},'
-        + '{"name":"口味适配","score":0-25,"max":25,"reason":"..."},'
-        + '{"name":"时令适宜","score":0-15,"max":15,"reason":"..."},'
-        + '{"name":"操作可行","score":0-15,"max":15,"reason":"..."},'
-        + '{"name":"成本合理","score":0-15,"max":15,"reason":"..."}], '
-        + '"issues": [{"level":"error|warning","message":"中文"}], "suggestions": ["中文"] }。'
-        + '维度顺序与满分不可改，totalScore 必须等于五个维度 score 之和。'
-        + '有明显健康风险/过敏/忌口冲突/家庭做不出来时 passed=false 且 issues 含 level="error"；小问题只给 warning 与 suggestions。';
+    var famBrief = _familyBriefCompact(family); // V117: 压缩档案（每人一行，空字段跳过），sig 缓存不重复构建
+    var sys = '家庭饮食审核员。按五维给食谱打分，仅返回 JSON。'
+        + '五维：营养均衡0-30、口味适配0-25、时令适宜0-15、操作可行0-15、成本合理0-15；dimensions=[{name,score,reason}]，reason 中文，totalScore=五维之和。'
+        + '健康风险/过敏/忌口/做不出来 → passed=false 且 issues 含 error；小问题给 warning。';
     var usr = '家庭档案：' + famBrief
         + '；就餐时间：' + ((context && context.dateKey) || '') + ' ' + ((context && context.meal) || '')
         + '；推荐食谱：' + dishName
@@ -21274,13 +21264,14 @@ async function _auditRecipeApi(recipe, family, context) {
         + (recipe && Array.isArray(recipe.ingredients) && recipe.ingredients.length ? ('；主要食材：' + recipe.ingredients.join('、')) : '');
     try {
         var fastFb = new Promise(function(r){ setTimeout(function(){ r(null); }, 6000); });
-        var res = await Promise.race([ callAliyunQwenApi(sys, usr, { mode: 'diet' }), fastFb ]);
+        var res = await Promise.race([ callAliyunQwenApi(sys, usr, { mode: 'diet', task: 'audit' }), fastFb ]); // V119: task=audit → 后端走强档模型
         if (res && typeof res === 'object') {
             var passed = res.passed !== false;
+            var _AMAX = { '营养均衡': 30, '口味适配': 25, '时令适宜': 15, '操作可行': 15, '成本合理': 15 }; // V117: sys 精简后 AI 可能不带 max，按维度名兜底
             var dims = Array.isArray(res.dimensions) ? res.dimensions.map(function(d){
                 if (!d || typeof d.name !== 'string') return null;
                 var sc = (typeof d.score === 'number') ? Math.max(0, Math.min(100, d.score)) : 0;
-                var mx = (typeof d.max === 'number' && d.max > 0) ? d.max : 0;
+                var mx = (typeof d.max === 'number' && d.max > 0) ? d.max : (_AMAX[d.name] || 0);
                 return { name: d.name, score: Math.round(sc), max: Math.round(mx), reason: (typeof d.reason === 'string') ? d.reason : '' };
             }).filter(Boolean) : null;
             var total = (typeof res.totalScore === 'number')
@@ -21323,7 +21314,8 @@ async function _generateAiRecipesWithAudit(dateKey, mealKey) {
             var a = audits[i] || { passed: true, score: null, issues: [], suggestions: [] };
             d.__audit = {
                 passed: a.passed !== false,
-                score: (typeof a.score === 'number') ? a.score : null,
+                totalScore: (typeof a.totalScore === 'number') ? a.totalScore : ((typeof a.score === 'number') ? a.score : null), // V117 修复：此前误读不存在的 a.score，五维分数被丢弃
+                dimensions: Array.isArray(a.dimensions) ? a.dimensions : null,
                 issues: Array.isArray(a.issues) ? a.issues : [],
                 suggestions: Array.isArray(a.suggestions) ? a.suggestions : []
             };
@@ -23065,6 +23057,83 @@ var VR_SEASON_OFF = {
 };
 function _vrRecipeText(recipe) { return _vrTextsOf(recipe).join('|'); }
 
+// ========== 本地规则引擎 V115：优先本地判断，避免不必要的 AI 调用 ==========
+// 五个可本地化规则与本文件的实现位置：
+//   1. 食材分类 → classifyIngredient()（营养表查表优先 + 关键词兜底）→ 已接入添加食材表单自动分类
+//   2. 餐次识别 → detectMealByTime()（0-9 早 / 9-14 午 / 14-24 晚）→ 已接入首页食记卡默认餐次
+//   3. 节气匹配 → getSolarTermForDate()（节气表查表）→ 已注入 AI 推荐 prompt「当前节气」
+//   4. 忌口检查 → validateRecipe()（V100：_vrTaboosOf 忌口解析 + 过敏原单字匹配）
+//   5. 重复检测 → validateRecipe()（V100：recentDishes 近 3 天精确比对）+ _buildDiversityConstraints（7 天多样性）
+// AI 只在必要时调用：生成新内容（推荐菜谱/食材知识）、语义理解（自然语言/图片）、复杂推理（营养配餐/审核评分）。
+var _ING_CAT_MAP = {
+    '主粮': '主粮', '谷薯类': '主粮',
+    '蔬菜': '蔬菜', '蔬菜类': '蔬菜',
+    '水果': '水果', '水果类': '水果',
+    '肉蛋奶': '肉蛋奶', '畜禽鱼蛋类': '肉蛋奶', '奶类': '肉蛋奶',
+    '水产': '水产',
+    '调料': '调料', '油脂类': '调料',
+    '干货药材': '干货药材', '大豆坚果类': '干货药材'
+};
+// 表外食材关键词兜底（顺序即优先级，前面命中即返回）
+var _ING_CAT_KEYWORDS = [
+    [/水产|鱼|虾|蟹|贝|鲍|鱿|蛤|螺|蛏|海带|紫菜|黄颡|三文鱼|金枪鱼/, '水产'],
+    [/猪肉|牛肉|羊肉|排骨|牛腩|里脊|五花肉|前腿肉|后腿肉|肉末|肉馅|肉丝|肉片|鸡翅|鸡腿|鸡胸|鸡爪|鸭肉|鹅|火腿|腊肠|培根|蛋|牛奶|酸奶|奶酪|奶油|奶粉/, '肉蛋奶'],
+    [/冬瓜|南瓜|黄瓜|丝瓜|苦瓜|西瓜皮|西葫芦|萝卜|胡萝卜|白萝卜|青萝卜|土豆|马铃薯|红薯|紫薯|山药|芋头|莲藕|茭白|笋|芦笋|茼蒿|芹菜|菠菜|韭菜|香菜|葱|蒜|姜|椒|茄子|番茄|西红柿|豆角|豇豆|四季豆|荷兰豆|毛豆|黄豆|绿豆|红豆|黑豆|豆腐|豆干|千张|豆浆|豆奶|豆花|腐竹|木耳|银耳|菇|菌|白菜|包菜|卷心菜|娃娃菜|油菜|生菜|油麦菜|空心菜|苋菜|荠菜|莴笋|秋葵|黄花菜|海带丝|藕/, '蔬菜'],
+    [/苹果|香蕉|橙子|橘子|柑|柚子|柠檬|梨|桃|李|杏|梅|枣|葡萄|提子|草莓|蓝莓|蔓越莓|芒果|菠萝|榴莲|荔枝|龙眼|桂圆|火龙果|猕猴桃|樱桃|车厘子|石榴|柿子|甘蔗|哈密瓜|香瓜|木瓜|椰子|山竹|杨梅|杨桃|枇杷|无花果|桑葚|百香果/, '水果'],
+    [/大米|小米|糯米|面粉|面条|挂面|米粉|粉丝|宽粉|馒头|包子|饺子|花卷|烧麦|汤圆|面包|吐司|麦片|燕麦|玉米|藜麦|荞麦|薏米|芡实|年糕|米粉肉|河粉|意面|通心粉/, '主粮'],
+    [/食盐|白糖|冰糖|红糖|酱油|生抽|老抽|醋|蚝油|料酒|香油|芝麻油|花生油|玉米油|橄榄油|调和油|辣椒油|花椒油|豆瓣酱|甜面酱|番茄酱|沙拉酱|淀粉|胡椒|花椒|八角|桂皮|香叶|丁香|茴香|孜然|五香粉|味精|鸡精|酵母|泡打粉|小苏打/, '调料'],
+    [/枸杞|莲子|百合|燕窝|虫草|当归|党参|黄芪|人参|花胶|桃胶|皂角米|陈皮|罗汉果|菊花|金银花|胖大海|红枣干|桂圆干|芝麻|花生|核桃|杏仁|腰果|开心果|巴旦木|松子|瓜子|栗子|白果/, '干货药材'],
+    [/饮料|可乐|雪碧|汽水|果汁|奶茶|咖啡|茶|酸奶昔|乳酸菌|饼干|薯片|辣条|糖果|巧克力|蛋糕|月饼|绿豆糕|果冻|蜜饯|话梅|膨化|冰淇淋|冰激凌|雪糕|速冻/, '饮料零食'],
+    [/火锅底料|自热|速食|罐头|方便面|螺蛳粉|酸辣粉|热干面|凉皮|预制菜/, '方便食品']
+];
+// 规则1：食材分类（"番茄"→"蔬菜"）。返回 fridgeCategory 选项值，查不到返回 ''（调用方保持原值）
+function classifyIngredient(name) {
+    var n = String(name || '').trim();
+    if (!n) return '';
+    var info = (typeof INGREDIENT_NUTRITION === 'object') && INGREDIENT_NUTRITION ? INGREDIENT_NUTRITION[n] : null;
+    if (info && info.category) {
+        // 营养表把鱼虾归「畜禽鱼蛋类」组，按 foodGroup=水产品 细分回水产
+        if (info.category === '畜禽鱼蛋类') return (info.foodGroup === '水产品') ? '水产' : '肉蛋奶';
+        // 豆制品（豆腐/豆浆等）跟随冰箱示例数据归「蔬菜」，花生坚果等归「干货药材」
+        if (info.category === '大豆坚果类' && /豆腐|豆干|千张|豆浆|豆花|豆皮|素鸡|腐竹|豆芽/.test(n)) return '蔬菜';
+        if (_ING_CAT_MAP[info.category]) return _ING_CAT_MAP[info.category];
+    }
+    for (var i = 0; i < _ING_CAT_KEYWORDS.length; i++) {
+        if (_ING_CAT_KEYWORDS[i][0].test(n)) return _ING_CAT_KEYWORDS[i][1];
+    }
+    return '';
+}
+// 规则2：餐次识别（0-9 早餐 / 9-14 午餐 / 14-24 晚餐）。hour 缺省取当前时间
+function detectMealByTime(hour) {
+    var h = (hour === undefined || hour === null) ? new Date().getHours() : Number(hour) || 0;
+    if (h < 0) h = 0; if (h > 23) h = 23;
+    if (h < 9) return 'breakfast';
+    if (h < 14) return 'lunch';
+    return 'dinner';
+}
+var _MEAL_LABELS = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
+function detectMealLabelByTime(hour) { return _MEAL_LABELS[detectMealByTime(hour)] || ''; }
+// ========== 家庭档案压缩缓存 V117：档案文本只构建一次，档案未变直接复用（省 CPU 与 Token） ==========
+// 压缩格式：每人"张三38岁平和质/清淡/忌虾蟹"，空字段跳过——比段落式描述省约 40-60% Token。
+// 说明：AI 接口为无状态单轮调用，「后续只传 familyId」需 AI 侧会话记忆，纯前端架构不支持；
+//      此处以"压缩 + 缓存构建"达成同样的省 Token 目标，语义不变。
+var __familyBriefCache = null;
+function _familyBriefCompact(family) {
+    var list = Array.isArray(family) ? family : [];
+    var sig = '';
+    try { sig = JSON.stringify(list.map(function(m){ return [m.name, m.age, m.constitution, m.taste, m.allergies, m.diet]; })); } catch (e) { sig = String(Date.now()); }
+    if (__familyBriefCache && __familyBriefCache.sig === sig) return __familyBriefCache.text;
+    var lines = list.map(function(m){
+        return [m.name || '', m.age ? m.age + '岁' : '', m.constitution || '', m.taste || '', m.allergies ? '忌' + m.allergies : '', m.diet ? m.diet : '']
+            .filter(Boolean).join('/');
+    }).filter(Boolean).join('；') || '普通三口之家';
+    __familyBriefCache = { sig: sig, text: lines };
+    return lines;
+}
+// ========== 家庭档案压缩缓存结束 ==========
+// ========== 本地规则引擎 V115 结束 ==========
+
+
 function validateRecipe(recipe, context) {
     var issues = [];
     if (!recipe) return issues;
@@ -24195,11 +24264,9 @@ var _hdMealNames = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
 var _hdMealIcons = { breakfast: '🌅', lunch: '🍽', dinner: '🌙' };
 var _hdManualIdx = null; // null = 按当前时间自动定位
 
+// V115: 复用本地规则引擎统一实现（0-9 早 / 9-14 午 / 14-24 晚，口径与 detectMealByTime 一致）
 function _hdDefaultIdx() {
-    var h = new Date().getHours();
-    if (h < 9) return 0;
-    if (h < 14) return 1;
-    return 2;
+    return _hdMeals.indexOf(detectMealByTime());
 }
 function _hdCurrentIdx() { return _hdManualIdx === null ? _hdDefaultIdx() : _hdManualIdx; }
 
@@ -27501,6 +27568,12 @@ function renderFamily() {
                 <span id="familyAdminEntryBtnLabel" style="font-size:14px;color:#4B5563;font-weight:500;flex:1;">文库管理</span>
                 <span style="font-size:12px;color:#9CA3AF;flex:0 0 auto;">分类 · 审核 · 条目</span>
                 <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
+            </div>
+            <div id="aiUsageEntry" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
+                <span style="font-size:18px;flex:0 0 auto;line-height:1;">📊</span>
+                <span style="font-size:14px;color:#4B5563;font-weight:500;flex:1;">AI 用量</span>
+                <span style="font-size:12px;color:#9CA3AF;flex:0 0 auto;">成本 · 预算</span>
+                <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
             </div>` : ''}
             </div>
         </div>
@@ -27513,6 +27586,9 @@ function renderFamily() {
             switchKnowledgeView('library'); // 先切到文库列表视图（管理面板所在容器），否则仍停留在 AI 对话页
             switchKnowledgeVisibility('admin');
         });
+        // V118: AI 用量入口（超管）
+        var _aiUsageRow = document.getElementById('aiUsageEntry');
+        if (_aiUsageRow) _aiUsageRow.addEventListener('click', openAiUsagePanel);
     }
 
     // 退出登录（组外）+ 版本长按
@@ -38085,6 +38161,153 @@ function refreshAdminTabVisibility() {
     var isLoggedIn = isSuperAdmin();
     var el = document.getElementById('familyAdminEntry');
     if (el) el.style.display = isLoggedIn ? '' : 'none';
+    var aiEl = document.getElementById('aiUsageEntry'); // V118: AI 用量入口随超管显隐
+    if (aiEl) aiEl.style.display = isLoggedIn ? '' : 'none';
+}
+
+// ============ V118: AI 用量监控面板（仅超级管理员） ============
+var AI_TASK_NAMES = { plan: '食谱推荐', recipe: '食谱推荐', recommend: '食谱推荐', parse: '食材识别', parse_voice: '语音识别', parse_link: '链接解析', chat: '聊天助手', audit: '审核评分', ingredient: '食材知识' };
+var AI_PROVIDER_NAMES = { agnes: 'Agnes', siliconflow: '硅基流动', dashscope: '阿里百炼', deepseek: 'DeepSeek' };
+function _aiUsageTaskName(t) { return AI_TASK_NAMES[t] || t || '其他'; }
+function _aiUsageProviderName(p) { return AI_PROVIDER_NAMES[p] || p; }
+function _aiUsageFmtCost(y) { return (y || 0) >= 1 ? '¥' + Number(y).toFixed(2) : (y > 0 ? '¥' + Number(y).toFixed(4) : '免费'); }
+function _aiUsageFmtNum(n) { return String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function _aiUsageFmtTime(ts) { try { var d = new Date((ts || 0) * 1000); return String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); } catch (e) { return ''; } }
+
+async function openAiUsagePanel() {
+    var old = document.getElementById('aiUsageOverlay');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'aiUsageOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100004;background:rgba(15,23,42,0.5);display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.innerHTML = '<div id="aiUsageCard" style="width:100%;max-width:400px;max-height:86vh;overflow-y:auto;background:#F9FAFB;border-radius:18px;box-sizing:border-box;">' +
+        '<div style="position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;padding:14px 16px;background:#F9FAFB;border-radius:18px 18px 0 0;">' +
+        '<button onclick="closeAiUsagePanel()" style="border:none;background:none;font-size:18px;color:#4B5563;cursor:pointer;padding:2px 6px;line-height:1;">←</button>' +
+        '<span style="font-size:16px;font-weight:700;color:#1F2937;">AI 用量</span>' +
+        '<span id="aiUsageMonthLabel" style="font-size:12px;color:#9CA3AF;margin-left:auto;"></span></div>' +
+        '<div id="aiUsageBody" style="padding:0 14px 14px;"><div style="text-align:center;color:#9CA3AF;font-size:13px;padding:40px 0;">加载中…</div></div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function(e) { if (e.target === ov) closeAiUsagePanel(); });
+    await _renderAiUsageBody();
+}
+
+function closeAiUsagePanel() { var ov = document.getElementById('aiUsageOverlay'); if (ov) ov.remove(); }
+
+async function _renderAiUsageBody() {
+    var bodyEl = document.getElementById('aiUsageBody');
+    if (!bodyEl) return;
+    var data = null, errMsg = '';
+    try {
+        var res = await fetch('/ai/usage?detail=1');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        data = await res.json();
+    } catch (e) { errMsg = String((e && e.message) || e); }
+    if (!data) {
+        bodyEl.innerHTML = '<div style="text-align:center;color:#9CA3AF;font-size:13px;padding:40px 0;">获取失败：' + errMsg + '<br>请确认后端服务已启动</div>';
+        return;
+    }
+    window.__aiUsageData = data;
+    var monthLabel = document.getElementById('aiUsageMonthLabel');
+    if (monthLabel) monthLabel.textContent = data.month + '月';
+
+    // 预算提醒条（>80% 黄色提醒 / ≥100% 红色 + 已切免费模型）
+    var b = data.budget || {};
+    var budgetHtml = '';
+    if (b.monthly > 0) {
+        var pct = Math.round((b.ratio || 0) * 100);
+        if (b.status === 'over') {
+            budgetHtml = '<div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;padding:10px 12px;font-size:13px;color:#DC2626;font-weight:600;margin-bottom:10px;">🚫 已超月度预算（¥' + b.used + '/¥' + b.monthly + '），付费模型已停用，自动切换免费模型</div>';
+        } else if (b.status === 'warn') {
+            budgetHtml = '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:10px 12px;font-size:13px;color:#B45309;font-weight:600;margin-bottom:10px;">⚠️ 本月预算已用 ' + pct + '%（¥' + b.used + '/¥' + b.monthly + '），请注意控制用量</div>';
+        }
+    }
+
+    // 本月用量三格
+    var totalHtml = '<div style="background:white;border:1px solid #F3F4F6;border-radius:12px;padding:14px;margin-bottom:10px;">' +
+        '<div style="font-size:13px;color:#6B7280;font-weight:600;margin-bottom:10px;">本月用量</div>' +
+        '<div style="display:flex;gap:8px;">' +
+        '<div style="flex:1;text-align:center;"><div style="font-size:20px;font-weight:700;color:#1F2937;">' + _aiUsageFmtNum(data.total_calls) + '</div><div style="font-size:11px;color:#9CA3AF;margin-top:2px;">总调用</div></div>' +
+        '<div style="flex:1.4;text-align:center;border-left:1px solid #F3F4F6;border-right:1px solid #F3F4F6;"><div style="font-size:20px;font-weight:700;color:#1F2937;">' + _aiUsageFmtNum(data.total_tokens) + '</div><div style="font-size:11px;color:#9CA3AF;margin-top:2px;">总 Token</div></div>' +
+        '<div style="flex:1;text-align:center;"><div style="font-size:20px;font-weight:700;color:#C2410C;">' + _aiUsageFmtCost(data.total_cost) + '</div><div style="font-size:11px;color:#9CA3AF;margin-top:2px;">估算成本</div></div>' +
+        '</div></div>';
+
+    // 按服务商
+    var provRows = (data.by_provider || []).length ? (data.by_provider || []).map(function(p) {
+        return '<div style="display:flex;align-items:center;padding:9px 0;border-bottom:1px solid #F9FAFB;font-size:13px;">' +
+            '<span style="flex:1;color:#4B5563;">' + _aiUsageProviderName(p.provider) + '</span>' +
+            '<span style="color:#6B7280;margin-right:12px;">' + _aiUsageFmtNum(p.calls) + ' 次</span>' +
+            '<span style="color:' + (p.cost > 0 ? '#DC2626' : '#059669') + ';font-weight:600;min-width:64px;text-align:right;">' + (p.cost > 0 ? _aiUsageFmtCost(p.cost) : '免费') + '</span></div>';
+    }).join('') : '<div style="padding:12px 0;color:#9CA3AF;font-size:13px;">本月暂无调用</div>';
+    var provHtml = '<div style="background:white;border:1px solid #F3F4F6;border-radius:12px;padding:14px;margin-bottom:10px;">' +
+        '<div style="font-size:13px;color:#6B7280;font-weight:600;margin-bottom:4px;">按服务商</div>' + provRows + '</div>';
+
+    // 按功能（占比条）
+    var barColors = ['#F97316', '#3B82F6', '#10B981', '#8B5CF6', '#EC4899', '#F59E0B', '#6B7280'];
+    var taskRows = (data.by_task || []).length ? (data.by_task || []).map(function(t, i) {
+        var c = barColors[i % barColors.length];
+        return '<div style="margin-bottom:10px;">' +
+            '<div style="display:flex;font-size:13px;align-items:center;"><span style="color:#4B5563;flex:1;">' + _aiUsageTaskName(t.task) + '</span><span style="color:#9CA3AF;font-size:12px;">' + t.pct + '% · ' + _aiUsageFmtNum(t.calls) + ' 次</span></div>' +
+            '<div style="height:6px;background:#F3F4F6;border-radius:3px;margin-top:4px;overflow:hidden;"><div style="height:100%;width:' + Math.min(100, t.pct) + '%;background:' + c + ';border-radius:3px;"></div></div></div>';
+    }).join('') : '<div style="padding:6px 0 0;color:#9CA3AF;font-size:13px;">本月暂无调用</div>';
+    var taskHtml = '<div style="background:white;border:1px solid #F3F4F6;border-radius:12px;padding:14px;margin-bottom:10px;">' +
+        '<div style="font-size:13px;color:#6B7280;font-weight:600;margin-bottom:10px;">按功能</div>' + taskRows + '</div>';
+
+    // 操作按钮 + 明细块（默认收起）
+    var recentRows = (data.recent || []).map(function(r) {
+        return '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid #F9FAFB;font-size:12px;gap:8px;">' +
+            '<span style="color:#9CA3AF;flex:0 0 auto;">' + _aiUsageFmtTime(r.timestamp) + '</span>' +
+            '<span style="color:#4B5563;flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + _aiUsageTaskName(r.task) + ' · ' + _aiUsageProviderName(r.provider) + '</span>' +
+            '<span style="color:#6B7280;flex:0 0 auto;">' + _aiUsageFmtNum(r.tokens) + ' tk</span>' +
+            '<span style="color:' + (r.cost > 0 ? '#DC2626' : '#059669') + ';flex:0 0 auto;min-width:52px;text-align:right;">' + (r.cost > 0 ? '¥' + Number(r.cost).toFixed(4) : '免费') + '</span></div>';
+    }).join('');
+    var btnHtml = '<div style="display:flex;gap:10px;margin-bottom:10px;">' +
+        '<button onclick="toggleAiUsageDetail()" style="flex:1;padding:9px;border:1px solid #FED7AA;border-radius:10px;background:#FFF7ED;font-size:13px;font-weight:600;color:#C2410C;cursor:pointer;">查看明细</button>' +
+        '<button onclick="openAiBudgetEditor()" style="flex:1;padding:9px;border:1px solid #E5E7EB;border-radius:10px;background:white;font-size:13px;font-weight:600;color:#4B5563;cursor:pointer;">设置预算</button></div>' +
+        '<div id="aiUsageDetailBlock" style="display:none;background:white;border:1px solid #F3F4F6;border-radius:12px;padding:12px;margin-bottom:6px;">' +
+        '<div style="font-size:13px;color:#6B7280;font-weight:600;margin-bottom:6px;">最近调用（' + (data.recent || []).length + ' 条）</div>' +
+        (recentRows || '<div style="color:#9CA3AF;font-size:13px;">暂无记录</div>') +
+        '<div style="font-size:11px;color:#D1D5DB;margin-top:8px;">仅统计经后端路由的调用；时间越近越靠前</div></div>';
+
+    bodyEl.innerHTML = budgetHtml + totalHtml + provHtml + taskHtml + btnHtml;
+}
+
+function toggleAiUsageDetail() {
+    var d = document.getElementById('aiUsageDetailBlock');
+    if (!d) return;
+    d.style.display = (d.style.display === 'none') ? '' : 'none';
+    if (d.style.display !== 'none') d.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function openAiBudgetEditor() {
+    var old = document.getElementById('aiBudgetEditor');
+    if (old) old.remove();
+    var cur = '';
+    try { var b = (window.__aiUsageData && window.__aiUsageData.budget) || {}; if (b.monthly > 0) cur = b.monthly; } catch (e) {}
+    var m = document.createElement('div');
+    m.id = 'aiBudgetEditor';
+    m.style.cssText = 'position:fixed;inset:0;z-index:100005;background:rgba(15,23,42,0.5);display:flex;align-items:center;justify-content:center;padding:24px;';
+    m.innerHTML = '<div style="width:100%;max-width:320px;background:white;border-radius:16px;padding:20px;box-sizing:border-box;">' +
+        '<div style="font-size:15px;font-weight:700;color:#1F2937;margin-bottom:12px;">设置月度预算（元）</div>' +
+        '<input id="aiBudgetInput" type="number" min="0" step="1" value="' + cur + '" placeholder="如 50（0 = 不限制）" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;">' +
+        '<div style="font-size:12px;color:#9CA3AF;margin-top:6px;">超过 80% 时面板提醒；达到 100% 自动只用免费模型</div>' +
+        '<div style="display:flex;gap:10px;margin-top:14px;">' +
+        '<button onclick="document.getElementById(\'aiBudgetEditor\').remove()" style="flex:1;padding:9px;border:1px solid #E5E7EB;border-radius:10px;background:white;font-size:14px;color:#4B5563;cursor:pointer;">取消</button>' +
+        '<button onclick="saveAiBudget()" style="flex:1;padding:9px;border:none;border-radius:10px;background:#F97316;font-size:14px;font-weight:600;color:white;cursor:pointer;">保存</button></div></div>';
+    document.body.appendChild(m);
+}
+
+async function saveAiBudget() {
+    var input = document.getElementById('aiBudgetInput');
+    var v = parseFloat(input && input.value);
+    if (isNaN(v) || v < 0) { showToast('请输入有效金额'); return; }
+    try {
+        var res = await fetch('/ai/budget', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ monthly: v }) });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var ed = document.getElementById('aiBudgetEditor');
+        if (ed) ed.remove();
+        showToast(v > 0 ? '✅ 月度预算已设为 ¥' + v : '已取消预算限制');
+        await _renderAiUsageBody();
+    } catch (e) { showToast('保存失败：' + ((e && e.message) || e)); }
 }
 
 // 超管管理面板渲染
@@ -41594,32 +41817,12 @@ async function generateMultiDayRecommendation(days) {
     // 构建结构化Prompt（九维融合）
     const userMessage = buildRecommendationPrompt(recData, weekDatesStr);
 
-    // 系统提示词（九维融合）
+    // 系统提示词（V117 二次精简：~138 字；usr 已含九维数据/编号约束/JSON模板/膳食指南参考量，sys 只留 usr 未覆盖的硬约束）
     var _dc = getDishCountByMembers(recData.servings || 3);
-    const systemPrompt = '你是"家肴记"的专业家庭饮食顾问AI。请综合九个维度的优先级信息，生成一份合理的未来' + days + '天三餐推荐方案。\n'
-        + '九个维度按优先级顺序：\n'
-        + '第1优先级：用户当前指令/约束\n'
-        + '第2优先级：历史对话中用户关心的内容\n'
-        + '第3优先级：当前就餐人员（人数、年龄、口味）\n'
-        + '第4优先级：家中已有食材（优先使用，特别关注即将过期的）\n'
-        + '第5优先级：家庭成员口味偏好/禁忌\n'
-        + '第6优先级：四季/时节因素（节气饮食原则）\n'
-        + '第7优先级：知识库内容（个人→家庭→公共）\n'
-        + '第8优先级：自家历史实际食谱（避免重复、强化偏好）\n'
-        + '第9优先级：AI综合推理（你的专业营养学和烹饪知识）\n\n'
-        + '要求：推荐贴近家庭实际，优先使用家中现有食材，结合节气养生知识，避免与近7天记录重复。每天三餐有变化，一周内不重复同样菜品。每道菜必须包含ingredients字段和推荐理由reason。\n\n'
-        + '【每餐菜品数量约束（基于' + (recData.servings || 3) + '人家庭）】\n'
-        + '- 早餐：必须' + _dc.breakfast + '（主食+蛋白质+饮品/水果），最多不超过' + _dc.breakNum + '道\n'
-        + '- 午餐：必须' + _dc.lunch + '（主食+主菜+副菜），最多不超过' + _dc.lunchNum + '道\n'
-        + '- 晚餐：必须' + _dc.dinner + '（主食+主菜+副菜），最多不超过' + _dc.dinnerNum + '道\n'
-        + '- 重要：每餐道数不得低于上述下限；避免浪费靠控制主食量与每道份量实现，不允许减少菜品道数\n\n'
-        + '【营养均衡要求】\n'
-        + '- 每天菜品需包含：主食、蛋白质、蔬菜\n'
-        + '- 荤素搭配合理，避免全荤或全素\n'
-        + '- 7天内菜品尽量不重复，避免连续两天出现相同菜\n'
-        + '【菜品排序规则】每餐菜品列表中：第一道必须是主食（杂粮饭/糙米饭/面条/粥/馒头/饼/薯类等，禁止纯白米饭类：米饭/大米饭/白米饭/蒸米饭，因其营养单一）；第二道推荐汤类菜品（如排骨汤/鱼汤/豆腐汤/蛋花汤/羹类等，若无汤类则推荐蔬菜类）；第三道及以后为主菜/副菜\n'
-        + '【菜名全局唯一】同一菜品名称在全部餐次和日期中合计最多出现1次（主食除外，主食可重复）\n'
-        + '【独立水果】若水果类摄入不足，必须在三餐中安排独立水果菜品（如苹果/蓝莓/草莓等，不依赖奶类饮品混合）';
+    const systemPrompt = '你是家肴记饮食顾问。生成未来' + days + '天三餐方案，只返回 JSON，禁解释文字。\n'
+        + '每餐道数（' + (recData.servings || 3) + '人）：早' + _dc.breakfast + '、午' + _dc.lunch + '、晚' + _dc.dinner + '（上限' + _dc.breakNum + '/' + _dc.lunchNum + '/' + _dc.dinnerNum + '），不低于下限，控份量不控道数。\n'
+        + '每餐首道主食(禁白米饭)，次道汤类或蔬菜，余为主/副菜。\n'
+        + '菜名全局唯一(主食除外)；水果不足则三餐安排独立水果。';
 
     // 显示持续"生成中"横幅（替代一闪而过的toast）
     showPlanGeneratingBanner(true);
@@ -41840,14 +42043,8 @@ async function generateAiMealRecommendation() {
             return parts.join(' | ');
         }).join('\n');
 
-        // 构建系统提示词（五维融合）
-        const systemPrompt = '你是一个专业的家庭饮食顾问AI。请综合以下五个维度信息，生成一份合理的明日三餐推荐方案：\n'
-            + '① AI推理：你具备专业营养学和烹饪知识\n'
-            + '② 就餐人情况：家庭成员的口味、年龄、体质\n'
-            + '③ 饮食知识库：当季饮食指南（食知提供的节气饮食原则和食材推荐）\n'
-            + '④ 家中食材：已有食材清单，优先使用现有食材\n'
-            + '⑤ 历史记录：过去7天的饮食记录，避免重复菜品，关注偏好\n'
-            + '要求：推荐贴近家庭实际，优先使用家中现有食材，结合节气养生知识，避免与近7天记录重复。';
+        // 构建系统提示词（V117 精简：~74 字；五维枚举 usr 已带【维度②】~【维度⑤】数据头，sys 只留角色+格式+三条要求）
+        const systemPrompt = '你是家庭饮食顾问AI。综合 usr 五维信息，生成明日三餐方案，只返回 JSON，禁解释文字。优先用家中现有食材，结合节气，避免与近7天记录重复。';
 
         // 构建用户消息（五维信息）
         let userMessage = `请为${targetDateStr}（${solarTerm.name}节气）推荐三餐食谱。\n\n`;
@@ -41865,8 +42062,8 @@ async function generateAiMealRecommendation() {
         if (knowledgeSummary) {
             userMessage += `【维度③ 食知-用户浏览/收藏知识】\n${knowledgeSummary}\n`;
         }
-        userMessage += `\n请严格按照以下JSON格式返回推荐方案，不要添加任何其他文字。\n**重要：每一道菜品都必须包含ingredients字段，列出该菜品所需的所有食材及其按用餐人数计算的用量，不可省略任何菜品的食材信息。**\n`;
-        userMessage += `{"date":"${targetDateStr}","solarTerm":"${solarTerm.name}","meals":{"breakfast":{"dishes":[{"name":"菜品名","ingredients":[{"name":"食材名","quantity":2,"unit":"个"}]}],"reason":"推荐理由"},"lunch":{"dishes":[{"name":"菜品名","ingredients":[{"name":"食材名","quantity":300,"unit":"克"}]}],"reason":"推荐理由"},"dinner":{"dishes":[{"name":"菜品名","ingredients":[{"name":"食材名","quantity":1,"unit":"把"}]}],"reason":"推荐理由"}},"summary":"综合推荐说明（说明如何结合了五维信息：节气知识、家中食材、家庭成员、历史记录等）"}`;
+        userMessage += `\n请严格按照以下JSON格式返回推荐方案，不要添加任何其他文字。\n**每道菜必须含 ingredients 字段（全部食材及每人份用量），不可省略。**\n`;
+        userMessage += `{"date":"${targetDateStr}","solarTerm":"${solarTerm.name}","meals":{"breakfast":{"dishes":[{"name":"菜名","ingredients":[{"name":"食材","quantity":2,"unit":"个"}]}],"reason":"理由"},"lunch":{"dishes":[同上结构]},"dinner":{"dishes":[同上结构]}},"summary":"综合说明（如何结合节气/食材/成员/历史）"}`;
 
         // 调用 Aliyun Qwen API（维度①：AI大模型）
         const aiResponse = await callAliyunQwenApi(systemPrompt, userMessage, { mode: getCurrentRecommendMode() });
@@ -41980,16 +42177,96 @@ function stripPlainRiceFromPlan(plan) {
     return plan;
 }
 
+// ========== AI 结果缓存 V116：相同输入 1 期内直接复用，避免重复调用 ==========
+// 缓存键 = hash(taskType + systemPrompt + userPrompt)：家庭档案/反馈学习/推荐模式变化都会改变 prompt → 自动失效
+// TTL：食材知识 30 天 / 菜谱推荐 1 天 / 节气食养 7 天 / 审核评分 1 天；未识别任务不缓存（对话等场景保守跳过）
+const _AI_CACHE_TTL = {
+    ingredient: 30 * 86400,  // 食材知识
+    recipe: 86400,           // 菜谱推荐
+    solar: 7 * 86400,        // 节气食养
+    audit: 86400             // 审核评分
+};
+const _AI_CACHE_MAX_KEYS = 80; // 容量上限（localStorage 有限，超限删最旧）
+function _aiCacheHashKey(taskType, sys, usr) {
+    var s = taskType + '|' + (sys || '') + '|' + (usr || '');
+    var h = 5381;
+    for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) & 0x7fffffff; }
+    return 'h' + h.toString(36);
+}
+function _aiCacheDetectTask(sys, usr) {
+    var s = (sys || '') + '|' + (usr || '');
+    if (/审核|评估以下食谱|家庭饮食审核专家/.test(s)) return 'audit';
+    if (/节气|食养/.test(s)) return 'solar';
+    if (/食材|原料|营养成分|食材知识/.test(s)) return 'ingredient';
+    if (/推荐|菜谱|食谱|膳食|三餐|菜单/.test(s)) return 'recipe';
+    return null;
+}
+const AICache = {
+    async get(key) {
+        const cached = localStorage.getItem('ai_cache_' + key);
+        if (!cached) return null;
+        try {
+            const data = JSON.parse(cached);
+            if (Date.now() > data.expireAt) { localStorage.removeItem('ai_cache_' + key); return null; }
+            return data.value;
+        } catch (e) { localStorage.removeItem('ai_cache_' + key); return null; }
+    },
+    async set(key, value, ttlSeconds) {
+        try {
+            localStorage.setItem('ai_cache_' + key, JSON.stringify({ value: value, expireAt: Date.now() + ttlSeconds * 1000, ts: Date.now() }));
+            this._trim();
+        } catch (e) { /* localStorage 满时静默放弃缓存，不影响主链路 */ }
+    },
+    _trim() {
+        var keys = [];
+        for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf('ai_cache_') === 0) keys.push(k);
+        }
+        if (keys.length <= _AI_CACHE_MAX_KEYS) return;
+        var items = keys.map(function(k){ var v = null; try { v = JSON.parse(localStorage.getItem(k)); } catch(e) {} return { k: k, ts: (v && v.ts) || 0 }; })
+                        .sort(function(a, b){ return a.ts - b.ts; });
+        items.slice(0, keys.length - _AI_CACHE_MAX_KEYS).forEach(function(x){ localStorage.removeItem(x.k); });
+    },
+    stats() {
+        var n = 0; for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf('ai_cache_') === 0) n++; }
+        return n;
+    }
+};
+async function callAIWithCache(taskType, sys, usr, coreFn) {
+    const key = _aiCacheHashKey(taskType, sys, usr);
+    const cached = await AICache.get(key);
+    if (cached) { console.log('[AICache] Cache hit:', taskType, key); return cached; }
+    const result = await coreFn();
+    await AICache.set(key, result, _AI_CACHE_TTL[taskType]);
+    console.log('[AICache] cached:', taskType, key, 'ttl=' + _AI_CACHE_TTL[taskType] + 's');
+    return result;
+}
+
 async function callAliyunQwenApi(systemPrompt, userMessage, opts) {
+    // V116: 识别任务类型，命中缓存直接返回（家庭档案/反馈/模式变化 → prompt 变化 → 键变化 → 自然失效）
+    const __taskType = (opts && opts.taskType) || _aiCacheDetectTask(systemPrompt, userMessage);
+    if (__taskType && _AI_CACHE_TTL[__taskType]) {
+        return await callAIWithCache(__taskType, systemPrompt, userMessage, async function(){
+            return await _callAliyunQwenApiCore(systemPrompt, userMessage, opts);
+        });
+    }
+    return await _callAliyunQwenApiCore(systemPrompt, userMessage, opts);
+}
+
+async function _callAliyunQwenApiCore(systemPrompt, userMessage, opts) {
     // opts.mode：AI推荐模式（RECOMMEND_MODES 枚举值），随 /plan 后端代理下发；
     // 直连阿里云的回退请求不携带该字段（第三方接口不识别自定义参数，避免被拒）
     const recMode = (opts && opts.mode) ? opts.mode : null;
+    // V119: opts.task 功能标识（audit=审核评分），随 /plan 下发用于后端场景路由（强档模型）与用量统计
+    const recTask = (opts && opts.task) ? opts.task : null;
     // 优先使用后端 /plan 代理（同源无 CORS），失败回退直连阿里云
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 60000);
         const planPayload = { system_prompt: systemPrompt, user_prompt: userMessage, max_tokens: 8192 };
         if (recMode) planPayload.mode = recMode;
+        if (recTask) planPayload.task_type = recTask;
         const response = await fetch('/plan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -42670,9 +42947,8 @@ function buildRecommendationPrompt(data, weekDatesStr) {
     prompt += `3. 结合时节因素推荐当季食材\n`;
     prompt += `4. 避免与近7天历史记录重复\n`;
     prompt += `5. 每天三餐有变化，一周内不重复同样菜品\n`;
-    prompt += `6. 每道菜必须标注推荐理由（如"基于家中食材推荐"、"基于季节推荐"等）。所有reason字段中必须显式包含一句《中国居民膳食指南》引用，例如"根据《中国居民膳食指南》推荐每日蔬菜300-500g，深色蔬菜占一半以上"或"根据《中国居民膳食指南》推荐每日应摄入300g奶类"\n`;
+    prompt += `6. 每道菜 reason 中显式引用《中国居民膳食指南》具体数值（参考每日量见文末）\n`;
     const DAILY_GUIDE_CUE = '每日谷薯类250-400g；蔬菜300-500g（深色占≥50%）；水果200-350g；畜禽鱼蛋类120-200g；奶类300g；大豆坚果类25-35g；烹调油25-30g；盐<5g；添加糖<25g；食物种类每日≥12种/每周≥25种。';
-    prompt += `【《中国居民膳食指南》依据（必须在reason中自然引用）】${DAILY_GUIDE_CUE}\n`;
     if (groupConstraints) {
         prompt += `7. 【重要】严格遵守上述"人群食疗约束规则"，针对不同人群类型优先推荐符合其营养需求的食谱\n`;
         prompt += `8. 每道菜在reason字段中需标注"👤 适合：[成员姓名]"和"🎯 目标：[具体营养目标]"，例如"👤 适合：小明、小红 🎯 目标：高蛋白增肌"\n`;
@@ -42687,7 +42963,8 @@ function buildRecommendationPrompt(data, weekDatesStr) {
     prompt += `${startIdx + 3}. 【硬性规则】同一餐中甜品类/甜汤类（如银耳羹、莲子羹、雪梨羹、糖水、水果沙拉、酸奶等）最多只能出现1道，严禁同餐出现2道或以上的甜食/甜汤\n`;
     prompt += `${startIdx + 4}. 同一餐中主食类最多1-2道（如同时有米饭+汤是允许的，但不能同时有米饭+面条+粥），主菜（蛋白质类）至少1道，素菜至少1道\n`;
     prompt += `\n请严格按照以下JSON格式返回，不要添加任何其他文字：\n`;
-    prompt += `{"days":[{"date":"日期","weekDay":"周几","meals":{"breakfast":{"dishes":[{"name":"菜品1","ingredients":[{"name":"食材名","quantity":2,"unit":"个"}],"reason":"推荐理由"},{"name":"菜品2","ingredients":[{"name":"食材名","quantity":200,"unit":"毫升"}],"reason":"推荐理由"}],"reason":"本餐推荐理由"},"lunch":{"dishes":[{"name":"菜品1","ingredients":[{"name":"食材名","quantity":300,"unit":"克"}],"reason":"推荐理由"},{"name":"菜品2","ingredients":[{"name":"食材名","quantity":150,"unit":"克"}],"reason":"推荐理由"},{"name":"菜品3","ingredients":[{"name":"食材名","quantity":1,"unit":"个"}],"reason":"推荐理由"}],"reason":"本餐推荐理由"},"dinner":{"dishes":[{"name":"菜品1","ingredients":[{"name":"食材名","quantity":200,"unit":"克"}],"reason":"推荐理由"},{"name":"菜品2","ingredients":[{"name":"食材名","quantity":1,"unit":"把"}],"reason":"推荐理由"},{"name":"菜品3","ingredients":[{"name":"食材名","quantity":500,"unit":"毫升"}],"reason":"推荐理由"}],"reason":"本餐推荐理由"}}}],"summary":"综合推荐说明"}`;
+    prompt += `{"days":[{"date":"日期","weekDay":"周几","meals":{"breakfast":{"dishes":[{"name":"菜名","ingredients":[{"name":"食材","quantity":2,"unit":"个"}],"reason":"理由"}],"reason":"本餐理由"},"lunch":{"dishes":[同上结构]},"dinner":{"dishes":[同上结构]}}}],"summary":"综合说明"}\n`;
+    prompt += `reason 要求：含推荐依据；每道菜 reason 中显式引用《中国居民膳食指南》具体数值（如"蔬菜300-500g，深色占一半"）。参考每日量：${DAILY_GUIDE_CUE}`;
 
     // 多样性约束注入
     var divConstraints = getDiversityConstraints(dateToKey(new Date()));
@@ -42747,45 +43024,10 @@ async function generateWeeklyAiMealRecommendation(days) {
     const recData = collectRecommendationData();
     const userMessage = buildRecommendationPrompt(recData, weekDatesStr);
 
-    var _dc2 = getDishCountByMembers(recData.servings || 3);
-    const _groupConstraints = getGroupTypeConstraints(recData.members);
-    const systemPrompt = '你是"家肴记"的专业家庭饮食顾问AI。请综合九个维度的优先级信息，生成一份合理的未来' + days + '天三餐推荐方案。\n'
-        + '九个维度按优先级顺序：\n'
-        + '第1优先级：用户当前指令/约束\n'
-        + '第2优先级：历史对话中用户关心的内容\n'
-        + '第3优先级：当前就餐人员（人数、年龄、口味）\n'
-        + '第4优先级：家中已有食材（优先使用，特别关注即将过期的）\n'
-        + '第5优先级：家庭成员口味偏好/禁忌\n'
-        + '第6优先级：四季/时节因素（节气饮食原则）\n'
-        + '第7优先级：知识库内容（个人→家庭→公共）\n'
-        + '第8优先级：自家历史实际食谱（避免重复、强化偏好）\n'
-        + '第9.5优先级：成员健康画像（人群类型、健康目标、饮食禁忌、生理数据）\n'
-        + '第9优先级：AI综合推理（你的专业营养学和烹饪知识）\n\n'
-        + (_groupConstraints ? '【人群食疗约束规则】\n' + _groupConstraints + '\n\n' : '')
-        + '要求：\n'
-        + '1. 推荐贴近家庭实际，优先使用家中现有食材\n'
-        + '2. 严格遵守口味约束和忌口，尊重用户当前指令\n'
-        + '3. 结合节气养生知识推荐当季食材\n'
-        + '4. 避免与近7天历史记录重复，关注家庭偏好\n'
-        + '5. 每天三餐有变化，一周内不重复同样菜品\n'
-        + '6. 每道菜必须包含ingredients字段（[{name,quantity,unit}]对象数组，quantity为每人份用量）和推荐理由reason。reason字段中必须显式引用《中国居民膳食指南》，例如"根据《中国居民膳食指南》推荐每日应摄入300g奶类，早餐搭配牛奶或酸奶以满足奶类需求"\n'
-        + '7. 特别注意：早餐、午餐、晚餐各自在7天内都必须有变化\n'
-        + (_groupConstraints ? '8. 【重要】严格遵守上述"人群食疗约束规则"，针对不同人群类型优先推荐符合其营养需求的食谱\n'
-        + '9. 每道菜在reason字段中需标注"👤 适合：[成员姓名]"和"🎯 目标：[具体营养目标]"，例如"👤 适合：小明、小红 🎯 目标：高蛋白增肌"\n\n' : '\n')
-        + '【《中国居民膳食指南》每日参考量（AI必须在reason中自然引用到对应的克数或规则）】谷薯类250-400g；蔬菜300-500g（深色占≥50%）；水果200-350g；畜禽鱼蛋类120-200g；奶类300g；大豆坚果类25-35g；烹调油25-30g；盐<5g；添加糖<25g；食物种类每日≥12种/每周≥25种\n\n'
-        + '【每餐菜品数量约束（基于' + (recData.servings || 3) + '人家庭）】\n'
-        + '- 早餐：推荐' + _dc2.breakfast + '菜（主食+蛋白质+饮品/水果），最多不超过' + _dc2.breakNum + '道\n'
-        + '- 午餐：推荐' + _dc2.lunch + '菜（主食+主菜+副菜），最多不超过' + _dc2.lunchNum + '道\n'
-        + '- 晚餐：推荐' + _dc2.dinner + '菜（主食+主菜+副菜），最多不超过' + _dc2.dinnerNum + '道\n'
-        + '- 重要：菜品数量宁少勿多，避免浪费，严格按照上述数量推荐\n'
-        + '- 流质类（粥/稀饭/豆浆/米糊/羹/甜汤）同一餐最多1道，禁止早餐同时出现粥和豆浆、晚餐同时出现粥和羹\n\n'
-        + '【营养均衡要求】\n'
-        + '- 每天菜品需包含：主食、蛋白质、蔬菜\n'
-        + '- 荤素搭配合理，避免全荤或全素\n'
-        + '- 7天内菜品尽量不重复，避免连续两天出现相同菜\n'
-        + '【菜品排序规则】每餐菜品列表中：第一道必须是主食（杂粮饭/糙米饭/面条/粥/馒头/饼/薯类等，禁止纯白米饭类：米饭/大米饭/白米饭/蒸米饭，因其营养单一）；第二道推荐汤类菜品（如排骨汤/鱼汤/豆腐汤/蛋花汤/羹类等，若无汤类则推荐蔬菜类）；第三道及以后为主菜/副菜\n'
-        + '【菜名全局唯一】同一菜品名称在全部餐次和日期中合计最多出现1次（主食除外，主食可重复）\n'
-        + '【独立水果】若水果类摄入不足，必须在三餐中安排独立水果菜品（如苹果/蓝莓/草莓等，不依赖奶类饮品混合）';
+    // V117 精简（约 850 字 → ~111 字）：usr 已含九维/编号约束/JSON模板/ingredients每人份/膳食指南参考量/人群约束(👤🎯)，sys 只留 usr 未覆盖的独有硬约束
+    const systemPrompt = '你是家肴记饮食顾问。生成未来' + days + '天三餐方案，只返回 JSON，禁解释文字。\n'
+        + '每餐首道主食(禁白米饭)，次道汤类或蔬菜，余为主/副菜；流质每餐≤1道，禁早餐饮+豆浆同现。\n'
+        + '菜名全局唯一(主食除外)；水果不足则三餐安排独立水果。';
 
     // 后台跑AI，成功后自动替换弹窗内容；用户关闭弹窗则静默写入缓存
     (async () => {
@@ -43827,11 +44069,14 @@ function handleAiReply(userText, templateReply) {
                 const apiKey = 'sk-d59f96e872d54e23ba692fd7d09eee1c';
                 const apiUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
                 const systemPrompt = '你是"家肴记"的AI膳食助手，擅长解答家庭烹饪、食材搭配、菜谱推荐等问题。回答简洁实用，控制在200字以内。注意结合上下文理解用户的追问。';
-                // 构建带上下文的消息列表（最近20条，包含当前用户消息）
-                const contextMessages = chatHistory.slice(-20).map(m => ({
-                    role: m.role,
-                    content: m.content
-                }));
+                // V117: 只传最近 3 轮（6 条）完整对话 + 之前最多 6 条的本地压缩摘要，更早丢弃——历史总量硬控在 ~500 token 内
+                const allMsgs = chatHistory.slice(-12);
+                const contextMessages = allMsgs.slice(-6).map(m => ({ role: m.role, content: m.content }));
+                const olderMsgs = allMsgs.slice(0, -6);
+                if (olderMsgs.length) {
+                    const brief = olderMsgs.map(m => (m.role === 'user' ? '问' : '答') + ':' + String(m.content || '').slice(0, 20)).join(' / ');
+                    contextMessages.unshift({ role: 'user', content: '（更早对话摘要）' + brief });
+                }
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
