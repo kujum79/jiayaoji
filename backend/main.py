@@ -46,7 +46,10 @@ ALIYUN_MODEL = "qwen-turbo"  # 可选 qwen-plus, qwen-max, qwen-turbo（免费�
 # 未配置环境变量时，沿用上面的内置 Key，保证现有调用不断服；
 # 换 Key / 加新服务商只需设置环境变量（DASHSCOPE_API_KEY 等）或改 model_config.py，无需动这里。
 os.environ.setdefault("ALIYUN_API_KEY", ALIYUN_API_KEY)
-from model_config import call_ai  # noqa: E402  （需在 setdefault 之后导入，确保能读到内置 Key）
+try:
+    from backend.model_config import call_ai  # 包形式导入（项目根目录启动 / Render 部署）
+except ImportError:  # 直接从 backend 目录启动时按同级模块导入
+    from model_config import call_ai  # noqa: E402  （需在 setdefault 之后导入，确保能读到内置 Key）
 # ===================================================
 
 app = FastAPI(
@@ -958,7 +961,10 @@ async def generate_ingredient(req: GenerateIngredientRequest) -> Dict[str, Any]:
 def ai_usage(detail: int = 0, month: str = ""):
     """AI 用量汇总：默认本月。含总调用/Token/成本、按服务商、按功能占比、预算状态；detail=1 附最近 50 条明细。"""
     import time as _time
-    from model_config import get_ai_cost_summary, get_budget_status
+    try:
+        from backend.model_config import get_ai_cost_summary, get_budget_status
+    except ImportError:
+        from model_config import get_ai_cost_summary, get_budget_status
     m = (month or "").strip() or _time.strftime("%Y-%m")
     summary = get_ai_cost_summary(month=m, recent_limit=50 if detail else 0)
     total_calls = summary["total_calls"]
@@ -984,13 +990,19 @@ def ai_usage(detail: int = 0, month: str = ""):
 
 @app.get("/ai/budget")
 def ai_budget_get():
-    from model_config import load_budget
+    try:
+        from backend.model_config import load_budget
+    except ImportError:
+        from model_config import load_budget
     return load_budget()
 
 
 @app.post("/ai/budget")
 def ai_budget_post(body: Dict[str, Any]):
-    from model_config import save_budget
+    try:
+        from backend.model_config import save_budget
+    except ImportError:
+        from model_config import save_budget
     try:
         monthly = float((body or {}).get("monthly", 0) or 0)
     except (TypeError, ValueError):
