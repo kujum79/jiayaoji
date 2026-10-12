@@ -5,3 +5,10 @@ __pycache__/
 *.pyc
 node_modules/
 .DS_Store
+*.log
+*.jsonl
+backend/ai_budget.json
+backend/data_migration.json
+family_reset_pass.sql
+.wrangler/
+.trae/

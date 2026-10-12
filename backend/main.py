@@ -22,6 +22,7 @@ import json
 import os
 import random
 import re
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote, urljoin
@@ -47,9 +48,9 @@ ALIYUN_MODEL = "qwen-turbo"  # 可选 qwen-plus, qwen-max, qwen-turbo（免费�
 # 换 Key / 加新服务商只需设置环境变量（DASHSCOPE_API_KEY 等）或改 model_config.py，无需动这里。
 os.environ.setdefault("ALIYUN_API_KEY", ALIYUN_API_KEY)
 try:
-    from backend.model_config import call_ai  # 包形式导入（项目根目录启动 / Render 部署）
+    from backend.model_config import call_ai, route_vision  # 包形式导入（项目根目录启动 / Render 部署）
 except ImportError:  # 直接从 backend 目录启动时按同级模块导入
-    from model_config import call_ai  # noqa: E402  （需在 setdefault 之后导入，确保能读到内置 Key）
+    from model_config import call_ai, route_vision  # noqa: E402  （需在 setdefault 之后导入，确保能读到内置 Key）
 # ===================================================
 
 app = FastAPI(
@@ -86,6 +87,64 @@ class PlanRequest(BaseModel):
     max_tokens: int = Field(default=8192, ge=100, le=32768)
     mode: Optional[str] = "seasonal"  # AI推荐模式（由前端 RECOMMEND_MODES 传入），缺省当季推荐
     task_type: Optional[str] = None  # V119: 功能标识（plan/audit…），审核评分等走强档模型并计入用量统计
+    # V140: json_mode 显式开关（缺省关）。/plan 是多任务统一代理入口（周计划/聊天回复/食材估算等均经此路由），
+    # V139 曾无条件强制 JSON 导致聊天回复也输出原始 JSON（用户不可读）——现仅周计划等明确要 JSON 的调用方传 true
+    json_mode: bool = False
+
+
+class RecommendRestaurantsRequest(BaseModel):
+    """V132: 外出就餐·选餐厅推荐入参（前端同源调用）"""
+    scene: str = ""      # 场景（家庭聚餐/朋友聚会…）
+    people: str = ""     # 人数
+    budget: str = ""     # 人均预算（如 50-100）
+    cuisine: str = ""    # 菜系偏好
+    location: str = ""   # 位置/地理范围
+    taste: str = ""      # 口味偏好
+    history: str = ""    # 历史就餐记录摘要
+
+
+class DishRestaurantInfo(BaseModel):
+    """V133: AI点菜引擎·餐厅信息"""
+    name: str = ""
+    cuisine: str = ""
+    city: str = ""
+    signatureDishes: List[Any] = Field(default_factory=list)
+
+
+class DishMenuItem(BaseModel):
+    """V133: AI点菜引擎·菜单项"""
+    name: str
+    price: float = 0
+    category: str = ""
+
+
+class DishDinerProfile(BaseModel):
+    """V133: AI点菜引擎·就餐人员"""
+    name: str = ""
+    age: int = 0
+    taste: str = ""
+    constitution: str = ""
+    tags: List[str] = Field(default_factory=list)
+
+
+class DishHistoryInfo(BaseModel):
+    """V133: AI点菜引擎·历史偏好；V136: 增加点菜历史学习字段"""
+    lastVisit: Dict[str, Any] = Field(default_factory=dict)
+    ratings: Dict[str, Any] = Field(default_factory=dict)
+    lastCombos: List[Any] = Field(default_factory=list)   # 同批就餐者上次点菜组合
+    historyText: str = ""                                  # 历史点菜记录文本摘要（注入Prompt）
+
+
+class RecommendDishesRequest(BaseModel):
+    """V133: AI点菜引擎·点菜推荐入参"""
+    restaurant: DishRestaurantInfo = Field(default_factory=DishRestaurantInfo)
+    menu: List[DishMenuItem] = Field(default_factory=list)
+    people: int = 0
+    budget: float = 0
+    scene: str = ""
+    diners: List[DishDinerProfile] = Field(default_factory=list)
+    allergens: List[str] = Field(default_factory=list)
+    history: DishHistoryInfo = Field(default_factory=DishHistoryInfo)
 
 
 class ChatResponse(BaseModel):
@@ -300,6 +359,7 @@ async def call_qwen(
     json_mode: bool = False,
     max_tokens: int = 8192,
     task_type: str = "chat",
+    timeout: float = 60.0,
 ) -> str:
     """按 model_config.PROVIDERS 优先级路由调用（失败自动降级），每次调用记录成本日志。
 
@@ -313,11 +373,207 @@ async def call_qwen(
             "json_mode": json_mode,
             "max_tokens": max_tokens,
             "temperature": 0.2 if json_mode else 0.7,
+            "timeout": timeout,
         })
         return result["content"].strip()
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"AI 服务调用失败：{exc}") from exc
+
+
+class VisionRequest(BaseModel):
+    user_prompt: str
+    image_data_url: str
+    system_prompt: str = ""
+    max_tokens: int = Field(default=2000, ge=100, le=4096)
+    task_type: Optional[str] = None  # V131: 功能标识（flyer_ocr…），写入用量统计
+
+
+@app.post("/ai/vision", response_model=ChatResponse)
+async def ai_vision(req: VisionRequest) -> ChatResponse:
+    """V131: 视觉理解（图片输入）统一入口——Agnes 免费视觉模型优先，qwen-vl-plus 兜底。
+
+    前端宣传单 OCR 等多模态任务由此走多服务商自动降级链，不再受单一服务商欠费影响。
+    """
+    content_parts: List[Dict[str, Any]] = []
+    if req.image_data_url:
+        content_parts.append({"type": "image_url", "image_url": {"url": req.image_data_url}})
+    content_parts.append({"type": "text", "text": req.user_prompt})
+    messages: List[Dict[str, Any]] = []
+    if req.system_prompt:
+        messages.append({"role": "system", "content": req.system_prompt})
+    messages.append({"role": "user", "content": content_parts})
+    task_type = req.task_type if (req.task_type and re.fullmatch(r"[a-z_]{1,24}", req.task_type)) else "vision"
+    try:
+        content, _provider = await route_vision(messages, max_tokens=req.max_tokens, task_type=task_type)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"AI 视觉服务调用失败：{exc}") from exc
+    return ChatResponse(response=content.strip())
 # ============================================
+
+
+# ========== V135: 菜单截图/链接识别 ==========
+MENU_CATEGORIES = ["荤菜", "素菜", "凉菜", "汤", "主食", "饮品", "其他"]
+_MENU_CAT_ALIAS = {
+    "荤": "荤菜", "荤菜": "荤菜", "肉": "荤菜", "热菜": "其他",
+    "素": "素菜", "素菜": "素菜", "蔬": "素菜",
+    "凉": "凉菜", "凉菜": "凉菜", "凉菜/素": "凉菜",
+    "汤": "汤", "汤羹": "汤",
+    "主食": "主食", "小吃": "其他",
+    "饮品": "饮品", "饮料": "饮品", "酒水": "饮品",
+    "其他": "其他",
+}
+
+
+class ParseMenuImageRequest(BaseModel):
+    """V135: 菜单截图识别入参（前端压缩后的单张 base64 图）"""
+    image: str = ""            # base64 图片（可带 data:image/...;base64, 前缀）
+    restaurantName: str = ""   # 已知餐厅名（辅助识别）
+    cuisine: str = ""          # 已知菜系
+
+
+def _normalize_menu_parse(parsed: Dict[str, Any], req_name: str, req_cuisine: str) -> Dict[str, Any]:
+    """归一化识别结果：餐厅信息用已知入参补齐、菜品去重、价格/置信度/分类归一。"""
+    rest = parsed.get("restaurant") if isinstance(parsed.get("restaurant"), dict) else {}
+    restaurant = {
+        "name": (rest.get("name") or req_name or "").strip(),
+        "cuisine": (rest.get("cuisine") or req_cuisine or "").strip(),
+        "address": (rest.get("address") or "").strip(),
+    }
+    dishes, seen = [], set()
+    for d in parsed.get("dishes") or []:
+        if not isinstance(d, dict):
+            continue
+        name = str(d.get("name") or "").strip()
+        if not name or name in seen:
+            continue
+        try:
+            price = float(d.get("price") or 0)
+        except (TypeError, ValueError):
+            price = 0.0
+        try:
+            conf = float(d.get("confidence", 0.8))
+        except (TypeError, ValueError):
+            conf = 0.8
+        if conf > 1:  # 兼容 0-100 置信度口径
+            conf = conf / 100
+        conf = max(0.0, min(1.0, conf))
+        cat = str(d.get("category") or "").strip()
+        cat = _MENU_CAT_ALIAS.get(cat, "其他")
+        seen.add(name)
+        dishes.append({
+            "name": name,
+            "price": round(price, 2),
+            "category": cat,
+            "confidence": round(conf, 2),
+        })
+    return {"restaurant": restaurant, "dishes": dishes}
+
+
+@app.post("/parse-menu-image")
+async def parse_menu_image(req: ParseMenuImageRequest) -> Dict[str, Any]:
+    """V135: 菜单截图识别——多模态模型提取餐厅信息与菜品（名称/价格/分类/置信度）。"""
+    image = req.image.strip()
+    if image.startswith("data:"):
+        image = image.split(",", 1)[-1]
+    if not image:
+        raise HTTPException(status_code=400, detail="缺少图片数据")
+    try:
+        base64.b64decode(image, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="图片数据格式无效")
+
+    system_prompt = (
+        "你是菜单截图识别专家。请识别以下菜单截图中的信息：\n"
+        "1. 餐厅名称、菜系、地址\n"
+        "2. 所有菜品名称、价格、描述\n"
+        "3. 菜品分类（荤菜/素菜/凉菜/汤/主食，饮品归 饮品，无法判断归 其他）\n"
+        "4. 每道菜给出识别置信度 confidence（0到1的小数，字迹模糊或需要推测的给低分）\n\n"
+        "注意：\n"
+        "- 价格只保留数字（单位元）\n"
+        "- 每道菜单一分类，不要合并\n"
+        "- 只提取图中真实存在的菜品，不要编造\n"
+        "- 返回严格 JSON 格式，不要任何额外文字或 Markdown 包裹\n\n"
+        'JSON 格式：{"restaurant":{"name":"餐厅名","cuisine":"菜系","address":"地址"},'
+        '"dishes":[{"name":"菜名","price":38,"category":"荤菜","confidence":0.95}]}'
+    )
+    hint = ""
+    if req.restaurantName or req.cuisine:
+        hint = f"\n\n已知信息参考：餐厅名「{req.restaurantName}」菜系「{req.cuisine}」。图中未显示的信息留空字符串，不要编造地址。"
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + image}},
+            {"type": "text", "text": "请识别这张菜单截图，返回严格 JSON。" + hint},
+        ]},
+    ]
+    try:
+        content, _provider = await route_vision(messages, max_tokens=3000, task_type="parse_menu")
+        parsed = extract_json_object(content)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"菜单识别失败：{exc}") from exc
+    return _normalize_menu_parse(parsed, req.restaurantName, req.cuisine)
+
+
+class ParseMenuUrlRequest(BaseModel):
+    """V135: 菜单链接解析入参（美团/点评等页面链接）"""
+    url: str = ""
+    restaurantName: str = ""
+    cuisine: str = ""
+
+
+@app.post("/parse-menu-url")
+async def parse_menu_url(req: ParseMenuUrlRequest) -> Dict[str, Any]:
+    """V135: 粘贴美团链接解析菜单——抓取页面文本交给文本模型提取菜品。
+
+    页面需登录/动态渲染/反爬导致抓取不到有效菜单内容时，返回 422 提示改用截图识别。
+    """
+    url = (req.url or "").strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="请输入有效的网页链接")
+    headers = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"}
+    text = ""
+    try:
+        resp = requests.get(url, headers=headers, timeout=12)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for tag in soup(["script", "style"]):
+            tag.decompose()
+        text = re.sub(r"\s+", " ", soup.get_text(" ", strip=True))[:6000]
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"链接抓取失败（{type(exc).__name__}），建议使用截图识别")
+    if len(text) < 50 or not re.search(r"(¥|\d+(\.\d+)?\s*元)", text):
+        raise HTTPException(status_code=422, detail="该链接页面未能提取到菜单内容（可能需要登录或为动态页面），建议使用截图识别")
+
+    system_prompt = (
+        "你是菜单信息提取专家。从网页文本中提取菜品列表。\n"
+        "分类归入：荤菜/素菜/凉菜/汤/主食/饮品/其他；每道菜给出置信度 confidence（0-1）。\n"
+        "返回严格 JSON，不要任何额外文字：\n"
+        '{"restaurant":{"name":"餐厅名","cuisine":"菜系","address":"地址"},'
+        '"dishes":[{"name":"菜名","price":38,"category":"荤菜","confidence":0.9}]}'
+    )
+    try:
+        content = await call_qwen(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": (
+                    f"网页文本：\n{text}\n\n"
+                    f"已知餐厅名：「{req.restaurantName}」菜系「{req.cuisine}」。"
+                    "提取文本中出现的所有菜品及价格，返回严格 JSON。"
+                )},
+            ],
+            json_mode=True,
+            max_tokens=3000,
+            task_type="parse_menu_url",
+        )
+        parsed = extract_json_object(content)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"菜单解析失败：{exc}") from exc
+    return _normalize_menu_parse(parsed, req.restaurantName, req.cuisine)
+# ========== V135 菜单识别结束 ==========
 
 
 def extract_json_object(text: str) -> Dict[str, Any]:
@@ -388,11 +644,500 @@ async def plan(req: PlanRequest) -> Dict[str, str]:
             {"role": "system", "content": system_content},
             {"role": "user", "content": req.user_prompt},
         ],
-        json_mode=False,
+        # V140: json_mode 改为请求级开关（req.json_mode）——V139 无条件强制 JSON 曾导致
+        # 经 /plan 代理的聊天回复（如"今天吃什么？"）输出原始 JSON；
+        # 仅前端周计划等明确要 JSON 的调用方传 true，其余任务回归提示词驱动
+        json_mode=req.json_mode,
         max_tokens=req.max_tokens,
         task_type=task_type,
+        timeout=150.0,  # V139: 7天完整计划正文可达 10k+ token，60s 会掐断长生成
     )
     return {"response": content}
+
+
+@app.post("/recommend-restaurants")
+async def recommend_restaurants(req: RecommendRestaurantsRequest) -> Dict[str, Any]:
+    """V132: 外出就餐·选餐厅推荐，返回1-3家（名称/理由/人均/推荐菜）。
+
+    入参为结构化字段，由后端统一组装提示词；json_mode 低温度保证稳定 JSON 输出。
+    """
+    system_prompt = (
+        "你是家庭外出就餐顾问，根据就餐信息推荐合适的餐厅。"
+        "必须只返回 JSON，不要任何额外文字或 Markdown 包裹。"
+        'JSON 格式：{"restaurants":[{"name":"餐厅名","reason":"50字内推荐理由（结合场景/预算/口味）",'
+        '"location":"大致位置（区/街道/商圈级别，如：海淀区中关村商圈；不确定则留空）",'
+        '"avg_price":"人均约XX元","dishes":[{"name":"招牌菜","price":价格数字}]}]}。'
+        "要求：1) 推荐1-3家，按匹配度排序；2) dishes 为该店3-5道招牌或推荐菜，price 为人均消费下的合理估值数字；"
+        "3) 综合考虑预算、场景、菜系、口味偏好与历史就餐记录；"
+        "4) location 只写到商圈/街道级别，禁止编造精确门牌地址与电话。"
+    )
+    user_lines = [
+        f"就餐场景：{req.scene or '未指定'}",
+        f"人数：{req.people or '未指定'}",
+        f"人均预算：{req.budget or '不限'}（元/人）",
+        f"菜系偏好：{req.cuisine or '不限'}",
+        f"位置范围：{req.location or '不限'}",
+        f"口味偏好：{req.taste or '不限'}",
+    ]
+    if req.history.strip():
+        user_lines.append("历史就餐记录：\n" + req.history.strip()[:800])
+    content = await call_qwen(
+        [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "\n".join(user_lines)},
+        ],
+        json_mode=True,
+        max_tokens=2000,
+        task_type="dining_out",
+    )
+    parsed = extract_json_object(content)
+    raw_list = None
+    if isinstance(parsed, dict):
+        raw_list = parsed.get("restaurants") or parsed.get("recommendations")
+    result = []
+    for item in (raw_list or [])[:3]:
+        if not isinstance(item, dict) or not item.get("name"):
+            continue
+        dishes = []
+        for d in (item.get("dishes") or []):
+            if isinstance(d, dict) and d.get("name"):
+                try:
+                    price = float(d.get("price") or 0)
+                except (TypeError, ValueError):
+                    price = 0.0
+                dishes.append({"name": str(d["name"]), "price": price})
+        # V137: 地址冗余进 reason 文本——即使前端是旧缓存代码（无📍行渲染）也能看到地址
+        _reason = str(item.get("reason") or "")
+        _loc = str(item.get("location") or "")
+        if _loc and _loc not in _reason:
+            _reason = (_reason + " （📍" + _loc + "）").strip()
+        result.append({
+            "name": str(item["name"]),
+            "reason": _reason,
+            "location": _loc,
+            "avg_price": str(item.get("avg_price") or item.get("avgPrice") or ""),
+            "dishes": dishes,
+        })
+    return {"restaurants": result}
+
+
+# ========== V140: 食养堂·AI 每日草稿生成 ==========
+class FoodHallDraftRequest(BaseModel):
+    date: str = ""
+    city: str = ""
+    solarTerm: str = ""
+    weather: dict = Field(default_factory=dict)
+
+
+class FoodHallAuditRequest(BaseModel):
+    articleId: str = ""
+    title: str = ""
+    summary: str = ""
+    content: str = ""
+    tips: List[str] = Field(default_factory=list)
+
+
+# 规格 Prompt：三篇主题分散 + 口语化 + 严格禁词（医疗/功效承诺类）
+_FOODHALL_SYSTEM = (
+    '请为家肴记"食养堂"栏目生成 3 篇候选内容。\n'
+    "【日期】{date}\n"
+    "【节气】{solar_term}\n"
+    "【天气】{weather}\n"
+    "\n"
+    "生成要求：\n"
+    '1. 3 篇内容主题尽量分散：1 篇挂靠节气或天气（category 用"节气食养"或"天气食养"）；'
+    '1 篇讲当季食材（category 用"当季食材"）；1 篇讲烹饪技巧或饮食文化（category 用"烹饪技巧"或"饮食文化"）\n'
+    "2. 每篇：标题 15 字内、摘要 60 字内、正文 200-300 字、小贴士 2 条（每条 25 字内）\n"
+    "3. 语言口语化，像和朋友聊天\n"
+    '4. 可结合近期饮食话题（如"秋燥"）\n'
+    "\n"
+    "严格禁止出现这些词：治疗、治愈、改善、降低、预防、功效、食疗、润肺、止咳、降三高、祛湿、排毒。"
+    "禁止提及疾病名称，禁止承诺任何功效。\n"
+    "\n"
+    '返回严格 JSON：{{"articles":[{{"category":"...","title":"...","summary":"...","content":"...","tips":["...","..."]}}]}}，'
+    "articles 必须恰好 3 个元素。"
+)
+
+# 验收禁词表（命中自动重试 1 次，仍命中则随响应返回 violations 供前端记 auditNote）
+_FOODHALL_BANNED = ["治疗", "治愈", "改善", "降低", "预防", "功效", "食疗",
+                    "润肺", "止咳", "降三高", "祛湿", "排毒"]
+
+# V141 审核黑名单（发布前合规审核·error 级，本地匹配 0 token）
+_FOODHALL_AUDIT_BANNED = ["治疗", "治愈", "根治", "改善", "降低", "预防", "抗癌", "排毒",
+                          "降三高", "消炎", "杀菌", "缓解", "调理", "祛湿", "补血",
+                          "润肺", "止咳", "明目", "安神", "养胃", "护肝"]
+# 疾病名称（error 级）
+_FOODHALL_DISEASES = ["高血压", "糖尿病", "癌症", "肿瘤", "肝炎", "肾炎", "胃炎", "肠炎",
+                      "失眠", "感冒", "心脏病", "痛风", "贫血", "哮喘", "中风"]
+# 功效承诺短语（error 级）
+_FOODHALL_PHRASES = ["能治", "可改善", "有疗效", "包治", "药到病除", "保证治好"]
+# 弱信号词：本地黑名单未命中但出现这些字眼时，触发 AI 语义二次确认（疑似风险）
+_FOODHALL_WEAK = ["功效", "偏方", "秘方", "古方", "神效", "疗效", "炎", "咳", "肿",
+                  "痛", "症", "菌", "毒", "药", "虚", "补气", "上火", "去火", "下火"]
+
+# 发布前 AI 合规审核员 Prompt（词表硬校验之后的第二道关）
+_FOODHALL_AUDIT_SYSTEM = (
+    "你是食养科普内容的合规审核员。请审核以下内容能否在家肴记APP食养堂栏目发布。\n"
+    "不通过标准（命中任一条即不通过）：\n"
+    "1. 含治疗、治愈、改善、降低、预防、功效、食疗、润肺、止咳、降三高、祛湿、排毒等功效承诺类词汇\n"
+    "2. 提及具体疾病名称，或暗示某种吃法对疾病有作用\n"
+    "3. 夸大宣传或绝对化用语（如最有效、保证、根治）\n"
+    "4. 推荐药物，或暗示某种食材可替代药物/治疗\n"
+    "通过标准：日常食材科普、烹饪方法、时令饮食建议等安全内容。\n"
+    '返回严格 JSON：{"passed": true或false, "reason": "不通过时给出具体原因（50字内），通过时为空字符串"}'
+)
+
+
+def _foodhall_banned_hits(text: str) -> List[str]:
+    return [w for w in _FOODHALL_BANNED if w in (text or "")]
+
+
+@app.post("/api/food-hall/generate-drafts")
+async def food_hall_generate_drafts(req: FoodHallDraftRequest) -> Dict[str, Any]:
+    """V140: AI 每日生成 3 篇食养堂草稿。
+
+    入参 date/city/solarTerm/weather 由前端组装（城市/天气/节气均有现成数据源）。
+    禁词命中自动重试 1 次；仍命中则在 violations 标注。前端负责把 drafts 写入
+    localStorage foodHallArticles（status=draft）并记 foodHallDrafts 批次。
+    """
+    date = (req.date or time.strftime("%Y-%m-%d"))[:10]
+    weather_desc = "未知"
+    if isinstance(req.weather, dict) and req.weather:
+        parts = []
+        if req.weather.get("textDay"):
+            parts.append(str(req.weather["textDay"]))
+        if req.weather.get("tempMax") is not None and req.weather.get("tempMin") is not None:
+            parts.append(f"{req.weather['tempMin']}~{req.weather['tempMax']}℃")
+        if parts:
+            weather_desc = "，".join(parts)
+
+    system_prompt = _FOODHALL_SYSTEM.format(
+        date=date, solar_term=req.solarTerm or "无",
+        weather=f"{req.city or ''} {weather_desc}".strip(),
+    )
+    user_prompt = f"日期：{date}；节气：{req.solarTerm or '无'}；城市：{req.city or '未提供'}。请生成 3 篇食养堂候选内容。"
+
+    drafts: List[Dict[str, Any]] = []
+    violations: List[Dict[str, Any]] = []
+    attempt = 0
+    for attempt in range(2):  # 首轮 + 禁词命中重试 1 次
+        content = await call_qwen(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            json_mode=True,
+            max_tokens=4096,
+            task_type="foodhall_draft",
+            timeout=120.0,
+        )
+        parsed = extract_json_object(content)
+        raw_list = parsed.get("articles") if isinstance(parsed, dict) else None
+        if not isinstance(raw_list, list) or not raw_list:
+            raise HTTPException(status_code=502, detail="AI返回数据格式异常，缺少articles字段")
+        drafts = []
+        violations = []
+        ts = int(time.time() * 1000)
+        for i, item in enumerate(raw_list[:3]):
+            if not isinstance(item, dict):
+                continue
+            blob = " ".join([str(item.get("title", "")), str(item.get("summary", "")),
+                             str(item.get("content", "")), " ".join(str(t) for t in (item.get("tips") or []))])
+            hits = _foodhall_banned_hits(blob)
+            if hits:
+                violations.append({"index": i, "words": hits})
+            drafts.append({
+                "id": f"fh_{ts}_{i}",
+                "category": str(item.get("category") or "节气食养"),
+                "title": str(item.get("title") or "").strip(),
+                "summary": str(item.get("summary") or "").strip(),
+                "content": str(item.get("content") or "").strip(),
+                "tips": [str(t).strip() for t in (item.get("tips") or []) if str(t).strip()][:2],
+            })
+        if drafts and not violations:
+            break  # 干净即返回；命中禁词则再生成一轮
+    return {"ok": True, "date": date, "regenerated": attempt > 0, "violations": violations, "drafts": drafts}
+
+
+@app.post("/api/food-hall/audit")
+async def food_hall_audit(req: FoodHallAuditRequest) -> Dict[str, Any]:
+    """V141: 食养堂发布前合规审核——本地关键词优先（0 token），弱信号才调 AI 二次确认。
+
+    流程：1) 黑名单/疾病名/功效短语本地匹配（error 直接拒，0 token）；
+         2) 长度检查（warning，不阻断）；
+         3) 本地干净但命中弱信号词（炎/咳/虚/偏方等）→ AI 语义二次确认。
+    返回 {"ok", "passed", "issues": [{"level", "message"}], "suggestions": []}。
+    """
+    tips_text = " ".join(str(t) for t in (req.tips or []))
+    blob = " ".join([req.title or "", req.summary or "", req.content or "", tips_text])
+    issues: List[Dict[str, str]] = []
+
+    # 1. 本地硬校验（error，0 token）
+    for w in _FOODHALL_AUDIT_BANNED:
+        if w in blob:
+            issues.append({"level": "error", "message": f"含医疗词汇'{w}'"})
+    for d in _FOODHALL_DISEASES:
+        if d in blob:
+            issues.append({"level": "error", "message": f"提及疾病名称'{d}'"})
+    for p in _FOODHALL_PHRASES:
+        if p in blob:
+            issues.append({"level": "error", "message": f"功效承诺'{p}'"})
+    if any(i["level"] == "error" for i in issues):
+        return {"ok": True, "passed": False, "issues": issues, "suggestions": []}
+
+    # 2. 长度检查（warning，不阻断）
+    title_len = len((req.title or "").strip())
+    content_len = len((req.content or "").strip())
+    if title_len > 15:
+        issues.append({"level": "warning", "message": f"标题 {title_len} 字，建议 15 字内"})
+    if content_len < 150:
+        issues.append({"level": "warning", "message": f"正文 {content_len} 字，建议 150-500 字"})
+    elif content_len > 500:
+        issues.append({"level": "warning", "message": f"正文 {content_len} 字，建议 150-500 字"})
+
+    # 3. 弱信号 → AI 语义二次确认
+    if any(k in blob for k in _FOODHALL_WEAK):
+        try:
+            content = await call_qwen(
+                [
+                    {"role": "system", "content": _FOODHALL_AUDIT_SYSTEM},
+                    {"role": "user", "content": f"【标题】{req.title or ''}\n【摘要】{req.summary or ''}\n【正文】{req.content or ''}\n【小贴士】{tips_text}"},
+                ],
+                json_mode=True,
+                max_tokens=512,
+                task_type="foodhall_audit",
+                timeout=90.0,
+            )
+            parsed = extract_json_object(content)
+            if isinstance(parsed, dict) and not parsed.get("passed"):
+                issues.append({"level": "error", "message": str(parsed.get("reason") or "AI审核未通过")})
+        except Exception as exc:  # AI 层异常不阻塞发布（本地层已通过），降级放行
+            log_ai_error("audit", "local-first", {"task_type": "foodhall_audit"}, exc)
+
+    return {
+        "ok": True,
+        "passed": not any(i["level"] == "error" for i in issues),
+        "issues": issues,
+        "suggestions": [],
+    }
+
+
+# ========== AI 点菜引擎（V133） ==========
+# 低评分阈值：历史评分 ≤ 2（5分制）视为"评分低"，本地预过滤
+_DISH_LOW_RATING = 2.0
+
+# 场景英文标识 → 中文（未识别时原样透传）
+DISH_SCENE_LABELS = {
+    "family_dinner": "家庭聚餐",
+    "friends_party": "朋友聚会",
+    "business": "商务宴请",
+    "date": "情侣约会",
+    "birthday": "生日宴",
+    "daily": "日常简餐",
+}
+
+
+def filter_menu_by_rules(menu: List[DishMenuItem], allergens: List[str], ratings: Dict[str, Any]):
+    """V133: AI点菜引擎·本地规则预过滤。
+
+    依次执行：1) 过滤菜名含过敏原/忌口关键词的菜；2) 过滤历史评分低的菜。
+    返回 (保留菜单, 过滤明细列表)。
+    """
+    blocked = [str(a).strip() for a in (allergens or []) if str(a).strip()]
+    low_rated = set()
+    for dish, score in (ratings or {}).items():
+        try:
+            if float(score) <= _DISH_LOW_RATING:
+                low_rated.add(str(dish).strip())
+        except (TypeError, ValueError):
+            continue
+    kept, removed = [], []
+    for item in menu:
+        name = (item.name or "").strip()
+        hit = next((k for k in blocked if k and k in name), None)
+        if hit:
+            removed.append({"name": name, "reason": f"含过敏原/忌口「{hit}」"})
+            continue
+        if name in low_rated:
+            removed.append({"name": name, "reason": "上次点过且评分低"})
+            continue
+        kept.append(item)
+    return kept, removed
+
+
+@app.post("/recommend-dishes")
+async def recommend_dishes(req: RecommendDishesRequest) -> Dict[str, Any]:
+    """V133: AI 点菜引擎——按人数/预算/口味/忌口推荐菜品组合。
+
+    流程：本地规则预过滤（过敏原/忌口/低评分）→ AI 按 12 条点菜规则推荐 →
+    归一化（只保留菜单内菜品、二次过敏原校验、重算估算总价与预算校验）。
+    """
+    # ---- 规则引擎：本地预过滤 ----
+    kept, removed = filter_menu_by_rules(req.menu, req.allergens, req.history.ratings)
+    for r in removed:
+        print(f"[recommend-dishes] 规则过滤: {r['name']} ({r['reason']})")
+
+    empty_combination = {
+        "totalDishes": 0, "coldDishes": 0, "hotDishes": 0,
+        "meatVegRatio": "-", "estimatedTotal": 0, "withinBudget": True,
+    }
+    if not kept:
+        tips = ["菜单为空，无法推荐"] if not req.menu else [
+            "菜单中所有菜品均被过敏原/忌口或低评分规则过滤，无法推荐",
+        ]
+        return {"recommendedDishes": [], "combination": empty_combination, "tips": tips, "filteredOut": removed}
+
+    # ---- 组装 Prompt（数据块 + 点菜规则模板） ----
+    rest = req.restaurant
+    sig = "、".join(str(s) for s in (rest.signatureDishes or [])[:8]) or "无"
+    rest_line = (
+        f"{rest.name or '未指定'}（菜系：{rest.cuisine or '未指定'}；城市：{rest.city or '未指定'}）；"
+        f"招牌菜：{sig}"
+    )
+    menu_lines = "\n".join(
+        f"{i}. {it.name}（{it.category or '未分类'}，{it.price}元）"
+        for i, it in enumerate(kept, 1)
+    )
+    if req.diners:
+        diner_lines = "\n".join(
+            f"- {d.name or '成员'}：{d.age if d.age else '年龄未知'}岁，口味：{d.taste or '不限'}，"
+            f"体质：{d.constitution or '不限'}" + (f"，标签：{'、'.join(d.tags)}" if d.tags else "")
+            for d in req.diners
+        )
+    else:
+        diner_lines = "未提供"
+    rating_str = "；".join(f"{k}：{v}分" for k, v in list((req.history.ratings or {}).items())[:20]) or "无"
+    last_visit = json.dumps(req.history.lastVisit, ensure_ascii=False)[:300] if req.history.lastVisit else "无"
+    # V136: 点菜历史学习——注入历史记录文本 + 同批人上次组合
+    history_line = f"【历史偏好】上次到访：{last_visit}；历史评分：{rating_str}"
+    if req.history.historyText.strip():
+        history_line += (
+            f"\n用户在这家餐厅的历史点菜记录：{req.history.historyText.strip()[:500]}"
+            "\n请参考历史偏好，避开上次评分低的菜。"
+        )
+    if req.history.lastCombos:
+        combos_str = json.dumps(req.history.lastCombos, ensure_ascii=False)[:400]
+        history_line += f"\n同批就餐者上次点菜组合（可参考）：{combos_str}"
+    scene_label = DISH_SCENE_LABELS.get((req.scene or "").strip(), req.scene or "未指定")
+    allergen_str = "、".join(str(a) for a in req.allergens) if req.allergens else "无"
+
+    system_prompt = (
+        "你是专业点菜顾问。请根据用户提供的就餐信息推荐菜品。\n\n"
+        "### 点菜规则\n"
+        "1. 菜品数量 = 人数 + 1 至 2\n"
+        "2. 荤素比例 3:7 或 4:6\n"
+        "3. 凉菜 1-2 道，热菜 4-6 道，汤 1 道\n"
+        "4. 口味平衡：至少 1 道清淡、1 道浓郁\n"
+        "5. 价格分配：1-2 道贵菜 + 3-4 道中等价\n"
+        "6. 主料不重复\n"
+        "7. 优先招牌菜\n"
+        "8. 优先时令菜\n"
+        "9. 避开过敏原和忌口\n"
+        "10. 老人优先软烂易嚼\n"
+        "11. 孩子优先清淡易消化\n"
+        "12. 只从菜单中推荐，不推荐菜单外的菜\n"
+        "13. 参考历史偏好：这家餐厅历史评分高（≥4分）的菜优先推荐，历史评分低（≤2分）的菜必须避开\n\n"
+        "### 输出要求\n"
+        "- 每道菜说明推荐理由\n"
+        "- 标注菜品分类（荤/素/凉/汤）\n"
+        "- 估算总价\n"
+        "- 给出上菜顺序建议\n"
+        "- 返回严格 JSON 格式，不要任何额外文字或 Markdown 包裹\n\n"
+        'JSON 格式：{"recommendedDishes":[{"name":"菜名","category":"荤/素/凉/汤","reason":"30字内推荐理由","price":价格数字,"portion":"整份或半份"}],'
+        '"combination":{"totalDishes":总道数,"coldDishes":凉菜数,"hotDishes":热菜数,"meatVegRatio":"荤素比如4:6","estimatedTotal":估算总价数字,"withinBudget":true或false},'
+        '"tips":["上菜顺序建议","其他点菜提示"]}'
+    )
+    user_content = (
+        f"【餐厅】{rest_line}\n"
+        f"【菜单】\n{menu_lines}\n"
+        f"【就餐人数】{req.people or '未指定'}\n"
+        f"【预算】{req.budget if req.budget else '不限'}元\n"
+        f"【场景】{scene_label}\n"
+        f"【就餐人员】\n{diner_lines}\n"
+        f"【忌口与过敏】{allergen_str}\n"
+        f"{history_line}"
+    )
+
+    content = await call_qwen(
+        [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ],
+        json_mode=True,
+        max_tokens=2500,
+        task_type="recommend_dishes",
+    )
+    parsed = extract_json_object(content)
+
+    # ---- 归一化：只保留（过滤后）菜单内菜品 + 二次过敏原校验 + 数量上限 ----
+    raw_list = parsed.get("recommendedDishes") or parsed.get("recommendations") or []
+    valid_names = {(it.name or "").strip() for it in kept}
+    blocked = [str(a).strip() for a in (req.allergens or []) if str(a).strip()]
+    limit = (req.people + 2) if req.people and req.people > 0 else len(raw_list)
+
+    result, seen = [], set()
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name or name in seen:
+            continue
+        if any(k and k in name for k in blocked):
+            continue  # 规则9：二次校验过敏原/忌口
+        if valid_names and name not in valid_names:
+            continue  # 规则12：只从菜单中推荐
+        try:
+            price = float(item.get("price") or 0)
+        except (TypeError, ValueError):
+            price = 0.0
+        seen.add(name)
+        result.append({
+            "name": name,
+            "category": str(item.get("category") or ""),
+            "reason": str(item.get("reason") or ""),
+            "price": price,
+            "portion": str(item.get("portion") or "整份"),
+        })
+        if len(result) >= limit:
+            break
+
+    # ---- combination：以 AI 结果为基底，重算总价与预算校验 ----
+    comb = parsed.get("combination") if isinstance(parsed.get("combination"), dict) else {}
+
+    def _int(key, default):
+        try:
+            return int(comb.get(key, default))
+        except (TypeError, ValueError):
+            return default
+
+    total_n = len(result)
+    cold_n = _int("coldDishes", sum(1 for d in result if "凉" in d["category"]))
+    soup_n = sum(1 for d in result if "汤" in d["category"])
+    hot_n = max(_int("hotDishes", total_n - cold_n - soup_n), 0)
+    meat_veg = str(comb.get("meatVegRatio") or "-")
+    if meat_veg == "-":
+        meat = sum(1 for d in result if "荤" in d["category"] or "肉" in d["category"])
+        veg = sum(1 for d in result if "素" in d["category"])
+        if meat + veg > 0:
+            meat_veg = f"{meat}:{veg}"
+    estimated_total = round(sum(d["price"] for d in result), 2)
+    within = comb.get("withinBudget")
+    if req.budget and req.budget > 0:
+        within = estimated_total <= req.budget
+
+    tips = [str(t) for t in (parsed.get("tips") or []) if str(t).strip()]
+    if req.budget and req.budget > 0 and estimated_total > req.budget:
+        tips.append(f"估算总价 {estimated_total} 元已超预算 {req.budget} 元，可减少贵菜或改半份")
+
+    combination = {
+        "totalDishes": total_n,
+        "coldDishes": cold_n,
+        "hotDishes": hot_n,
+        "meatVegRatio": meat_veg,
+        "estimatedTotal": estimated_total,
+        "withinBudget": bool(within) if within is not None else True,
+    }
+    return {"recommendedDishes": result, "combination": combination, "tips": tips, "filteredOut": removed}
 
 
 @app.post("/parse", response_model=ParseResponse)
@@ -962,9 +1707,9 @@ def ai_usage(detail: int = 0, month: str = ""):
     """AI 用量汇总：默认本月。含总调用/Token/成本、按服务商、按功能占比、预算状态；detail=1 附最近 50 条明细。"""
     import time as _time
     try:
-        from backend.model_config import get_ai_cost_summary, get_budget_status
+        from backend.model_config import get_ai_cost_summary, get_budget_status, get_provider_status
     except ImportError:
-        from model_config import get_ai_cost_summary, get_budget_status
+        from model_config import get_ai_cost_summary, get_budget_status, get_provider_status
     m = (month or "").strip() or _time.strftime("%Y-%m")
     summary = get_ai_cost_summary(month=m, recent_limit=50 if detail else 0)
     total_calls = summary["total_calls"]
@@ -981,6 +1726,9 @@ def ai_usage(detail: int = 0, month: str = ""):
         "total_calls": total_calls,
         "total_tokens": summary["total_tokens"],
         "total_cost": round(summary["total_cost"], 4),
+        "total_errors": summary.get("total_errors", 0),
+        "errors_recent": summary.get("errors_recent", []),
+        "providers_configured": get_provider_status(),
         "by_provider": by_provider,
         "by_task": by_task,
         "budget": get_budget_status(),
@@ -1037,7 +1785,7 @@ if FRONTEND_DIR.exists():
                 return FileResponse(index_path, media_type="text/html", headers={"Cache-Control": "no-store"})
         # 检查是否是已注册的 API 路径（跳过）
         api_paths = {
-            "health", "chat", "plan", "parse", "parse_voice", "parse_link",
+            "health", "chat", "plan", "recommend-restaurants", "recommend-dishes", "parse", "parse_voice", "parse_link",
             "recognize_ingredients", "explore-ingredient", "generate-ingredient", "app",
             "docs", "redoc", "openapi.json", "docs/oauth2-redirect"
         }
@@ -1056,3 +1804,322 @@ else:
     @app.get("/app", include_in_schema=False)
     async def serve_app_home():
         raise HTTPException(status_code=404, detail="frontend 目录不存在")
+
+
+# ========== V137: localStorage 数据迁移（换端口 8010→8011 后旧源数据中转） ==========
+MIGRATION_FILE = Path(__file__).parent / "data_migration.json"
+
+class MigrationPayload(BaseModel):
+    payload: Dict[str, Any]
+
+@app.post("/api/migration/upload", include_in_schema=False)
+async def migration_upload(req: MigrationPayload):
+    """8010 源页面把本源 localStorage 快照上传到服务端暂存。"""
+    try:
+        MIGRATION_FILE.write_text(json.dumps(req.payload, ensure_ascii=False), encoding="utf-8")
+        return {"ok": True, "keys": len(req.payload)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/migration/download", include_in_schema=False)
+async def migration_download():
+    """8011 源页面拉取暂存的旧数据快照（用POST避开先注册的GET catch-all静态路由）。"""
+    if MIGRATION_FILE.exists():
+        try:
+            return json.loads(MIGRATION_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+# ========== V138: 天气代理接口（和风天气，POST /api/weather） ==========
+import time as _wx_time
+
+QWEATHER_API_KEY = os.environ.get("QWEATHER_API_KEY", "").strip()
+# 和风 2024-08 后新注册项目须用专属 API Host（控制台查看，形如 abc123.re.qweatherapi.com）；
+# 旧域名 devapi.qweather.com 对新 Key 返回 403。QWEATHER_API_HOST 留空则用旧域名（兼容老 Key）。
+_wx_host = os.environ.get("QWEATHER_API_HOST", "").strip().rstrip("/")
+if _wx_host and not _wx_host.startswith("http"):
+    _wx_host = "https://" + _wx_host
+# 免费开发版 Key 的 GeoAPI 走 devapi 域名（geoapi.qweather.com 为付费版专属，免费 Key 请求 404）
+QWEATHER_GEO_URL = (_wx_host + "/geo/v2/city/lookup") if _wx_host else "https://devapi.qweather.com/geo/v2/city/lookup"
+QWEATHER_7D_URL = (_wx_host + "/v7/weather/7d") if _wx_host else "https://devapi.qweather.com/v7/weather/7d"
+_WEATHER_CACHE: Dict[str, Dict[str, Any]] = {}  # "city|days" -> {"ts": 时间戳, "data": 响应}
+_WEATHER_CACHE_TTL = 3 * 3600  # 3 小时
+_WEEKDAY_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+
+
+class WeatherRequest(BaseModel):
+    city: str
+    days: int = 7
+
+
+def _weather_error(detail: str = "") -> Dict[str, str]:
+    """统一降级响应：error 固定文案，detail 带原因，不抛异常不阻塞主流程。"""
+    err: Dict[str, str] = {"error": "天气获取失败"}
+    if detail:
+        err["detail"] = detail[:120]
+    return err
+
+
+def _wx_int(v: Any) -> int:
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _wx_float(v: Any) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _summarize_weather(daily: List[Dict[str, Any]]) -> str:
+    """本地规则拼接一句话摘要（不调 AI）：未来N天以X为主，周X有降水，气温A-B°C。"""
+    if not daily:
+        return ""
+    from collections import Counter
+    texts = [str(d.get("textDay") or "").strip() for d in daily if d.get("textDay")]
+    mode_text = Counter(texts).most_common(1)[0][0] if texts else ""
+    try:
+        tmin = min(int(d["tempMin"]) for d in daily if d.get("tempMin") is not None)
+        tmax = max(int(d["tempMax"]) for d in daily if d.get("tempMax") is not None)
+        temp_part = f"气温{tmin}-{tmax}°C"
+    except (ValueError, TypeError):
+        temp_part = ""
+    rain_days: List[str] = []
+    for d in daily:
+        t = str(d.get("textDay") or "") + str(d.get("textNight") or "")
+        if "雨" in t or "雪" in t:
+            try:
+                from datetime import datetime as _dt
+                wd = _WEEKDAY_CN[_dt.strptime(str(d.get("date")), "%Y-%m-%d").weekday()]
+                if wd not in rain_days:
+                    rain_days.append(wd)
+            except (ValueError, TypeError):
+                pass
+    n = len(daily)
+    parts = []
+    if mode_text:
+        parts.append(f"未来{n}天以{mode_text}为主" if n > 1 else f"今天{mode_text}")
+    if rain_days:
+        parts.append("、".join(rain_days[:3]) + "有降水")
+    if temp_part:
+        parts.append(temp_part)
+    return "，".join(parts)
+
+
+@app.post("/api/weather")
+async def api_weather(req: WeatherRequest):
+    """天气代理：前端同源调用，避免暴露 Key 与 CORS；同城市 3 小时内存缓存；任何失败返回 error 字段。"""
+    city = (req.city or "").strip()
+    if not city:
+        return _weather_error("城市不能为空")
+    try:
+        days = max(1, min(7, int(req.days or 7)))
+    except (TypeError, ValueError):
+        days = 7
+
+    # 1) 缓存命中：3 小时内同城市+天数直接返回
+    cache_key = f"{city}|{days}"
+    now = _wx_time.time()
+    hit = _WEATHER_CACHE.get(cache_key)
+    if hit and now - hit.get("ts", 0) < _WEATHER_CACHE_TTL:
+        return hit["data"]
+
+    if not QWEATHER_API_KEY:
+        return _weather_error("未配置 QWEATHER_API_KEY（backend/.env）")
+
+    # 认证只用 X-QW-Api-Key（实测专属 Host 下与 Bearer 双发时上游按 Bearer 校验导致 401）
+    headers = {"X-QW-Api-Key": QWEATHER_API_KEY}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # 2) 城市搜索 → LocationID
+            geo = await client.get(
+                QWEATHER_GEO_URL,
+                params={"location": city, "number": 1, "lang": "zh"},
+                headers=headers,
+            )
+            geo.raise_for_status()
+            geo_data = geo.json()
+            if geo_data.get("code") != "200" or not geo_data.get("location"):
+                return _weather_error(f"城市查询失败(code={geo_data.get('code')})")
+            location_id = str(geo_data["location"][0].get("id") or "")
+            city_name = str(geo_data["location"][0].get("name") or city)
+            # 3) 7 天预报（days<7 时截取前 N 天）
+            wx = await client.get(
+                QWEATHER_7D_URL,
+                params={"location": location_id, "lang": "zh"},
+                headers=headers,
+            )
+            wx.raise_for_status()
+            wx_data = wx.json()
+    except Exception as exc:  # 兜底：任何上游异常（httpx/解析/未知）都降级，不阻塞主流程
+        return _weather_error(str(exc))
+
+    if wx_data.get("code") != "200" or not wx_data.get("daily"):
+        return _weather_error(f"预报获取失败(code={wx_data.get('code')})")
+
+    daily_out = []
+    for d in wx_data.get("daily", [])[:days]:
+        daily_out.append({
+            "date": str(d.get("fxDate") or ""),
+            "textDay": str(d.get("textDay") or ""),
+            "textNight": str(d.get("textNight") or ""),
+            "tempMax": _wx_int(d.get("tempMax")),
+            "tempMin": _wx_int(d.get("tempMin")),
+            "humidity": _wx_int(d.get("humidity")),
+            "precip": _wx_float(d.get("precip")),
+            "windScale": str(d.get("windScaleDay") or ""),
+        })
+
+    result = {"city": city_name, "daily": daily_out, "summary": _summarize_weather(daily_out)}
+    _WEATHER_CACHE[cache_key] = {"ts": now, "data": result}
+    # 防膨胀：超过 50 个城市缓存时淘汰最旧条目
+    if len(_WEATHER_CACHE) > 50:
+        oldest = min(_WEATHER_CACHE.items(), key=lambda kv: kv[1].get("ts", 0))[0]
+        _WEATHER_CACHE.pop(oldest, None)
+    return result
+
+
+# ========== V139: 食养堂每日一课（POST /api/daily-tip） ==========
+# 同一家庭同一天只生成一次，内存缓存到当天 23:59（键 "familyId|date"）
+_DAILY_TIP_CACHE: Dict[str, Dict[str, Any]] = {}
+
+_DAILY_TIP_SYSTEM = (
+    "你是家庭饮食知识编辑。请为今天的家庭推送一条食养知识。\n\n"
+    "### 选题优先级\n"
+    "1. 如果今天或明天是节气 → 讲该节气的饮食讲究\n"
+    "2. 如果今天有显著天气变化（降温>5°C、高温>32°C、雨雪）→ 讲对应饮食\n"
+    "3. 如果都没有 → 讲当季食材或家常烹饪技巧\n\n"
+    "### 内容要求\n"
+    "1. 标题：15字以内，有悬念或画面感\n"
+    "2. 摘要：60字以内，卡片展示用\n"
+    "3. 正文：200-300字，口语化，像和老朋友聊天\n"
+    "4. 小贴士：2条，每条20字以内\n"
+    "5. 可关联 1-2 种当季食材\n\n"
+    "### 严格禁止\n"
+    "- 禁止使用：治疗、治愈、改善、降低、预防、功效、食疗、润肺、止咳、降三高、祛湿\n"
+    "- 禁止提及任何疾病名称\n"
+    "- 禁止承诺健康效果\n"
+    "- 禁止\"XX能治XX\"的句式\n\n"
+    "### 返回格式\n"
+    "严格 JSON，不要任何解释性文字，格式：\n"
+    '{"category":"节气食养","title":"","summary":"","content":"",'
+    '"tips":["",""],"relatedIngredients":[""]}'
+)
+
+# 输出侧禁用词（与 prompt 双保险；V139 规格 11 词）
+_DAILY_TIP_BANNED = ["治疗", "治愈", "改善", "降低", "预防", "功效", "食疗", "润肺", "止咳", "降三高", "祛湿"]
+
+
+def _strip_banned_words(text: str) -> str:
+    for w in _DAILY_TIP_BANNED:
+        text = text.replace(w, "")
+    return text
+
+
+def _clean_daily_tip(data: Dict[str, Any]) -> Dict[str, Any]:
+    """归一化 AI 返回的每日一课内容：字段齐全、清洗禁用词、限长。"""
+    title = _strip_banned_words(str(data.get("title") or "").strip())[:20]
+    summary = _strip_banned_words(str(data.get("summary") or "").strip())[:70]
+    content = _strip_banned_words(str(data.get("content") or "").strip())
+    tips = []
+    for t in (data.get("tips") or [])[:2]:
+        t = _strip_banned_words(str(t).strip())
+        if t:
+            tips.append(t[:25])
+    related = [str(x).strip()[:10] for x in (data.get("relatedIngredients") or [])[:2] if str(x).strip()]
+    category = str(data.get("category") or "节气食养").strip()[:10] or "节气食养"
+    return {"category": category, "title": title, "summary": summary,
+            "content": content, "tips": tips, "relatedIngredients": related}
+
+
+def _daily_tip_expire_ts(date_str: str) -> float:
+    """缓存有效期：当天 23:59:59（date 非法时退化为 24 小时）。"""
+    try:
+        import datetime as _dt
+        day = _dt.datetime.strptime(date_str, "%Y-%m-%d")
+        return day.replace(hour=23, minute=59, second=59).timestamp()
+    except (ValueError, TypeError):
+        return time.time() + 86400
+
+
+class DailyTipRequest(BaseModel):
+    date: str
+    familyId: str = ""
+    city: str = ""
+    familyBrief: str = ""
+    solarTerm: str = ""
+    weather: Optional[Dict[str, Any]] = None
+    variant: int = 0  # V139: "换一条"用，0=默认（缓存键兼容原规格 daily_tip_${familyId}_${date}）
+
+
+@app.post("/api/daily-tip")
+async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
+    """食养堂每日一课：按 节气>天气>当季食材 优先级生成，同家庭同日仅生成一次。"""
+    date_str = (req.date or "").strip()
+    family_id = (req.familyId or "default").strip()[:32]
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
+        return {"error": "日期格式应为 YYYY-MM-DD"}
+
+    cache_key = f"{family_id}|{date_str}|{max(0, int(req.variant))}"
+    hit = _DAILY_TIP_CACHE.get(cache_key)
+    now_ts = time.time()
+    if hit:
+        if now_ts <= hit.get("expire", 0):
+            return hit["data"]
+        _DAILY_TIP_CACHE.pop(cache_key, None)  # 过期清理
+
+    # 选题上下文：天气描述行
+    weather_line = "未提供"
+    if isinstance(req.weather, dict) and req.weather:
+        parts = []
+        if req.weather.get("textDay"):
+            parts.append(str(req.weather["textDay"]))
+        if req.weather.get("tempMax") is not None and req.weather.get("tempMin") is not None:
+            parts.append(f"{req.weather['tempMin']}~{req.weather['tempMax']}°C")
+        if parts:
+            weather_line = " ".join(parts)
+
+    user_lines = [
+        f"【日期】{date_str}",
+        f"【节气】{req.solarTerm.strip() or '不在节气当天'}",
+        f"【天气】{weather_line}",
+        f"【城市】{(req.city or '').strip() or '未提供'}",
+        f"【家庭】{(req.familyBrief or '').strip()[:200] or '普通家庭'}",
+    ]
+    if req.variant > 0:
+        user_lines.append(f"【要求】这是该家庭今天看到的第 {req.variant + 1} 条，请换一个与之前完全不同的选题角度（如不同食材、烹饪技巧、节气习俗），标题和内容都不要与之前重复。")
+    try:
+        content = await call_qwen(
+            [
+                {"role": "system", "content": _DAILY_TIP_SYSTEM},
+                {"role": "user", "content": "\n".join(user_lines)},
+            ],
+            json_mode=True,
+            max_tokens=1200,
+            task_type="daily_tip",
+        )
+    except Exception as e:  # AI 不可用不阻塞：返回降级提示
+        print(f"[daily-tip] call_qwen error: {e}")
+        return {"error": "每日一课生成失败，请稍后重试"}
+
+    parsed = extract_json_object(content)
+    if not isinstance(parsed, dict) or not parsed.get("title"):
+        return {"error": "每日一课生成失败，请稍后重试"}
+
+    tip = _clean_daily_tip(parsed)
+    if not tip["title"] or not tip["content"]:
+        return {"error": "每日一课生成失败，请稍后重试"}
+
+    result = {"id": f"tip_{date_str.replace('-', '')}", "date": date_str, **tip}
+    _DAILY_TIP_CACHE[cache_key] = {"expire": _daily_tip_expire_ts(date_str), "data": result}
+    # 防膨胀：最多缓存 120 个 家庭|日期 条目，超出淘汰最先过期者
+    if len(_DAILY_TIP_CACHE) > 120:
+        oldest = min(_DAILY_TIP_CACHE.items(), key=lambda kv: kv[1].get("expire", 0))[0]
+        _DAILY_TIP_CACHE.pop(oldest, None)
+    return result
+

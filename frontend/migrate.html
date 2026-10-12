@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>家肴记 · 数据迁移</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+body { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #FFF7ED; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+.card { background: white; border-radius: 16px; padding: 32px; max-width: 420px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); text-align: center; }
+h1 { font-size: 18px; color: #C2410C; margin: 0 0 12px; }
+#st { font-size: 14px; color: #374151; line-height: 1.8; margin-top: 16px; }
+.step { display: inline-block; background: #FFEDD5; border-radius: 999px; padding: 2px 12px; font-size: 12px; color: #9A3412; margin-bottom: 8px; }
+a { color: #F97316; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🍳 家肴记数据迁移</h1>
+  <div class="step" id="mode">检测中…</div>
+  <div id="st">正在处理，请勿关闭此页面…</div>
+</div>
+<script>
+(async function () {
+  var st = document.getElementById('st');
+  var mode = document.getElementById('mode');
+  var port = location.port;
+  var NEW_PORT = '8012'; // V138 当前主端口
+  var OLD_PORTS = ['8010', '8011']; // 历史端口（导出用）
+  var FETCH_TIMEOUT = 15000; // fetch 超时 15 秒，防止 Simple Browser 缓存旧代码后无限挂起
+  // 版本戳：Simple Browser 顽固缓存绕过——URL 加 ?v=20261009c 可强制拉最新
+  var VER = '20261009d';
+
+  // 加超时的 fetch 封装
+  async function fetchWithTimeout(url, opts) {
+    opts = opts || {};
+    // 绕过 Simple Browser 缓存：给同域请求加随机时间戳
+    if (url.indexOf('?') < 0) url += '?_=' + Date.now(); else url += '&_=' + Date.now();
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, FETCH_TIMEOUT);
+    opts.signal = ctrl.signal;
+    try {
+      var r = await fetch(url, opts);
+      return r;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  if (OLD_PORTS.indexOf(port) >= 0) {
+    // 旧源：读取本源全部 localStorage 上传
+    mode.textContent = '第 1 步 · 从旧数据区导出';
+    try {
+      var data = {};
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        data[k] = localStorage.getItem(k);
+      }
+      var count = Object.keys(data).length;
+      if (count === 0) { st.innerHTML = '旧数据区是空的，无需迁移。直接使用 <a href="http://127.0.0.1:' + NEW_PORT + '/app">' + NEW_PORT + ' 新地址</a>'; return; }
+      var r = await fetchWithTimeout(location.origin + '/api/migration/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload: data })
+      });
+      var j = await r.json();
+      if (j.ok) {
+        st.innerHTML = '✅ 已导出 ' + count + ' 项数据！<br><br>请打开第 2 步链接完成恢复：<br><a href="http://127.0.0.1:' + NEW_PORT + '/migrate.html">http://127.0.0.1:' + NEW_PORT + '/migrate.html</a>';
+      } else {
+        st.textContent = '❌ 上传失败：' + (j.detail || '未知错误');
+      }
+    } catch (e) {
+      st.textContent = '❌ 出错：' + (e.message || e);
+    }
+  } else {
+    // 新源：拉取快照恢复（不覆盖本源已有键；restaurants 特殊合并）
+    mode.textContent = '第 2 步 · 恢复到新数据区';
+    try {
+      var r2 = await fetchWithTimeout(location.origin + '/api/migration/download', { method: 'POST' });
+      var data2 = await r2.json();
+      var keys = Object.keys(data2 || {});
+      if (!keys.length) { st.innerHTML = '暂无待恢复数据。请先打开 <a href="http://127.0.0.1:8011/migrate.html">http://127.0.0.1:8011/migrate.html</a> 完成第 1 步导出。'; return; }
+      var restored = 0, skipped = 0, bareStripped = 0;
+      // V138: 旧版按家庭码隔离键名（如 V2C8WRFR_dietCalendar），新版读裸键（dietCalendar）。
+      // 剥离全大写家庭码前缀（至少4字符+A-Z0-9），同步写裸键。用字符串方法避免正则解析问题。
+      function stripFamilyPrefix(key) {
+        var idx = key.indexOf('_');
+        if (idx < 4) return null;
+        var prefix = key.substring(0, idx);
+        for (var i = 0; i < prefix.length; i++) {
+          var c = key.charCodeAt(i);
+          if (!((c >= 65 && c <= 90) || (c >= 48 && c <= 57))) return null;
+        }
+        return key.substring(idx + 1);
+      }
+      keys.forEach(function (k) {
+        // V138: 强制覆盖（8012 源只有被 app 初始化的默认空值，旧区真实数据优先）
+        try {
+          localStorage.setItem(k, data2[k]); restored++;
+          var bare = stripFamilyPrefix(k);
+          if (bare && bare !== k) {
+            localStorage.setItem(bare, data2[k]); bareStripped++;
+          }
+        } catch(e) { skipped++; }
+      });
+      var msg = '✅ 迁移完成！恢复 ' + restored + ' 项';
+      if (bareStripped) msg += '，其中 ' + bareStripped + ' 项已剥离家庭码前缀';
+      if (skipped) msg += '（' + skipped + ' 项写入失败）';
+      st.innerHTML = msg + '<br><br>正在跳转到家肴记…';
+      setTimeout(function () { location.href = '/app'; }, 1800);
+    } catch (e) {
+      st.textContent = '❌ 出错：' + (e.message || e);
+    }
+  }
+})();
+</script>
+</body>
+</html>

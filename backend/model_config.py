@@ -48,12 +48,18 @@ PROVIDERS: Dict[str, Dict[str, Any]] = {
         "api_key": os.getenv("AGNES_API_KEY", ""),
         "models": {
             "text_fast": "agnes-2.5-flash",   # 日常对话/推荐菜谱/食材知识
-            "text_pro": "agnes-2.5-pro",      # 审核评分/营养配餐/复杂推理
+            # V137: 原为 agnes-2.5-pro，该 Key 对 pro 模型持续 403（从未成功），强档降为同 flash，省一次必败尝试
+            "text_pro": "agnes-2.5-flash",
+            "vision": ["agnes-2.5-flash", "agnes-3.0-flash"],  # V131: 视觉理解（image_url 多模态输入，免费flash档实测支持）
             "image": "agnes-image-2.1-flash",
             "video": "agnes-video-2.5",
         },
         "image_path": "/images/generations",
         "video_path": "/videos",
+        # V139: agnes-2.5-flash 为推理模型，思维链(reasoning_content)不受控会耗尽全部 max_tokens
+        # 导致 content 为空（finish_reason=length，reasoning_tokens=8192/text_tokens=0）。
+        # 压制到 low 后 reasoning_tokens≈75，正文正常输出（实测 4 种参数变体均有效，此参数最省额度）。
+        "chat_extra": {"reasoning_effort": "low"},
         "priority": 1,
         "cost": 0,  # 免费
     },
@@ -73,6 +79,7 @@ PROVIDERS: Dict[str, Dict[str, Any]] = {
         "api_key": os.getenv("DASHSCOPE_API_KEY", "") or os.getenv("ALIYUN_API_KEY", ""),
         "models": {
             "text": "qwen-turbo",
+            "vision": "qwen-vl-plus",  # V131: 视觉理解兜底（宣传单OCR等图片输入任务）
         },
         "priority": 3,
         "cost": 0.0000003,
@@ -179,8 +186,48 @@ async def route_chat(
                 last_err = "返回空内容"
             except (httpx.HTTPStatusError, httpx.RequestError, KeyError, IndexError) as exc:
                 last_err = f"{type(exc).__name__}: {exc}"
+                log_ai_error(name, model, {"task_type": "chat"}, exc)
         errors.append(f"{name}: {last_err or '全部模型失败'}")
     raise RuntimeError("所有模型服务商均调用失败 -> " + "；".join(errors))
+
+
+async def route_vision(
+    messages: List[Dict[str, Any]],
+    *,
+    max_tokens: Optional[int] = None,
+    timeout: float = 90.0,
+    task_type: str = "vision",
+) -> Tuple[str, str]:
+    """V131: 视觉理解（图片输入）路由——按优先级尝试配置了 vision 模型的服务商，失败自动降级。
+
+    agnes: agnes-2.5-flash / agnes-3.0-flash（免费档实测支持 image_url 多模态）；
+    dashscope: qwen-vl-plus 兜底。messages 的 content 可为 OpenAI 多模态数组。
+    返回 (回复文本, 服务商名)。全部失败抛 RuntimeError。
+    """
+    errors: List[str] = []
+    for name, cfg in get_provider_order():
+        vision_models = cfg.get("models", {}).get("vision")
+        api_key = cfg.get("api_key") or ""
+        if not vision_models:
+            continue
+        if not api_key:
+            errors.append(f"{name}: 未配置 Key")
+            continue
+        model_seq: List[str] = vision_models if isinstance(vision_models, list) else [vision_models]
+        last_err: Optional[str] = None
+        for model in model_seq:
+            try:
+                data = await _call_provider_chat(name, cfg, model, messages, max_tokens=max_tokens, timeout=timeout)
+                content = data["choices"][0]["message"]["content"]
+                if content:
+                    log_ai_call(name, model, {"task_type": task_type}, data)
+                    return content, name
+                last_err = "返回空内容"
+            except (httpx.HTTPStatusError, httpx.RequestError, KeyError, IndexError) as exc:
+                last_err = f"{type(exc).__name__}: {exc}"
+                log_ai_error(name, model, {"task_type": task_type}, exc)
+        errors.append(f"{name}: {last_err or '全部模型失败'}")
+    raise RuntimeError("所有视觉模型服务商均调用失败 -> " + "；".join(errors))
 
 
 # ========== 通用任务路由（text / image / video）与调用日志 ==========
@@ -194,8 +241,13 @@ def _call_provider_chat(
     max_tokens: Optional[int] = None,
     temperature: Optional[float] = None,
     timeout: float = 60.0,
+    extra_body: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """单服务商 chat/completions 调用（同步发起由调用方 await），返回完整响应 JSON。"""
+    """单服务商 chat/completions 调用（同步发起由调用方 await），返回完整响应 JSON。
+
+    extra_body：按服务商透传的附加参数（如 agnes 的 reasoning_effort），仅文本链路传入，
+    视觉链路不带（避免多模态模型不认识该参数被拒）。
+    """
     payload: Dict[str, Any] = {"model": model, "messages": messages}
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
@@ -203,6 +255,8 @@ def _call_provider_chat(
         payload["max_tokens"] = max_tokens
     if temperature is not None:
         payload["temperature"] = temperature
+    if extra_body:
+        payload.update(extra_body)
 
     async def _post() -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -238,6 +292,19 @@ def log_ai_call(provider: str, model: str, payload: Dict[str, Any], result: Dict
     }
     save_ai_log(log_entry)
     return log_entry
+
+
+def log_ai_error(provider: str, model: str, payload: Dict[str, Any], error: Any) -> None:
+    """V132: 记录 AI 调用失败（tokens=0 + error 字段），供用量面板异常监控与超管提醒。"""
+    entry = {
+        "provider": provider,
+        "model": model,
+        "tokens": 0,
+        "timestamp": time.time(),
+        "task": str(payload.get("task_type", "") or ""),
+        "error": str(error)[:200],
+    }
+    save_ai_log(entry)
 
 
 # ========== V118: 月度预算与用量监控 ==========
@@ -303,6 +370,8 @@ def get_ai_cost_summary(month: Optional[str] = None, recent_limit: int = 0) -> D
         "total_calls": 0,
         "total_tokens": 0,
         "total_cost": 0.0,
+        "total_errors": 0,
+        "errors_recent": [],
         "by_provider": {},
         "by_task": {},
         "recent": [],
@@ -313,6 +382,14 @@ def get_ai_cost_summary(month: Optional[str] = None, recent_limit: int = 0) -> D
     for entry in entries:
         provider = str(entry.get("provider", "?"))
         task = str(entry.get("task", "?"))
+        error = str(entry.get("error") or "")
+        if error:
+            # V132: 失败调用单独统计（不计入 calls/tokens/cost）
+            summary["total_errors"] += 1
+            for key, name2 in (("by_provider", provider), ("by_task", task)):
+                b2 = summary[key].setdefault(name2, {"calls": 0, "tokens": 0, "cost": 0.0})
+                b2["errors"] = b2.get("errors", 0) + 1
+            continue
         tokens = entry.get("tokens", 0) or 0
         cost = _log_entry_cost(entry)
         summary["total_calls"] += 1
@@ -329,14 +406,26 @@ def get_ai_cost_summary(month: Optional[str] = None, recent_limit: int = 0) -> D
     for bucket in summary["by_task"].values():
         bucket["cost"] = round(bucket["cost"], 6)
     if recent_limit > 0 and entries:
-        for entry in entries[-recent_limit:][::-1]:
+        ok_entries = [e for e in entries if not e.get("error")]
+        for entry in ok_entries[-recent_limit:][::-1]:
             summary["recent"].append({
                 "provider": str(entry.get("provider", "?")),
                 "model": str(entry.get("model", "?")),
-                "tokens": entry.get("tokens", 0) or 0,
+                "tokens": entry.get("tokens", 0),
                 "cost": round(_log_entry_cost(entry), 6),
                 "timestamp": entry.get("timestamp", 0),
                 "task": str(entry.get("task", "")),
+            })
+    # V132: 最近 20 条失败明细（时间倒序），供用量面板异常区块与超管提醒
+    err_entries = [e for e in entries if e.get("error")]
+    if err_entries:
+        for entry in err_entries[-20:][::-1]:
+            summary["errors_recent"].append({
+                "provider": str(entry.get("provider", "?")),
+                "model": str(entry.get("model", "?")),
+                "task": str(entry.get("task", "")),
+                "error": str(entry.get("error", "")),
+                "timestamp": entry.get("timestamp", 0),
             })
     return summary
 
@@ -399,11 +488,18 @@ async def call_ai(task_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
                         max_tokens=payload.get("max_tokens"),
                         temperature=payload.get("temperature"),
                         timeout=payload.get("timeout", 60.0),
+                        extra_body=config.get("chat_extra"),
                     )
+                    # V139: 空 content 视为该服务商失败（如推理模型思维链耗尽 max_tokens 时
+                    # content=""，finish_reason=length），自动降级下一家，而不是把空串当成功返回
+                    _content = data["choices"][0]["message"]["content"]
+                    if not (_content or "").strip():
+                        _finish = data["choices"][0].get("finish_reason")
+                        raise ValueError(f"返回内容为空(finish_reason={_finish})")
                     result: Dict[str, Any] = {
                         "provider": name,
                         "model": model,
-                        "content": data["choices"][0]["message"]["content"],
+                        "content": _content,
                         "usage": data.get("usage", {}),
                     }
                 else:
@@ -441,6 +537,7 @@ async def call_ai(task_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
             except Exception as e:
                 print(f"{name}/{model} failed: {e}")
                 errors.append(f"{name}/{model}: {type(e).__name__}: {e}")
+                log_ai_error(name, model, payload, e)
                 continue
     msg = "All providers failed -> " + "；".join(errors)
     if task_type == "video":
