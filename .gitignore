@@ -9,6 +9,7 @@ node_modules/
 *.jsonl
 backend/ai_budget.json
 backend/data_migration.json
+backend/data/
 family_reset_pass.sql
 .wrangler/
 .trae/

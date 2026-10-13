@@ -1,0 +1,11 @@
+[Unit]
+Description=Run JiaYaoJi FoodHall auto-publish nightly at 22:30
+
+[Timer]
+# 每天 22:30 执行；服务器关机错过则开机后补跑一次（Persistent）
+OnCalendar=*-*-* 22:30:00
+Persistent=true
+Unit=jiayaoji-foodhall.service
+
+[Install]
+WantedBy=timers.target

@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V138-20261009i';
+        var APP_VER = 'V143-20261014a';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -25340,6 +25340,7 @@ function renderHomeCards() {
 // V140: "读完整/收藏"移至标题行右侧、"换一条"按钮移除（variant 机制保留：_dtSwapCount 恒为 0，读完整/收藏仍按 variant 链取缓存）
 var _dtSwapCount = 0;
 var _dtLoadedKey = ''; // 已加载的 familyId|date，避免重复请求
+var _dtServerTip = null; // V143: 服务端 22:30 自动流水线预选的当日内容
 function _dtTodayKey() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function _dtCacheKey(variant) { return 'daily_tip_' + (getFamilyId() || 'default') + '_' + _dtTodayKey() + (variant ? '_' + variant : ''); }
 function _dtRenderSkeleton() {
@@ -25356,8 +25357,23 @@ function _dtRenderCard(tip) {
     var emoji = '🍂';
     var term = String(window.__currentSolarTerm || '');
     if (term) emoji = '🎐';
+    var adminCtl = '';
+    var _fhAdmin = (typeof isSuperAdmin === 'function' && isSuperAdmin());
+    if (!_fhAdmin) {
+        try { _fhAdmin = !!(JSON.parse(lsGet('superAdmin') || '{}') || {}).isLoggedIn; } catch (e) { _fhAdmin = false; }
+    }
+    if (tip.autoPublished && _fhAdmin) {
+        if (tip.reviewStatus === 'confirmed') {
+            adminCtl = '<span style="font-size:10px;color:#15803D;background:#DCFCE7;border-radius:4px;padding:2px 6px;margin-right:8px;align-self:center;">AI预选✓已确认</span>';
+        } else {
+            adminCtl = '<span style="font-size:10px;color:#B45309;background:#FEF3C7;border-radius:4px;padding:2px 6px;margin-right:6px;align-self:center;">AI预选·待复核</span>'
+                + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:6px;" onclick="_fhReviewAuto(\'' + (tip.date || '') + '\',\'confirm\')">保留</button>'
+                + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:8px;color:#B91C1C;" onclick="_fhReviewAuto(\'' + (tip.date || '') + '\',\'withdraw\')">换篇</button>';
+        }
+    }
     el.innerHTML = '<div class="dt-head"><span>📚 食养堂 · 今日一课</span>'
         + '<span class="dt-head-btns">'
+        + adminCtl
         + '<button class="dt-btn dt-btn-primary" onclick="_openDailyTipFull()">读完整</button>'
         + '<button class="dt-btn" onclick="_collectDailyTip()">收藏</button>'
         + '</span></div>'
@@ -25410,13 +25426,48 @@ async function renderHomeDailyTipCard(force) {
     if (!force && _dtLoadedKey === ck) return; // 已加载过当天内容，不重复请求
     _dtLoadedKey = ck;
     _dtSwapCount = 0;
+    _dtServerTip = null;
     // V142: 首页卡片只读已发布文章，不再调 AI 生成
     try {
         var pub = _fhPublishedToday();
         if (pub) { _dtRecordHistory(pub); _dtRenderCard(pub); return; }
     } catch (e) {}
-    // 降级：今日未发布 → 暂未更新
+    // V143: 超管未手动发布 → 读服务端前一天 22:30 自动流水线预选入库的内容
+    _dtRenderSkeleton();
+    try {
+        var resp = await fetch('/api/food-hall/published?date=' + encodeURIComponent(_dtTodayKey()), { cache: 'no-store' });
+        var out = await resp.json();
+        if (out && out.published && out.article && out.article.title) {
+            _dtServerTip = out.article;
+            _dtRecordHistory(out.article);
+            _dtRenderCard(out.article);
+            return;
+        }
+    } catch (e) {}
+    // 降级：本地与服务端今日均无内容 → 暂未更新
     _dtRenderDegraded();
+}
+// V143: 超管复核 AI 预选篇（confirm 保留 / withdraw 撤回换篇）
+async function _fhReviewAuto(date, action) {
+    if (!date) return;
+    if (action === 'withdraw' && !confirm('撤回后首页将不再展示这篇 AI 预选内容。\n确定撤回、改用其他篇目吗？')) return;
+    try {
+        var resp = await fetch('/api/food-hall/review', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: date, action: action })
+        });
+        var out = await resp.json();
+        if (!out || !out.ok) { showToast((out && out.error) || '操作失败，请稍后重试'); return; }
+        if (action === 'withdraw') {
+            _dtServerTip = null;
+            showToast('已撤回，今日可在后台手动发布其他篇目');
+            renderHomeDailyTipCard(true);
+        } else {
+            if (_dtServerTip) _dtServerTip.reviewStatus = 'confirmed';
+            showToast('已确认保留该篇');
+            _dtRenderCard(_dtGetCached());
+        }
+    } catch (e) { showToast('网络异常，操作未完成'); }
 }
 // V140: 每日一课历史——每次内容渲染（生成/缓存命中）后写入 dailyTipHistory（{日期: tip}），保留最近 30 天
 function _dtRecordHistory(tip) {
@@ -25436,6 +25487,7 @@ function _dtGetCached() {
     // 从当前渲染的缓存链取完整 tip（读完整/收藏/分享共用）
     var pub = _fhPublishedToday(); // V140: 已发布文章优先于 AI 缓存链
     if (pub) return pub;
+    if (_dtServerTip && _dtServerTip.title) return _dtServerTip; // V143: 服务端预选篇
     var tip = null;
     for (var v = _dtSwapCount; v >= 0; v--) {
         var raw = localStorage.getItem(_dtCacheKey(v));

@@ -1,0 +1,9 @@
+[Unit]
+Description=JiaYaoJi FoodHall auto-publish (generate + audit + pick for tomorrow)
+After=network-online.target jiayaoji.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# 城市可用环境变量覆盖：Environment=JIAYAOJI_CITY=杭州
+ExecStart=/bin/bash /var/www/jiayaoji/deploy/foodhall_autopub.sh

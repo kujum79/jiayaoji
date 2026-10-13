@@ -30,7 +30,7 @@ from urllib.parse import quote, urljoin
 import httpx
 import requests
 from bs4 import BeautifulSoup
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -633,12 +633,19 @@ async def chat(req: ChatRequest) -> Dict[str, str]:
 @app.post("/plan")
 async def plan(req: PlanRequest) -> Dict[str, str]:
     """食谱计划生成接口（前端同源调用，避免 CORS）"""
-    # 前端已构建详细的五维上下文 system_prompt；mode 非默认时在其最前面追加模式侧重指令
-    system_content = get_mode_directive(req.mode) + req.system_prompt
     # V119: 功能标识白名单（只允许小写字母/下划线，防日志污染），缺省 plan
     task_type = (req.task_type or "plan").strip()
     if not re.fullmatch(r"[a-z_]{1,24}", task_type):
         task_type = "plan"
+    # 前端已构建详细的五维上下文 system_prompt；mode 非默认时在其最前面追加模式侧重指令
+    system_content = get_mode_directive(req.mode)
+    # V143: 仅对食谱规划类任务注入食养堂上下文（近7天已选主题防重复 + 近3天未选候选池），
+    # 绝不作用于聊天回复，避免重蹈 V139 无差别污染输出格式的覆辙
+    if "plan" in task_type:
+        foodhall_ctx = _foodhall_plan_context()
+        if foodhall_ctx:
+            system_content += foodhall_ctx + "\n\n"
+    system_content += req.system_prompt
     content = await call_qwen(
         [
             {"role": "system", "content": system_content},
@@ -799,23 +806,39 @@ async def food_hall_generate_drafts(req: FoodHallDraftRequest) -> Dict[str, Any]
     入参 date/city/solarTerm/weather 由前端组装（城市/天气/节气均有现成数据源）。
     禁词命中自动重试 1 次；仍命中则在 violations 标注。前端负责把 drafts 写入
     localStorage foodHallArticles（status=draft）并记 foodHallDrafts 批次。
+    V143: 主体抽到 _foodhall_generate_core，供 22:30 自动发布流水线复用。
     """
     date = (req.date or time.strftime("%Y-%m-%d"))[:10]
+    weather = req.weather if isinstance(req.weather, dict) else {}
+    drafts, violations, regenerated = await _foodhall_generate_core(
+        date, req.city, req.solarTerm, weather
+    )
+    return {"ok": True, "date": date, "regenerated": regenerated,
+            "violations": violations, "drafts": drafts}
+
+
+async def _foodhall_generate_core(
+    date: str, city: str, solar_term: str, weather: Optional[Dict[str, Any]]
+) -> tuple:
+    """V143: 食养堂 3 篇候选生成核心（端点与自动流水线共用）。
+
+    返回 (drafts, violations, regenerated)；格式异常直接抛 502。
+    """
     weather_desc = "未知"
-    if isinstance(req.weather, dict) and req.weather:
+    if isinstance(weather, dict) and weather:
         parts = []
-        if req.weather.get("textDay"):
-            parts.append(str(req.weather["textDay"]))
-        if req.weather.get("tempMax") is not None and req.weather.get("tempMin") is not None:
-            parts.append(f"{req.weather['tempMin']}~{req.weather['tempMax']}℃")
+        if weather.get("textDay"):
+            parts.append(str(weather["textDay"]))
+        if weather.get("tempMax") is not None and weather.get("tempMin") is not None:
+            parts.append(f"{weather['tempMin']}~{weather['tempMax']}℃")
         if parts:
             weather_desc = "，".join(parts)
 
     system_prompt = _FOODHALL_SYSTEM.format(
-        date=date, solar_term=req.solarTerm or "无",
-        weather=f"{req.city or ''} {weather_desc}".strip(),
+        date=date, solar_term=solar_term or "无",
+        weather=f"{city or ''} {weather_desc}".strip(),
     )
-    user_prompt = f"日期：{date}；节气：{req.solarTerm or '无'}；城市：{req.city or '未提供'}。请生成 3 篇食养堂候选内容。"
+    user_prompt = f"日期：{date}；节气：{solar_term or '无'}；城市：{city or '未提供'}。请生成 3 篇食养堂候选内容。"
 
     drafts: List[Dict[str, Any]] = []
     violations: List[Dict[str, Any]] = []
@@ -856,20 +879,25 @@ async def food_hall_generate_drafts(req: FoodHallDraftRequest) -> Dict[str, Any]
             })
         if drafts and not violations:
             break  # 干净即返回；命中禁词则再生成一轮
-    return {"ok": True, "date": date, "regenerated": attempt > 0, "violations": violations, "drafts": drafts}
+    return drafts, violations, attempt > 0
 
 
 @app.post("/api/food-hall/audit")
 async def food_hall_audit(req: FoodHallAuditRequest) -> Dict[str, Any]:
     """V141: 食养堂发布前合规审核——本地关键词优先（0 token），弱信号才调 AI 二次确认。
-
-    流程：1) 黑名单/疾病名/功效短语本地匹配（error 直接拒，0 token）；
-         2) 长度检查（warning，不阻断）；
-         3) 本地干净但命中弱信号词（炎/咳/虚/偏方等）→ AI 语义二次确认。
-    返回 {"ok", "passed", "issues": [{"level", "message"}], "suggestions": []}。
+    V143: 主体抽到 _foodhall_audit_core，自动发布流水线复用同一把尺子。
     """
-    tips_text = " ".join(str(t) for t in (req.tips or []))
-    blob = " ".join([req.title or "", req.summary or "", req.content or "", tips_text])
+    return await _foodhall_audit_core(req.title, req.summary, req.content, req.tips)
+
+
+async def _foodhall_audit_core(
+    title: str, summary: str, content: str, tips: List[str]
+) -> Dict[str, Any]:
+    """审核核心：1) 黑名单/疾病名/功效短语本地匹配（error 直接拒，0 token）；
+    2) 长度检查（warning，不阻断）；3) 弱信号词 → AI 语义二次确认。
+    """
+    tips_text = " ".join(str(t) for t in (tips or []))
+    blob = " ".join([title or "", summary or "", content or "", tips_text])
     issues: List[Dict[str, str]] = []
 
     # 1. 本地硬校验（error，0 token）
@@ -886,8 +914,8 @@ async def food_hall_audit(req: FoodHallAuditRequest) -> Dict[str, Any]:
         return {"ok": True, "passed": False, "issues": issues, "suggestions": []}
 
     # 2. 长度检查（warning，不阻断）
-    title_len = len((req.title or "").strip())
-    content_len = len((req.content or "").strip())
+    title_len = len((title or "").strip())
+    content_len = len((content or "").strip())
     if title_len > 15:
         issues.append({"level": "warning", "message": f"标题 {title_len} 字，建议 15 字内"})
     if content_len < 150:
@@ -898,17 +926,17 @@ async def food_hall_audit(req: FoodHallAuditRequest) -> Dict[str, Any]:
     # 3. 弱信号 → AI 语义二次确认
     if any(k in blob for k in _FOODHALL_WEAK):
         try:
-            content = await call_qwen(
+            ai_content = await call_qwen(
                 [
                     {"role": "system", "content": _FOODHALL_AUDIT_SYSTEM},
-                    {"role": "user", "content": f"【标题】{req.title or ''}\n【摘要】{req.summary or ''}\n【正文】{req.content or ''}\n【小贴士】{tips_text}"},
+                    {"role": "user", "content": f"【标题】{title or ''}\n【摘要】{summary or ''}\n【正文】{content or ''}\n【小贴士】{tips_text}"},
                 ],
                 json_mode=True,
                 max_tokens=512,
                 task_type="foodhall_audit",
                 timeout=90.0,
             )
-            parsed = extract_json_object(content)
+            parsed = extract_json_object(ai_content)
             if isinstance(parsed, dict) and not parsed.get("passed"):
                 issues.append({"level": "error", "message": str(parsed.get("reason") or "AI审核未通过")})
         except Exception as exc:  # AI 层异常不阻塞发布（本地层已通过），降级放行
@@ -920,6 +948,403 @@ async def food_hall_audit(req: FoodHallAuditRequest) -> Dict[str, Any]:
         "issues": issues,
         "suggestions": [],
     }
+
+
+# ========== V143: 食养堂自动发布流水线（22:30 生成→审核→选篇入库，次日首页直接展示） ==========
+import secrets as _secrets
+import sqlite3 as _sqlite3
+from datetime import date as _date_cls, datetime as _dt_cls, timedelta as _td_cls
+
+_FH_DATA_DIR = Path(__file__).parent / "data"
+_FH_DB_PATH = _FH_DATA_DIR / "jiayaoji.db"
+
+# 2026 节气日期表（与前端 SOLAR_TERMS_2026 一致）；相邻年份仅 ±1 天漂移，匹配容差 1 天
+_FH_TERMS = [
+    ("01-05", "小寒"), ("01-20", "大寒"), ("02-04", "立春"), ("02-19", "雨水"),
+    ("03-05", "惊蛰"), ("03-20", "春分"), ("04-05", "清明"), ("04-20", "谷雨"),
+    ("05-05", "立夏"), ("05-21", "小满"), ("06-05", "芒种"), ("06-21", "夏至"),
+    ("07-07", "小暑"), ("07-23", "大暑"), ("08-07", "立秋"), ("08-23", "处暑"),
+    ("09-07", "白露"), ("09-23", "秋分"), ("10-08", "寒露"), ("10-23", "霜降"),
+    ("11-07", "立冬"), ("11-22", "小雪"), ("12-07", "大雪"), ("12-22", "冬至"),
+]
+
+
+def _fh_solar_term(date_str: str) -> str:
+    """按节气表匹配 date 当天（±1 天容差，覆盖跨年日期漂移）；无命中返回空串。"""
+    try:
+        d = _dt_cls.strptime(date_str, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return ""
+    for mmdd, name in _FH_TERMS:
+        try:
+            term_day = d.replace(month=int(mmdd[:2]), day=int(mmdd[3:]))
+        except ValueError:
+            continue
+        if abs((d - term_day).days) <= 1:
+            return name
+    return ""
+
+
+def _internal_token() -> str:
+    """内部定时任务令牌：环境变量优先，否则首次自动生成落到 data/.internal_token（仅本机定时任务读取）。"""
+    env = os.environ.get("JIAYAOJI_INTERNAL_TOKEN", "").strip()
+    if env:
+        return env
+    token_file = _FH_DATA_DIR / ".internal_token"
+    if token_file.exists():
+        tok = token_file.read_text(encoding="utf-8").strip()
+        if tok:
+            return tok
+    _FH_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    tok = _secrets.token_hex(24)
+    token_file.write_text(tok, encoding="utf-8")
+    try:
+        token_file.chmod(0o600)
+    except OSError:
+        pass
+    return tok
+
+
+def _fh_db():
+    """SQLite 连接（标准库零依赖），首次调用自动建表。"""
+    _FH_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    conn = _sqlite3.connect(str(_FH_DB_PATH), timeout=10)
+    conn.row_factory = _sqlite3.Row
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS food_hall_pub_days (
+            publish_date   TEXT PRIMARY KEY,
+            category       TEXT DEFAULT '',
+            title          TEXT DEFAULT '',
+            summary        TEXT DEFAULT '',
+            content        TEXT DEFAULT '',
+            tips           TEXT DEFAULT '[]',
+            related        TEXT DEFAULT '[]',
+            drafts         TEXT DEFAULT '[]',
+            chosen_id      TEXT DEFAULT '',
+            auto_published INTEGER DEFAULT 1,
+            review_status  TEXT DEFAULT 'pending',
+            run_note       TEXT DEFAULT '',
+            created_at     TEXT DEFAULT '',
+            updated_at     TEXT DEFAULT ''
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS food_hall_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            publish_date TEXT DEFAULT '',
+            status       TEXT DEFAULT '',
+            note         TEXT DEFAULT '',
+            payload      TEXT DEFAULT '[]',
+            created_at   TEXT DEFAULT ''
+        )
+        """
+    )
+    conn.commit()
+    return conn
+
+
+@app.on_event("startup")
+def _fh_startup_init() -> None:
+    """V143: 启动即建表 + 生成内部令牌文件（供本机 22:30 定时任务读取，避免鉴权鸡生蛋问题）。"""
+    try:
+        _internal_token()
+        _fh_db().close()
+    except Exception as exc:
+        print(f"[foodhall] 启动初始化失败: {exc}")
+
+
+def _fh_record_run(pub_date: str, status: str, note: str, audited: List[Dict[str, Any]]) -> None:
+    """流水线审计日志（含全部候选与不通过原因），供超管排查使用。"""
+    try:
+        with _fh_db() as conn:
+            conn.execute(
+                "INSERT INTO food_hall_runs (publish_date, status, note, payload, created_at) "
+                "VALUES (?,?,?,?,?)",
+                (pub_date, status, note[:500],
+                 json.dumps(audited, ensure_ascii=False)[:20000],
+                 _dt_cls.now().strftime("%Y-%m-%d %H:%M:%S")),
+            )
+    except Exception as exc:
+        print(f"[foodhall] run 日志写入失败: {exc}")
+
+
+def _fh_row_to_article(row) -> Dict[str, Any]:
+    """DB 行 → 前端 tip 结构（与 foodHallArticles 卡片渲染字段对齐）。"""
+    try:
+        tips = json.loads(row["tips"] or "[]")
+    except json.JSONDecodeError:
+        tips = []
+    return {
+        "id": f"autotip_{(row['publish_date'] or '').replace('-', '')}",
+        "date": row["publish_date"],
+        "category": row["category"] or "节气食养",
+        "title": row["title"] or "",
+        "summary": row["summary"] or "",
+        "content": row["content"] or "",
+        "tips": tips if isinstance(tips, list) else [],
+        "relatedIngredients": [],
+        "autoPublished": bool(row["auto_published"]),
+        "reviewStatus": row["review_status"] or "pending",
+    }
+
+
+def _fh_get_published_row(date_str: str):
+    """取某日已发布行（不存在或空内容返回 None）。"""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str or ""):
+        return None
+    try:
+        with _fh_db() as conn:
+            return conn.execute(
+                "SELECT * FROM food_hall_pub_days WHERE publish_date=? "
+                "AND title<>'' AND COALESCE(review_status,'')<>'withdrawn'",
+                (date_str,),
+            ).fetchone()
+    except Exception as exc:
+        print(f"[foodhall] 读取已发布内容失败: {exc}")
+        return None
+
+
+def _fh_pick_score(article: Dict[str, Any], recent_cats: List[str], index: int) -> float:
+    """选篇打分：主题不与近 3 天重复 > 时效性（节气/天气类）> 正文篇幅适中 > 双小贴士。
+    同分时靠 index 微差保持生成顺序（第 1 篇通常挂靠节气，时效性最强）。"""
+    score = 1.0 - index * 0.01
+    if article.get("category") not in recent_cats:
+        score += 2.0
+    if article.get("category") in ("节气食养", "天气食养"):
+        score += 1.5
+    content_len = len(article.get("content") or "")
+    if 180 <= content_len <= 320:
+        score += 1.0
+    elif 150 <= content_len <= 420:
+        score += 0.5
+    if len(article.get("tips") or []) == 2:
+        score += 0.5
+    return score
+
+
+class FoodHallAutoPublishRequest(BaseModel):
+    date: str = ""               # 展示日期，缺省=明天
+    city: str = ""
+    solarTerm: str = ""
+    weather: Optional[Dict[str, Any]] = None
+    force: bool = False          # 强制覆盖（即使超管已确认）
+
+
+@app.post("/api/food-hall/auto-publish", include_in_schema=False)
+async def food_hall_auto_publish(
+    req: FoodHallAutoPublishRequest,
+    x_internal_token: str = Header(default=""),
+) -> Dict[str, Any]:
+    """V143: 定时流水线（22:30 由本机 cron/计划任务调用，仅认 X-Internal-Token）。
+
+    生成 3 篇 → 逐篇合规审核 → 打分选 1 篇 → 写入 food_hall_pub_days（展示日期=明天）。
+    幂等：超管已确认(review_status=confirmed)的日期默认跳过；全部审核不通过则不发布，
+    仅写 food_hall_runs 审计记录，等超管当天手工处理。
+    """
+    if not x_internal_token or not _secrets.compare_digest(x_internal_token, _internal_token()):
+        raise HTTPException(status_code=403, detail="禁止访问：内部令牌无效")
+
+    pub_date = (req.date or "").strip()
+    if not pub_date:
+        pub_date = (_date_cls.today() + _td_cls(days=1)).strftime("%Y-%m-%d")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", pub_date):
+        raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
+
+    now_iso = _dt_cls.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 已存在且已被超管确认 → 不覆盖人工干预
+    try:
+        with _fh_db() as conn:
+            existed = conn.execute(
+                "SELECT review_status FROM food_hall_pub_days WHERE publish_date=?",
+                (pub_date,),
+            ).fetchone()
+        if existed and existed["review_status"] == "confirmed" and not req.force:
+            return {"ok": True, "published": False, "skipped": True,
+                    "reason": "超管已确认，跳过自动覆盖", "date": pub_date}
+    except Exception as exc:
+        print(f"[foodhall] 预检失败: {exc}")
+
+    term = (req.solarTerm or "").strip() or _fh_solar_term(pub_date)
+    try:
+        drafts, violations, regenerated = await _foodhall_generate_core(
+            pub_date, req.city, term, req.weather if isinstance(req.weather, dict) else {}
+        )
+    except HTTPException as exc:
+        _fh_record_run(pub_date, "error", f"生成失败: {exc.detail}", [])
+        raise
+
+    # 逐篇审核（与超管发布前同一把尺子）
+    audited: List[Dict[str, Any]] = []
+    for d in drafts:
+        audit = await _foodhall_audit_core(
+            d.get("title", ""), d.get("summary", ""), d.get("content", ""), d.get("tips", [])
+        )
+        audited.append({**d, "audit": audit})
+
+    passed = [a for a in audited if a.get("audit", {}).get("passed")]
+    note = f"生成{len(drafts)}篇，通过{len(passed)}篇" + ("，触发禁词重试" if regenerated else "")
+    if violations:
+        note += f"，禁词提示{len(violations)}处"
+
+    if not passed:
+        _fh_record_run(pub_date, "no_pass", note + "；无合格候选，不自动发布", audited)
+        return {"ok": True, "published": False, "passed": 0, "total": len(drafts),
+                "date": pub_date, "solarTerm": term, "note": note}
+
+    # 近 3 天已选类别，避免主题/品类连撞
+    recent_cats: List[str] = []
+    try:
+        with _fh_db() as conn:
+            rows = conn.execute(
+                "SELECT category FROM food_hall_pub_days WHERE title<>'' AND publish_date < ? "
+                "ORDER BY publish_date DESC LIMIT 3",
+                (pub_date,),
+            ).fetchall()
+            recent_cats = [r["category"] for r in rows if r["category"]]
+    except Exception:
+        recent_cats = []
+
+    chosen_idx = max(
+        range(len(audited)),
+        key=lambda i: _fh_pick_score(audited[i], recent_cats, i)
+        if audited[i].get("audit", {}).get("passed") else -999,
+    )
+    chosen = dict(audited[chosen_idx])
+    chosen_score = round(_fh_pick_score(chosen, recent_cats, chosen_idx), 2)
+
+    # upsert（重跑同一日期覆盖旧的自动结果）
+    try:
+        with _fh_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO food_hall_pub_days
+                  (publish_date, category, title, summary, content, tips, related, drafts,
+                   chosen_id, auto_published, review_status, run_note, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,1,'pending',?,?,?)
+                ON CONFLICT(publish_date) DO UPDATE SET
+                  category=excluded.category, title=excluded.title, summary=excluded.summary,
+                  content=excluded.content, tips=excluded.tips, related=excluded.related,
+                  drafts=excluded.drafts, chosen_id=excluded.chosen_id, auto_published=1,
+                  review_status='pending', run_note=excluded.run_note, updated_at=excluded.updated_at
+                """,
+                (pub_date, chosen.get("category", ""), chosen.get("title", ""),
+                 chosen.get("summary", ""), chosen.get("content", ""),
+                 json.dumps(chosen.get("tips", []), ensure_ascii=False), "[]",
+                 json.dumps(audited, ensure_ascii=False), chosen.get("id", ""),
+                 note, now_iso, now_iso),
+            )
+    except Exception as exc:
+        _fh_record_run(pub_date, "error", f"入库失败: {exc}", audited)
+        raise HTTPException(status_code=500, detail=f"自动发布入库失败: {exc}")
+
+    _fh_record_run(pub_date, "published", f"{note}；选中《{chosen.get('title')}》", audited)
+    return {
+        "ok": True, "published": True, "date": pub_date, "solarTerm": term,
+        "chosen": {"id": chosen.get("id"), "category": chosen.get("category"),
+                   "title": chosen.get("title"), "score": chosen_score},
+        "passed": len(passed), "total": len(drafts), "note": note,
+    }
+
+
+@app.get("/api/food-hall/published", include_in_schema=False)
+async def food_hall_get_published(date: str = "") -> Dict[str, Any]:
+    """首页读取某日服务端预选内容（超管手动发布在浏览器 localStorage，本接口是自动流水线渠道）。"""
+    date = (date or time.strftime("%Y-%m-%d"))[:10]
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        return {"ok": False, "error": "日期格式应为 YYYY-MM-DD"}
+    row = _fh_get_published_row(date)
+    if not row:
+        return {"ok": True, "published": False, "date": date}
+    return {"ok": True, "published": True, "date": date, "article": _fh_row_to_article(row)}
+
+
+class FoodHallReviewRequest(BaseModel):
+    date: str
+    action: str = ""  # confirm 确认保留 | withdraw 撤回换篇
+
+
+@app.post("/api/food-hall/review", include_in_schema=False)
+async def food_hall_review(req: FoodHallReviewRequest) -> Dict[str, Any]:
+    """V143: 超管次日复核 AI 预选篇——confirm 确认保留 / withdraw 撤回（首页立即不再展示）。
+
+    鉴权沿用前端超管口令门（与全站管理操作同一信任模型），每次操作写 food_hall_runs 审计。
+    """
+    pub_date = (req.date or "").strip()
+    action = (req.action or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", pub_date):
+        raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
+    if action not in ("confirm", "withdraw"):
+        raise HTTPException(status_code=400, detail="action 仅支持 confirm/withdraw")
+    new_status = "confirmed" if action == "confirm" else "withdrawn"
+    now_iso = _dt_cls.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        with _fh_db() as conn:
+            cur = conn.execute(
+                "UPDATE food_hall_pub_days SET review_status=?, updated_at=? "
+                "WHERE publish_date=? AND title<>''",
+                (new_status, now_iso, pub_date),
+            )
+            if cur.rowcount == 0:
+                return {"ok": False, "error": "该日期没有可复核的自动发布内容"}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"复核操作失败: {exc}")
+    _fh_record_run(pub_date, f"review_{new_status}", f"超管执行 {action}", [])
+    return {"ok": True, "date": pub_date, "reviewStatus": new_status}
+
+
+def _foodhall_plan_context() -> str:
+    """V143: 给 /api/plan 注入食养堂上下文——
+    近 7 天已选主题（避免重复）+ 近 3 天未选用但审核通过的候选标题（3/7 天规划可参考）。
+    审核不通过的内容永不进入规划上下文。无数据返回空串。"""
+    try:
+        today = _date_cls.today()
+        d7 = (today - _td_cls(days=6)).strftime("%Y-%m-%d")
+        d3 = (today - _td_cls(days=2)).strftime("%Y-%m-%d")
+        today_s = today.strftime("%Y-%m-%d")
+        with _fh_db() as conn:
+            rows = conn.execute(
+                "SELECT publish_date, title, category, drafts, chosen_id FROM food_hall_pub_days "
+                "WHERE title<>'' AND publish_date BETWEEN ? AND ? ORDER BY publish_date",
+                (d7, today_s),
+            ).fetchall()
+    except Exception:
+        return ""
+    if not rows:
+        return ""
+    selected = [f"{r['publish_date'][5:]} {r['category']}《{r['title']}》" for r in rows]
+    pool: List[str] = []
+    for r in rows:
+        if r["publish_date"] < d3:
+            continue
+        try:
+            drafts = json.loads(r["drafts"] or "[]")
+        except json.JSONDecodeError:
+            continue
+        for d in drafts:
+            if not isinstance(d, dict) or d.get("id") == r["chosen_id"]:
+                continue
+            if not (d.get("audit") or {}).get("passed"):
+                continue  # 审核不通过篇不喂规划
+            t = (d.get("title") or "").strip()
+            if t:
+                pool.append(f"{d.get('category') or '食养'}《{t}》")
+    lines: List[str] = []
+    if selected:
+        lines.append("【本周食养堂已选主题】" + "、".join(selected)
+                     + "——规划菜谱时请避免重复这些主题与主打食材。")
+    if pool:
+        seen, uniq = set(), []
+        for p in pool:
+            if p not in seen:
+                seen.add(p)
+                uniq.append(p)
+        lines.append("【食养堂未用候选主题】" + "、".join(uniq[:8])
+                     + "——这些是近 3 天已生成但未选用的合规选题，3 天/7 天食谱规划可优先参考。")
+    return "\n".join(lines)
 
 
 # ========== AI 点菜引擎（V133） ==========
@@ -2072,6 +2497,15 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
         if now_ts <= hit.get("expire", 0):
             return hit["data"]
         _DAILY_TIP_CACHE.pop(cache_key, None)  # 过期清理
+
+    # V143: 首屏（variant=0）优先返回前一天 22:30 流水线预选入库的内容，
+    # 早高峰零 AI 延迟；换一换(variant>0)仍走实时生成
+    if req.variant == 0:
+        pub_row = _fh_get_published_row(date_str)
+        if pub_row:
+            pub_result = _fh_row_to_article(pub_row)
+            _DAILY_TIP_CACHE[cache_key] = {"expire": _daily_tip_expire_ts(date_str), "data": pub_result}
+            return pub_result
 
     # 选题上下文：天气描述行
     weather_line = "未提供"
