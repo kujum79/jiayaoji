@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V147-20261014c';
+        var APP_VER = 'V148-20261014d';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -4579,6 +4579,14 @@
                                 </select>
                             </div>
                             <input type="text" id="famDiet" placeholder="饮食要求（如：喜欢吃牛肉，不吃葱姜）" style="padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
+                            <!-- V148: 饮食偏好（喜欢/不喜欢/关注/其他备注，存 member.preference） -->
+                            <div style="border-top:1px dashed #FED7AA; margin-top:6px; padding-top:6px;">
+                                <div style="font-size:13px; font-weight:600; color:#9A3412; margin-bottom:4px;">🍽️ 饮食偏好</div>
+                                <input type="text" id="famPrefLikes" placeholder="喜欢的（逗号分隔，如：红烧肉、川菜）" style="width:100%; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; box-sizing:border-box;">
+                                <input type="text" id="famPrefDislikes" placeholder="不喜欢的（逗号分隔，如：苦瓜、香菜）" style="width:100%; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; margin-top:4px; box-sizing:border-box;">
+                                <input type="text" id="famPrefConcerns" placeholder="饮食关注（如：少油少盐）" style="width:100%; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; margin-top:4px; box-sizing:border-box;">
+                                <textarea id="famPrefNotes" placeholder="其他备注" rows="2" style="width:100%; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; margin-top:4px; box-sizing:border-box; resize:vertical; font-family:inherit;"></textarea>
+                            </div>
                             <!-- 健康画像 -->
                             <div style="border-top:1px dashed #FED7AA; margin-top:6px; padding-top:6px;">
                                 <div style="font-size:13px; font-weight:600; color:#9A3412; margin-bottom:4px;">🏃 健康画像</div>
@@ -29364,6 +29372,38 @@ function renderGrowthTreeAndBadges(hostId, where) {
     host.insertAdjacentHTML(where || 'afterbegin', html);
 }
 
+// V148: 成员饮食偏好工具函数——member.preference = { likes:[], dislikes:[], concerns:"", notes:"" }
+// 逗号分隔文本 → 去重去空数组（兼容中英文逗号、顿号、分号）
+function _parsePrefList(text) {
+    var out = [];
+    String(text || '').split(/[,，、;；]/).forEach(function(s) {
+        s = s.trim();
+        if (s && out.indexOf(s) === -1) out.push(s);
+    });
+    return out;
+}
+// 从表单 4 个字段读取 preference 对象（编辑传 ('editPref', id)，添加传 ('famPref')）
+function _readPrefFromForm(prefix, idSuffix) {
+    function val(elId) { var el = document.getElementById(elId); return el ? el.value : ''; }
+    var sfx = idSuffix ? ('_' + idSuffix) : '';
+    return {
+        likes: _parsePrefList(val(prefix + 'Likes' + sfx)),
+        dislikes: _parsePrefList(val(prefix + 'Dislikes' + sfx)),
+        concerns: val(prefix + 'Concerns' + sfx).trim(),
+        notes: val(prefix + 'Notes' + sfx).trim()
+    };
+}
+// 成员卡片摘要：喜欢：… · 不喜欢：… · 关注：…（无内容返回空串）
+function _memberPreferenceSummary(member) {
+    var p = member && member.preference;
+    if (!p) return '';
+    var parts = [];
+    if (Array.isArray(p.likes) && p.likes.length) parts.push('喜欢：' + p.likes.join('、'));
+    if (Array.isArray(p.dislikes) && p.dislikes.length) parts.push('不喜欢：' + p.dislikes.join('、'));
+    if (p.concerns) parts.push('关注：' + p.concerns);
+    return parts.join(' · ');
+}
+
 function renderFamily() {
     try {
     // 未登录浏览模式: 不渲染任何家庭成员/就餐组/家庭码信息(默认成员含"老公、儿子", 属于演示数据,
@@ -29481,6 +29521,7 @@ function renderFamily() {
             <div class="member-info">
                 <div class="detail"><span style="font-weight:500;color:#374151;">👪 小家</span> ${constitution ? '<span class="constitution-tag" style="margin-left:0;margin-right:6px;">' + escapeHtml(constitution) + '</span>' : ''}口味：${selMember.taste || ''}</div>
                 <div class="detail" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><select id="familyMemberSelector" style="padding:2px 5px;border:1px solid #FED7AA;border-radius:6px;font-size:12px;color:#C2410C;background:#FFFBEB;cursor:pointer;outline:none;max-width:58px;">${xiaojiaMembers.map(m => `<option value="${escapeHtml(m.name)}" ${m.name === selectedFamilyMemberName ? 'selected' : ''}>${escapeHtml(m.name)}${m.role === 'admin' ? ' 🛡️' : ''}</option>`).join('')}</select><span>饮食要求：${selMember.dietaryPreference || '未填写'}</span></div>
+                ${_memberPreferenceSummary(selMember) ? '<div class="detail" style="font-size:12px;color:#9A3412;background:#FFF7ED;border-radius:6px;padding:3px 8px;margin-top:2px;">🍽️ ' + escapeHtml(_memberPreferenceSummary(selMember)) + '</div>' : ''}
             </div>
             <div style="display:flex;gap:6px;align-items:center;">
                 <button data-id="${selMember.id}" class="edit-member" onclick="window.editMemberCard('${selMember.id}')" style="background:none;border:none;color:#F97316;font-size:14px;cursor:pointer;">✎</button>
@@ -29579,6 +29620,14 @@ window.editMemberCard = function(id) {
                         </select>
                     </div>
                     <input type="text" id="editDiet_${id}" value="${member.dietaryPreference||''}" placeholder="饮食要求" style="padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
+                    <!-- V148: 饮食偏好（喜欢/不喜欢/关注/其他备注，存 member.preference） -->
+                    <div style="border-top:1px dashed #FED7AA; margin-top:6px; padding-top:6px;">
+                        <div style="font-size:13px; font-weight:600; color:#9A3412; margin-bottom:4px;">🍽️ 饮食偏好</div>
+                        <input type="text" id="editPrefLikes_${id}" value="${escapeHtml(((member.preference&&member.preference.likes)||[]).join('、'))}" placeholder="喜欢的（逗号分隔，如：红烧肉、川菜）" style="width:100%; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; box-sizing:border-box;">
+                        <input type="text" id="editPrefDislikes_${id}" value="${escapeHtml(((member.preference&&member.preference.dislikes)||[]).join('、'))}" placeholder="不喜欢的（逗号分隔，如：苦瓜、香菜）" style="width:100%; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; margin-top:4px; box-sizing:border-box;">
+                        <input type="text" id="editPrefConcerns_${id}" value="${escapeHtml((member.preference&&member.preference.concerns)||'')}" placeholder="饮食关注（如：少油少盐）" style="width:100%; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; margin-top:4px; box-sizing:border-box;">
+                        <textarea id="editPrefNotes_${id}" placeholder="其他备注" rows="2" style="width:100%; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; margin-top:4px; box-sizing:border-box; resize:vertical; font-family:inherit;">${escapeHtml((member.preference&&member.preference.notes)||'')}</textarea>
+                    </div>
                     <!-- 健康画像 -->
                     <div style="border-top:1px dashed #FED7AA; margin-top:6px; padding-top:6px;">
                         <div style="font-size:13px; font-weight:600; color:#9A3412; margin-bottom:4px;">🏃 健康画像</div>
@@ -29648,6 +29697,8 @@ window.editMemberCard = function(id) {
                 member.healthGoal = document.getElementById('editHealthGoal_' + id).value.trim();
                 member.medicalHistory = document.getElementById('editMedicalHistory_' + id).value.trim();
                 member.activityLevel = document.getElementById('editActivityLevel_' + id).value;
+                // V148: 饮食偏好
+                member.preference = _readPrefFromForm('editPref', id);
                 // 动态字段
                 member.trainingItem = (document.getElementById('editTrainingItem_' + id)||{}).value || '';
                 member.trainingFreq = (document.getElementById('editTrainingFreq_' + id)||{}).value || '';
@@ -59490,12 +59541,14 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
     const healthStartDate = ((document.getElementById('famHealthStartDate')||{}).value || '').trim();
     const healthEndDate = ((document.getElementById('famHealthEndDate')||{}).value || '').trim();
     const healthNote = ((document.getElementById('famHealthNote')||{}).value || '').trim();
+    // V148: 饮食偏好
+    const preference = _readPrefFromForm('famPref');
     familyData.push({
         id: Date.now(), name, age, place, currentCity: city, occupation, workSchedule, taste, dietaryPreference,
         relationship, isFamily, constitution: constitution || '', constitutionDetail: '',
         height, weight, groupType, healthGoal, medicalHistory, activityLevel,
         trainingItem, trainingFreq, pregnancyWeek, diseaseType,
-        healthStartDate, healthEndDate, healthNote
+        healthStartDate, healthEndDate, healthNote, preference
     });
     lsSet('familyData', JSON.stringify(familyData));
     // 将新成员添加到所选就餐组
@@ -59535,6 +59588,11 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
     if (famWsEl) famWsEl.value = '';
     document.getElementById('famTaste').value = '';
     document.getElementById('famDiet').value = '';
+    // V148: 清空饮食偏好字段
+    document.getElementById('famPrefLikes').value = '';
+    document.getElementById('famPrefDislikes').value = '';
+    document.getElementById('famPrefConcerns').value = '';
+    document.getElementById('famPrefNotes').value = '';
     document.getElementById('famConstitution').value = '';
     document.getElementById('famHeight').value = '';
     document.getElementById('famWeight').value = '';
