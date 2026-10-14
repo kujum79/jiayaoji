@@ -16371,7 +16371,7 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
                     if (dishStr.indexOf(w) !== -1) score += 1.5;
                 });
                 // 模式侧重加分（本地兜底也按模式分化；modeReasonMap 无 seasonal —— 当季已作为基础层）
-                var modeReasonMap = { diet: '食疗调理', preference: '口味偏好', nutrition: '营养均衡' };
+                var modeReasonMap = { diet: '时令适宜', preference: '口味偏好', nutrition: '营养均衡' };
                 if (fbBoost.cats && fbBoost.cats.length) {
                     fbBoost.cats.forEach(function(c){ if (cat && cat.indexOf(c) !== -1) score += 6; });
                 }
@@ -21997,7 +21997,7 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                         + '3.至少1-2道家人爱吃的菜；'
                         + '4.不要连续推荐同一道菜（遵守多样性约束）；'
                         + '5.饮食关注的方向要在菜品选择中体现（如少油少盐、清淡等）。'
-                        + '注意：reason 中不要出现治疗、治愈、预防、降低等医疗词汇，用"适合""搭配""时令"等日常表述。';
+                        + '注意：reason 中不要出现治疗、治愈、预防、降低、食疗、改善、疗效等医疗词汇，用"适合""搭配""时令"等日常表述。';
                 }
             } catch(e) { prefSection = ''; }
             var sys = '你是家肴记饮食策划。只返回 JSON：{byDate:{"' + dateKey + '":{"' + mealKey + '":[{dish:"菜名",reason:"15-28字"}]}}}。'
@@ -22027,6 +22027,8 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                 var dishes = res.byDate[dateKey][mealKey].map(function(item){
                     var n = cleanDishName(typeof item === 'string' ? item : (item && (item.dish || item.name)));
                     var reason = (item && typeof item.reason === 'string') ? item.reason : '';
+                    // 输出侧医疗词兜底清洗（双保险，防止 AI 偶发违规）
+                    reason = reason.replace(/治疗|治愈|预防|降低|食疗|改善|疗效|药效|病症|疾病|症状|中药|药方/g, '');
                     return n ? { dish: n, reason: reason.slice(0, 28), ingredients: (DISH_INGREDIENTS[n] && DISH_INGREDIENTS[n].ingredients) || [n] } : null;
                 }).filter(Boolean);
                 if (dishes.length >= Math.min(2, _needN)) {
