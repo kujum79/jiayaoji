@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V152-20261015a';
+        var APP_VER = 'V153-20261015c';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -18909,7 +18909,255 @@ function confirmRecShopping() {
 }
 
 // ====== 菜品详情面板 ======
+// ========== V153 食材用量按用餐人数自动计算 ==========
+// 基准：DISH_INGREDIENTS[菜].perServing / ingredients[].amountPerPerson 均为"单人份"用量
+// 总用量 = 单人份 × 各就餐成员系数之和（按食材类别：主食/高蛋白/其他分别累计）
+window._dishDetailPeople = null;   // 详情弹窗手动人数覆盖；null=自动取当天就餐组
+window._dishDetailPeopleEditOpen = false;
+window._dishDetailState = null;    // {dishName, ings, saved, dateKey, mealType, lastRows, lastCtx}
+
+// 食材归类（仅用于人群系数）：staple 主食 / protein 高蛋白 / other 其他
+function _ingAmountKind(name) {
+    var s = String(name || '');
+    if (/米|面|粉|燕麦|麦片|馒头|包子|饺子|馄饨|饼|粥|红薯|地瓜|土豆|马铃薯|玉米|山药|芋头|吐司|面包|小米|意面|挂面|年糕|杂粮/.test(s)) return 'staple';
+    if (/肉|牛腩|牛肉|猪肉|排骨|猪肝|猪|羊|鸡|鸭|鹅|鱼|虾|蟹|贝|蛋|奶|豆腐|豆干|腐竹|豆皮|鱿鱼|海参|肝/.test(s)) return 'protein';
+    return 'other';
+}
+function _memberAgeNum(m) {
+    if (!m) return null;
+    var a = parseFloat(m.age);
+    return isNaN(a) ? null : a;
+}
+// 婴儿（V151 字段 isInfant 或年龄<1岁）：成人菜谱用量不纳入，辅食单独计算
+function _isInfantDiner(m) {
+    if (!m) return false;
+    if (m.isInfant === true || m.isInfant === 'true') return true;
+    var a = _memberAgeNum(m);
+    return a !== null && a < 1;
+}
+// 体力劳动者（务农、建筑等）：职业字段或文本命中
+function _isManualLaborDiner(m) {
+    if (!m) return false;
+    if (m.occupation === '体力劳动者' || m.role === '体力劳动者') return true;
+    var blob = [m.occupation, m.workSchedule, m.taste, m.dietaryPreference, m.healthConcerns, m.place, m.constitutionDetail].join(' ');
+    return /务农|农民|农活|建筑|工地|工人|搬运|重体力|体力劳动/.test(blob);
+}
+// 单个成员对某类食材的份量系数（互斥优先级：婴儿0 → 老人70+×0.8 → 儿童3-6岁×0.5 → 体力劳动者 主食1.3/蛋白1.2 → 普通1）
+function _memberServingWeight(m, kind) {
+    if (_isInfantDiner(m)) return 0;
+    var age = _memberAgeNum(m);
+    if (age !== null && age >= 70) return 0.8;
+    if (age !== null && age >= 3 && age <= 6) return 0.5;
+    if (_isManualLaborDiner(m)) return (kind === 'staple') ? 1.3 : ((kind === 'protein') ? 1.2 : 1);
+    return 1;
+}
+// 当前就餐组上下文：就餐人数 + 各类食材等效份数 + 调整标签（婴儿不纳入成人餐份数）
+function getMealDinerContext(dateKey) {
+    var names = [];
+    var groupName = '';
+    try {
+        var g = (typeof getDiaryDiningGroup === 'function') ? getDiaryDiningGroup(dateKey) : null;
+        if (g && Array.isArray(g.members)) { names = g.members.slice(); groupName = g.groupName || ''; }
+    } catch (e) {}
+    if (!names.length) {
+        names = (typeof getFamilyMembers === 'function' ? getFamilyMembers() : []).map(function (m) { return m.name; });
+    }
+    var all = names.map(function (nm) {
+        return ((typeof getFamilyMembers === 'function' ? getFamilyMembers() : []).find(function (m) { return m.name === nm; })) || { name: nm };
+    });
+    var eq = { staple: 0, protein: 0, other: 0 };
+    var tags = [];
+    var diners = [];
+    all.forEach(function (m) {
+        if (_isInfantDiner(m)) return;
+        diners.push(m);
+        eq.staple += _memberServingWeight(m, 'staple');
+        eq.protein += _memberServingWeight(m, 'protein');
+        eq.other += _memberServingWeight(m, 'other');
+        var age = _memberAgeNum(m);
+        if (age !== null && age >= 70) tags.push({ name: m.name, text: m.name + ' 70+×0.8' });
+        else if (age !== null && age >= 3 && age <= 6) tags.push({ name: m.name, text: m.name + ' 儿童×0.5' });
+        else if (_isManualLaborDiner(m)) tags.push({ name: m.name, text: m.name + ' 体力×1.2/1.3' });
+    });
+    var infantCount = all.filter(_isInfantDiner).length;
+    if (!diners.length) { eq.staple = eq.protein = eq.other = 1; }
+    // 消除 1.3×2 类浮点尾差（5.8999999999999995 → 5.9）
+    eq.staple = Math.round(eq.staple * 100) / 100;
+    eq.protein = Math.round(eq.protein * 100) / 100;
+    eq.other = Math.round(eq.other * 100) / 100;
+    return {
+        count: diners.length || 1,
+        names: diners.map(function (m) { return m.name; }),
+        groupName: groupName,
+        equivalent: eq,
+        adjusted: tags.length > 0,
+        tags: tags,
+        infantCount: infantCount
+    };
+}
+function _shortFoodUnit(u) {
+    u = String(u || '');
+    if (u === '克') return 'g';
+    if (u === '千克') return 'kg';
+    if (u === '毫升') return 'ml';
+    if (u === '升') return 'L';
+    return u;
+}
+// 数量取整：计数单位（个/颗/根…）四舍五入到整数；克/毫升 ≥20 取整，其余保留 1 位小数
+function _roundFoodAmount(v, unit) {
+    if (!isFinite(v)) return v;
+    if (/^[个颗根条块只尾瓣片把勺袋包盒瓶枚]$/.test(String(unit || ''))) return Math.round(v);
+    if (v >= 20) return Math.round(v);
+    if (v >= 2) return Math.round(v * 10) / 10;
+    return Math.round(v * 100) / 100;
+}
+// 计算一道菜的食材总用量行：[{name, kind, perPerson, unit, unitLabel, total, have}]
+function calcDishAmounts(dishName, ings, savedIngredients, ctx) {
+    ctx = ctx || { count: 1, equivalent: { staple: 1, protein: 1, other: 1 } };
+    var eq = ctx.equivalent || { staple: ctx.count, protein: ctx.count, other: ctx.count };
+    var info = (typeof DISH_INGREDIENTS !== 'undefined') ? (DISH_INGREDIENTS[dishName] || DISH_INGREDIENTS[(dishName || '').trim()]) : null;
+    var baseMap = {};
+    if (info && Array.isArray(info.perServing)) {
+        info.perServing.forEach(function (p) { if (p && p.name) baseMap[normalizeIngredientName(p.name)] = p; });
+    }
+    var savedMap = {};
+    (savedIngredients || []).forEach(function (p) {
+        if (p && p.name) savedMap[normalizeIngredientName(p.name)] = p;
+    });
+    return (ings || []).map(function (ing) {
+        var std = normalizeIngredientName(ing);
+        var kind = _ingAmountKind(ing);
+        var src = savedMap[std] || baseMap[std] || null;
+        var per = NaN, unit = '';
+        if (src) {
+            per = parseFloat(src.quantity != null ? src.quantity : src.amountPerPerson);
+            unit = src.unit || '';
+        }
+        var mult = eq[kind] != null ? eq[kind] : ctx.count;
+        var total = (!isNaN(per) && per > 0) ? _roundFoodAmount(per * mult, unit) : null;
+        return {
+            name: ing, kind: kind,
+            perPerson: isNaN(per) ? null : per,
+            unit: unit, unitLabel: _shortFoodUnit(unit),
+            total: total,
+            have: (typeof checkFridgeHas === 'function') ? checkFridgeHas(ing) : false
+        };
+    });
+}
+// 详情弹窗「人数 + 食材清单 + 加入采购清单」区块
+function _dishAmountBlockHtml(dishName, normalizedIngs, savedIngredients, dateKey, mealType) {
+    window._dishDetailState = { dishName: dishName, ings: normalizedIngs, saved: savedIngredients, dateKey: dateKey, mealType: mealType };
+    var ctx, people;
+    if (window._dishDetailPeople && window._dishDetailPeople > 0) {
+        people = window._dishDetailPeople;
+        ctx = { count: people, equivalent: { staple: people, protein: people, other: people }, adjusted: false, manual: true, tags: [], infantCount: 0, names: [] };
+    } else {
+        ctx = getMealDinerContext(dateKey);
+        people = Math.max(1, ctx.count);
+    }
+    var rows = calcDishAmounts(dishName, normalizedIngs, savedIngredients, ctx);
+    window._dishDetailState.lastRows = rows;
+    window._dishDetailState.lastCtx = ctx;
+
+    var tagHtml = '';
+    if (ctx.manual) {
+        tagHtml = '<div style="font-size:12px;color:#9CA3AF;margin-top:4px;">✋ 手动人数（' + people + '人），未按人群调整；点「按就餐组」恢复自动计算</div>';
+    } else if (ctx.adjusted) {
+        var parts = [];
+        var labor = ctx.tags.filter(function (t) { return /体力/.test(t.text); });
+        var old = ctx.tags.filter(function (t) { return /70/.test(t.text); });
+        var kid = ctx.tags.filter(function (t) { return /儿童/.test(t.text); });
+        if (labor.length) parts.push('体力劳动者 ' + labor.length + ' 人：主食×1.3、高蛋白×1.2');
+        if (old.length) parts.push('70+老人 ' + old.length + ' 人：×0.8');
+        if (kid.length) parts.push('3-6岁儿童 ' + kid.length + ' 人：×0.5');
+        tagHtml = '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:4px 8px;margin-top:4px;">⚖️ 已按人群调整：' + escapeHtml(parts.join('；')) + '</div>';
+    }
+    if (!ctx.manual && ctx.infantCount > 0) {
+        tagHtml += '<div style="font-size:12px;color:#1D4ED8;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:6px;padding:4px 8px;margin-top:4px;">🍼 家中婴儿 ' + ctx.infantCount + ' 人不纳入本菜用量，辅食请按婴儿方案单独准备</div>';
+    }
+
+    var rowsHtml = rows.map(function (r) {
+        var qtyStr = r.total ? ('<b style="color:#9A3412;">' + r.total + r.unitLabel + '</b>') : '<span style="color:#9CA3AF;">适量</span>';
+        return '<div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;border-bottom:1px dashed #F3F4F6;font-size:14px;">'
+            + '<span style="width:14px;flex:none;">' + (r.have ? '✓' : '·') + '</span>'
+            + '<span style="flex:1;">' + escapeHtml(r.name) + '</span>'
+            + '<span>' + qtyStr + '</span></div>';
+    }).join('');
+
+    var editOpen = window._dishDetailPeopleEditOpen;
+    var editorHtml = '<div id="dishPeopleEditor" style="display:' + (editOpen ? 'flex' : 'none') + ';align-items:center;gap:8px;margin-top:8px;">'
+        + '<button type="button" onclick="_dishAdjustPeople(-1)" style="width:30px;height:30px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;font-size:16px;cursor:pointer;">−</button>'
+        + '<b id="dishPeopleEditNum" style="font-size:16px;min-width:24px;text-align:center;">' + people + '</b>'
+        + '<button type="button" onclick="_dishAdjustPeople(1)" style="width:30px;height:30px;border:1px solid #E5E7EB;border-radius:6px;background:#fff;font-size:16px;cursor:pointer;">＋</button>'
+        + '<button type="button" onclick="_dishResetPeople()" style="border:1px solid #E5E7EB;border-radius:6px;background:#F9FAFB;font-size:12px;padding:6px 10px;cursor:pointer;">按就餐组</button>'
+        + '<span style="font-size:12px;color:#9CA3AF;">1-20人</span></div>';
+
+    return '<div id="dishAmountBlock" class="dish-detail-section">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
+        + '<div style="font-size:15px;font-weight:600;color:#374151;">🍽️ 用餐人数：<b id="dishPeopleCount" style="color:#EA5800;">' + people + '</b> 人' + (ctx.groupName ? '<span style="font-size:12px;color:#9CA3AF;font-weight:normal;margin-left:6px;">' + escapeHtml(ctx.groupName) + '</span>' : '') + '</div>'
+        + '<button type="button" onclick="_dishTogglePeopleEdit()" style="border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;">调整人数</button>'
+        + '</div>'
+        + editorHtml + tagHtml
+        + '<div class="dish-detail-section-title" style="margin-top:10px;">🥬 食材清单 <span style="font-size:12px;color:#9CA3AF;font-weight:normal;">（<span id="dishPeopleServing">' + people + '</span>人份）</span></div>'
+        + '<div>' + rowsHtml + '</div>'
+        + '<button type="button" onclick="_addDishToShoppingList()" style="margin-top:10px;width:100%;border:none;background:#EA5800;color:#fff;border-radius:8px;padding:10px;font-size:14px;font-weight:600;cursor:pointer;">🛒 加入采购清单</button>'
+        + '</div>';
+}
+// 仅局部重算用量区块（AI 生成的做法步骤不受影响）
+function _dishRerenderAmountBlock() {
+    var st = window._dishDetailState;
+    var el = document.getElementById('dishAmountBlock');
+    if (!st || !el) return;
+    el.outerHTML = _dishAmountBlockHtml(st.dishName, st.ings, st.saved, st.dateKey, st.mealType);
+}
+function _dishTogglePeopleEdit() {
+    window._dishDetailPeopleEditOpen = !window._dishDetailPeopleEditOpen;
+    _dishRerenderAmountBlock();
+}
+function _dishAdjustPeople(delta) {
+    var cur = window._dishDetailPeople;
+    if (!(cur > 0)) cur = Math.max(1, (window._dishDetailState && window._dishDetailState.lastCtx) ? window._dishDetailState.lastCtx.count : 1);
+    cur = Math.max(1, Math.min(20, cur + delta));
+    window._dishDetailPeople = cur;
+    _dishRerenderAmountBlock();
+}
+function _dishResetPeople() {
+    window._dishDetailPeople = null;
+    window._dishDetailPeopleEditOpen = false;
+    _dishRerenderAmountBlock();
+}
+// 把当前菜的计算用量加入「食材准备」采购清单（同名同单位累加）
+function _addDishToShoppingList() {
+    var st = window._dishDetailState;
+    if (!st || !st.lastRows) { showToast('暂无用量数据'); return; }
+    var prep = window._prep || (window._prep = {});
+    if (!Array.isArray(prep.extraItems)) prep.extraItems = [];
+    if (!prep.selectedItems) prep.selectedItems = {};
+    if (!prep.overrides) prep.overrides = {};
+    var added = 0, merged = 0;
+    st.lastRows.forEach(function (r) {
+        if (!r.total) return;  // 适量类调料不加入
+        var name = r.name, unit = r.unit || '', qty = r.total;
+        var hit = prep.extraItems.find(function (e) { return e && e.name === name && String(e.unit || '') === unit; });
+        if (hit) {
+            hit.qty = _roundFoodAmount((parseFloat(hit.qty) || 0) + qty, unit);
+            merged++;
+        } else {
+            var unitPrice = (typeof estimatePrepPrice === 'function') ? estimatePrepPrice(name, 1, unit) : 0;
+            prep.extraItems.push({ name: name, qty: qty, unit: unit, unitPrice: unitPrice || 0 });
+            added++;
+        }
+        prep.selectedItems[name] = true;
+        if (prep.deleted) prep.deleted[name] = false;
+    });
+    var n = st.lastCtx ? st.lastCtx.count : '';
+    if (added + merged > 0) showToast('🛒 已加入采购清单（' + n + '人份）：新增 ' + added + ' 种' + (merged ? '，合并 ' + merged + ' 种' : '') + '，可在「食材准备」页查看');
+    else showToast('该菜暂无具体用量，未能加入');
+}
+
 function showDishDetail(dishName, dateKey, mealType) {
+    window._dishDetailPeople = null;
+    window._dishDetailPeopleEditOpen = false;
     let overlay = document.getElementById('dishDetailOverlay');
     if (!overlay) {
         overlay = document.createElement('div');
@@ -19056,49 +19304,23 @@ function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra
             normalizedIngs.push(stdName);
         }
     });
-    // 获取食材用量（按当前就餐人数）
-    const detailServings = (typeof getDiaryDiningGroup === 'function' && getDiaryDiningGroup()) ? getDiaryDiningGroup().members.length : 2;
-    const ingWithQty = normalizedIngs.map(ing => {
-        const have = checkFridgeHas(ing);
-        let qty = '', unit = '';
-        // 1. 优先使用 savedIngredients（来自 dishMeta，AI 批量获取的用量）
-        if (savedIngredients && Array.isArray(savedIngredients) && savedIngredients.length > 0) {
-            const match = savedIngredients.find(p => (p.name === ing || normalizeIngredientName(p.name) === ing));
-            if (match) {
-                qty = Math.round((match.quantity || 0) * detailServings * 10) / 10;
-                unit = match.unit || '';
-            }
-        }
-        // 2. 若无 savedIngredients 匹配，从 DISH_INGREDIENTS 数据库取
-        if (!qty) {
-            const ingInfo = (typeof DISH_INGREDIENTS !== 'undefined') ? (DISH_INGREDIENTS[dishName] || DISH_INGREDIENTS[dishName.trim()]) : null;
-            if (ingInfo && ingInfo.perServing) {
-                const match = ingInfo.perServing.find(p => p.name === ing || normalizeIngredientName(p.name) === ing);
-                if (match) {
-                    qty = Math.round((match.quantity || 0) * detailServings * 10) / 10;
-                    unit = match.unit || '';
-                }
-            }
-        }
-        const qtyStr = qty ? `${qty}${unit}` : '';
-        return `<span class="dish-detail-ingredient${have ? '' : ' missing'}">${have ? '✓' : '✗'} ${escapeHtml(ing)}${qtyStr ? ` <b style="color:#9A3412;">${qtyStr}</b>` : ''}</span>`;
-    }).join('');
+    // V153：食材用量区块（人数自动读取就餐组，含人群系数、调整人数、加入采购清单）
+    const detailServings = Math.max(1, getMealDinerContext(extra.dateKey).count);
+    var amountBlockHtml = _dishAmountBlockHtml(dishName, normalizedIngs, savedIngredients, extra.dateKey, extra.mealType);
+    var _amountRows0 = (window._dishDetailState && window._dishDetailState.lastRows) || [];
+    var hasAnyQty = _amountRows0.some(function (r) { return r.total; });
 
     // AI 兜底：如果所有食材都没有用量（既无 savedIngredients 也无 DISH_INGREDIENTS 命中），异步调AI补全
-    var hasAnyQty = ingWithQty.indexOf('<b') >= 0;
     if (!hasAnyQty && !savedIngredients) {
         getDishIngredientsAI(dishName, detailServings).then(function(aiList) {
             if (!aiList || !aiList.length) return;
-            var aiMap = {};
-            aiList.forEach(function(p) { aiMap[normalizeIngredientName(p.name)] = p; });
-            var updatedHtml = normalizedIngs.map(function(ing) {
-                var have = checkFridgeHas(ing);
-                var ai = aiMap[ing] || aiMap[normalizeIngredientName(ing)];
-                var qtyStr = ai ? (ai.quantity + ai.unit) : '';
-                return '<span class="dish-detail-ingredient' + (have ? '' : ' missing') + '">' + (have ? '✓' : '✗') + ' ' + escapeHtml(ing) + (qtyStr ? ' <b style="color:#9A3412;">' + qtyStr + '</b>' : '') + '</span>';
-            }).join('');
-            var ingSection = body.querySelector('.dish-detail-section');
-            if (ingSection) ingSection.innerHTML = '<div class="dish-detail-section-title">🥬 所需食材 <span style="font-size:12px;color:#9CA3AF;font-weight:normal;">（' + detailServings + '人份 · AI生成）</span></div><div>' + updatedHtml + '</div>';
+            // AI 返回的是 detailServings 人份的总量，换算回单人份后走统一计算
+            var perPersonList = aiList.map(function (p) {
+                return { name: p.name, quantity: Math.round(((p.quantity || 0) / detailServings) * 100) / 100, unit: p.unit || '' };
+            });
+            var st = window._dishDetailState;
+            var box = document.getElementById('dishAmountBlock');
+            if (st && box) box.outerHTML = _dishAmountBlockHtml(st.dishName, st.ings, perPersonList, st.dateKey, st.mealType);
         }).catch(function(){});
     }
 
@@ -19165,10 +19387,7 @@ function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra
         ${reasonHtml}
         ${suitableHtml}
         ${nutritionHtml}
-        <div class="dish-detail-section">
-            <div class="dish-detail-section-title">🥬 所需食材 <span style="font-size:12px;color:#9CA3AF;font-weight:normal;">（${detailServings}人份）</span></div>
-            <div>${ingWithQty}</div>
-        </div>
+        ${amountBlockHtml}
         ${_twReqHtml(dishName)}
         <div class="dish-detail-section">
             <div class="dish-detail-section-title">👨‍🍳 制作步骤</div>
@@ -19219,53 +19438,34 @@ async function generateDishRecipeAI(dishName, savedIngredients) {
         const stepMatch = aiText.match(/【制作步骤】([\s\S]*?)(?=【烹饪技巧】|$)/);
         const tipMatch = aiText.match(/【烹饪技巧】([\s\S]*?)$/);
 
-        // 获取当前就餐人数
-        const aiServings = (typeof getDiaryDiningGroup === 'function' && getDiaryDiningGroup()) ? getDiaryDiningGroup().members.length : 2;
-        const ingDishInfo = (typeof DISH_INGREDIENTS !== 'undefined') ? (DISH_INGREDIENTS[dishName] || DISH_INGREDIENTS[dishName.trim()]) : null;
-
-        function buildIngTag(ingName) {
-            const have = checkFridgeHas(ingName);
-            let qty = '', unit = '';
-            // 1. 优先使用 savedIngredients（来自 dishMeta，AI 批量获取的用量）
-            if (savedIngredients && Array.isArray(savedIngredients) && savedIngredients.length > 0) {
-                const match = savedIngredients.find(p => (p.name === ingName || normalizeIngredientName(p.name) === ingName));
-                if (match) {
-                    qty = Math.round((match.quantity || 0) * aiServings * 10) / 10;
-                    unit = match.unit || '';
-                }
-            }
-            // 2. 若无 savedIngredients 匹配，从 DISH_INGREDIENTS 数据库取
-            if (!qty && ingDishInfo && ingDishInfo.perServing) {
-                const match = ingDishInfo.perServing.find(p => p.name === ingName || normalizeIngredientName(p.name) === ingName);
-                if (match) {
-                    qty = Math.round((match.quantity || 0) * aiServings * 10) / 10;
-                    unit = match.unit || '';
-                }
-            }
-            const qtyStr = qty ? `${qty}${unit}` : '';
-            return `<span class="dish-detail-ingredient${have ? '' : ' missing'}">${have ? '✓' : '✗'} ${escapeHtml(ingName)}${qtyStr ? ` <b style="color:#9A3412;">${qtyStr}</b>` : ''}</span>`;
-        }
-
-        let ingHtml = '';
+        // V153：解析AI给出的食材名（用量以 DISH_INGREDIENTS 单人份/dishMeta 为准，按就餐组人数+人群系数计算）
+        let aiIngs = [];
         if (ingMatch) {
             const rawIngs = ingMatch[1].split(/[,，、\n]/).map(s => s.trim()).filter(s => s.length > 0 && s.length < 25);
-            // 标准化食材名称并去重
-            const aiIngs = [];
             rawIngs.forEach(raw => {
                 const cleanName = cleanIngredientName(raw);
                 if (cleanName.length === 0) return;
                 const stdName = normalizeIngredientName(cleanName);
-                if (!aiIngs.includes(stdName)) {
-                    aiIngs.push(stdName);
-                }
+                if (!aiIngs.includes(stdName)) aiIngs.push(stdName);
             });
-            ingHtml = aiIngs.map(ing => buildIngTag(ing)).join('');
         } else {
             // fallback: 使用getDishIngredients返回的标准化食材
-            ingHtml = ingredients.map(ing => {
-                const stdName = normalizeIngredientName(ing);
-                return buildIngTag(stdName);
-            }).join('');
+            aiIngs = ingredients.map(ing => normalizeIngredientName(ing));
+        }
+        var aiAmountBlockHtml = _dishAmountBlockHtml(dishName, aiIngs, savedIngredients, null, null);
+        var _aiRows0 = (window._dishDetailState && window._dishDetailState.lastRows) || [];
+        var _aiServings0 = Math.max(1, (window._dishDetailState && window._dishDetailState.lastCtx) ? window._dishDetailState.lastCtx.count : 2);
+        if (!_aiRows0.some(function (r) { return r.total; }) && !savedIngredients) {
+            // 本地无单人份基准时，AI 食材用量接口兜底（返回总量→折算单人份→统一计算）
+            getDishIngredientsAI(dishName, _aiServings0).then(function (aiList) {
+                if (!aiList || !aiList.length) return;
+                var perPersonList = aiList.map(function (p) {
+                    return { name: p.name, quantity: Math.round(((p.quantity || 0) / _aiServings0) * 100) / 100, unit: p.unit || '' };
+                });
+                var st = window._dishDetailState;
+                var box = document.getElementById('dishAmountBlock');
+                if (st && box) box.outerHTML = _dishAmountBlockHtml(st.dishName, st.ings, perPersonList, st.dateKey, st.mealType);
+            }).catch(function () {});
         }
 
         let stepsHtml = '';
@@ -19287,10 +19487,7 @@ async function generateDishRecipeAI(dishName, savedIngredients) {
         }
 
         body.innerHTML = `
-            <div class="dish-detail-section">
-                <div class="dish-detail-section-title">🥬 所需食材 <span style="font-size:12px;color:#9CA3AF;font-weight:normal;">（${aiServings}人份）</span></div>
-                <div>${ingHtml}</div>
-            </div>
+            ${aiAmountBlockHtml}
             ${_twReqHtml(dishName)}
             <div class="dish-detail-section">
                 <div class="dish-detail-section-title">👨‍🍳 制作步骤</div>
