@@ -1476,6 +1476,187 @@ def filter_menu_by_rules(menu: List[DishMenuItem], allergens: List[str], ratings
     return kept, removed
 
 
+# ========== V147: 个人饮食偏好·语义提取层（AI 提炼评论/行为/档案 → 结构化偏好） ==========
+
+class ExtractPreferenceRequest(BaseModel):
+    comments: List[str] = Field(default_factory=list)   # 用户近期评论（食记 overallComment/userComment）
+    behavior: Dict[str, Any] = Field(default_factory=dict)  # 前端 behaviorProfile 行为统计
+    familyBrief: str = ""                               # 压缩后的家庭档案文本
+
+
+# 偏好提炼禁词：复用食养堂审核词表（医疗词 + 疾病名 + 功效短语），输出前本地硬过滤兜底
+# 注意："控糖/控油/控盐"是用户行为偏好，允许保留；"降糖/降压"等功效承诺才禁
+_PREF_BANNED_WORDS = list(dict.fromkeys(
+    _FOODHALL_AUDIT_BANNED + _FOODHALL_DISEASES + _FOODHALL_PHRASES
+    + ["功效", "食疗", "药效", "药用", "降糖", "降脂", "降压",
+       "降血糖", "降血脂", "降血压", "血糖高", "血糖偏高"]
+))
+
+_PREF_EXTRACT_SYSTEM = (
+    "你是家庭饮食偏好分析师。请从用户反馈里提炼饮食偏好。\n"
+    "输出要求：\n"
+    "1. likes：用户喜欢的食材、口味、烹饪方式（短语数组）\n"
+    "2. dislikes：用户明确不喜欢的食材、口味、做法（短语数组）\n"
+    "3. concerns：用户的饮食关注点，如少油、控糖、预算、省时、儿童爱吃等（短语数组）\n"
+    "4. familyNotes：家人的特殊偏好，键为家人称呼、值为偏好描述（对象）\n"
+    "规则：\n"
+    "- 只基于用户真实表达，不要推测、不要补充用户没说过的内容\n"
+    "- 禁止医疗词汇（治疗、功效、改善、降低、预防等）\n"
+    "- 禁止提及任何疾病名称\n"
+    "- 没有依据的字段返回空数组/空对象\n"
+    '返回严格 JSON：{"likes": [], "dislikes": [], "concerns": [], "familyNotes": {}}'
+)
+
+
+def _pref_find_banned(text: str) -> List[str]:
+    """返回字符串中命中的违禁词列表。"""
+    return [w for w in _PREF_BANNED_WORDS if w in text]
+
+
+def _pref_coerce_str_list(raw: Any) -> List[str]:
+    """把 AI 返回的数组归一化为去重、去空的短语字符串数组（元素为对象时取 name/desc/text）。"""
+    if not isinstance(raw, list):
+        return []
+    out: List[str] = []
+    for item in raw:
+        if isinstance(item, str):
+            s = item.strip()
+        elif isinstance(item, dict):
+            s = str(item.get("name") or item.get("desc") or item.get("text") or "").strip()
+        else:
+            s = ""
+        if s and s not in out:
+            out.append(s[:50])  # 单条限长，避免 AI 写长句
+    return out[:20]
+
+
+def _pref_coerce_notes(raw: Any) -> Dict[str, str]:
+    """归一化 familyNotes 为 {家人称呼: 偏好描述}；兼容 [{member,note}] 数组形态。"""
+    notes: Dict[str, str] = {}
+    if isinstance(raw, dict):
+        for k, v in raw.items():
+            key = str(k or "").strip()[:20]
+            val = str(v or "").strip()[:100]
+            if key and val:
+                notes[key] = val
+    elif isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                key = str(item.get("member") or item.get("name") or "").strip()[:20]
+                val = str(item.get("note") or item.get("preference") or item.get("desc") or "").strip()[:100]
+                if key and val:
+                    notes[key] = val
+    return notes
+
+
+def _pref_sanitize(result: Dict[str, Any]) -> Dict[str, Any]:
+    """本地硬过滤：丢弃任何含医疗词/疾病名的列表项与 familyNotes 条目（无医疗词汇兜底）。"""
+    likes = [s for s in result.get("likes", []) if not _pref_find_banned(s)]
+    dislikes = [s for s in result.get("dislikes", []) if not _pref_find_banned(s)]
+    concerns = [s for s in result.get("concerns", []) if not _pref_find_banned(s)]
+    notes = {k: v for k, v in result.get("familyNotes", {}).items()
+             if not _pref_find_banned(k) and not _pref_find_banned(v)}
+    return {"likes": likes, "dislikes": dislikes, "concerns": concerns, "familyNotes": notes}
+
+
+def _pref_normalize(parsed: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "likes": _pref_coerce_str_list(parsed.get("likes")),
+        "dislikes": _pref_coerce_str_list(parsed.get("dislikes")),
+        "concerns": _pref_coerce_str_list(parsed.get("concerns")),
+        "familyNotes": _pref_coerce_notes(parsed.get("familyNotes")),
+    }
+
+
+def _pref_has_banned(result: Dict[str, Any]) -> bool:
+    if any(_pref_find_banned(s) for s in result["likes"]):
+        return True
+    if any(_pref_find_banned(s) for s in result["dislikes"]):
+        return True
+    if any(_pref_find_banned(s) for s in result["concerns"]):
+        return True
+    for k, v in result["familyNotes"].items():
+        if _pref_find_banned(k) or _pref_find_banned(v):
+            return True
+    return False
+
+
+@app.post("/api/extract-preference")
+async def extract_preference(req: ExtractPreferenceRequest) -> Dict[str, Any]:
+    """V147: 从用户评论+行为统计+家庭档案中 AI 语义提炼饮食偏好（7 天缓存由前端控制）。
+
+    安全：prompt 禁止医疗词/疾病名 → AI 返回后本地词表扫描，命中则带警告重试 1 次 →
+    仍命中的条目在本地直接丢弃（_pref_sanitize），保证输出无医疗词汇。
+    """
+    comments = [str(c).strip() for c in (req.comments or []) if str(c or "").strip()]
+    behavior = req.behavior if isinstance(req.behavior, dict) else {}
+    family_brief = (req.familyBrief or "").strip()
+    if not comments and not behavior:
+        raise HTTPException(status_code=400, detail="暂无可分析的评论或行为数据")
+
+    comments_text = "\n".join(f"- {c[:200]}" for c in comments[-60:]) or "（暂无评论）"
+    try:
+        behavior_text = json.dumps(behavior, ensure_ascii=False)[:3000] or "{}"
+    except (TypeError, ValueError):
+        behavior_text = "{}"
+
+    prompt = (
+        "你是家庭饮食偏好分析师。请从以下用户反馈里提炼偏好：\n\n"
+        f"【用户近期评论】\n{comments_text}\n\n"
+        f"【已有行为数据】\n{behavior_text}\n\n"
+        f"【家庭档案】\n{family_brief or '普通家庭'}\n\n"
+        "请提炼：\n"
+        "1. 用户喜欢什么（食材、口味、烹饪方式）\n"
+        "2. 用户不喜欢什么\n"
+        "3. 用户有什么饮食关注\n"
+        "4. 家人的特殊偏好\n\n"
+        "要求：\n"
+        "- 只基于用户真实表达，不要推测\n"
+        "- 禁止医疗词汇（治疗、功效、改善、降低）\n"
+        "- 禁止提及疾病名称\n"
+        "- 返回严格 JSON"
+    )
+
+    async def _ask(extra_warning: str = "") -> Dict[str, Any]:
+        user_content = prompt + extra_warning
+        ai_text = await call_qwen(
+            [
+                {"role": "system", "content": _PREF_EXTRACT_SYSTEM},
+                {"role": "user", "content": user_content},
+            ],
+            json_mode=True,
+            max_tokens=1024,
+            task_type="preference_extract",
+            timeout=90.0,
+        )
+        parsed = extract_json_object(ai_text)
+        if not isinstance(parsed, dict):
+            raise HTTPException(status_code=502, detail="AI 返回结构不是 JSON 对象")
+        return _pref_normalize(parsed)
+
+    try:
+        result = await _ask()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"偏好提炼失败：{exc}") from exc
+
+    # 命中医疗词 → 带明确警告重试 1 次
+    if _pref_has_banned(result):
+        try:
+            result = await _ask(
+                "\n\n【重要纠正】你上一次的回答中出现了医疗词汇或疾病名称，这是严格禁止的。"
+                "请重新提炼，确保 likes/dislikes/concerns/familyNotes 中不含任何医疗、功效、疾病相关表述。"
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            print(f"[extract-preference] 重试失败，沿用首条结果并本地净化: {exc}")
+
+    # 本地硬过滤兜底：仍含违禁词的条目直接丢弃
+    return _pref_sanitize(result)
+
+
 @app.post("/recommend-dishes")
 async def recommend_dishes(req: RecommendDishesRequest) -> Dict[str, Any]:
     """V133: AI 点菜引擎——按人数/预算/口味/忌口推荐菜品组合。
