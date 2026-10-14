@@ -749,14 +749,14 @@ _FOODHALL_SYSTEM = (
     '请为家肴记"食养堂"栏目生成 3 篇候选内容。\n'
     "【日期】{date}\n"
     "【节气】{solar_term}\n"
-    "【天气】{weather}\n"
     "\n"
     "生成要求：\n"
-    '1. 3 篇内容主题尽量分散：1 篇挂靠节气或天气（category 用"节气食养"或"天气食养"）；'
+    '1. 3 篇内容主题尽量分散：1 篇挂靠节气或时令（category 用"节气食养"）；'
     '1 篇讲当季食材（category 用"当季食材"）；1 篇讲烹饪技巧或饮食文化（category 用"烹饪技巧"或"饮食文化"）\n'
     "2. 每篇：标题 15 字内、摘要 60 字内、正文 200-300 字、小贴士 2 条（每条 25 字内）\n"
     "3. 语言口语化，像和朋友聊天\n"
-    '4. 可结合近期饮食话题（如"秋燥"）\n'
+    '4. 主题必须全国通用，不得指定或暗示某座城市/地区，不得绑定某地天气（如"杭州降温""北京下雪"等都被禁止）；'
+    '可结合近期全国性饮食话题（如"秋燥""进补"）\n'
     "\n"
     "严格禁止出现这些词：治疗、治愈、改善、降低、预防、功效、食疗、润肺、止咳、降三高、祛湿、排毒。"
     "禁止提及疾病名称，禁止承诺任何功效。\n"
@@ -823,22 +823,12 @@ async def _foodhall_generate_core(
     """V143: 食养堂 3 篇候选生成核心（端点与自动流水线共用）。
 
     返回 (drafts, violations, regenerated)；格式异常直接抛 502。
+    V145: 选题全国通用——city/weather 入参保留以兼容旧调用，但不再注入 prompt。
     """
-    weather_desc = "未知"
-    if isinstance(weather, dict) and weather:
-        parts = []
-        if weather.get("textDay"):
-            parts.append(str(weather["textDay"]))
-        if weather.get("tempMax") is not None and weather.get("tempMin") is not None:
-            parts.append(f"{weather['tempMin']}~{weather['tempMax']}℃")
-        if parts:
-            weather_desc = "，".join(parts)
-
     system_prompt = _FOODHALL_SYSTEM.format(
         date=date, solar_term=solar_term or "无",
-        weather=f"{city or ''} {weather_desc}".strip(),
     )
-    user_prompt = f"日期：{date}；节气：{solar_term or '无'}；城市：{city or '未提供'}。请生成 3 篇食养堂候选内容。"
+    user_prompt = f"日期：{date}；节气：{solar_term or '无'}。请生成 3 篇食养堂候选内容，主题必须全国通用。"
 
     drafts: List[Dict[str, Any]] = []
     violations: List[Dict[str, Any]] = []
@@ -1099,7 +1089,7 @@ def _fh_get_published_row(date_str: str):
         with _fh_db() as conn:
             return conn.execute(
                 "SELECT * FROM food_hall_pub_days WHERE publish_date=? "
-                "AND title<>'' AND COALESCE(review_status,'')<>'withdrawn'",
+                "AND title<>'' AND COALESCE(review_status,'')='confirmed'",
                 (date_str,),
             ).fetchone()
     except Exception as exc:
@@ -1122,7 +1112,22 @@ def _fh_pick_score(article: Dict[str, Any], recent_cats: List[str], index: int) 
         score += 0.5
     if len(article.get("tips") or []) == 2:
         score += 0.5
+    # V145: 城市名/天气词硬扣分（夜间备稿不再注入城市/天气，但 AI 仍可能自塞，需硬扣分兜底）
+    blob = (str(article.get("title", "")) + " " + str(article.get("summary", "")) + " "
+            + str(article.get("content", "")))
+    if any(w in blob for w in _FH_CITY_HINTS):
+        score -= 5.0
+    if any(w in blob for w in _FH_WEATHER_HINTS):
+        score -= 3.0
     return score
+
+
+# V145: 城市词与天气词硬扣分兜底表
+_FH_CITY_HINTS = ["北京", "上海", "杭州", "广州", "深圳", "成都", "重庆", "西安",
+                  "武汉", "南京", "天津", "苏州", "长沙", "青岛", "大连", "宁波",
+                  "厦门", "福州", "哈尔滨", "沈阳", "长春", "昆明", "郑州", "济南"]
+_FH_WEATHER_HINTS = ["降温", "升温", "暴雨", "大雪", "暴雪", "寒潮", "高温", "酷暑",
+                     "梅雨", "台风", "沙尘", "冰雹", "雷雨", "连阴雨", "骤降", "骤升"]
 
 
 class FoodHallAutoPublishRequest(BaseModel):
@@ -1264,7 +1269,7 @@ async def food_hall_get_published(date: str = "") -> Dict[str, Any]:
 
 @app.get("/api/food-hall/published-list", include_in_schema=False)
 async def food_hall_published_list(days: int = 120) -> Dict[str, Any]:
-    """V144: 公共文库·食养堂归档——近 N 天已发布（含超管确认/待复核，不含撤回）。
+    """V144: 公共文库·食养堂归档——近 N 天已发布（仅超管 confirmed）。
 
     只返回 publish_date <= 今天 的记录，避免提前泄露次日预生成稿。
     """
@@ -1275,7 +1280,7 @@ async def food_hall_published_list(days: int = 120) -> Dict[str, Any]:
         with _fh_db() as conn:
             rows = conn.execute(
                 "SELECT * FROM food_hall_pub_days WHERE title<>'' "
-                "AND COALESCE(review_status,'')<>'withdrawn' "
+                "AND COALESCE(review_status,'')='confirmed' "
                 "AND publish_date BETWEEN ? AND ? ORDER BY publish_date DESC",
                 (start_s, today_s),
             ).fetchall()
@@ -1317,6 +1322,64 @@ async def food_hall_review(req: FoodHallReviewRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"复核操作失败: {exc}")
     _fh_record_run(pub_date, f"review_{new_status}", f"超管执行 {action}", [])
     return {"ok": True, "date": pub_date, "reviewStatus": new_status}
+
+
+@app.get("/api/food-hall/pending-list", include_in_schema=False)
+async def food_hall_pending_list() -> Dict[str, Any]:
+    """V145: 超管审稿——返回所有 review_status='pending' 的自动备稿（含今天与明天）。
+
+    供超管管理页"AI 待审" tab 展示。无鉴权（沿用前端超管口令门信任模型）。
+    """
+    try:
+        with _fh_db() as conn:
+            rows = conn.execute(
+                "SELECT * FROM food_hall_pub_days WHERE title<>'' "
+                "AND COALESCE(review_status,'')='pending' "
+                "ORDER BY publish_date DESC",
+            ).fetchall()
+    except Exception as exc:
+        print(f"[foodhall] 待审列表读取失败: {exc}")
+        return {"ok": False, "error": "待审列表读取失败"}
+    return {"ok": True, "articles": [_fh_row_to_article(r) for r in rows]}
+
+
+class FoodHallAutoConfirmRequest(BaseModel):
+    date: str = ""  # 缺省=今天
+
+
+@app.post("/api/food-hall/auto-confirm", include_in_schema=False)
+async def food_hall_auto_confirm(
+    req: FoodHallAutoConfirmRequest,
+    x_internal_token: str = Header(default=""),
+) -> Dict[str, Any]:
+    """V145: 保底自动确认——每天 6:00 由 systemd timer 调用。
+
+    把当天 publish_date 还是 pending 的记录转为 confirmed，保证首页 6:00 后一定有内容。
+    幂等：已是 confirmed/withdrawn 的不动。
+    """
+    if not x_internal_token or not _secrets.compare_digest(x_internal_token, _internal_token()):
+        raise HTTPException(status_code=403, detail="禁止访问：内部令牌无效")
+    pub_date = (req.date or "").strip()
+    if not pub_date:
+        pub_date = _date_cls.today().strftime("%Y-%m-%d")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", pub_date):
+        raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
+    now_iso = _dt_cls.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        with _fh_db() as conn:
+            cur = conn.execute(
+                "UPDATE food_hall_pub_days SET review_status='confirmed', updated_at=? "
+                "WHERE publish_date=? AND title<>'' "
+                "AND COALESCE(review_status,'')='pending'",
+                (now_iso, pub_date),
+            )
+            affected = cur.rowcount
+    except Exception as exc:
+        _fh_record_run(pub_date, "error", f"保底确认失败: {exc}", [])
+        raise HTTPException(status_code=500, detail=f"保底确认失败: {exc}")
+    note = f"保底自动确认 {affected} 篇" if affected else "无可确认记录"
+    _fh_record_run(pub_date, "auto_confirmed", note, [])
+    return {"ok": True, "date": pub_date, "confirmed": affected}
 
 
 def _foodhall_plan_context() -> str:

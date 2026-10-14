@@ -1,0 +1,9 @@
+[Unit]
+Description=JiaYaoJi FoodHall auto-confirm pending drafts at 06:00
+After=network.target jiayaoji.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/var/www/jiayaoji
+ExecStart=/var/www/jiayaoji/deploy/foodhall_autoconfirm.sh
+User=www-data

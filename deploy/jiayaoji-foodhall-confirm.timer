@@ -1,0 +1,11 @@
+[Unit]
+Description=Run JiaYaoJi FoodHall auto-confirm at 06:00
+
+[Timer]
+# 每天 06:00 保底确认今日 pending 备稿；错过则开机补跑
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+Unit=jiayaoji-foodhall-confirm.service
+
+[Install]
+WantedBy=timers.target
