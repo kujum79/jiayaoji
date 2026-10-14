@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V145-20261014a';
+        var APP_VER = 'V146-20261014b';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -7865,6 +7865,7 @@ function familyKey(key) {
         'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
+        'behaviorProfile','dismissedRecommendDishes',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
         if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
@@ -8631,7 +8632,8 @@ function claimGlobalDataForFamily() {
     var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
         'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
-        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate'];
+        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
+        'behaviorProfile','dismissedRecommendDishes'];
     if (!localStorage.getItem(claimFlag)) {
         for (var i = 0; i < familyKeys.length; i++) {
             var k = familyKeys[i];
@@ -8672,7 +8674,8 @@ function exportFamilyData() {
     var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
         'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
-        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate'];
+        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
+        'behaviorProfile','dismissedRecommendDishes'];
     var data = {};
     for (var i = 0; i < familyKeys.length; i++) {
         var k = familyKeys[i];
@@ -8937,6 +8940,189 @@ function _backfillPlanDishMeta(dateKey, mealType) {
         });
         if (dirty) saveDietCalendar(calendar);
     } catch(e) { console.warn('_backfillPlanDishMeta err:', e); }
+}
+
+// ============================================================
+// V146: 个人饮食偏好行为统计层（纯前端聚合，无 AI 调用）
+// 数据源：fridgeItems + purchaseHistory + dietCalendar(actual) + dismissedRecommendDishes
+// 输出落盘 localStorage 键 behaviorProfile（通过 familyKey 自动按家庭隔离）
+// 触发时机：① updateMealActual 后 ② saveFridgeItems 后 ③ 首页每日首次打开（renderHomeCards 入口）
+// ============================================================
+
+// 记录被用户手动从计划中删除的推荐菜（写入 dismissedRecommendDishes，按家庭隔离）
+// 在 removeDishFromMealPlan 内部调用：dateKey/mealType/dishName + plan.dishMeta 中的 source
+function _recordDismissedRecommendDish(dateKey, mealType, dishName, source) {
+    try {
+        if (!dishName) return;
+        var list = [];
+        try { list = JSON.parse(lsGet('dismissedRecommendDishes') || '[]') || []; } catch(e) { list = []; }
+        // 同菜名+同日只记一次（用户可能误操作后再加回来）
+        var exists = list.some(function(x) { return x && x.name === dishName && x.date === dateKey; });
+        if (exists) return;
+        list.push({
+            name: dishName,
+            date: dateKey || '',
+            mealType: mealType || '',
+            source: source || '',
+            deletedAt: Date.now()
+        });
+        // 保留最近 200 条，避免无限增长
+        if (list.length > 200) list = list.slice(-200);
+        lsSet('dismissedRecommendDishes', JSON.stringify(list));
+    } catch(e) { console.warn('_recordDismissedRecommendDish err', e); }
+}
+
+// 构建家庭饮食偏好画像（统计聚合，纯 localStorage 读写，无副作用）
+// familyId 可选；不传则用 getFamilyId()，无家庭则用 'default'
+function buildBehaviorProfile(familyId) {
+    var fid = familyId;
+    if (!fid) {
+        try { fid = getFamilyId() || 'default'; } catch(e) { fid = 'default'; }
+    }
+    var profile = {
+        familyId: fid,
+        updatedAt: Date.now(),
+        frequentIngredients: [],
+        frequentDishes: [],
+        preferredTastes: [],
+        dislikedDishes: [],
+        timePatterns: { breakfast: [], lunch: [], dinner: [], weekend: [] }
+    };
+
+    try {
+        // ---- 1. 高频食材：fridgeItems（家中常备） + purchaseHistory.items（采购记录） ----
+        var ingredientCount = {}; // name -> 累计出现次数
+        var addIngredient = function(name, count) {
+            var n = String(name || '').trim();
+            if (!n) return;
+            ingredientCount[n] = (ingredientCount[n] || 0) + (count || 1);
+        };
+        // 冰箱/家中食材：每条计 1 次（表示该食材在用户家庭出现过）
+        var fridge = [];
+        try { fridge = JSON.parse(lsGet('fridgeItems') || '[]') || []; } catch(e) { fridge = []; }
+        if (Array.isArray(fridge)) {
+            fridge.forEach(function(it) {
+                if (it && it.name) addIngredient(it.name, 1);
+            });
+        }
+        // 采购记录：每条采购按数量累加
+        var purchases = [];
+        try { purchases = JSON.parse(lsGet('purchaseHistory') || '[]') || []; } catch(e) { purchases = []; }
+        if (Array.isArray(purchases)) {
+            purchases.forEach(function(rec) {
+                var items = (rec && rec.items) || [];
+                items.forEach(function(it) {
+                    if (!it) return;
+                    var qty = Number(it.qty || it.count || 0);
+                    addIngredient(it.name, qty > 0 ? qty : 1);
+                });
+            });
+        }
+        profile.frequentIngredients = Object.keys(ingredientCount)
+            .map(function(name) { return { name: name, count: ingredientCount[name] }; })
+            .sort(function(a, b) { return b.count - a.count; })
+            .slice(0, 30);
+
+        // ---- 2/3/5. 遍历 dietCalendar.actual.dishes 收集菜名/口味/时间模式 ----
+        var dishCount = {};          // 菜名 -> 出现次数
+        var tasteCount = {};         // 口味 -> 次数（仅 rating≥4 计入偏好口味）
+        var mealDishCount = { breakfast: {}, lunch: {}, dinner: {}, snack: {} };
+        var weekendDishCount = {};   // 周末菜名 -> 次数
+        var dislikedSet = {};        // 菜名 -> true（rating≤2 视为不爱吃）
+
+        var calendar = {};
+        try { calendar = JSON.parse(lsGet('dietCalendar') || '{}') || {}; } catch(e) { calendar = {}; }
+        Object.keys(calendar).forEach(function(dateStr) {
+            var dayObj = null;
+            try { dayObj = new Date(dateStr + 'T12:00:00'); } catch(e) { dayObj = null; }
+            var isWeekend = !!(dayObj && (dayObj.getDay() === 0 || dayObj.getDay() === 6));
+            var dayData = calendar[dateStr] || {};
+            ['breakfast','lunch','dinner','snack'].forEach(function(mealKey) {
+                var slot = dayData[mealKey] || {};
+                var actual = slot.actual;
+                if (!actual || !Array.isArray(actual.dishes)) return;
+                actual.dishes.forEach(function(d) {
+                    var name = typeof d === 'string' ? d : ((d && d.name) || '');
+                    if (!name) return;
+                    name = String(name).trim();
+                    if (!name) return;
+                    // 高频菜
+                    dishCount[name] = (dishCount[name] || 0) + 1;
+                    // 时间模式
+                    if (mealDishCount[mealKey]) {
+                        mealDishCount[mealKey][name] = (mealDishCount[mealKey][name] || 0) + 1;
+                    }
+                    // 周末
+                    if (isWeekend) {
+                        weekendDishCount[name] = (weekendDishCount[name] || 0) + 1;
+                    }
+                    // rating/taste 字段
+                    var rating = Number(d && d.rating) || 0;
+                    var taste = String((d && d.taste) || '').trim();
+                    if (rating >= 4 && taste) {
+                        tasteCount[taste] = (tasteCount[taste] || 0) + 1;
+                    }
+                    if (rating > 0 && rating <= 2) {
+                        dislikedSet[name] = true;
+                    }
+                });
+            });
+        });
+
+        profile.frequentDishes = Object.keys(dishCount)
+            .map(function(name) { return { name: name, count: dishCount[name] }; })
+            .sort(function(a, b) { return b.count - a.count; })
+            .slice(0, 30);
+
+        profile.preferredTastes = Object.keys(tasteCount)
+            .sort(function(a, b) { return tasteCount[b] - tasteCount[a]; });
+
+        ['breakfast','lunch','dinner'].forEach(function(mk) {
+            profile.timePatterns[mk] = Object.keys(mealDishCount[mk])
+                .map(function(name) { return { name: name, count: mealDishCount[mk][name] }; })
+                .sort(function(a, b) { return b.count - a.count; })
+                .slice(0, 10);
+        });
+        profile.timePatterns.weekend = Object.keys(weekendDishCount)
+            .map(function(name) { return { name: name, count: weekendDishCount[name] }; })
+            .sort(function(a, b) { return b.count - a.count; })
+            .slice(0, 10);
+
+        // ---- 4. 不喜欢的菜：rating≤2 + 被手动删除的推荐菜 ----
+        var dismissed = [];
+        try { dismissed = JSON.parse(lsGet('dismissedRecommendDishes') || '[]') || []; } catch(e) { dismissed = []; }
+        if (Array.isArray(dismissed)) {
+            dismissed.forEach(function(x) {
+                if (x && x.name) dislikedSet[x.name] = true;
+            });
+        }
+        profile.dislikedDishes = Object.keys(dislikedSet);
+    } catch(e) {
+        console.warn('buildBehaviorProfile err', e);
+    }
+
+    // 写回 localStorage（familyKey 已自动加家庭前缀）
+    try { lsSetJSON('behaviorProfile', profile); } catch(e) { console.warn('buildBehaviorProfile save err', e); }
+    return profile;
+}
+
+// 首页每日首次打开时自动刷新（仅当天未构建过时触发）
+function _maybeRefreshBehaviorProfileDaily() {
+    try {
+        var today = (function() {
+            var d = new Date();
+            return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        })();
+        var last = null;
+        try {
+            var p = JSON.parse(lsGet('behaviorProfile') || 'null');
+            if (p && p.updatedAt) {
+                var d = new Date(p.updatedAt);
+                last = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+            }
+        } catch(e) {}
+        if (last !== today) buildBehaviorProfile(getFamilyId() || 'default');
+    } catch(e) { console.warn('_maybeRefreshBehaviorProfileDaily err', e); }
 }
 
 // ============================================================
@@ -9330,6 +9516,8 @@ function updateMealActual(date, mealType, actualData) {
     saveDietCalendar(calendar);
     // 以实际为准，正式扣减/释放/新增食材
     finalizeActualIngredients(date, mealType, oldActual);
+    // V146: 行为统计层——保存实际记录后刷新饮食偏好画像
+    try { buildBehaviorProfile(getFamilyId() || 'default'); } catch(e) {}
 }
 
 // ============================================================
@@ -12055,6 +12243,8 @@ function guessFoodEmoji(name) {
 // 保存fridgeItems到localStorage
 function saveFridgeItems() {
     lsSet('fridgeItems', JSON.stringify(fridgeItems));
+    // V146: 行为统计层——家中食材变化后刷新饮食偏好画像
+    try { buildBehaviorProfile(getFamilyId() || 'default'); } catch(e) {}
 }
 
 // 计算距过期天数
@@ -22563,6 +22753,11 @@ function removeDishFromMealPlan(dateKey, mealType, dishName) {
             if (plan.state !== 'confirmed') delete plan.confirmed; else plan.confirmed = true;
         }
         saveDietCalendar(cal);
+        // V146: 行为统计层——记录被手动删除的推荐菜（供 dislikedDishes 聚合）
+        try {
+            var _meta = (plan.dishMeta && plan.dishMeta[dishName]) || {};
+            _recordDismissedRecommendDish(dateKey, mealType, dishName, _meta.source || '');
+        } catch(e) {}
         // 如果删除的是已确认菜 → 重新计算 reservation（简单起见：取消整餐 reservationId 的所有，若还有 confirmed 则重加）
         if (wasConfirmed && typeof cancelReservePlanIngredients === 'function') cancelReservePlanIngredients(dateKey, mealType);
         var stillConfirmed = (plan.state === 'confirmed' || plan.confirmed === true || (Array.isArray(newDishes) && plan.dishMeta && newDishes.some(function(d){
@@ -22571,6 +22766,8 @@ function removeDishFromMealPlan(dateKey, mealType, dishName) {
         })));
         if (stillConfirmed && typeof reservePlanIngredients === 'function') reservePlanIngredients(dateKey, mealType);
         if (typeof renderDiary === 'function') renderDiary();
+        // V146: 行为统计层——刷新饮食偏好画像（让 dislikedDishes 即时包含本次删除的菜）
+        try { buildBehaviorProfile(getFamilyId() || 'default'); } catch(e) {}
     } catch(e) { console.warn('removeDishFromMealPlan err', e); }
 }
 // 食记页面：用户勾选/取消 某道菜时，即时落盘 dishMeta.confirmed（保留 source/addedAt 不动）
@@ -25328,6 +25525,8 @@ function _homeOpenLibrary() {
 
 // 首页卡片渲染总入口（init 与首页每次显示时调用）
 function renderHomeCards() {
+    // V146: 行为统计层——每日首次打开首页自动刷新饮食偏好画像（幂等）
+    try { _maybeRefreshBehaviorProfileDaily(); } catch(e) {}
     renderHomeIngrTags();
     renderHomeDiaryCard();
     _mountHomeDiningSelector(); // V41: 就餐人选择器搬到首页食记卡（与食记页同一节点，数据天然同步）
