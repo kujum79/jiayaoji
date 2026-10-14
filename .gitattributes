@@ -1,0 +1,4 @@
+# 服务器端（Linux）直接执行的脚本与 systemd 单元必须 LF，否则 shebang/指令会带 \r 报错
+deploy/*.sh text eol=lf
+deploy/*.service text eol=lf
+deploy/*.timer text eol=lf

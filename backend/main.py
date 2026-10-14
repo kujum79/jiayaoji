@@ -1262,6 +1262,29 @@ async def food_hall_get_published(date: str = "") -> Dict[str, Any]:
     return {"ok": True, "published": True, "date": date, "article": _fh_row_to_article(row)}
 
 
+@app.get("/api/food-hall/published-list", include_in_schema=False)
+async def food_hall_published_list(days: int = 120) -> Dict[str, Any]:
+    """V144: 公共文库·食养堂归档——近 N 天已发布（含超管确认/待复核，不含撤回）。
+
+    只返回 publish_date <= 今天 的记录，避免提前泄露次日预生成稿。
+    """
+    days = max(1, min(int(days or 120), 366))
+    today_s = _date_cls.today().strftime("%Y-%m-%d")
+    start_s = (_date_cls.today() - _td_cls(days=days - 1)).strftime("%Y-%m-%d")
+    try:
+        with _fh_db() as conn:
+            rows = conn.execute(
+                "SELECT * FROM food_hall_pub_days WHERE title<>'' "
+                "AND COALESCE(review_status,'')<>'withdrawn' "
+                "AND publish_date BETWEEN ? AND ? ORDER BY publish_date DESC",
+                (start_s, today_s),
+            ).fetchall()
+    except Exception as exc:
+        print(f"[foodhall] 归档列表读取失败: {exc}")
+        return {"ok": False, "error": "归档读取失败"}
+    return {"ok": True, "articles": [_fh_row_to_article(r) for r in rows]}
+
+
 class FoodHallReviewRequest(BaseModel):
     date: str
     action: str = ""  # confirm 确认保留 | withdraw 撤回换篇

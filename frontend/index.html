@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V143-20261014a';
+        var APP_VER = 'V144-20261014a';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -25844,6 +25844,94 @@ function _fhPublishedToday() {
     pubs.sort(function (a, b) { return (b.publishedAt || 0) - (a.publishedAt || 0); });
     return pubs[0];
 }
+
+// ====== V144: 公共文库·食养堂归档 / 家庭文库·食养收藏 ======
+// 食养堂树状子分类（与生成端 category 一致）；食养收藏沿用同一套，仅内容=用户收藏
+var _FH_TREE_CATS = ['节气食养', '天气食养', '当季食材', '烹饪技巧', '饮食文化'];
+var _fhServerArchive = [];          // 服务端自动发布归档（会话内缓存）
+var _fhServerArchiveAt = 0;
+var _fhArchiveLoading = false;
+async function _fhLoadServerArchive(force) {
+    if (!force && _fhServerArchiveAt && Date.now() - _fhServerArchiveAt < 10 * 60 * 1000) return _fhServerArchive;
+    if (_fhArchiveLoading) { await new Promise(function (r) { var t = setInterval(function () { if (!_fhArchiveLoading) { clearInterval(t); r(); } }, 200); }); return _fhServerArchive; }
+    _fhArchiveLoading = true;
+    try {
+        var resp = await fetch('/api/food-hall/published-list?days=120', { cache: 'no-store' });
+        var out = await resp.json();
+        if (out && out.ok && Array.isArray(out.articles)) {
+            _fhServerArchive = out.articles.map(function (a) { return Object.assign({}, a, { source: 'ai_auto', autoPublished: true }); });
+            _fhServerArchiveAt = Date.now();
+        }
+    } catch (e) { /* 服务端不可用时仅显示本地归档 */ }
+    _fhArchiveLoading = false;
+    return _fhServerArchive;
+}
+// 进入食养分类页时预载服务端归档，到库后刷新一次目录树（10 分钟缓存，不会形成刷新循环）
+function _fhEnsureArchiveForTree() {
+    if (_fhServerArchiveAt && Date.now() - _fhServerArchiveAt < 10 * 60 * 1000) return;
+    _fhLoadServerArchive().then(function () {
+        var listEl = document.getElementById('categoryContentList');
+        if (listEl && listEl.querySelector('.sy-layout')) renderShiyangContent();
+    });
+}
+// 公共食养堂归档 = 本地超管手动发布 + 服务端自动发布；同日同标题去重，手动发布优先
+function _fhArchiveAll() {
+    var seen = {}, out = [];
+    var push = function (a) {
+        if (!a || !a.title) return;
+        var key = (a.date || '') + '|' + a.title;
+        if (seen[key]) return;
+        seen[key] = 1; out.push(a);
+    };
+    _fhRead().filter(function (x) { return x && x.status === 'published' && x.title; }).forEach(push);
+    (_fhServerArchive || []).forEach(push);
+    out.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    return out;
+}
+// 家庭食养收藏：当前家庭收藏键 favoriteFoodHall
+function _fhFavAll() {
+    var list = _dtFavList();
+    list.sort(function (a, b) { return (b.favoritedAt || 0) - (a.favoritedAt || 0); });
+    return list;
+}
+function _fhArchiveById(id) {
+    var all = _fhArchiveAll();
+    for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
+    return null;
+}
+function _fhOpenArchiveId(id) {
+    var a = _fhArchiveById(id);
+    if (a) _openDailyTipFull(a);
+}
+function _fhOpenFavId(id) {
+    var l = _fhFavAll();
+    for (var i = 0; i < l.length; i++) if (l[i].id === id) { _openDailyTipFull(l[i]); return; }
+}
+// 归档/收藏卡片（点击打开食养堂详情弹层；favMode 显示取消收藏）
+function _fhTreeCardHtml(a, favMode) {
+    var cat = a.category || '节气食养';
+    var dateTxt = a.date || '';
+    if (favMode && a.favoritedAt) {
+        var d = new Date(a.favoritedAt);
+        dateTxt = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    var right = favMode
+        ? '<span onclick="event.stopPropagation();_fhTreeUnfav(\'' + String(a.id || '').replace(/'/g, '') + '\',this)" style="margin-left:auto;font-size:12px;color:#EF4444;cursor:pointer;white-space:nowrap;">取消收藏</span>'
+        : (a.autoPublished ? '<span style="margin-left:auto;font-size:10px;color:#B45309;background:#FEF3C7;border-radius:4px;padding:1px 6px;white-space:nowrap;">AI预选</span>' : '');
+    return '<div class="cat-search-item" style="display:block;cursor:pointer;" onclick="_fh' + (favMode ? 'OpenFavId' : 'OpenArchiveId') + '(\'' + String(a.id || '').replace(/'/g, '') + '\')">'
+        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
+        + '<span style="font-size:11px;color:#B08968;">' + escapeHtml(dateTxt) + '</span>'
+        + '<span style="font-size:11px;color:#9A3412;background:#FFF3E2;border-radius:999px;padding:1px 8px;">' + escapeHtml(cat) + '</span>'
+        + right + '</div>'
+        + '<div class="cat-search-item-title" style="margin-bottom:2px;">' + escapeHtml(a.title || '无标题') + '</div>'
+        + (a.summary ? '<div class="cat-search-item-summary">' + escapeHtml(a.summary) + '</div>' : '')
+        + '</div>';
+}
+function _fhTreeUnfav(id, btn) {
+    _dtFavRemove(id);
+    showToast && showToast('已取消收藏');
+    renderShiyangContent();
+}
 // 草稿生成记录：一次 AI 生成批次 = 一条 {id, date, articles:[文章id], generatedAt}，新记录在前
 function _fhdRead() {
     try { var a = JSON.parse(lsGet('foodHallDrafts') || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
@@ -34354,6 +34442,7 @@ function _syItemsForLayer(lib) {
 // 板块下级：节气食养→四季；其余→常量 ∪ 数据里实际用过的 leafCategory
 function _sySectionChildren(lib, sec, libItems) {
     if (sec === '节气食养') return ['春季', '夏季', '秋季', '冬季'];
+    if (sec === '食养堂' || sec === '食养收藏') return _FH_TREE_CATS.slice();
     if (sec === '食养食谱') return null;
     var base;
     if (sec === '人群配餐') base = SHIYANG_POPULATIONS.slice();
@@ -34366,9 +34455,13 @@ function _sySectionChildren(lib, sec, libItems) {
     return base;
 }
 function _sySecCount(libItems, sec) {
+    if (sec === '食养堂') return _fhArchiveAll().length;
+    if (sec === '食养收藏') return _fhFavAll().length;
     return libItems.filter(function (k) { return k.subCategory === sec; }).length;
 }
 function _syLeafCount(libItems, sec, leaf) {
+    if (sec === '食养堂') return _fhArchiveAll().filter(function (a) { return (a.category || '') === leaf; }).length;
+    if (sec === '食养收藏') return _fhFavAll().filter(function (a) { return (a.category || '') === leaf; }).length;
     if (sec === '节气食养') {
         var terms = SHIYANG_SEASON_TERMS[leaf] || [];
         return libItems.filter(function (k) { return k.subCategory === '节气食养' && terms.indexOf(k.solarTerm) >= 0; }).length;
@@ -34472,6 +34565,30 @@ function _syPaneHtml(libItems, curTerm) {
         try { info = getSolarTermByName(termName); } catch (e) { info = null; }
         items = libItems.filter(function (k) { return k.subCategory === '节气食养' && k.solarTerm === termName; });
         html += _syTermGuideHtml(termName, info, items);
+    } else if (segs[1] === '食养堂' || segs[1] === '食养收藏') {
+        // V144: 食养堂（公共·全部已发布归档）/ 食养收藏（家庭·仅收藏）
+        var isFavSec = segs[1] === '食养收藏';
+        var fhList = isFavSec ? _fhFavAll() : _fhArchiveAll();
+        var fhLeaf = segs.length === 3 ? segs[2] : '';
+        if (fhLeaf) fhList = fhList.filter(function (a) { return (a.category || '') === fhLeaf; });
+        var mgrBtn = '';
+        if (!isFavSec) {
+            try {
+                var _fhAdmin = (typeof isSuperAdmin === 'function' && isSuperAdmin())
+                    || !!(JSON.parse(lsGet('superAdmin') || '{}') || {}).isLoggedIn;
+                if (_fhAdmin) mgrBtn = '<button type="button" onclick="_openFoodHallMgr()" style="margin-left:auto;border:1px solid #FDBA74;background:#FFF3E2;color:#9A3412;font-size:12px;font-weight:600;border-radius:999px;padding:4px 12px;cursor:pointer;">⚙️ 食养堂管理</button>';
+            } catch (e) {}
+        }
+        html += '<div style="display:flex;align-items:center;margin-bottom:10px;">'
+            + '<div style="font-size:14px;font-weight:700;color:#9A3412;">🍂 ' + segs[1] + (fhLeaf ? ' · ' + fhLeaf : '') + '</div>'
+            + '<span style="font-size:12px;color:#B08968;margin-left:8px;">共 ' + fhList.length + ' 篇</span>' + mgrBtn + '</div>';
+        if (fhList.length) {
+            html += fhList.map(function (a) { return _fhTreeCardHtml(a, isFavSec); }).join('');
+        } else {
+            html += isFavSec
+                ? '<div class="cat-no-result">还没有收藏' + (fhLeaf ? '「' + fhLeaf + '」' : '') + '内容<br><span style="font-size:13px;color:#D1D5DB;">去首页食养堂卡片或公共文库·食养堂点⭐收藏</span></div>'
+                : '<div class="cat-no-result">' + (fhLeaf ? '暂无「' + fhLeaf + '」已发布内容' : '食养堂暂无已发布内容') + '<br><span style="font-size:13px;color:#D1D5DB;">每天 22:30 自动备稿，次日发布后归档于此</span></div>';
+        }
     } else if (segs.length === 1) {
         // 文库节点：该库全部食养内容
         items = libItems;
@@ -34594,17 +34711,25 @@ function renderShiyangContent() {
                     });
                 }
             });
-        }
-        // V140: 食养堂入口——位于"家庭文库"分支下方（往期回顾 + 我的收藏）
-        if (lib === 'family') {
-            html += '<div class="sy-row" data-key="dtsymg" style="margin:4px 2px;background:#FFF3E2;border:1px solid #FDBA74;border-radius:8px;color:#9A3412;font-weight:700;">'
-                + '🍂 食养堂</div>';
+            // V144: 食养堂（公共·全部已发布归档）/ 食养收藏（家庭·仅用户收藏），位置在「日常食养」之下
+            var extraSec = lib === 'public' ? '食养堂' : (lib === 'family' ? '食养收藏' : '');
+            if (extraSec) {
+                var fk = lib + '|' + extraSec;
+                html += rowHtml(fk, '🍂 ' + extraSec, { branch: true, count: _sySecCount(libItems, extraSec) });
+                if (_syTreeOpen[fk]) {
+                    _FH_TREE_CATS.forEach(function (fc) {
+                        html += rowHtml(fk + '|' + fc, fc, { count: _syLeafCount(libItems, extraSec, fc) });
+                    });
+                }
+            }
         }
     });
     html += '</div>';
     html += '<div class="sy-main">' + _syPaneHtml(libItems, curTerm) + '</div>';
     html += '</div>';
     listEl.innerHTML = html;
+    // V144: 异步补齐服务端自动发布归档（到库后自动刷新一次计数与列表）
+    _fhEnsureArchiveForTree();
 }
 // 目录树点击（事件委托，重渲染后仍生效）
 document.addEventListener('click', function (e) {
@@ -34614,8 +34739,6 @@ document.addEventListener('click', function (e) {
     if (!row || !listEl.contains(row)) return;
     var key = row.getAttribute('data-key');
     if (!key) return;
-    // V140: 食养堂入口（家庭文库下方）→ 打开往期回顾/收藏归档页
-    if (key === 'dtsymg') { _openDailyTipArchive(); return; }
     if (key === 'now') {
         // 置顶动态节点：直达公共文库当前节气
         var info = null;
