@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V151-20261015a';
+        var APP_VER = 'V152-20261015a';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -9437,6 +9437,57 @@ function infantSafetyNotice(stage) {
         return '👶 12-36 月龄建议软烂、少盐少糖、无骨刺的辅食。饮食安排请遵医嘱。';
     }
     return '';
+}
+
+// ==================== V152: 强制免责声明 ====================
+// 版本化 key：文案升级时改版本号，所有用户重新确认一次
+var DIET_DISCLAIMER_ACK_KEY = 'dietDisclaimerAcked_v152';
+var DIET_DISCLAIMER_TEXTS = {
+    general: '以上内容仅供参考，不构成医疗建议。如有健康问题，请咨询医生或注册营养师。',
+    special: '本方案仅提供日常饮食搭配建议，不构成医疗建议。如您有慢性疾病或特殊健康状况，请先咨询医生。本方案不能替代药物治疗。',
+    infant: '婴儿喂养请遵医嘱。6 个月以下建议纯母乳或配方奶喂养。辅食添加时间、种类、数量请咨询儿科医生。'
+};
+// 营养配餐人群分组 → 声明级别
+var NUTRITION_SPECIAL_GROUPS = { '孕妇营养': true, '婴儿辅食': true, '老年食养': true };
+
+// 固定在方案底部的免责声明（不可关闭，11px，#9CA3AF）
+function dietDisclaimerFooterHtml(kind) {
+    var text = DIET_DISCLAIMER_TEXTS[kind] || DIET_DISCLAIMER_TEXTS.general;
+    return '<div class="diet-disclaimer-footer" style="margin-top:14px;padding:10px 12px;border-top:1px solid #F3F4F6;font-size:11px;line-height:1.7;color:#9CA3AF;text-align:left;">' + escapeHtml(text) + '</div>';
+}
+
+function dietDisclaimerAcked() {
+    try { return lsGet(DIET_DISCLAIMER_ACK_KEY) === '1'; } catch (e) { return false; }
+}
+
+// 首次查看强制二次确认。自建全屏遮罩，不走现有 modal 体系（避免被统一关闭逻辑隐藏）：
+// 无关闭按钮、无遮罩点击关闭、无 ESC 关闭；只有"确认并继续"。
+function ensureDietDisclaimer(onConfirm) {
+    if (dietDisclaimerAcked()) { if (onConfirm) onConfirm(); return; }
+    var mask = document.createElement('div');
+    mask.id = 'dietDisclaimerMask';
+    mask.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(17,24,39,0.55);display:flex;align-items:center;justify-content:center;padding:20px;';
+    var dlg = document.createElement('div');
+    dlg.style.cssText = 'background:#fff;max-width:380px;width:100%;border-radius:16px;padding:22px 20px 18px;box-shadow:0 20px 60px rgba(0,0,0,0.25);text-align:center;';
+    dlg.innerHTML =
+        '<div style="font-size:30px;margin-bottom:10px;">⚖️</div>'
+        + '<div style="font-size:16px;font-weight:700;color:#111827;margin-bottom:10px;">温馨提示</div>'
+        + '<div style="font-size:14px;color:#4B5563;line-height:1.8;margin-bottom:18px;">本服务仅提供营养搭配建议，不涉及疾病诊断和治疗。<br>确认后继续。</div>'
+        + '<button type="button" id="dietDisclaimerOk" style="width:100%;padding:11px;background:#F97316;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;">确认并继续</button>';
+    mask.appendChild(dlg);
+    document.body.appendChild(mask);
+    function close() {
+        try { lsSet(DIET_DISCLAIMER_ACK_KEY, '1'); } catch (e) {}
+        if (mask.parentNode) mask.parentNode.removeChild(mask);
+        document.removeEventListener('keydown', blockEsc, true);
+        if (onConfirm) onConfirm();
+    }
+    function blockEsc(e) { if (e.key === 'Escape' || e.keyCode === 27) { e.preventDefault(); e.stopPropagation(); } }
+    // 捕获阶段拦截 ESC，阻止任何关闭路径
+    document.addEventListener('keydown', blockEsc, true);
+    dlg.querySelector('#dietDisclaimerOk').addEventListener('click', close);
+    // 拦截遮罩点击（仅遮罩本身，点按钮不受影响）
+    mask.addEventListener('click', function (e) { if (e.target === mask) e.stopPropagation(); });
 }
 
 // 设置页手动按钮：强制重新提炼（无视缓存）
@@ -22094,8 +22145,8 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                 var dishes = res.byDate[dateKey][mealKey].map(function(item){
                     var n = cleanDishName(typeof item === 'string' ? item : (item && (item.dish || item.name)));
                     var reason = (item && typeof item.reason === 'string') ? item.reason : '';
-                    // 输出侧医疗词兜底清洗（双保险，防止 AI 偶发违规）
-                    reason = reason.replace(/治疗|治愈|预防|降低|食疗|改善|疗效|药效|病症|疾病|症状|中药|药方/g, '');
+                    // V152: 输出侧医疗词兜底清洗（双保险，词表与 AI_DIET_COMPLIANCE_PROMPT 对齐）
+                    reason = reason.replace(/治疗|治愈|根治|改善|降低|预防|抗癌|排毒|降三高|消炎|杀菌|缓解|调理|食疗|疗效|药效|病症|疾病|症状|中药|药方/g, '');
                     return n ? { dish: n, reason: reason.slice(0, 28), ingredients: (DISH_INGREDIENTS[n] && DISH_INGREDIENTS[n].ingredients) || [n] } : null;
                 }).filter(Boolean);
                 if (dishes.length >= Math.min(2, _needN)) {
@@ -27383,7 +27434,9 @@ function _renderNutritionGroupContent() {
                 + '<div style="font-size:15px;font-weight:700;color:#1E40AF;line-height:1.7;margin-bottom:8px;">宝宝还小，6 个月以下建议纯母乳/配方奶喂养</div>'
                 + '<div style="font-size:13px;color:#1D4ED8;line-height:1.7;">辅食添加请遵医嘱，通常在 6 个月后开始。<br>本页面不为 6 个月以下婴儿推荐任何辅食。</div>'
                 + '</div>';
+            html += dietDisclaimerFooterHtml('infant');
             area.innerHTML = html;
+            ensureDietDisclaimer();
             return;
         }
         if (infantStage) {
@@ -27436,11 +27489,16 @@ function _renderNutritionGroupContent() {
                 + '</div>';
         });
     }
+    // V152: 固定底部免责声明（婴儿组=专属版，孕妇/老人=强化版，其余=通用版）
+    var _discKind = isInfantGroup ? 'infant' : (NUTRITION_SPECIAL_GROUPS[_nutritionActiveGroup] ? 'special' : 'general');
+    html += dietDisclaimerFooterHtml(_discKind);
     area.innerHTML = html;
+    // V152: 首次查看方案强制二次确认（已确认则不弹）
+    ensureDietDisclaimer();
 }
 
 // AI 生成营养方案（前端 mock，带医疗词拦截）
-var _NUTRITION_MEDICAL_BLOCK = ["治疗", "治愈", "疗效", "药用", "诊断", "降压", "降糖", "降脂", "抗癌", "消炎", "康复", "止痛", "改善", "降低", "预防"];
+var _NUTRITION_MEDICAL_BLOCK = ["治疗", "治愈", "根治", "疗效", "药用", "诊断", "降压", "降糖", "降脂", "抗癌", "排毒", "降三高", "消炎", "杀菌", "康复", "止痛", "改善", "降低", "预防", "缓解", "调理"];
 function _nutritionStripMedical(txt) {
     if (!txt) return '';
     var cleaned = txt;
@@ -27506,7 +27564,7 @@ function _nutritionRequestReview() {
         group: group,
         title: 'AI 生成·' + group + '一周方案',
         targetGoals: g.goals.slice(0, 2),
-        content: _nutritionStripMedical('根据' + group + '人群特点，建议' + g.description + '，重点关注' + g.goals.join('、') + '。每日保证充足睡眠和适量运动。'),
+        content: _nutritionStripMedical('根据' + group + '人群特点，建议' + g.description + '，重点关注' + g.goals.join('、') + '。每日保证充足睡眠和适量运动。以上内容仅供参考。'),
         dishes: mockDishes,
         adoptCount: 0,
         createdAt: Date.now(),
@@ -35231,8 +35289,15 @@ function _shiyangCardHtml(k) {
 function _shiyangEmptyHtml(msg) {
     return '<div class="cat-no-result">' + (msg || '暂无内容') + '<br><span style="font-size:13px;color:#D1D5DB;">可通过右上角 ＋ 添加</span></div>';
 }
+// V152: 食养页声明级别（婴儿=专属版，孕产/老年/慢病=强化版，其余=通用版）
+function _shiyangDisclaimerKind(segs) {
+    var s = (segs || []).join('|');
+    if (/婴|宝宝|辅食/.test(s)) return 'infant';
+    if (/孕|产|哺乳|老年|慢病|疾病|特殊|高血糖|高血压|糖尿病/.test(s)) return 'special';
+    return 'general';
+}
 function _shiyangDisclaimerHtml() {
-    return '<div style="margin-top:14px;padding:10px 12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;font-size:12px;color:#92400E;line-height:1.8;">⚠️ ' + SHIYANG_DISCLAIMER + '</div>';
+    return dietDisclaimerFooterHtml('general');
 }
 function _shiyangPillRow(arr, activeVal, fnName) {
     return '<div style="display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;-webkit-overflow-scrolling:touch;">'
@@ -35486,7 +35551,8 @@ function _syPaneHtml(libItems, curTerm) {
         items = libItems.filter(function (k) { return k.subCategory === sec2 && k.leafCategory === leaf2; });
         html += items.length ? items.map(_shiyangCardHtml).join('') : _shiyangEmptyHtml('暂无「' + leaf2 + '」食养内容');
     }
-    html += _shiyangDisclaimerHtml();
+    // V152: 固定底部免责声明（按板块分级）
+    html += dietDisclaimerFooterHtml(_shiyangDisclaimerKind(segs));
     return html;
 }
 function renderShiyangContent() {
@@ -35597,6 +35663,8 @@ function renderShiyangContent() {
     html += '<div class="sy-main">' + _syPaneHtml(libItems, curTerm) + '</div>';
     html += '</div>';
     listEl.innerHTML = html;
+    // V152: 首次查看食养方案强制二次确认
+    ensureDietDisclaimer();
     // V144: 异步补齐服务端自动发布归档（到库后自动刷新一次计数与列表）
     _fhEnsureArchiveForTree();
 }
@@ -42737,9 +42805,10 @@ function showKnowledgeDetail(id) {
         </div>
     `;
 
-    // === 食养条目：底部强制免责声明 ===
+    // === 食养条目：V152 底部强制免责声明（按主题分级：婴儿/特殊/通用） ===
     if (item.mainCategory === 'shiyang') {
-        bodyHtml += `<div style="margin-top:12px;padding:10px 12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;font-size:12px;color:#92400E;line-height:1.8;">⚠️ ${SHIYANG_DISCLAIMER}</div>`;
+        bodyHtml += dietDisclaimerFooterHtml(_shiyangDisclaimerKind([item.subCategory, item.leafCategory, item.title]));
+        ensureDietDisclaimer();
     }
 
     // === 食材条目：推荐搭配 + 强制免责声明 ===
@@ -45797,7 +45866,14 @@ async function callAIWithCache(taskType, sys, usr, coreFn) {
     return result;
 }
 
+// V152: 所有 AI 饮食类生成的强制合规指令（统一在 callAliyunQwenApi 入口注入）
+var AI_DIET_COMPLIANCE_PROMPT = '合规要求（必须严格遵守）：禁止使用以下词汇：治疗、治愈、根治、改善、降低、预防、抗癌、排毒、降三高、消炎、杀菌、缓解、调理。禁止提及任何疾病名称。所有建议必须标注"仅供参考"。';
+
 async function callAliyunQwenApi(systemPrompt, userMessage, opts) {
+    // V152: 统一注入医疗禁词与"仅供参考"合规要求（opts.skipCompliance=true 可跳过，如纯 NLP 提取任务）
+    if (!(opts && opts.skipCompliance)) {
+        systemPrompt = String(systemPrompt || '') + '\n' + AI_DIET_COMPLIANCE_PROMPT;
+    }
     // V116: 识别任务类型，命中缓存直接返回（家庭档案/反馈/模式变化 → prompt 变化 → 键变化 → 自然失效）
     const __taskType = (opts && opts.taskType) || _aiCacheDetectTask(systemPrompt, userMessage);
     if (__taskType && _AI_CACHE_TTL[__taskType]) {
