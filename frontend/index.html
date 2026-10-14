@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V150-20261014a';
+        var APP_VER = 'V151-20261015a';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -4579,6 +4579,16 @@
                                 </select>
                             </div>
                             <input type="text" id="famDiet" placeholder="饮食要求（如：喜欢吃牛肉，不吃葱姜）" style="padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
+                            <!-- V151: 婴儿阶段（3岁以下婴幼儿辅食安全） -->
+                            <div class="family-form-row" style="display:flex; gap:4px; align-items:center;">
+                                <span style="font-size:12px; color:#9A3412; white-space:nowrap;">👶 婴儿阶段</span>
+                                <select id="famInfantStage" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
+                                    <option value="">非婴幼儿（3岁以上）</option>
+                                    <option value="0-6m">0-6个月（纯母乳/配方奶）</option>
+                                    <option value="6-12m">6-12个月（泥糊状辅食）</option>
+                                    <option value="12-36m">12-36个月（软烂辅食）</option>
+                                </select>
+                            </div>
                             <!-- V148: 饮食偏好（喜欢/不喜欢/关注/其他备注，存 member.preference） -->
                             <div style="border-top:1px dashed #FED7AA; margin-top:6px; padding-top:6px;">
                                 <div style="font-size:13px; font-weight:600; color:#9A3412; margin-bottom:4px;">🍽️ 饮食偏好</div>
@@ -9384,6 +9394,49 @@ function buildPreferenceProfile(familyId) {
 
     try { lsSetJSON('preferenceProfile', profile); } catch(e) { console.warn('buildPreferenceProfile save err', e); }
     return profile;
+}
+
+// ==================== V151: 婴儿辅食安全 ====================
+var INFANT_STAGES = ['0-6m', '6-12m', '12-36m'];
+var INFANT_STAGE_TEXT = {
+    '0-6m': '0-6个月',
+    '6-12m': '6-12个月',
+    '12-36m': '12-36个月'
+};
+
+// 获取家庭中所有婴幼儿成员
+function getFamilyInfants() {
+    var familyData = [];
+    try { familyData = JSON.parse(lsGet('familyData') || '[]') || []; } catch(e) { familyData = []; }
+    if (!Array.isArray(familyData)) return [];
+    return familyData.filter(function(m) {
+        return m && (m.isInfant === true || INFANT_STAGES.indexOf(m.infantStage) !== -1);
+    });
+}
+
+// 返回月龄最小的婴儿阶段（安全优先：0-6m > 6-12m > 12-36m）
+function getYoungestInfantStage() {
+    var infants = getFamilyInfants();
+    var stage = null;
+    infants.forEach(function(m) {
+        var s = m.infantStage;
+        if (INFANT_STAGES.indexOf(s) !== -1 && (!stage || INFANT_STAGES.indexOf(s) < INFANT_STAGES.indexOf(stage))) stage = s;
+    });
+    return stage;
+}
+
+// 婴儿安全提示文案（统一带"遵医嘱"）
+function infantSafetyNotice(stage) {
+    if (stage === '0-6m') {
+        return '👶 宝宝还小，6 个月以下建议纯母乳/配方奶喂养。辅食添加请遵医嘱，通常在 6 个月后开始。';
+    }
+    if (stage === '6-12m') {
+        return '👶 6-12 月龄建议泥糊状辅食，初次添加请少量尝试，观察 3 天。辅食添加请遵医嘱。';
+    }
+    if (stage === '12-36m') {
+        return '👶 12-36 月龄建议软烂、少盐少糖、无骨刺的辅食。饮食安排请遵医嘱。';
+    }
+    return '';
 }
 
 // 设置页手动按钮：强制重新提炼（无视缓存）
@@ -22000,6 +22053,18 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                         + '注意：reason 中不要出现治疗、治愈、预防、降低、食疗、改善、疗效等医疗词汇，用"适合""搭配""时令"等日常表述。';
                 }
             } catch(e) { prefSection = ''; }
+            // V151: 婴儿辅食安全规则（安全优先级高于口味偏好）
+            var infantSection = '';
+            try {
+                var _infantStage = (typeof getYoungestInfantStage === 'function') ? getYoungestInfantStage() : null;
+                if (_infantStage === '0-6m') {
+                    infantSection = '\n【婴儿安全·最高优先级】如果家庭成员中有 6 个月以下婴儿，禁止推荐任何辅食。只返回提示："6 个月以下婴儿建议纯母乳或配方奶喂养，辅食添加请遵医嘱，通常在 6 个月后开始。"为其他家庭成员推荐家常菜时，不得在菜名或 reason 中出现任何婴儿辅食/宝宝餐内容。';
+                } else if (_infantStage === '6-12m') {
+                    infantSection = '\n【婴儿安全】家庭成员中有 6-12 个月婴儿：如需辅食只能推荐泥糊状辅食（如高铁米粉、南瓜泥、苹果泥、胡萝卜泥、土豆泥），不加油盐糖，避免整粒、坚果、果冻等窒息风险食物；初次添加请少量尝试，观察 3 天；辅食添加请遵医嘱。';
+                } else if (_infantStage === '12-36m') {
+                    infantSection = '\n【婴儿安全】家庭成员中有 12-36 个月幼儿：辅食须软烂、少盐少糖、去骨刺、切小块，避免整粒坚果、果冻、多刺鱼类；饮食安排请遵医嘱。';
+                }
+            } catch(e) { infantSection = ''; }
             var sys = '你是家肴记饮食策划。只返回 JSON：{byDate:{"' + dateKey + '":{"' + mealKey + '":[{dish:"菜名",reason:"15-28字"}]}}}。'
                 + '每餐' + _needN + '道（' + _fmN + '人，宁少勿多）；菜名真实家常菜，reason 中文。'
                 + '结合节气与成员健康，优先当季；健康推荐菜 reason 含"适合生长发育期/术后/慢病/孕期/产后"。'
@@ -22013,6 +22078,8 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                 + (healthRules ? ('；\n健康适配要求（必须遵守）：\n' + healthRules) : '')
                 // V138: 天气饮食建议（只是建议，不覆盖过敏原/忌口/体质/节气约束）
                 + (weatherHint ? ('；\n' + weatherHint) : '')
+                // V151: 婴儿辅食安全（安全优先级，置于偏好画像之前）
+                + (infantSection ? ('；' + infantSection) : '')
                 // V150: 饮食偏好画像（优先级第6位，在天气之后）
                 + (prefSection ? ('；' + prefSection) : '')
                 + (function(){ var dc = getDiversityConstraints(dateKey); return dc ? ('；\n' + dc) : ''; })()
@@ -27185,6 +27252,33 @@ var NUTRITION_GROUPS = {
     "老年食养": { icon: "👴", goals: ["低盐", "易消化", "补钙"], ageRange: [60, 100], description: "老年人软食营养", moduleKey: "营养配餐.老年食养" }
 };
 
+// V151: 内置婴儿辅食参考（按月龄分级，仅为通用参考，遵医嘱）
+var INFANT_FOOD_GUIDE = {
+    '6-12m': {
+        texture: '泥糊状辅食',
+        badge: '初次添加请少量尝试，观察 3 天',
+        foods: [
+            { name: '高铁婴儿米粉', note: '温水或母乳冲调成稀泥，首选补铁辅食' },
+            { name: '南瓜泥', note: '南瓜去皮去籽蒸熟，压成细泥' },
+            { name: '苹果泥', note: '苹果蒸熟后刮泥，初次少量尝试' },
+            { name: '胡萝卜泥', note: '胡萝卜蒸软压泥，可拌入米粉' },
+            { name: '土豆泥', note: '土豆蒸熟压细泥，质地绵密好吞咽' },
+            { name: '鸡肉胡萝卜泥', note: '鸡腿肉去筋蒸熟，与胡萝卜一起打泥过筛（8 月龄后）' }
+        ]
+    },
+    '12-36m': {
+        texture: '软烂辅食',
+        badge: '少盐少糖、去骨刺、切小块',
+        foods: [
+            { name: '肉末蔬菜粥', note: '瘦肉末 + 青菜碎 + 大米熬煮软烂' },
+            { name: '蒸蛋羹', note: '鸡蛋打散加 1.5 倍温水过筛，中火蒸 8 分钟' },
+            { name: '软面条', note: '婴儿面煮软剪碎，搭配番茄肉末' },
+            { name: '番茄牛肉末软饭', note: '牛肉剁碎，番茄去皮炒软，配软米饭' },
+            { name: '鱼肉豆腐羹', note: '选少刺鱼去净刺，与嫩豆腐蒸成羹' }
+        ]
+    }
+};
+
 // 样例营养方案（初始化时写入 localStorage）
 var DEFAULT_NUTRITION_PLANS = [
     { id: "np_001", authorId: "chef_nutritionist_001", authorName: "李营养", authorBadge: "🥗", group: "孕妇营养", title: "孕早期·一周营养搭配", targetGoals: ["补充叶酸", "补钙"], content: "孕早期（1-12 周）建议清淡适口，适量补充叶酸 400μg/天，钙 800mg/天。推荐绿叶蔬菜、豆制品、奶类。", dishes: [{ name: "菠菜猪肝汤", ingredients: ["菠菜 200g", "猪肝 100g"], steps: ["猪肝切片焯水", "菠菜切段", "清水烧开下猪肝煮 5 分钟", "加菠菜和盐调味"] }, { name: "牛奶燕麦粥", ingredients: ["燕麦 50g", "牛奶 250ml"], steps: ["燕麦加水煮沸", "加牛奶继续煮 5 分钟"] }], adoptCount: 0, createdAt: Date.now() - 86400000 * 2 },
@@ -27260,7 +27354,12 @@ function _renderNutritionGroupContent() {
     var g = NUTRITION_GROUPS[_nutritionActiveGroup];
     var html = '';
 
-    // 人群信息卡
+    // V151: 婴儿辅食安全校验（依据家庭成员中标记的婴儿阶段）
+    var isInfantGroup = (_nutritionActiveGroup === '婴儿辅食');
+    var infantStage = isInfantGroup ? getYoungestInfantStage() : null;
+    var blockUnder6m = isInfantGroup && infantStage === '0-6m';
+
+    // 人群信息卡（0-6 个月婴儿不显示 AI 生成按钮）
     html += '<div style="background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FED7AA;border-radius:14px;padding:14px;margin-bottom:12px;">'
         + '<div style="display:flex;align-items:center;gap:10px;">'
         + '<div style="font-size:32px;">' + g.icon + '</div>'
@@ -27270,8 +27369,46 @@ function _renderNutritionGroupContent() {
         + '<div style="font-size:12px;color:#EA580C;margin-top:4px;">目标：' + g.goals.join(' · ') + '</div>'
         + '</div>'
         + '</div>'
-        + '<button onclick="_nutritionRequestReview()" style="margin-top:10px;width:100%;padding:8px;background:#F97316;color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">🤖 AI 生成营养方案</button>'
+        + (blockUnder6m
+            ? '<div style="margin-top:10px;padding:8px;background:#FEF3C7;border-radius:8px;font-size:12px;color:#92400E;text-align:center;line-height:1.6;">⛔ 6 个月以下不提供任何辅食推荐</div>'
+            : '<button onclick="_nutritionRequestReview()" style="margin-top:10px;width:100%;padding:8px;background:#F97316;color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">🤖 AI 生成营养方案</button>')
         + '</div>';
+
+    // V151: 婴儿辅食安全卡 + 月龄食谱
+    if (isInfantGroup) {
+        if (blockUnder6m) {
+            // 0-6 个月：只显示纯母乳/配方奶提示，不显示任何辅食推荐
+            html += '<div style="background:#EFF6FF;border:2px solid #93C5FD;border-radius:14px;padding:20px 16px;margin-bottom:12px;text-align:center;">'
+                + '<div style="font-size:40px;margin-bottom:10px;">🍼</div>'
+                + '<div style="font-size:15px;font-weight:700;color:#1E40AF;line-height:1.7;margin-bottom:8px;">宝宝还小，6 个月以下建议纯母乳/配方奶喂养</div>'
+                + '<div style="font-size:13px;color:#1D4ED8;line-height:1.7;">辅食添加请遵医嘱，通常在 6 个月后开始。<br>本页面不为 6 个月以下婴儿推荐任何辅食。</div>'
+                + '</div>';
+            area.innerHTML = html;
+            return;
+        }
+        if (infantStage) {
+            var guide = INFANT_FOOD_GUIDE[infantStage];
+            var infantNames = getFamilyInfants().map(function(m) { return m.name; }).join('、');
+            html += '<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:12px;padding:12px 14px;margin-bottom:12px;">'
+                + '<div style="font-size:13px;font-weight:700;color:#1E40AF;line-height:1.6;">' + infantSafetyNotice(infantStage) + '</div>'
+                + '<div style="font-size:11px;color:#3B82F6;margin-top:6px;">当前宝宝：' + escapeHtml(infantNames) + '（' + INFANT_STAGE_TEXT[infantStage] + '）· 适用质地：' + guide.texture + '</div>'
+                + '</div>';
+            html += '<div style="font-size:14px;font-weight:700;color:#9A3412;margin-bottom:8px;">🥄 ' + guide.texture + '参考</div>';
+            guide.foods.forEach(function(f) {
+                html += '<div style="background:white;border:1px solid #BFDBFE;border-radius:12px;padding:12px 14px;margin-bottom:8px;">'
+                    + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+                    + '<span style="font-size:15px;font-weight:700;color:#1E40AF;">' + f.name + '</span>'
+                    + '<span style="font-size:10px;padding:2px 8px;background:#DBEAFE;color:#1E40AF;border-radius:10px;">' + guide.badge + '</span>'
+                    + '</div>'
+                    + '<div style="font-size:12px;color:#4B5563;line-height:1.6;">' + f.note + '</div>'
+                    + '</div>';
+            });
+        } else {
+            html += '<div style="background:#F8FAFC;border:1px dashed #94A3B8;border-radius:12px;padding:14px;margin-bottom:12px;font-size:12px;color:#64748B;line-height:1.7;text-align:center;">'
+                + '👶 尚未在家庭成员中标记婴儿阶段。<br>请到「我家 → 家庭成员 → 编辑」中设置宝宝的婴儿阶段（0-6 / 6-12 / 12-36 个月），系统将按月龄提供安全的辅食建议。'
+                + '</div>';
+        }
+    }
 
     // 方案列表
     var plans = getNutritionPlans().filter(function(p) { return p.group === _nutritionActiveGroup; });
@@ -27314,6 +27451,47 @@ function _nutritionRequestReview() {
     var group = _nutritionActiveGroup;
     var g = NUTRITION_GROUPS[group];
     if (!g) return;
+
+    // V151: 婴儿辅食安全拦截
+    if (group === '婴儿辅食') {
+        var stage = getYoungestInfantStage();
+        if (stage === '0-6m') {
+            // 0-6 个月：强制拦截，不生成任何辅食方案
+            showToast('6 个月以下婴儿建议纯母乳或配方奶喂养，辅食添加请遵医嘱，通常在 6 个月后开始。');
+            return;
+        }
+        if (stage === '6-12m' || stage === '12-36m') {
+            var guide = INFANT_FOOD_GUIDE[stage];
+            var pick = guide.foods.slice(0, 3);
+            var mockDishes = pick.map(function(f) {
+                return { name: f.name, ingredients: [f.note], steps: ['按月龄处理成' + guide.texture + '，初次添加请少量尝试，观察 3 天，辅食添加请遵医嘱'] };
+            });
+            var plan = {
+                id: 'np_ai_' + Date.now(),
+                authorId: 'ai_home',
+                authorName: 'AI 营养师',
+                authorBadge: '🍼',
+                group: group,
+                title: 'AI 生成·' + INFANT_STAGE_TEXT[stage] + '婴儿' + guide.texture + '方案',
+                targetGoals: ['补铁', '易消化'],
+                content: infantSafetyNotice(stage) + ' 以下为' + guide.texture + '参考，' + guide.badge + '。',
+                dishes: mockDishes,
+                adoptCount: 0,
+                createdAt: Date.now(),
+                reviewStatus: 'pending',
+                infantStage: stage
+            };
+            var plans = getNutritionPlans();
+            plans.unshift(plan);
+            saveNutritionPlans(plans);
+            showToast('已按' + INFANT_STAGE_TEXT[stage] + '月龄生成' + guide.texture + '方案，请遵医嘱');
+            _renderNutritionGroupContent();
+            return;
+        }
+        // 未标记婴儿阶段：提示先去设置，不生成
+        showToast('请先在「我家 → 家庭成员」中设置宝宝的婴儿阶段');
+        return;
+    }
 
     // 生成 mock 方案
     var mockDishes = [
@@ -29779,6 +29957,16 @@ window.editMemberCard = function(id) {
                         </select>
                     </div>
                     <input type="text" id="editDiet_${id}" value="${member.dietaryPreference||''}" placeholder="饮食要求" style="padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
+                    <!-- V151: 婴儿阶段（3岁以下婴幼儿辅食安全） -->
+                    <div class="family-form-row" style="display:flex; gap:4px; align-items:center;">
+                        <span style="font-size:12px; color:#9A3412; white-space:nowrap;">👶 婴儿阶段</span>
+                        <select id="editInfantStage_${id}" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
+                            <option value="">非婴幼儿（3岁以上）</option>
+                            <option value="0-6m"${member.infantStage==='0-6m'?' selected':''}>0-6个月（纯母乳/配方奶）</option>
+                            <option value="6-12m"${member.infantStage==='6-12m'?' selected':''}>6-12个月（泥糊状辅食）</option>
+                            <option value="12-36m"${member.infantStage==='12-36m'?' selected':''}>12-36个月（软烂辅食）</option>
+                        </select>
+                    </div>
                     <!-- V148: 饮食偏好（喜欢/不喜欢/关注/其他备注，存 member.preference） -->
                     <div style="border-top:1px dashed #FED7AA; margin-top:6px; padding-top:6px;">
                         <div style="font-size:13px; font-weight:600; color:#9A3412; margin-bottom:4px;">🍽️ 饮食偏好</div>
@@ -29834,6 +30022,10 @@ window.editMemberCard = function(id) {
                 const oldName = member.name;
                 member.name = nameVal;
                 member.age = parseInt(document.getElementById('editAge_' + id).value) || 0;
+                // V151: 婴儿阶段
+                var _editInfantStage = document.getElementById('editInfantStage_' + id).value;
+                if (_editInfantStage) { member.isInfant = true; member.infantStage = _editInfantStage; }
+                else { member.isInfant = false; delete member.infantStage; }
                 // 根据选择的就餐组推导关系类型
                 const newGroupId = parseInt(document.getElementById('editDiningGroup_' + id).value);
                 const newGroup = diningGroups.find(g => g.id === newGroupId);
@@ -59703,12 +59895,15 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
     const healthNote = ((document.getElementById('famHealthNote')||{}).value || '').trim();
     // V148: 饮食偏好
     const preference = _readPrefFromForm('famPref');
+    // V151: 婴儿阶段
+    const infantStage = document.getElementById('famInfantStage').value || '';
     familyData.push({
         id: Date.now(), name, age, place, currentCity: city, occupation, workSchedule, taste, dietaryPreference,
         relationship, isFamily, constitution: constitution || '', constitutionDetail: '',
         height, weight, groupType, healthGoal, medicalHistory, activityLevel,
         trainingItem, trainingFreq, pregnancyWeek, diseaseType,
-        healthStartDate, healthEndDate, healthNote, preference
+        healthStartDate, healthEndDate, healthNote, preference,
+        isInfant: !!infantStage, infantStage: infantStage || undefined
     });
     lsSet('familyData', JSON.stringify(familyData));
     // V149: 新成员偏好写入后同步合成偏好画像
@@ -59750,6 +59945,7 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
     if (famWsEl) famWsEl.value = '';
     document.getElementById('famTaste').value = '';
     document.getElementById('famDiet').value = '';
+    document.getElementById('famInfantStage').value = '';
     // V148: 清空饮食偏好字段
     document.getElementById('famPrefLikes').value = '';
     document.getElementById('famPrefDislikes').value = '';
