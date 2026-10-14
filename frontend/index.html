@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V148-20261014d';
+        var APP_VER = 'V149-20261014a';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -7873,7 +7873,7 @@ function familyKey(key) {
         'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
-        'behaviorProfile','dismissedRecommendDishes','implicitPreferences',
+        'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
         if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
@@ -8641,7 +8641,7 @@ function claimGlobalDataForFamily() {
         'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
-        'behaviorProfile','dismissedRecommendDishes','implicitPreferences'];
+        'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile'];
     if (!localStorage.getItem(claimFlag)) {
         for (var i = 0; i < familyKeys.length; i++) {
             var k = familyKeys[i];
@@ -8683,7 +8683,7 @@ function exportFamilyData() {
         'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
-        'behaviorProfile','dismissedRecommendDishes','implicitPreferences'];
+        'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile'];
     var data = {};
     for (var i = 0; i < familyKeys.length; i++) {
         var k = familyKeys[i];
@@ -9111,6 +9111,8 @@ function buildBehaviorProfile(familyId) {
 
     // 写回 localStorage（familyKey 已自动加家庭前缀）
     try { lsSetJSON('behaviorProfile', profile); } catch(e) { console.warn('buildBehaviorProfile save err', e); }
+    // V149: 行为画像更新后同步合成偏好画像
+    try { buildPreferenceProfile(fid); } catch(e) { console.warn('buildPreferenceProfile after behavior err', e); }
     return profile;
 }
 
@@ -9165,6 +9167,8 @@ function saveImplicitPreferences(p) {
         expiresAt: now + IMPLICIT_PREF_TTL
     };
     lsSet('implicitPreferences', JSON.stringify(rec));
+    // V149: 语义提炼更新后同步合成偏好画像
+    try { buildPreferenceProfile(); } catch(e) { console.warn('buildPreferenceProfile after implicit err', e); }
     return rec;
 }
 
@@ -9266,6 +9270,120 @@ function _maybeWeeklyImplicitPreferences() {
             }).catch(function(e) { console.warn('[偏好画像] 每周自动提炼失败:', e && e.message); });
         }, 8000);
     } catch(e) { console.warn('_maybeWeeklyImplicitPreferences err', e); }
+}
+
+// ============================================================
+// V149: 家庭饮食偏好画像合成层
+// 合并三层数据：behaviorProfile（行为统计）+ implicitPreferences（语义提取）+ familyData.members[].preference（显式声明）
+// 输出落 localStorage 键 preferenceProfile（familyKey 自动按家庭隔离）
+// ============================================================
+
+function _getFrequentNames(arr, n) {
+    var out = [];
+    if (!Array.isArray(arr)) return out;
+    for (var i = 0; i < arr.length && out.length < n; i++) {
+        var item = arr[i];
+        var name = (item && typeof item === 'object') ? item.name : item;
+        name = String(name || '').trim();
+        if (name && out.indexOf(name) === -1) out.push(name);
+    }
+    return out;
+}
+
+// 根据三层数据生成一句话摘要（仅拼接非空段，保证可读）
+function _buildPreferenceSummary(behavior, implicit, explicit) {
+    var segments = [];
+
+    // 常做的菜：取行为统计的高频菜 top3
+    var topDishes = _getFrequentNames(behavior && behavior.frequentDishes, 3);
+    if (topDishes.length) segments.push('常做' + topDishes.join('、'));
+
+    // 偏好口味：行为统计的 preferredTastes
+    var tastes = [];
+    if (behavior && Array.isArray(behavior.preferredTastes)) {
+        for (var t = 0; t < behavior.preferredTastes.length && tastes.length < 2; t++) {
+            var tv = String(behavior.preferredTastes[t] || '').trim();
+            if (tv && tastes.indexOf(tv) === -1) tastes.push(tv);
+        }
+    }
+    if (tastes.length) segments.push('偏好' + tastes.join('、'));
+
+    // 不喜欢：显式 + 语义 + 行为（dislikedDishes）合并去重，取前 3
+    var dislikes = [];
+    function pushDislike(x) {
+        var s = String(x || '').trim();
+        if (s && dislikes.indexOf(s) === -1) dislikes.push(s);
+    }
+    if (explicit) {
+        (explicit.dislikes || []).forEach(pushDislike);
+    }
+    if (implicit) (implicit.dislikes || []).forEach(pushDislike);
+    if (behavior) (behavior.dislikedDishes || []).forEach(pushDislike);
+    if (dislikes.length) segments.push('不喜欢' + dislikes.slice(0, 3).join('、'));
+
+    // 关注：显式 concerns + 语义 concerns
+    var concerns = [];
+    function pushConcern(x) {
+        var s = String(x || '').trim();
+        if (s && concerns.indexOf(s) === -1) concerns.push(s);
+    }
+    if (explicit) (explicit.concerns || []).forEach(pushConcern);
+    if (implicit) (implicit.concerns || []).forEach(pushConcern);
+    if (concerns.length) segments.push('关注' + concerns.slice(0, 3).join('、'));
+
+    return segments.join('，');
+}
+
+// 合成家庭饮食偏好画像
+function buildPreferenceProfile(familyId) {
+    var fid = familyId;
+    if (!fid) { try { fid = getFamilyId() || 'default'; } catch(e) { fid = 'default'; } }
+
+    // 1. 行为统计层
+    var behavior = {};
+    try { behavior = JSON.parse(lsGet('behaviorProfile') || 'null') || {}; } catch(e) { behavior = {}; }
+
+    // 2. 语义提取层
+    var implicit = {};
+    try { implicit = JSON.parse(lsGet('implicitPreferences') || 'null') || {}; } catch(e) { implicit = {}; }
+
+    // 3. 显式声明层：familyData.members[].preference（V148）
+    var familyData = [];
+    try { familyData = JSON.parse(lsGet('familyData') || '[]') || []; } catch(e) { familyData = []; }
+
+    var likes = [], dislikes = [], concerns = [];
+    var members = {};
+    if (Array.isArray(familyData)) {
+        familyData.forEach(function(m) {
+            var p = m && m.preference;
+            if (!p) return;
+            var name = String(m.name || '').trim() || ('member_' + (m.id || ''));
+            var mLikes = Array.isArray(p.likes) ? p.likes : [];
+            var mDislikes = Array.isArray(p.dislikes) ? p.dislikes : [];
+            members[name] = {
+                likes: mLikes,
+                dislikes: mDislikes,
+                concerns: p.concerns || '',
+                notes: p.notes || ''
+            };
+            mLikes.forEach(function(x) { x = String(x || '').trim(); if (x && likes.indexOf(x) === -1) likes.push(x); });
+            mDislikes.forEach(function(x) { x = String(x || '').trim(); if (x && dislikes.indexOf(x) === -1) dislikes.push(x); });
+            if (p.concerns && concerns.indexOf(p.concerns) === -1) concerns.push(p.concerns);
+        });
+    }
+    var explicit = { likes: likes, dislikes: dislikes, concerns: concerns, members: members };
+
+    var profile = {
+        familyId: fid,
+        updatedAt: Date.now(),
+        behavior: behavior,
+        implicit: implicit,
+        explicit: explicit,
+        summary: _buildPreferenceSummary(behavior, implicit, explicit)
+    };
+
+    try { lsSetJSON('preferenceProfile', profile); } catch(e) { console.warn('buildPreferenceProfile save err', e); }
+    return profile;
 }
 
 // 设置页手动按钮：强制重新提炼（无视缓存）
@@ -29709,7 +29827,8 @@ window.editMemberCard = function(id) {
                 member.healthEndDate = ((document.getElementById('editHealthEndDate_' + id)||{}).value || '').trim();
                 member.healthNote = ((document.getElementById('editHealthNote_' + id)||{}).value || '').trim();
                 lsSet('familyData', JSON.stringify(familyData));
-                // 如果姓名有变化，更新所有就餐组中的旧名
+                // V149: 成员偏好更新后同步合成偏好画像
+                try { buildPreferenceProfile(); } catch(e) { console.warn('buildPreferenceProfile after member edit err', e); }
                 if (oldName !== nameVal) {
                     diningGroups.forEach(g => {
                         const idx = g.members.indexOf(oldName);
@@ -59551,6 +59670,8 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
         healthStartDate, healthEndDate, healthNote, preference
     });
     lsSet('familyData', JSON.stringify(familyData));
+    // V149: 新成员偏好写入后同步合成偏好画像
+    try { buildPreferenceProfile(); } catch(e) { console.warn('buildPreferenceProfile after member add err', e); }
     // 将新成员添加到所选就餐组
     let targetGroupName;
     if (diningGroupId === 4) {
