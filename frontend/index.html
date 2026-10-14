@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V149-20261014a';
+        var APP_VER = 'V150-20261014a';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -21963,6 +21963,43 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                 healthProfiles = collectMemberHealthProfiles(dineMembers) || '';
                 healthRules = getGroupTypeConstraints(dineMembers) || '';
             } catch(e) { healthProfiles = ''; healthRules = ''; }
+            // V150: 饮食偏好画像（三层合并：行为统计 + 语义提取 + 显式声明）
+            // 优先级第6位：过敏原 > 忌口 > 体质 > 节气 > 天气 > 偏好
+            var prefSection = '';
+            try {
+                var _fid = null;
+                try { _fid = getFamilyId(); } catch(e) {}
+                var _prof = (typeof buildPreferenceProfile === 'function') ? buildPreferenceProfile(_fid) : {};
+                var _beh = (_prof && _prof.behavior) || {};
+                var _impl = (_prof && _prof.implicit) || {};
+                var _expl = (_prof && _prof.explicit) || {};
+                var _prefSummary = String(_prof.summary || '').trim();
+                var _freqIngs = _getFrequentNames(_beh.frequentIngredients, 8).join('、');
+                var _dislikes = [];
+                function _pushD(x){ x = String(x||'').trim(); if (x && _dislikes.indexOf(x)===-1) _dislikes.push(x); }
+                (_expl.dislikes || []).forEach(_pushD);
+                (_impl.dislikes || []).forEach(_pushD);
+                (_beh.dislikedDishes || []).forEach(_pushD);
+                var _dislikeStr = _dislikes.slice(0, 8).join('、');
+                var _concerns = [];
+                function _pushC(x){ x = String(x||'').trim(); if (x && _concerns.indexOf(x)===-1) _concerns.push(x); }
+                (_expl.concerns || []).forEach(_pushC);
+                (_impl.concerns || []).forEach(_pushC);
+                var _concernStr = _concerns.slice(0, 5).join('、');
+                if (_prefSummary || _freqIngs || _dislikeStr || _concernStr) {
+                    prefSection = '\n【个人饮食偏好画像】' + (_prefSummary || '暂无')
+                        + '\n【高频食材】' + (_freqIngs || '暂无')
+                        + '\n【不喜欢】' + (_dislikeStr || '暂无')
+                        + '\n【饮食关注】' + (_concernStr || '暂无')
+                        + '\n请在推荐时考虑以上偏好：'
+                        + '1.优先使用高频食材；'
+                        + '2.避开不喜欢的食材/菜品；'
+                        + '3.至少1-2道家人爱吃的菜；'
+                        + '4.不要连续推荐同一道菜（遵守多样性约束）；'
+                        + '5.饮食关注的方向要在菜品选择中体现（如少油少盐、清淡等）。'
+                        + '注意：reason 中不要出现治疗、治愈、预防、降低等医疗词汇，用"适合""搭配""时令"等日常表述。';
+                }
+            } catch(e) { prefSection = ''; }
             var sys = '你是家肴记饮食策划。只返回 JSON：{byDate:{"' + dateKey + '":{"' + mealKey + '":[{dish:"菜名",reason:"15-28字"}]}}}。'
                 + '每餐' + _needN + '道（' + _fmN + '人，宁少勿多）；菜名真实家常菜，reason 中文。'
                 + '结合节气与成员健康，优先当季；健康推荐菜 reason 含"适合生长发育期/术后/慢病/孕期/产后"。'
@@ -21976,6 +22013,8 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                 + (healthRules ? ('；\n健康适配要求（必须遵守）：\n' + healthRules) : '')
                 // V138: 天气饮食建议（只是建议，不覆盖过敏原/忌口/体质/节气约束）
                 + (weatherHint ? ('；\n' + weatherHint) : '')
+                // V150: 饮食偏好画像（优先级第6位，在天气之后）
+                + (prefSection ? ('；' + prefSection) : '')
                 + (function(){ var dc = getDiversityConstraints(dateKey); return dc ? ('；\n' + dc) : ''; })()
                 // V101: 二次审核驳回反馈——重试时避开上批被驳回的菜
                 + (retryFeedback ? ('；\n⚠️ 上一批推荐被家庭饮食审核驳回：' + retryFeedback + '。请务必避开同样的问题，换其他菜品。') : '')
