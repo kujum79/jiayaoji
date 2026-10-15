@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V154-20261015';
+        var APP_VER = 'V155-20261015';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -10247,17 +10247,98 @@ const DIET_KNOWLEDGE_BASE = {
     calm_mind: { name: "养心安神", suitableFor: ["睡眠不佳", "心神不宁", "压力大"], foods: ["莲子", "百合", "桂圆", "红枣"], dishes: ["莲子百合粥", "桂圆红枣汤"], description: "适合睡眠不佳、心神不宁的人群。" }
 };
 
+// V155: 九种体质食材库（含宜/忌/推荐菜品，覆盖平和/气虚/阳虚/阴虚/痰湿/湿热/血瘀/气郁/特禀）
 const CONSTITUTION_DIET_RULES = {
-    '平和质': { principle: '均衡营养，五谷杂粮、时令蔬果，无特别忌口。', suitable: ['五谷杂粮', '时令蔬果', '鸡蛋', '牛奶'], avoid: [] },
-    '气虚质': { principle: '补气健脾，宜食山药、鸡肉、黄芪等。忌生冷、油腻。', suitable: ['山药', '鸡肉', '黄芪', '党参', '大枣'], avoid: ['生冷食物', '油腻食物', '萝卜'] },
-    '阳虚质': { principle: '温阳散寒，宜食羊肉、生姜、韭菜等。忌生冷、寒凉。', suitable: ['羊肉', '生姜', '韭菜', '桂圆', '核桃'], avoid: ['生冷食物', '寒凉食物', '冰饮'] },
-    '阴虚质': { principle: '滋阴润燥，宜食百合、银耳、梨等。忌辛辣、燥热。', suitable: ['百合', '银耳', '梨', '枸杞', '鸭肉'], avoid: ['辛辣食物', '燥热食物', '羊肉'] },
-    '痰湿质': { principle: '健脾祛湿，宜食薏米、赤小豆、冬瓜等。忌甜食、油腻。', suitable: ['薏米', '赤小豆', '冬瓜', '陈皮', '荷叶'], avoid: ['甜食', '油腻食物', '糯米'] },
-    '湿热质': { principle: '清热利湿，宜食绿豆、苦瓜、荷叶等。忌辛辣、油炸。', suitable: ['绿豆', '苦瓜', '荷叶', '薏米', '冬瓜'], avoid: ['辛辣食物', '油炸食物', '羊肉'] },
-    '血瘀质': { principle: '活血化瘀，宜食山楂、黑木耳、玫瑰花等。忌寒凉、收涩。', suitable: ['山楂', '黑木耳', '玫瑰花', '红花', '桃仁'], avoid: ['寒凉食物', '收涩食物'] },
-    '气郁质': { principle: '疏肝理气，宜食玫瑰、陈皮、萝卜等。忌收敛、滞气。', suitable: ['玫瑰花', '陈皮', '萝卜', '香菜', '佛手'], avoid: ['收敛食物', '滞气食物', '红薯'] },
-    '特禀质': { principle: '扶正固表，宜食黄芪、大枣、山药等。忌发物、过敏原。', suitable: ['黄芪', '大枣', '山药', '蜂蜜', '燕麦'], avoid: ['发物', '过敏原', '海鲜'] }
+    '平和质': { principle: '均衡营养，五谷杂粮、时令蔬果，无特别忌口。', suitable: ['五谷杂粮', '时令蔬果', '鸡蛋', '牛奶', '适量肉蛋'], avoid: [], recommend: ['小米粥', '清蒸鱼', '时蔬'] },
+    '气虚质': { principle: '补气健脾，宜食山药、鸡肉、黄芪等。忌生冷、油腻。', suitable: ['山药', '鸡肉', '黄芪', '党参', '大枣', '小米', '牛肉'], avoid: ['生冷食物', '油腻食物', '萝卜'], recommend: ['山药排骨汤', '红枣小米粥', '黄芪炖鸡'] },
+    '阳虚质': { principle: '温阳散寒，宜食羊肉、生姜、韭菜等。忌生冷、寒凉。', suitable: ['羊肉', '生姜', '韭菜', '桂圆', '核桃'], avoid: ['生冷食物', '寒凉食物', '冰饮'], recommend: ['当归生姜羊肉汤', '桂圆红枣茶', '韭菜炒蛋'] },
+    '阴虚质': { principle: '滋阴润燥，宜食百合、银耳、梨等。忌辛辣、燥热。', suitable: ['百合', '银耳', '梨', '枸杞', '鸭肉'], avoid: ['辛辣食物', '燥热食物', '羊肉'], recommend: ['银耳百合羹', '雪梨炖冰糖', '老鸭汤'] },
+    '痰湿质': { principle: '健脾祛湿，宜食薏米、赤小豆、冬瓜等。忌甜食、油腻。', suitable: ['薏米', '赤小豆', '冬瓜', '陈皮', '荷叶', '白萝卜'], avoid: ['甜食', '油腻食物', '糯米', '肥肉'], recommend: ['薏米红豆粥', '冬瓜排骨汤', '白萝卜炖牛肉'] },
+    '湿热质': { principle: '清热利湿，宜食绿豆、苦瓜、荷叶等。忌辛辣、油炸。', suitable: ['绿豆', '苦瓜', '荷叶', '薏米', '冬瓜', '莲子'], avoid: ['辛辣食物', '油炸食物', '羊肉', '酒'], recommend: ['绿豆汤', '苦瓜炒蛋', '莲子百合粥'] },
+    '血瘀质': { principle: '活血化瘀，宜食山楂、黑木耳、玫瑰花等。忌寒凉、收涩。', suitable: ['山楂', '黑木耳', '玫瑰花', '红花', '桃仁', '洋葱'], avoid: ['寒凉食物', '收涩食物'], recommend: ['山楂茶', '木耳炒肉', '洋葱炒蛋'] },
+    '气郁质': { principle: '疏肝理气，宜食玫瑰、陈皮、萝卜等。忌收敛、滞气。', suitable: ['玫瑰花', '陈皮', '萝卜', '香菜', '佛手', '香蕉'], avoid: ['收敛食物', '滞气食物', '红薯', '油腻', '辛辣'], recommend: ['玫瑰花茶', '陈皮瘦肉汤', '香蕉牛奶'] },
+    '特禀质': { principle: '扶正固表，宜食黄芪、大枣、山药等。忌发物、过敏原。', suitable: ['黄芪', '大枣', '山药', '蜂蜜', '燕麦', '清淡', '易消化'], avoid: ['发物', '过敏原', '海鲜'], recommend: ['根据过敏原定制', '黄芪红枣粥', '清炒山药'] }
 };
+
+// V155: 体质匹配工具——读取就餐成员体质、计算菜品适配体质、构建AI提示段
+// 优先级：过敏原 > 忌口 > 体质 > 节气 > 天气 > 偏好（体质第3位）
+function getFamilyConstitutions(members) {
+    var arr = Array.isArray(members) ? members : [];
+    if (!arr.length) {
+        try { arr = (typeof getDiaryDiningMembersInfo === 'function') ? getDiaryDiningMembersInfo() : (Array.isArray(familyData) ? familyData : []); } catch (e) { arr = []; }
+    }
+    var list = [];
+    var cnt = {};
+    arr.forEach(function (m) {
+        var c = (m && m.constitution) ? m.constitution : '';
+        if (!c) return;
+        list.push({ name: m.name || '成员', constitution: c });
+        cnt[c] = (cnt[c] || 0) + 1;
+    });
+    var majority = null, max = 0;
+    Object.keys(cnt).forEach(function (k) { if (cnt[k] > max) { max = cnt[k]; majority = k; } });
+    var conflict = Object.keys(cnt).length > 1;
+    return { majority: majority, conflict: conflict, members: list, counts: cnt };
+}
+
+// 计算单道菜适配的体质列表（基于菜名+食材命中 CONSTITUTION_DIET_RULES.suitable/recommend）
+// 特禀质不参与自动匹配：其饮食取决于个人过敏原，需按成员过敏原判断，不能由菜名推断
+function getDishConstitutions(dishName, ingredients) {
+    if (!CONSTITUTION_DIET_RULES) return [];
+    var name = String(dishName || '');
+    var ings = Array.isArray(ingredients) ? ingredients.map(function (x) { return typeof x === 'string' ? x : ((x && (x.name || x.dish)) || ''); }).filter(Boolean) : [];
+    var hit = {};
+    Object.keys(CONSTITUTION_DIET_RULES).forEach(function (c) {
+        if (c === '特禀质') return;
+        var rule = CONSTITUTION_DIET_RULES[c] || {};
+        var suit = (rule.suitable || []).concat(rule.recommend || []);
+        var matched = false;
+        suit.forEach(function (s) {
+            if (!s) return;
+            if (name.indexOf(s) > -1) matched = true;
+            for (var i = 0; i < ings.length; i++) {
+                if (ings[i] && ings[i].indexOf(s) > -1) { matched = true; break; }
+            }
+        });
+        // 忌口命中则不适配
+        var avoided = false;
+        (rule.avoid || []).forEach(function (a) {
+            if (!a) return;
+            if (name.indexOf(a) > -1) avoided = true;
+        });
+        if (matched && !avoided) hit[c] = true;
+    });
+    return Object.keys(hit);
+}
+
+// V155: 菜品体质标签 HTML（用于食记餐卡计划菜行等；无匹配返回空串）
+function constitutionTagHtmlForDish(dishName) {
+    try {
+        if (!dishName) return '';
+        var cons = getDishConstitutions(dishName, []);
+        if (!cons.length) return '';
+        return '<span class="constitution-tag">🥗 适合：' + escapeHtml(cons.join('、')) + '</span>';
+    } catch (e) { return ''; }
+}
+
+// 构建 AI 体质提示段：注入就餐成员体质、多数体质优先、冲突分别推荐
+function buildConstitutionPromptSection(members) {
+    var info = getFamilyConstitutions(members);
+    if (!info.members.length) return '';
+    var lines = info.members.map(function (m) { return m.name + '(' + m.constitution + ')'; }).join('、');
+    var section = '\n【家庭成员体质】' + lines;
+    section += '\n【体质匹配规则】优先匹配多数成员的体质(' + (info.majority || '无') + ')；'
+        + '若成员体质冲突，请按体质分别推荐菜品，并在每道菜 reason 末尾标注"适合：XX质"；'
+        + '推荐菜品的食材应落在对应体质的"宜"列表内，避开"忌"列表；'
+        + 'reason 不得出现治疗、治愈、疗效、调理、改善等医疗词汇，用"适合""搭配""时令"等日常表述。';
+    // 附九种体质宜忌速查
+    var cheat = Object.keys(CONSTITUTION_DIET_RULES).map(function (c) {
+        var r = CONSTITUTION_DIET_RULES[c];
+        return c + '宜:' + (r.suitable || []).slice(0, 5).join('/') + '|忌:' + (r.avoid || []).slice(0, 3).join('/');
+    }).join('；');
+    section += '\n【九体质宜忌速查】' + cheat;
+    return section;
+}
 
 const DEFAULT_CONTACTS = [];
 
@@ -16811,7 +16892,10 @@ async function generateIngredientPrefRecipes() {
             var sys = modePrefix + ' 当季食材作为基础层自动融入所有推荐（用户无需选择时节）。' + freshnessRule + '仅返回一个严格 JSON，无任何 Markdown/解释：{ byDate: { "YYYYMMDD": { breakfast:[ {dish:"菜名", reason:"15-22字说明"} ], lunch:[...], dinner:[...] } } }，3 天每天 3 餐，每餐 ' + _dcCnt.dinnerNum + ' 道菜（宁少勿多，不得超出），家常菜；所有 reason 必须是中文，且必须标注节气信息（如"大暑节气推荐"、"大暑宜食冬瓜"），结合用户给的"当前节气+家人偏好+爱吃食材 Top8+久放食材"，例如"爸爸喜欢牛肉，近30天出现4次"；不要重复同一天同一道菜；菜名必须是真实家常菜；日期 key 必须严格等于用户给的 3 个 YYYYMMDD。';
             // 多样性约束注入（固定策略：避免7天内重复+换菜系+避免连续同主食材）
             var divText = getDiversityConstraints(days[0] ? days[0].dateKey : undefined);
-            var usr = `当前节气/时节：${solarTermName}（${solarTermRangeText(term)}，建议食材：${solarIngs.join('、')||'无提示'}）；目标日期：${daysText}；家庭成员/口味：${familyText || '（2 人家庭，默认）'}；近 30 天爱吃食材 Top：${topLiked}；家中久放需优先消耗的食材：${freshText}；${divText ? divText.replace(/\n/g, ' ') + '；' : ''}${modeHint}；每道菜 reason 需包含节气标注（如"${solarTermName||'当季'}节气推荐"），用到久放食材的菜需在 reason 中标注"建议优先使用XX"；请输出 3 天 3 餐的 ${_dcCnt.dinnerNum} 道菜/餐个性化推荐（${servings}人家庭，宁少勿多，不得超出），并为每道菜给出 15~22 字中文推荐理由。流质类（粥/稀饭/豆浆/米糊/羹/甜汤）同一餐最多 1 道（早餐不能又粥又豆浆）。`;
+            // V155: 体质匹配段（优先级第3位；冲突分别推荐）
+            var _constSec = '';
+            try { _constSec = buildConstitutionPromptSection(family); } catch(e) { _constSec = ''; }
+            var usr = `当前节气/时节：${solarTermName}（${solarTermRangeText(term)}，建议食材：${solarIngs.join('、')||'无提示'}）；目标日期：${daysText}；家庭成员/口味：${familyText || '（2 人家庭，默认）'}；近 30 天爱吃食材 Top：${topLiked}；家中久放需优先消耗的食材：${freshText}；${divText ? divText.replace(/\n/g, ' ') + '；' : ''}${modeHint}${_constSec}；每道菜 reason 需包含节气标注（如"${solarTermName||'当季'}节气推荐"），用到久放食材的菜需在 reason 中标注"建议优先使用XX"；请输出 3 天 3 餐的 ${_dcCnt.dinnerNum} 道菜/餐个性化推荐（${servings}人家庭，宁少勿多，不得超出），并为每道菜给出 15~22 字中文推荐理由。流质类（粥/稀饭/豆浆/米糊/羹/甜汤）同一餐最多 1 道（早餐不能又粥又豆浆）。`;
             var fastFb = new Promise(function(r){ setTimeout(function(){ r(null); }, 5000); });
             var res = await Promise.race([ callAliyunQwenApi(sys, usr, { mode: modeKey }), fastFb ]);
             if (res && res.byDate && typeof res.byDate === 'object') {
@@ -19368,6 +19452,12 @@ function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra
     if (recipe.suitableFor && Array.isArray(recipe.suitableFor) && recipe.suitableFor.length) {
         suitableHtml = '<div style="margin-bottom:6px;font-size:12px;color:#374151;">🏷️ 适用人群：' + recipe.suitableFor.map(escapeHtml).join('、') + '</div>';
     }
+    // V155: 体质适配区块（按菜名+食材匹配九体质宜忌库）
+    var constHtml = '';
+    try {
+        var _dc = (typeof getDishConstitutions === 'function') ? getDishConstitutions(dishName, normalizedIngs) : [];
+        if (_dc.length) constHtml = '<div style="margin-bottom:6px;"><span class="constitution-tag">🥗 适合：' + escapeHtml(_dc.join('、')) + '</span></div>';
+    } catch(e) {}
     // 营养数据（知识库 nutrition）
     var nutritionHtml = '';
     if (recipe.nutrition && typeof recipe.nutrition === 'object') {
@@ -19387,6 +19477,7 @@ function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra
         ${hTagsHtml}
         ${reasonHtml}
         ${suitableHtml}
+        ${constHtml}
         ${nutritionHtml}
         ${amountBlockHtml}
         ${_twReqHtml(dishName)}
@@ -19487,7 +19578,15 @@ async function generateDishRecipeAI(dishName, savedIngredients) {
             </div>`;
         }
 
+        // V155: 体质适配区块（AI路径同样按菜名+食材匹配）
+        var _aiConstHtml = '';
+        try {
+            var _aic = (typeof getDishConstitutions === 'function') ? getDishConstitutions(dishName, aiIngs) : [];
+            if (_aic.length) _aiConstHtml = '<div style="margin-bottom:6px;"><span class="constitution-tag">🥗 适合：' + escapeHtml(_aic.join('、')) + '</span></div>';
+        } catch(e) {}
+
         body.innerHTML = `
+            ${_aiConstHtml}
             ${aiAmountBlockHtml}
             ${_twReqHtml(dishName)}
             <div class="dish-detail-section">
@@ -22314,6 +22413,9 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                     infantSection = '\n【婴儿安全】家庭成员中有 12-36 个月幼儿：辅食须软烂、少盐少糖、去骨刺、切小块，避免整粒坚果、果冻、多刺鱼类；饮食安排请遵医嘱。';
                 }
             } catch(e) { infantSection = ''; }
+            // V155: 体质匹配段（优先级第3位，在过敏原/忌口之后、节气之前；冲突分别推荐）
+            var constitutionSection = '';
+            try { constitutionSection = buildConstitutionPromptSection(dineMembers); } catch(e) { constitutionSection = ''; }
             var sys = '你是家肴记饮食策划。只返回 JSON：{byDate:{"' + dateKey + '":{"' + mealKey + '":[{dish:"菜名",reason:"15-28字"}]}}}。'
                 + '每餐' + _needN + '道（' + _fmN + '人，宁少勿多）；菜名真实家常菜，reason 中文。'
                 + '结合节气与成员健康，优先当季；健康推荐菜 reason 含"适合生长发育期/术后/慢病/孕期/产后"。'
@@ -22329,6 +22431,8 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                 + (weatherHint ? ('；\n' + weatherHint) : '')
                 // V151: 婴儿辅食安全（安全优先级，置于偏好画像之前）
                 + (infantSection ? ('；' + infantSection) : '')
+                // V155: 体质匹配（优先级第3位，在婴儿安全之后、偏好画像之前）
+                + (constitutionSection ? ('；' + constitutionSection) : '')
                 // V150: 饮食偏好画像（优先级第6位，在天气之后）
                 + (prefSection ? ('；' + prefSection) : '')
                 + (function(){ var dc = getDiversityConstraints(dateKey); return dc ? ('；\n' + dc) : ''; })()
@@ -32480,9 +32584,15 @@ function renderPlan() {
         // 没有用量数据时，添加"获取用量"按钮
         const fetchQtyBtn = (!hasQty && dishName) ? `<button class="fetch-qty-btn" data-date="${key}" data-meal="${mealKey}" data-name="${escapeHtml(dishName)}" data-servings="${planServings}" style="background:#FFF7ED;color:#9A3412;border:1px solid #FED7AA;border-radius:16px;padding:5px 12px;font-size:13px;cursor:pointer;margin-top:6px;transition:all .2s;">📋 获取食材用量</button>` : '';
 
+        // V155: 计算菜品适配体质标签（优先用 item.constitutions，否则按菜名+食材匹配）
+        var _dishCons = Array.isArray(item.constitutions) && item.constitutions.length
+            ? item.constitutions
+            : (typeof getDishConstitutions === 'function' ? getDishConstitutions(dishName, item.ingredients) : []);
+        var _consTagHtml = _dishCons.length ? `<div class="dish-constitution" style="margin-top:4px;"><span class="constitution-tag" style="margin-left:0;">🥗 适合：${escapeHtml(_dishCons.join('、'))}</span></div>` : '';
         html += `<div class="plan-dish-card">
             <div class="dish-name">${escapeHtml(dishName)}${renderHealthTagsHtml(reason)}</div>
             <div class="dish-for-whom">${escapeHtml(forWhom)}</div>
+            ${_consTagHtml}
             ${taste ? `<div class="dish-taste">${escapeHtml(taste)}</div>` : ''}
             ${ingredientsHtml ? `<div class="dish-ingredients">${ingredientsHtml}</div>` : ''}
             ${fetchQtyBtn}
@@ -48643,6 +48753,7 @@ function renderDiary() {
                     + '<span class="dish-tag-clickable" onclick="showDishDetail(\'' + escapeAttr(it.name) + '\',\'' + escapeAttr(dateKey) + '\',\'' + escapeAttr(meal.key) + '\')">' + escapeHtml(it.name) + '</span>'
                     + ('speechSynthesis' in window ? '<button type="button" title="朗读" onclick="event.preventDefault();event.stopPropagation();_dishListenReadDirect(\'' + escapeAttr(it.name) + '\');" style="border:none;background:none;padding:0;font-size:14px;line-height:1;color:#F97316;cursor:pointer;flex-shrink:0;margin-left:2px;vertical-align:middle;">🔊</button>' : '')
                     + hTagsHtml
+                    + (typeof constitutionTagHtmlForDish === 'function' ? constitutionTagHtmlForDish(it.name) : '')
                     + '</label>';
             }).join('');
             var planConfirmedLocal = (data.plan.state === 'confirmed' || data.plan.confirmed === true || data.plan.state === 'completed');
