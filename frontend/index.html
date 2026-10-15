@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V153-20261015c';
+        var APP_VER = 'V154-20261015';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -6485,6 +6485,7 @@ function migrateToDietCalendar() {
     
     // 2. 迁移 mealRecords 中的实际记录
     records.forEach(r => {
+        if (r.kind === 'group') return; // V154: 分餐记录已自带日历actual，不参与旧版单菜迁移
         const date = r.date;
         const mealMap = { '早餐': 'breakfast', '午餐': 'lunch', '晚餐': 'dinner', '加餐': 'snack' };
         const meal = mealMap[r.mealType] || 'lunch';
@@ -34013,6 +34014,7 @@ function renderRecord() {
     // 按菜名聚合
     const grouped = {};
     dayRecords.forEach(r => {
+        if (!r.dishName) return; // V154: 分餐记录(kind=group)无单菜名，跳过避免聚合到 undefined
         if (!grouped[r.dishName]) grouped[r.dishName] = [];
         grouped[r.dishName].push(r);
     });
@@ -34217,7 +34219,8 @@ function getPlanMealSummary(dayPlan) {
 }
 
 function getRecordMealSummary(records) {
-    const labels = [...new Set(records.map(r => r.mealType || '正餐'))];
+    // V154: 分餐记录(kind=group)的 mealType 存英文key，统一映射为中文
+    const labels = [...new Set(records.map(r => (r && r.kind === 'group') ? getMealLabel(r.mealType) : (r.mealType || '正餐')))];
     return labels.length === 3 ? '三餐' : (labels.join('、') || '正餐');
 }
 
@@ -37024,6 +37027,20 @@ function renderFullHistoryList(type) {
         const sorted = records.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         if (!sorted.length) return `<div class="full-history-empty">暂无三餐实录</div>`;
         return sorted.map(record => {
+            // V154: 分餐记录（一餐多人）
+            if (record.kind === 'group') {
+                const memList = Array.isArray(record.records) ? record.records : [];
+                const memberSummary = memList.map(m => `${m.memberName || '成员'}@${m.location || ''}`).join('、');
+                const dishSet = [];
+                memList.forEach(m => (m.dishes || []).forEach(d => { if (dishSet.indexOf(d) === -1) dishSet.push(d); }));
+                return `
+                    <div class="full-history-card" data-type="record" data-index="${record.date || ''}">
+                        <div class="full-history-meta">${record.date || '未记录日期'} ${escapeHtml(record.mealLabel || getMealLabel(record.mealType) || '正餐')} <span class="tag-solar">👥${memList.length}人分餐</span></div>
+                        <div class="full-history-line"><strong>👥 ${escapeHtml(memberSummary || '（无成员）')}</strong></div>
+                        <div class="full-history-line">${escapeHtml(dishSet.join('、') || '（无菜品）')}</div>
+                    </div>
+                `;
+            }
             const typeLabel = record.diningType === '外出就餐' ? '🍽️ 外食' : '🏠 家做';
             return `
                 <div class="full-history-card" data-type="record" data-index="${record.date || ''}">
@@ -48742,7 +48759,7 @@ function renderDiary() {
                         ? `<button onclick="openDiningOutModal('${meal.key}','confirmed')" style="background:#EFF6FF;color:#1E40AF;">记录实际</button>`
                         : `<button onclick="openDiningOutModal('${meal.key}','planning')" style="background:#FEF3C7;color:#92400E;">继续规划</button>`
                     ) : (window.__diaryPlanBtnHtml || '') + `
-                        <button onclick="openDiaryRecordModal('${meal.key}')">记录</button>
+                        <button onclick="openGroupRecordModal('${meal.key}')">记录</button>
                     `}
                     ${(typeof isChildMode === 'function' && isChildMode()) ? '<button onclick="openChildDiaryGuide(\'' + meal.key + '\',\'' + dateKey + '\')" style="background:linear-gradient(135deg,#FBBF24,#F472B6);color:white;font-weight:700;">🌈 写作引导</button>' : ''}
                 </div>
@@ -48787,11 +48804,12 @@ function renderDiary() {
                     ${(() => {
                         const rem = getMealReminder(meal.key);
                         if (rem) {
-                            return `<div onclick="openDiaryRecordModal('${meal.key}')" style="position:absolute;top:-22px;left:50%;transform:translateX(-50%);padding:2px 12px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;white-space:nowrap;z-index:5;box-shadow:0 2px 6px rgba(0,0,0,0.08);transition:background 0.15s;">${rem.msg}</div>`;
+                            return `<div onclick="openGroupRecordModal('${meal.key}')" style="position:absolute;top:-22px;left:50%;transform:translateX(-50%);padding:2px 12px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;white-space:nowrap;z-index:5;box-shadow:0 2px 6px rgba(0,0,0,0.08);transition:background 0.15s;">${rem.msg}</div>`;
                         }
                         return '';
                     })()}
                     <div><span class="diary-section-label">实际：</span>${actualText}${actualEmoji}</div>
+                    ${hasActual && data.actual.groupRecord && data.actual.locationSummary ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">👥 ${escapeHtml(data.actual.locationSummary)}</div>` : ''}
                     ${hasActual && data.actual.photos && data.actual.photos.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${data.actual.photos.slice(0,4).map(p => `<img src="${p}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">`).join('')}</div>` : ''}
                     ${buildMealSavingBarHtml(data)}
                 </div>
@@ -58901,6 +58919,347 @@ function openDiaryRecordModal(mealKey) {
         renderDiary();
         const hasFeedback = actualData.dishes.some(d => d.aiFeedback) || actualData.aiSuggestion;
         showToast('✅ 记录已保存' + (hasFeedback ? '，AI建议已生成' : ''));
+    });
+}
+
+// ==================== V154 分餐记录：一餐多人分别记录 ====================
+var GROUP_LOCATION_OPTIONS = ['家', '单位', '学校', '车上', '餐厅', '其他'];
+
+function openGroupRecordModal(mealKey) {
+    if (!requireLogin('记录实际就餐')) return;
+    const dateKey = dateToKey(currentDiaryDate);
+    const data = getMealData(dateKey, mealKey);
+    const planDishes = (data.plan && Array.isArray(data.plan.dishes))
+        ? data.plan.dishes.map(d => typeof d === 'string' ? d : ((d && d.name) || '')).filter(Boolean)
+        : [];
+    const existingActual = data.actual || null;
+
+    const mealNames = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
+    const mealLabel = mealNames[mealKey] || '正餐';
+
+    // 分餐人状态：[{memberId, memberName, location, dishes[], eatTime, duration, rating, comment}]
+    let members = [];
+
+    function _mkMemberId() { return 'grp_' + Date.now() + '_' + Math.floor(Math.random() * 10000); }
+    function _newMember(name, location, dishes) {
+        return {
+            memberId: _mkMemberId(),
+            memberName: name || '',
+            location: location || '家',
+            dishes: Array.isArray(dishes) ? dishes.slice() : [],
+            eatTime: '',
+            duration: '',
+            rating: 0,
+            comment: ''
+        };
+    }
+    function _copyMember(m) {
+        return {
+            memberId: m.memberId || _mkMemberId(),
+            memberName: m.memberName || '',
+            location: m.location || '家',
+            dishes: Array.isArray(m.dishes) ? m.dishes.map(String) : [],
+            eatTime: m.eatTime || '',
+            duration: m.duration || '',
+            rating: m.rating || 0,
+            comment: m.comment || ''
+        };
+    }
+
+    // 初始化：优先恢复本餐已存的分餐记录 → 否则按当天就餐组成员建卡（菜品预填计划菜品）
+    (function initMembers() {
+        if (existingActual && existingActual.groupRecord && Array.isArray(existingActual.members) && existingActual.members.length > 0) {
+            existingActual.members.forEach(m => members.push(_copyMember(m)));
+            return;
+        }
+        let names = [];
+        try {
+            const dining = (typeof getDiaryDiningGroup === 'function') ? getDiaryDiningGroup(dateKey) : null;
+            if (dining && Array.isArray(dining.members) && dining.members.length > 0) names = dining.members.slice();
+        } catch (e) {}
+        if (names.length === 0) names = getFamilyMembers().map(m => m.name).filter(Boolean);
+        if (names.length === 0) names = ['我'];
+        const fam = getFamilyMembers();
+        names.forEach(n => {
+            const fm = fam.find(m => m.name === n);
+            const mem = _newMember(n, '家', planDishes.slice());
+            if (fm && fm.id) mem.memberId = fm.id;
+            members.push(mem);
+        });
+    })();
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(31,41,55,0.5);display:flex;align-items:flex-end;justify-content:center;padding:0;';
+    overlay.addEventListener('click', function(e) { if (e.target === this) overlay.remove(); });
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:white;border-radius:20px 20px 0 0;padding:20px;width:420px;max-width:calc(100% - 10px);max-height:85vh;overflow-y:auto;box-shadow:0 -4px 20px rgba(0,0,0,0.15);';
+    modal.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <button id="grpCloseBtn" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6B7280;padding:0;line-height:1;">＜</button>
+            <div style="font-size:16px;font-weight:700;color:#374151;flex:1;">✍️ 记录${escapeHtml(mealLabel)}</div>
+            <button id="grpSaveBtn" style="padding:6px 16px;background:#F97316;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">💾 保存</button>
+        </div>
+        <div style="font-size:12px;color:#9CA3AF;margin-bottom:10px;">同一餐可按成员分别记录菜品、地点与时间</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+            <button type="button" id="grpSyncAllBtn" style="padding:5px 12px;border:1px solid #FED7AA;background:#FFFBEB;color:#C2410C;border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;">⇋ 同步到所有人</button>
+            <button type="button" id="grpCopyLastBtn" style="padding:5px 12px;border:1px solid #E5E7EB;background:#F9FAFB;color:#374151;border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;">📋 复制上次</button>
+            <button type="button" id="grpDetailBtn" style="padding:5px 12px;border:1px solid #E5E7EB;background:white;color:#6B7280;border-radius:14px;font-size:12px;cursor:pointer;margin-left:auto;">📝 详细记录 ›</button>
+        </div>
+        <div id="grpMemberList"></div>
+        <button type="button" id="grpAddMemberBtn" style="width:100%;padding:10px;border:1px dashed #FED7AA;background:#FFFBEB;color:#F97316;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;">＋ 添加其他成员</button>
+    `;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const memberListEl = () => document.getElementById('grpMemberList');
+
+    function renderGroupMembers() {
+        const box = memberListEl();
+        if (!box) return;
+        let html = '';
+        members.forEach((m, mi) => {
+            const locOpts = GROUP_LOCATION_OPTIONS.map(loc =>
+                `<option value="${escapeAttr(loc)}"${m.location === loc ? ' selected' : ''}>${escapeHtml(loc)}</option>`).join('');
+            const dishTags = m.dishes.map((d, di) =>
+                `<span style="display:inline-flex;align-items:center;gap:4px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:2px 4px 2px 8px;font-size:13px;color:#166534;max-width:100%;box-sizing:border-box;">`
+                + `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;">${escapeHtml(d)}</span>`
+                + `<button type="button" class="grp-dish-del" data-mi="${mi}" data-di="${di}" style="background:none;border:none;color:#9CA3AF;font-size:12px;cursor:pointer;padding:0 2px;line-height:1;">✕</button></span>`
+            ).join('');
+            const stars = [1, 2, 3, 4, 5].map(s =>
+                `<button type="button" class="grp-star" data-mi="${mi}" data-star="${s}" style="background:none;border:none;padding:0 1px;font-size:16px;line-height:1;cursor:pointer;color:${m.rating >= s ? '#F59E0B' : '#E5E7EB'};">★</button>`
+            ).join('');
+            html += `<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:12px;padding:10px;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+                    <span style="font-size:14px;flex-shrink:0;">👤</span>
+                    <input type="text" class="grp-name" data-mi="${mi}" value="${escapeAttr(m.memberName)}" placeholder="称呼" style="width:92px;padding:5px 8px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;box-sizing:border-box;height:30px;">
+                    <select class="grp-loc" data-mi="${mi}" style="padding:5px 6px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;box-sizing:border-box;height:30px;background:white;">${locOpts}</select>
+                    <button type="button" class="grp-del-member" data-mi="${mi}" title="移除该成员" style="margin-left:auto;background:none;border:none;color:#D1D5DB;font-size:15px;cursor:pointer;padding:2px 4px;line-height:1;">✕</button>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
+                    <span style="font-size:12px;color:#6B7280;flex-shrink:0;">菜品</span>
+                    ${dishTags}
+                    <button type="button" class="grp-add-dish" data-mi="${mi}" style="padding:2px 8px;border:1px dashed #FED7AA;background:#FFFBEB;color:#F97316;border-radius:8px;font-size:13px;cursor:pointer;line-height:1.4;">＋</button>
+                </div>
+                <div class="grp-add-row" data-mi="${mi}" style="display:none;margin:-2px 0 8px;">
+                    <div style="display:flex;gap:6px;">
+                        <input type="text" class="grp-add-input" data-mi="${mi}" placeholder="输入菜名" style="flex:1;padding:5px 8px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;box-sizing:border-box;height:30px;">
+                        <button type="button" class="grp-add-confirm" data-mi="${mi}" style="padding:0 12px;border:none;background:#F97316;color:white;border-radius:8px;font-size:13px;cursor:pointer;height:30px;">添加</button>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                    <span style="font-size:12px;color:#6B7280;flex-shrink:0;">⏰</span>
+                    <input type="time" class="grp-time" data-mi="${mi}" value="${escapeAttr(m.eatTime)}" style="padding:4px 6px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;box-sizing:border-box;height:28px;">
+                    <span style="font-size:12px;color:#6B7280;flex-shrink:0;">⏱</span>
+                    <input type="number" class="grp-dur" data-mi="${mi}" min="0" step="5" value="${m.duration ? escapeAttr(String(m.duration)) : ''}" placeholder="用时" style="width:56px;padding:4px 6px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;box-sizing:border-box;height:28px;">
+                    <span style="font-size:12px;color:#6B7280;">分钟</span>
+                    <span style="margin-left:auto;display:inline-flex;align-items:center;">${stars}</span>
+                </div>
+                <input type="text" class="grp-comment" data-mi="${mi}" value="${escapeAttr(m.comment || '')}" placeholder="一句话评价（可选）" style="margin-top:8px;width:100%;padding:5px 8px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;box-sizing:border-box;height:30px;">
+            </div>`;
+        });
+        box.innerHTML = html;
+        bindGroupMemberEvents();
+    }
+
+    function addDishFromInput(mi, inp) {
+        const m = members[mi];
+        if (!m || !inp) return;
+        const name = (inp.value || '').trim();
+        if (!name) { showToast('请输入菜名'); return; }
+        if (m.dishes.some(d => d === name)) { showToast('该菜已添加'); return; }
+        m.dishes.push(name);
+        renderGroupMembers();
+        const row = memberListEl().querySelector('.grp-add-row[data-mi="' + mi + '"]');
+        if (row) { row.style.display = 'block'; const ni = row.querySelector('.grp-add-input'); if (ni) ni.focus(); }
+    }
+
+    function bindGroupMemberEvents() {
+        const box = memberListEl();
+        if (!box) return;
+        box.querySelectorAll('.grp-name').forEach(el => {
+            el.addEventListener('input', function() { const m = members[parseInt(this.dataset.mi)]; if (m) m.memberName = this.value; });
+        });
+        box.querySelectorAll('.grp-loc').forEach(el => {
+            el.addEventListener('change', function() { const m = members[parseInt(this.dataset.mi)]; if (m) m.location = this.value; });
+        });
+        box.querySelectorAll('.grp-dish-del').forEach(el => {
+            el.addEventListener('click', function() {
+                const mi = parseInt(this.dataset.mi), di = parseInt(this.dataset.di);
+                const m = members[mi];
+                if (m) { m.dishes.splice(di, 1); renderGroupMembers(); }
+            });
+        });
+        box.querySelectorAll('.grp-add-dish').forEach(el => {
+            el.addEventListener('click', function() {
+                const mi = parseInt(this.dataset.mi);
+                const row = box.querySelector('.grp-add-row[data-mi="' + mi + '"]');
+                if (row) {
+                    row.style.display = row.style.display === 'none' ? 'block' : 'none';
+                    const inp = row.querySelector('.grp-add-input');
+                    if (inp && row.style.display === 'block') inp.focus();
+                }
+            });
+        });
+        box.querySelectorAll('.grp-add-confirm').forEach(el => {
+            el.addEventListener('click', function() {
+                const mi = parseInt(this.dataset.mi);
+                addDishFromInput(mi, box.querySelector('.grp-add-input[data-mi="' + mi + '"]'));
+            });
+        });
+        box.querySelectorAll('.grp-add-input').forEach(el => {
+            el.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addDishFromInput(parseInt(this.dataset.mi), this);
+                }
+            });
+        });
+        box.querySelectorAll('.grp-time').forEach(el => {
+            el.addEventListener('input', function() { const m = members[parseInt(this.dataset.mi)]; if (m) m.eatTime = this.value; });
+            el.addEventListener('change', function() { const m = members[parseInt(this.dataset.mi)]; if (m) m.eatTime = this.value; });
+        });
+        box.querySelectorAll('.grp-dur').forEach(el => {
+            el.addEventListener('input', function() { const m = members[parseInt(this.dataset.mi)]; if (m) m.duration = this.value; });
+        });
+        box.querySelectorAll('.grp-star').forEach(el => {
+            el.addEventListener('click', function() {
+                const mi = parseInt(this.dataset.mi), s = parseInt(this.dataset.star);
+                const m = members[mi];
+                if (!m) return;
+                m.rating = (m.rating === s) ? 0 : s;
+                renderGroupMembers();
+            });
+        });
+        box.querySelectorAll('.grp-comment').forEach(el => {
+            el.addEventListener('input', function() { const m = members[parseInt(this.dataset.mi)]; if (m) m.comment = this.value; });
+        });
+        box.querySelectorAll('.grp-del-member').forEach(el => {
+            el.addEventListener('click', function() {
+                const mi = parseInt(this.dataset.mi);
+                if (members.length <= 1) { showToast('至少保留一位成员'); return; }
+                members.splice(mi, 1);
+                renderGroupMembers();
+            });
+        });
+    }
+
+    renderGroupMembers();
+
+    document.getElementById('grpCloseBtn').addEventListener('click', () => overlay.remove());
+
+    // ＋ 添加其他成员
+    document.getElementById('grpAddMemberBtn').addEventListener('click', function() {
+        members.push(_newMember('', '家', []));
+        renderGroupMembers();
+        const box = memberListEl();
+        if (box) {
+            const inputs = box.querySelectorAll('.grp-name');
+            if (inputs.length) inputs[inputs.length - 1].focus();
+        }
+    });
+
+    // ⇋ 同步到所有人：把有菜品的成员的菜品复制给其他所有成员
+    document.getElementById('grpSyncAllBtn').addEventListener('click', function() {
+        if (members.length < 2) { showToast('请先「＋ 添加其他成员」再同步'); return; }
+        const src = members.find(m => m.dishes.length > 0);
+        if (!src) { showToast('请先为成员填写菜品'); return; }
+        members.forEach(m => { if (m !== src) m.dishes = src.dishes.slice(); });
+        renderGroupMembers();
+        showToast('✅ 已把「' + (src.memberName || '成员') + '」的菜品同步到所有人');
+    });
+
+    // 📋 复制上次：载入上一条同餐次分餐记录
+    document.getElementById('grpCopyLastBtn').addEventListener('click', function() {
+        let last = null;
+        try {
+            const recs = JSON.parse(lsGet('mealRecords')) || [];
+            const candidates = recs.filter(r => r && r.kind === 'group' && r.mealType === mealKey
+                && (!existingActual || !existingActual.groupRecord || r.id !== existingActual.groupId));
+            candidates.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+            last = candidates[0] || null;
+        } catch (e) {}
+        if (!last || !Array.isArray(last.records) || last.records.length === 0) {
+            showToast('没有找到' + mealLabel + '的上次分餐记录');
+            return;
+        }
+        members = last.records.map(m => _copyMember(m));
+        renderGroupMembers();
+        showToast('✅ 已复制 ' + (last.date || '') + ' 的分餐记录（' + last.records.length + '位成员）');
+    });
+
+    // 📝 详细记录：切换到包含图片/AI评价/心情的完整记录界面
+    document.getElementById('grpDetailBtn').addEventListener('click', function() {
+        overlay.remove();
+        openDiaryRecordModal(mealKey);
+    });
+
+    // 💾 保存
+    document.getElementById('grpSaveBtn').addEventListener('click', function() {
+        for (let i = 0; i < members.length; i++) {
+            if (!String(members[i].memberName || '').trim()) { showToast('请填写第' + (i + 1) + '位成员的称呼'); return; }
+        }
+        const totalDishes = members.reduce((n, m) => n + (m.dishes || []).filter(d => String(d).trim()).length, 0);
+        if (totalDishes === 0) { showToast('请至少为一位成员填写菜品'); return; }
+
+        const cleanRecords = members.map(m => ({
+            memberId: m.memberId,
+            memberName: String(m.memberName).trim(),
+            location: m.location || '家',
+            dishes: (m.dishes || []).map(d => String(d).trim()).filter(Boolean),
+            eatTime: m.eatTime || '',
+            duration: parseFloat(m.duration) || 0,
+            rating: m.rating || 0,
+            comment: String(m.comment || '').trim()
+        }));
+        const solarTerm = getSolarTermForDate(currentDiaryDate);
+        const record = {
+            id: Date.now(),
+            kind: 'group',
+            date: dateKey,
+            mealType: mealKey,
+            mealLabel: mealLabel,
+            records: cleanRecords,
+            solarTerm: solarTerm.name,
+            createdAt: Date.now()
+        };
+        try {
+            const recs = JSON.parse(lsGet('mealRecords')) || [];
+            recs.push(record);
+            lsSet('mealRecords', JSON.stringify(recs));
+        } catch (e) { console.warn('分餐记录保存失败：', e); showToast('保存失败，请重试'); return; }
+
+        // 同步日历 actual：餐次卡片显示"已记录"+菜品汇总+分餐名单
+        const dishUnion = [];
+        cleanRecords.forEach(r => r.dishes.forEach(d => { if (dishUnion.indexOf(d) === -1) dishUnion.push(d); }));
+        const allHome = cleanRecords.every(r => r.location === '家');
+        const locSummary = cleanRecords.map(r => r.memberName + '@' + r.location).join('、');
+        const actualData = {
+            dishes: dishUnion.map(n => ({ name: n })),
+            diningType: '在家做饭',
+            solarTerm: solarTerm.name,
+            groupRecord: true,
+            groupId: record.id,
+            members: cleanRecords,
+            locationSummary: locSummary
+        };
+        // 非全员在家：不按计划全量扣减冰箱库存（按"未用完"空清单=不扣）
+        actualData.ingredientUsageMode = allHome ? 'all' : 'partial';
+        if (!allHome) actualData.actualIngredientUsage = [];
+        // 保留此前"详细记录"中的照片/心情/标签/评价（避免覆盖丢失）
+        if (existingActual && !existingActual.groupRecord) {
+            if (Array.isArray(existingActual.photos) && existingActual.photos.length) actualData.photos = existingActual.photos;
+            if (existingActual.mood) actualData.mood = existingActual.mood;
+            if (existingActual.tags) actualData.tags = existingActual.tags;
+            if (existingActual.overallComment) actualData.overallComment = existingActual.overallComment;
+        }
+        if (!actualData.overallComment) actualData.overallComment = '分餐：' + locSummary;
+
+        try { updateMealActual(dateKey, mealKey, actualData); } catch (e) { console.warn('同步日历失败：', e); }
+
+        overlay.remove();
+        renderDiary();
+        showToast('✅ 分餐记录已保存（' + cleanRecords.length + '位成员）');
     });
 }
 
