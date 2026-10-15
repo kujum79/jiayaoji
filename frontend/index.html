@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V160-20261016';
+        var APP_VER = 'V161-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -9939,6 +9939,13 @@ function updateMealActual(date, mealType, actualData) {
     const calendar = getDietCalendar();
     if (!calendar[date]) calendar[date] = {};
     if (!calendar[date][mealType]) calendar[date][mealType] = { plan: null, actual: null };
+    // V161: 统一清洗菜品列表——兼容字符串/对象两种形态，过滤空对象与空菜名（历史脏数据防御）
+    if (actualData && Array.isArray(actualData.dishes)) {
+        actualData.dishes = actualData.dishes
+            .map(d => (typeof d === 'string' ? { name: d.trim() } : d))
+            .filter(d => d && typeof d === 'object' && String(d.name || '').trim())
+            .map(d => Object.assign({}, d, { name: String(d.name).trim() }));
+    }
     // 保存旧的实际数据（用于回退扣减）
     const oldActual = calendar[date][mealType].actual || null;
     // 记录实际后，计划状态变为 completed
@@ -59289,12 +59296,57 @@ function openGroupRecordModal(mealKey) {
         bindGroupMemberEvents();
     }
 
+    // V161: 判断输入菜名是否为「计划菜/已点菜」的食材（如输入"鸡蛋"，而已点"水煮蛋"——水煮蛋就是鸡蛋做的）
+    // 返回命中的菜品名数组；数据源优先 plan.dishMeta，其次菜品配方库
+    function _grpFindDishContainingIngredient(ingName) {
+        const raw = String(ingName || '').trim();
+        if (!raw) return [];
+        const std = (typeof normalizeIngredientName === 'function') ? normalizeIngredientName(raw) : raw;
+        const hits = [];
+        function ingredientsOf(dishName) {
+            try {
+                const cal = getDietCalendar();
+                const md = cal[dateKey] && cal[dateKey][mealKey];
+                const meta = md && md.plan && md.plan.dishMeta && md.plan.dishMeta[dishName];
+                if (meta && Array.isArray(meta.ingredients)) {
+                    return meta.ingredients.map(i => typeof i === 'string' ? i : (i && i.name) || '');
+                }
+            } catch (e) {}
+            return (typeof getDishIngredients === 'function') ? (getDishIngredients(dishName) || []) : [];
+        }
+        function check(dishName) {
+            const dn = String(dishName || '').trim();
+            if (!dn || dn === raw) return;
+            const ings = ingredientsOf(dn);
+            const matched = ings.some(function (i) {
+                const n = (typeof normalizeIngredientName === 'function') ? normalizeIngredientName(i) : String(i || '').trim();
+                return n && n === std;
+            });
+            if (matched && hits.indexOf(dn) === -1) hits.push(dn);
+        }
+        try {
+            const cal0 = getDietCalendar();
+            const md0 = cal0[dateKey] && cal0[dateKey][mealKey];
+            const pd = md0 && md0.plan && md0.plan.dishes;
+            if (Array.isArray(pd)) pd.forEach(function (d) { check(typeof d === 'string' ? d : (d && d.name) || ''); });
+        } catch (e) {}
+        members.forEach(function (m) { (m.dishes || []).forEach(check); });
+        return hits;
+    }
+
     function addDishFromInput(mi, inp) {
         const m = members[mi];
         if (!m || !inp) return;
         const name = (inp.value || '').trim();
         if (!name) { showToast('请输入菜名'); return; }
         if (m.dishes.some(d => d === name)) { showToast('该菜已添加'); return; }
+        // V161: 输入的是已点菜/计划菜的食材时二次确认，防止"水煮蛋"+"鸡蛋"这种语义重复
+        const dupHits = _grpFindDishContainingIngredient(name);
+        if (dupHits.length > 0) {
+            const ok = window.confirm('「' + name + '」是已点菜品「' + dupHits.slice(0, 3).join('、')
+                + '」的食材（例如"水煮蛋"就是鸡蛋做的），可能是同一道菜重复记录。\n\n确定要作为独立菜品再添加吗？');
+            if (!ok) return;
+        }
         m.dishes.push(name);
         renderGroupMembers();
         const row = memberListEl().querySelector('.grp-add-row[data-mi="' + mi + '"]');
