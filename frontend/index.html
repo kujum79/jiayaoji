@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V155-20261015';
+        var APP_VER = 'V156-20261015';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -4588,6 +4588,18 @@
                                     <option value="6-12m">6-12个月（泥糊状辅食）</option>
                                     <option value="12-36m">12-36个月（软烂辅食）</option>
                                 </select>
+                            </div>
+                            <!-- V156: 特殊人群标签（多选，触发专属推荐规则） -->
+                            <div style="border-top:1px dashed #FED7AA; margin-top:6px; padding-top:6px;">
+                                <div style="font-size:13px; font-weight:600; color:#9A3412; margin-bottom:4px;">🏷️ 特殊人群标签（可多选，触发专属推荐）</div>
+                                <div id="famSpecialTags" style="display:flex; flex-wrap:wrap; gap:6px;">
+                                    <label style="display:inline-flex; align-items:center; gap:3px; font-size:13px; color:#374151; background:#FFF7ED; border:1px solid #FED7AA; border-radius:14px; padding:3px 10px; cursor:pointer;"><input type="checkbox" class="fam-special-tag-cb" value="体育生" style="accent-color:#F97316;">🏃‍♂️ 体育生</label>
+                                    <label style="display:inline-flex; align-items:center; gap:3px; font-size:13px; color:#374151; background:#FFF7ED; border:1px solid #FED7AA; border-radius:14px; padding:3px 10px; cursor:pointer;"><input type="checkbox" class="fam-special-tag-cb" value="高龄老人" style="accent-color:#F97316;">🧓 高龄老人</label>
+                                    <label style="display:inline-flex; align-items:center; gap:3px; font-size:13px; color:#374151; background:#FFF7ED; border:1px solid #FED7AA; border-radius:14px; padding:3px 10px; cursor:pointer;"><input type="checkbox" class="fam-special-tag-cb" value="婴儿" style="accent-color:#F97316;">👶 婴儿</label>
+                                    <label style="display:inline-flex; align-items:center; gap:3px; font-size:13px; color:#374151; background:#FFF7ED; border:1px solid #FED7AA; border-radius:14px; padding:3px 10px; cursor:pointer;"><input type="checkbox" class="fam-special-tag-cb" value="外国人" style="accent-color:#F97316;">🌍 外国人</label>
+                                    <label style="display:inline-flex; align-items:center; gap:3px; font-size:13px; color:#374151; background:#FFF7ED; border:1px solid #FED7AA; border-radius:14px; padding:3px 10px; cursor:pointer;"><input type="checkbox" class="fam-special-tag-cb" value="产后妈妈" style="accent-color:#F97316;">🤱 产后妈妈</label>
+                                    <label style="display:inline-flex; align-items:center; gap:3px; font-size:13px; color:#374151; background:#FFF7ED; border:1px solid #FED7AA; border-radius:14px; padding:3px 10px; cursor:pointer;"><input type="checkbox" class="fam-special-tag-cb" value="体力劳动者" style="accent-color:#F97316;">👷 体力劳动者</label>
+                                </div>
                             </div>
                             <!-- V148: 饮食偏好（喜欢/不喜欢/关注/其他备注，存 member.preference） -->
                             <div style="border-top:1px dashed #FED7AA; margin-top:6px; padding-top:6px;">
@@ -10337,6 +10349,65 @@ function buildConstitutionPromptSection(members) {
         return c + '宜:' + (r.suitable || []).slice(0, 5).join('/') + '|忌:' + (r.avoid || []).slice(0, 3).join('/');
     }).join('；');
     section += '\n【九体质宜忌速查】' + cheat;
+    return section;
+}
+
+// ====== V156: 特殊人群标签触发专属推荐 ======
+// 标签存于 familyData.members[].tags 数组；识别时与既有字段联动（体育生 groupType、产后妈妈 groupType=产后调理、婴儿 isInfant/infantStage、高龄老人 age>=80）
+const SPECIAL_TAG_RULES = {
+    '体育生':    { icon: '🏃‍♂️', action: '增加高能量、高蛋白推荐（如牛肉、鸡蛋、奶类、瘦肉），保证训练消耗补充' },
+    '高龄老人':  { icon: '🧓', action: '推荐软食/流食，软烂易嚼、低盐低糖，避开坚硬难嚼、整粒、多刺食物' },
+    '婴儿':      { icon: '👶', action: '按婴儿阶段辅食安全规则执行：6个月以下不推荐任何辅食，仅纯母乳/配方奶提示并遵医嘱；6个月以上按阶段推荐泥糊/软烂辅食' },
+    '外国人':    { icon: '🌍', action: '兼顾国际风味（意式、英式等西式做法，如意面、烤菜、沙拉），适当减少重口中式炒菜' },
+    '产后妈妈':  { icon: '🤱', action: '增加补血、催乳食材（如瘦肉、猪肝、蛋、鲫鱼汤、红枣、小米），避免生冷辛辣' },
+    '体力劳动者': { icon: '👷', action: '增加主食量和蛋白质（米饭面食足量、肉类豆制品加量），保证体力消耗补充' }
+};
+
+// 识别单个成员命中的特殊标签（tags 为主，兼容既有字段联动）
+function getMemberSpecialTags(m) {
+    if (!m) return [];
+    var out = [];
+    var t = Array.isArray(m.tags) ? m.tags : [];
+    function has(x) { return t.indexOf(x) > -1; }
+    if (has('体育生') || m.groupType === '体育生') out.push('体育生');
+    if (has('高龄老人') || (Number(m.age) >= 80)) out.push('高龄老人');
+    if (has('婴儿') || m.isInfant === true || m.isInfant === 'true') out.push('婴儿');
+    if (has('外国人')) out.push('外国人');
+    if (has('产后妈妈') || m.groupType === '产后调理') out.push('产后妈妈');
+    if (has('体力劳动者')) out.push('体力劳动者');
+    return out;
+}
+
+// 汇总家庭/就餐成员的特殊标签：{ tag: [成员名...] }
+function getFamilySpecialTags(members) {
+    var arr = Array.isArray(members) ? members : [];
+    if (!arr.length) {
+        try { arr = (typeof getDiaryDiningMembersInfo === 'function') ? getDiaryDiningMembersInfo() : (Array.isArray(familyData) ? familyData : []); } catch (e) { arr = []; }
+    }
+    var map = {};
+    arr.forEach(function (m) {
+        getMemberSpecialTags(m).forEach(function (tag) {
+            if (!map[tag]) map[tag] = [];
+            var nm = (m && m.name) || '成员';
+            if (map[tag].indexOf(nm) === -1) map[tag].push(nm);
+        });
+    });
+    return map;
+}
+
+// 构建 AI 特殊标签提示段（无命中返回空串；婴儿标签只引用阶段规则，细节由 V151 婴儿安全段承载，避免重复冲突）
+function buildSpecialTagPromptSection(members) {
+    var map = getFamilySpecialTags(members);
+    var tags = Object.keys(map);
+    if (!tags.length) return '';
+    var who = tags.map(function (t) { return map[t].join('、') + '：' + t; }).join('；');
+    var section = '\n【家庭成员特殊标签】' + who;
+    section += '\n【标签触发规则·必须遵守】';
+    tags.forEach(function (t) {
+        var r = SPECIAL_TAG_RULES[t];
+        if (r) section += '\n- ' + t + '：' + r.action;
+    });
+    section += '\n涉及特殊标签成员的菜品，reason 中用"适合"句式体现对应调整（如"高蛋白适合训练补充""软烂适合老人"），不得出现医疗词汇。';
     return section;
 }
 
@@ -16895,7 +16966,10 @@ async function generateIngredientPrefRecipes() {
             // V155: 体质匹配段（优先级第3位；冲突分别推荐）
             var _constSec = '';
             try { _constSec = buildConstitutionPromptSection(family); } catch(e) { _constSec = ''; }
-            var usr = `当前节气/时节：${solarTermName}（${solarTermRangeText(term)}，建议食材：${solarIngs.join('、')||'无提示'}）；目标日期：${daysText}；家庭成员/口味：${familyText || '（2 人家庭，默认）'}；近 30 天爱吃食材 Top：${topLiked}；家中久放需优先消耗的食材：${freshText}；${divText ? divText.replace(/\n/g, ' ') + '；' : ''}${modeHint}${_constSec}；每道菜 reason 需包含节气标注（如"${solarTermName||'当季'}节气推荐"），用到久放食材的菜需在 reason 中标注"建议优先使用XX"；请输出 3 天 3 餐的 ${_dcCnt.dinnerNum} 道菜/餐个性化推荐（${servings}人家庭，宁少勿多，不得超出），并为每道菜给出 15~22 字中文推荐理由。流质类（粥/稀饭/豆浆/米糊/羹/甜汤）同一餐最多 1 道（早餐不能又粥又豆浆）。`;
+            // V156: 特殊人群标签段（触发专属推荐规则）
+            var _tagSec = '';
+            try { _tagSec = buildSpecialTagPromptSection(family); } catch(e) { _tagSec = ''; }
+            var usr = `当前节气/时节：${solarTermName}（${solarTermRangeText(term)}，建议食材：${solarIngs.join('、')||'无提示'}）；目标日期：${daysText}；家庭成员/口味：${familyText || '（2 人家庭，默认）'}；近 30 天爱吃食材 Top：${topLiked}；家中久放需优先消耗的食材：${freshText}；${divText ? divText.replace(/\n/g, ' ') + '；' : ''}${modeHint}${_constSec}${_tagSec}；每道菜 reason 需包含节气标注（如"${solarTermName||'当季'}节气推荐"），用到久放食材的菜需在 reason 中标注"建议优先使用XX"；请输出 3 天 3 餐的 ${_dcCnt.dinnerNum} 道菜/餐个性化推荐（${servings}人家庭，宁少勿多，不得超出），并为每道菜给出 15~22 字中文推荐理由。流质类（粥/稀饭/豆浆/米糊/羹/甜汤）同一餐最多 1 道（早餐不能又粥又豆浆）。`;
             var fastFb = new Promise(function(r){ setTimeout(function(){ r(null); }, 5000); });
             var res = await Promise.race([ callAliyunQwenApi(sys, usr, { mode: modeKey }), fastFb ]);
             if (res && res.byDate && typeof res.byDate === 'object') {
@@ -22416,6 +22490,9 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
             // V155: 体质匹配段（优先级第3位，在过敏原/忌口之后、节气之前；冲突分别推荐）
             var constitutionSection = '';
             try { constitutionSection = buildConstitutionPromptSection(dineMembers); } catch(e) { constitutionSection = ''; }
+            // V156: 特殊人群标签段（体育生/高龄老人/婴儿/外国人/产后妈妈/体力劳动者，触发专属推荐规则）
+            var specialTagSection = '';
+            try { specialTagSection = buildSpecialTagPromptSection(dineMembers); } catch(e) { specialTagSection = ''; }
             var sys = '你是家肴记饮食策划。只返回 JSON：{byDate:{"' + dateKey + '":{"' + mealKey + '":[{dish:"菜名",reason:"15-28字"}]}}}。'
                 + '每餐' + _needN + '道（' + _fmN + '人，宁少勿多）；菜名真实家常菜，reason 中文。'
                 + '结合节气与成员健康，优先当季；健康推荐菜 reason 含"适合生长发育期/术后/慢病/孕期/产后"。'
@@ -22433,6 +22510,8 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                 + (infantSection ? ('；' + infantSection) : '')
                 // V155: 体质匹配（优先级第3位，在婴儿安全之后、偏好画像之前）
                 + (constitutionSection ? ('；' + constitutionSection) : '')
+                // V156: 特殊人群标签（在体质之后、偏好画像之前）
+                + (specialTagSection ? ('；' + specialTagSection) : '')
                 // V150: 饮食偏好画像（优先级第6位，在天气之后）
                 + (prefSection ? ('；' + prefSection) : '')
                 + (function(){ var dc = getDiversityConstraints(dateKey); return dc ? ('；\n' + dc) : ''; })()
@@ -30327,6 +30406,18 @@ window.editMemberCard = function(id) {
                             <option value="12-36m"${member.infantStage==='12-36m'?' selected':''}>12-36个月（软烂辅食）</option>
                         </select>
                     </div>
+                    <!-- V156: 特殊人群标签（多选，触发专属推荐规则） -->
+                    <div style="border-top:1px dashed #FED7AA; margin-top:6px; padding-top:6px;">
+                        <div style="font-size:13px; font-weight:600; color:#9A3412; margin-bottom:4px;">🏷️ 特殊人群标签（可多选，触发专属推荐）</div>
+                        <div id="editSpecialTags_${id}" style="display:flex; flex-wrap:wrap; gap:6px;">
+                            <label style="display:inline-flex; align-items:center; gap:3px; font-size:13px; color:#374151; background:#FFF7ED; border:1px solid #FED7AA; border-radius:14px; padding:3px 10px; cursor:pointer;"><input type="checkbox" class="edit-special-tag-cb" value="体育生"${(member.tags||[]).indexOf('体育生')>-1?' checked':''} style="accent-color:#F97316;">🏃‍♂️ 体育生</label>
+                            <label style="display:inline-flex; align-items:center; gap:3px; font-size:13px; color:#374151; background:#FFF7ED; border:1px solid #FED7AA; border-radius:14px; padding:3px 10px; cursor:pointer;"><input type="checkbox" class="edit-special-tag-cb" value="高龄老人"${(member.tags||[]).indexOf('高龄老人')>-1?' checked':''} style="accent-color:#F97316;">🧓 高龄老人</label>
+                            <label style="display:inline-flex; align-items:center; gap:3px; font-size:13px; color:#374151; background:#FFF7ED; border:1px solid #FED7AA; border-radius:14px; padding:3px 10px; cursor:pointer;"><input type="checkbox" class="edit-special-tag-cb" value="婴儿"${(member.tags||[]).indexOf('婴儿')>-1?' checked':''} style="accent-color:#F97316;">👶 婴儿</label>
+                            <label style="display:inline-flex; align-items:center; gap:3px; font-size:13px; color:#374151; background:#FFF7ED; border:1px solid #FED7AA; border-radius:14px; padding:3px 10px; cursor:pointer;"><input type="checkbox" class="edit-special-tag-cb" value="外国人"${(member.tags||[]).indexOf('外国人')>-1?' checked':''} style="accent-color:#F97316;">🌍 外国人</label>
+                            <label style="display:inline-flex; align-items:center; gap:3px; font-size:13px; color:#374151; background:#FFF7ED; border:1px solid #FED7AA; border-radius:14px; padding:3px 10px; cursor:pointer;"><input type="checkbox" class="edit-special-tag-cb" value="产后妈妈"${(member.tags||[]).indexOf('产后妈妈')>-1?' checked':''} style="accent-color:#F97316;">🤱 产后妈妈</label>
+                            <label style="display:inline-flex; align-items:center; gap:3px; font-size:13px; color:#374151; background:#FFF7ED; border:1px solid #FED7AA; border-radius:14px; padding:3px 10px; cursor:pointer;"><input type="checkbox" class="edit-special-tag-cb" value="体力劳动者"${(member.tags||[]).indexOf('体力劳动者')>-1?' checked':''} style="accent-color:#F97316;">👷 体力劳动者</label>
+                        </div>
+                    </div>
                     <!-- V148: 饮食偏好（喜欢/不喜欢/关注/其他备注，存 member.preference） -->
                     <div style="border-top:1px dashed #FED7AA; margin-top:6px; padding-top:6px;">
                         <div style="font-size:13px; font-weight:600; color:#9A3412; margin-bottom:4px;">🍽️ 饮食偏好</div>
@@ -30410,6 +30501,11 @@ window.editMemberCard = function(id) {
                 member.activityLevel = document.getElementById('editActivityLevel_' + id).value;
                 // V148: 饮食偏好
                 member.preference = _readPrefFromForm('editPref', id);
+                // V156: 特殊人群标签（多选）
+                member.tags = Array.prototype.map.call(
+                    document.querySelectorAll('#editSpecialTags_' + id + ' .edit-special-tag-cb:checked'),
+                    function (cb) { return cb.value; }
+                );
                 // 动态字段
                 member.trainingItem = (document.getElementById('editTrainingItem_' + id)||{}).value || '';
                 member.trainingFreq = (document.getElementById('editTrainingFreq_' + id)||{}).value || '';
@@ -60640,13 +60736,19 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
     const preference = _readPrefFromForm('famPref');
     // V151: 婴儿阶段
     const infantStage = document.getElementById('famInfantStage').value || '';
+    // V156: 特殊人群标签（多选）
+    const _famTagVals = Array.prototype.map.call(
+        document.querySelectorAll('#famSpecialTags .fam-special-tag-cb:checked'),
+        function (cb) { return cb.value; }
+    );
     familyData.push({
         id: Date.now(), name, age, place, currentCity: city, occupation, workSchedule, taste, dietaryPreference,
         relationship, isFamily, constitution: constitution || '', constitutionDetail: '',
         height, weight, groupType, healthGoal, medicalHistory, activityLevel,
         trainingItem, trainingFreq, pregnancyWeek, diseaseType,
         healthStartDate, healthEndDate, healthNote, preference,
-        isInfant: !!infantStage, infantStage: infantStage || undefined
+        isInfant: !!infantStage, infantStage: infantStage || undefined,
+        tags: _famTagVals
     });
     lsSet('familyData', JSON.stringify(familyData));
     // V149: 新成员偏好写入后同步合成偏好画像
