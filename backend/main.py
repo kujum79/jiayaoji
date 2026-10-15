@@ -2453,6 +2453,39 @@ def ai_budget_post(body: Dict[str, Any]):
     return {"monthly": monthly}
 
 
+# ========== V157: /api 前缀别名（修复线上 Nginx 去前缀代理导致 /api/* 路由不可达） ==========
+# 线上 Nginx 对 /api/ 采用去前缀代理（proxy_pass 尾斜杠），/api/food-hall/published
+# 到达本服务时路径为 /food-hall/published，老路由 /chat、/health 因此可达，而 V139+
+# 新增的 /api/* 路由（daily-tip、weather、food-hall、migration）全部落空。
+# 为所有 /api/xxx 路由注册无前缀别名 /xxx，两种路径形态均可命中。
+# 注意：GET 别名必须在 catch-all 之前注册，否则会被 /{path:path} 吞掉返回 HTML；
+# 而 /api/daily-tip、/api/weather、/api/migration 定义在本块之后，文件末尾会补跑一遍。
+_api_alias_done: set = set()
+
+def _register_api_prefix_aliases() -> None:
+    for _alias_route in list(app.routes):
+        _alias_path = getattr(_alias_route, "path", "")
+        if (
+            _alias_path.startswith("/api/")
+            and "{" not in _alias_path
+            and _alias_path not in _api_alias_done
+        ):
+            _api_alias_done.add(_alias_path)
+            _alias_methods = sorted(set(getattr(_alias_route, "methods", None) or ["GET"]))
+            try:
+                app.add_api_route(
+                    _alias_path[len("/api"):],
+                    _alias_route.endpoint,
+                    methods=_alias_methods,
+                    include_in_schema=False,
+                    name="api_alias_" + _alias_path.strip("/").replace("/", "_"),
+                )
+            except Exception as _alias_exc:
+                print(f"[alias] 注册别名失败 {_alias_path}: {_alias_exc}")
+
+_register_api_prefix_aliases()
+
+
 # ========== 前端静态文件托管（用于 TRAE 预览面板直接打开 APP） ==========
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -2823,4 +2856,9 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
         oldest = min(_DAILY_TIP_CACHE.items(), key=lambda kv: kv[1].get("expire", 0))[0]
         _DAILY_TIP_CACHE.pop(oldest, None)
     return result
+
+
+# V157: 文件末尾补跑别名注册——覆盖定义在本块之后的 /api/daily-tip、/api/weather、
+# /api/migration 等 POST 路由（catch-all 仅 GET，POST 别名无被吞风险；已注册路径自动去重）
+_register_api_prefix_aliases()
 
