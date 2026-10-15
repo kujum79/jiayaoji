@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V159-20261015';
+        var APP_VER = 'V160-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -12104,7 +12104,7 @@ var SAVING_RESTAURANT_PRICE = {
     '青椒土豆丝': 11, '醋溜土豆丝': 11, '酸辣土豆丝': 11, '米饭': 3, '白米饭': 3,
     '小米粥': 4, '白粥': 3, '小米南瓜粥': 5, '南瓜粥': 5, '燕麦粥': 6, '燕麦牛奶': 8, '牛奶燕麦': 8,
     '牛奶麦片': 6, '三明治': 9, '鸡蛋三明治': 9,
-    '煎蛋': 4, '荷包蛋': 4, '水煮蛋': 3, '白煮蛋': 3, '茶叶蛋': 3, '白粥配鸡蛋': 6, '豆腐脑': 5, '豆浆': 3,
+    '煎蛋': 4, '荷包蛋': 4, '水煮蛋': 3, '白煮蛋': 3, '茶叶蛋': 3, '鸡蛋': 3, '白粥配鸡蛋': 6, '豆腐脑': 5, '豆浆': 3,
     '葱油拌面': 11, '阳春面': 9, '蔬菜面': 11, '牛肉粉': 18, '蒸饺': 13, '水饺': 13,
     '绿豆汤': 6, '紫菜汤': 6
 };
@@ -12195,6 +12195,21 @@ function isPlainFruitDish(dishName) {
     // 3) 常见水果精确名白名单（精确匹配，不用"果/瓜"宽匹配，避免误伤冬瓜、果酱）
     return PLAIN_FRUIT_NAMES.indexOf(core) >= 0;
 }
+// V160: 纯配餐饮品识别——牛奶/酸奶/白水等是直接饮用的配餐饮品，不是"在家做 vs 外面吃"的菜，
+// 不参与省钱计算（避免"3杯牛奶 外食¥39、省¥22"这类失真）。配方库中的奶制菜（牛奶燕麦等）不排除。
+var PLAIN_DRINK_NAMES = ['牛奶', '纯牛奶', '鲜牛奶', '早餐奶', '热牛奶', '温牛奶', '全脂牛奶', '脱脂牛奶',
+    '酸奶', '原味酸奶', '白开水', '温水', '热水', '矿泉水', '纯净水', '饮用水'];
+function isPlainDrinkDish(dishName) {
+    var raw = String(dishName || '').trim();
+    if (!raw) return false;
+    // 菜品配方库里有的（牛奶燕麦、牛奶麦片、燕麦牛奶、奶茶等）是一道菜/自制饮品，不排除
+    if (typeof DISH_INGREDIENTS !== 'undefined' && DISH_INGREDIENTS[raw]) return false;
+    var core = raw.replace(/[（(].*?[)）]/g, '').trim();
+    if (PLAIN_DRINK_NAMES.indexOf(core) >= 0) return true;
+    // 「一杯/一盒 + 牛奶/酸奶」这类带量词前缀的纯饮品记录
+    if (/^(一杯|一盒|一瓶|一袋|热|温|冰)?(纯|鲜)?牛奶$/.test(core) || /^(一杯|一盒|一瓶|一袋)?(原味)?酸奶$/.test(core)) return true;
+    return false;
+}
 // 解析餐次就餐人数
 function _savingServingsOf(md) {
     if (md) {
@@ -12228,7 +12243,8 @@ function calcMealSaving(md) {
     src.forEach(function (d) {
         var nm = _savingDishName(d);
         // 纯水果（苹果、香蕉等单食材）不按"在家做vs外面吃"算账，直接剔除
-        if (nm && names.indexOf(nm) < 0 && !isPlainFruitDish(nm)) names.push(nm);
+        // V160: 纯配餐饮品（牛奶、酸奶、白水等）同样剔除，避免虚高
+        if (nm && names.indexOf(nm) < 0 && !isPlainFruitDish(nm) && !isPlainDrinkDish(nm)) names.push(nm);
     });
     if (!names.length) return null;
     var sv = _savingServingsOf(md);
