@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V158-20261015';
+        var APP_VER = 'V159-20261015';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -345,6 +345,8 @@
             font-size: 12.5px; color: #166534;
             background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px;
             padding: 5px 10px; line-height: 1.5;
+            /* V159: 左成本右「本月已省」两端布局 */
+            display: flex; justify-content: space-between; align-items: center; gap: 8px;
         }
         .hd-btns { display: flex; gap: 8px; margin-top: 12px; }
         .hd-btns button {
@@ -12462,17 +12464,23 @@ function aggregateSavingExtended(start, end) {
 function getMonthRange(y, m) { // y年（4位）、m月（1-12）
     return { start: new Date(y, m - 1, 1), end: new Date(y, m, 0, 23, 59, 59) };
 }
-// 首页省钱入口：与"明天吃啥？/今天做甚？"同款下划线文字，无本月记录时隐藏
+// 首页省钱入口：V159 从顶部导航移到餐卡成本行右侧（#homeCostSaveSlot），点击进复盘省钱汇总
 function renderHomeSavingCard() {
-    var wrap = document.getElementById('homeSavingLinkWrap');
-    if (!wrap) return;
     var now = new Date();
     var rng = getMonthRange(now.getFullYear(), now.getMonth() + 1);
     var agg = aggregateSavingExtended(rng.start, rng.end);
-    var txt = document.getElementById('homeSavingLinkText');
-    if (agg.totalSaving <= 0 || !txt) { wrap.style.display = 'none'; return; }
-    txt.textContent = '本月已省¥' + agg.totalSaving.toFixed(1).replace(/\.0$/, '');
-    wrap.style.display = 'inline';
+    var text = agg.totalSaving > 0 ? '本月已省¥' + agg.totalSaving.toFixed(1).replace(/\.0$/, '') : '';
+    var slot = document.getElementById('homeCostSaveSlot');
+    if (slot) {
+        slot.innerHTML = text
+            ? '<span style="cursor:pointer;color:#7A4A21;text-decoration:underline;white-space:nowrap;" onclick="openSavingPeriodReport()">' + text + '</span>'
+            : '';
+    }
+    // 旧顶部导航槽废弃隐藏
+    var wrap = document.getElementById('homeSavingLinkWrap');
+    if (wrap) wrap.style.display = 'none';
+    var oldTxt = document.getElementById('homeSavingLinkText');
+    if (oldTxt) oldTxt.textContent = '';
 }
 // 首页卡片点击：打开复盘 → 周期报告 → 省钱汇总（当月）
 function openSavingPeriodReport() {
@@ -26302,10 +26310,10 @@ function renderHomeDiaryCard() {
             } else {
                 var sv = calcMealSaving(md);
                 if (sv && (sv.home > 0 || sv.out > 0)) {
-                    // V48: 金额加粗，「省 ¥X」绿色 #10B981 突出
-                    costHtml = '<div class="hd-cost">💰 ' + (sv.projected ? '预计' : '') + '：在家 <b>¥' + sv.home.toFixed(1) + '</b> / 外食 <b>¥' + (Math.round(sv.out * 10) / 10) + '</b>' + (sv.saved > 0 ? ' ｜ <span style="color:#10B981;font-weight:700;">省 ¥' + sv.saved.toFixed(1) + '</span>' : '') + '</div>';
+                    // V159: 去掉「💰 预计：」前缀；行右侧挂「本月已省」入口（flex 两端布局）
+                    costHtml = '<div class="hd-cost"><span>在家 <b>¥' + sv.home.toFixed(1) + '</b> / 外食 <b>¥' + (Math.round(sv.out * 10) / 10) + '</b>' + (sv.saved > 0 ? ' ｜ <span style="color:#10B981;font-weight:700;">省 ¥' + sv.saved.toFixed(1) + '</span>' : '') + '</span><span id="homeCostSaveSlot" style="flex-shrink:0;"></span></div>';
                 } else {
-                    costHtml = '<div class="hd-cost">💰 预计：待记录</div>'; // V44: 无成本数据显示待记录，不再显示 ¥0.0 / ¥0
+                    costHtml = '<div class="hd-cost"><span>待记录</span><span id="homeCostSaveSlot" style="flex-shrink:0;"></span></div>'; // V44: 无成本数据显示待记录，不再显示 ¥0.0 / ¥0
                 }
             }
         } catch (e) { costHtml = ''; }
@@ -26358,6 +26366,8 @@ function renderHomeDiaryCard() {
         + '<button class="hd-pill-btn" onclick="openAddRecordModal()">记录</button>' // V106: 记录实际→记录
         + '</div>'
         + costHtml;
+    // V159: 餐卡重建后刷新成本行右侧「本月已省」槽
+    try { renderHomeSavingCard(); } catch (e) {}
 }
 
 // 食记卡片「📋 计划」：进入食记页管理计划（餐卡勾选 + 确认计划）
@@ -26412,27 +26422,19 @@ function _dtRenderCard(tip) {
     var emoji = '🍂';
     var term = String(window.__currentSolarTerm || '');
     if (term) emoji = '🎐';
-    // V145: 昨日文章降级显示时加角标
-    var yesterdayTag = tip._yesterdayLabel ? '<span style="font-size:10px;color:#9CA3AF;background:#F3E9DC;border-radius:4px;padding:2px 6px;margin-right:8px;align-self:center;">昨日</span>' : '';
+    // V159: 移除「昨日」降级角标与「AI预选✓已确认」徽标（页面更简洁；待复核态操作保留）
     var adminCtl = '';
     var _fhAdmin = (typeof isSuperAdmin === 'function' && isSuperAdmin());
     if (!_fhAdmin) {
         try { _fhAdmin = !!(JSON.parse(lsGet('superAdmin') || '{}') || {}).isLoggedIn; } catch (e) { _fhAdmin = false; }
     }
-    if (tip.autoPublished && _fhAdmin) {
-        if (tip.reviewStatus === 'confirmed') {
-            // V158: 已确认篇也给超管换篇入口（后端 /api/food-hall/review 支持撤回已确认篇目）
-            adminCtl = '<span style="font-size:10px;color:#15803D;background:#DCFCE7;border-radius:4px;padding:2px 6px;margin-right:6px;align-self:center;">AI预选✓已确认</span>'
-                + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:8px;color:#B91C1C;" onclick="_fhReviewAuto(\'' + (tip.date || '') + '\',\'withdraw\')">换篇</button>';
-        } else {
-            adminCtl = '<span style="font-size:10px;color:#B45309;background:#FEF3C7;border-radius:4px;padding:2px 6px;margin-right:6px;align-self:center;">AI预选·待复核</span>'
-                + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:6px;" onclick="_fhReviewAuto(\'' + (tip.date || '') + '\',\'confirm\')">保留</button>'
-                + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:8px;color:#B91C1C;" onclick="_fhReviewAuto(\'' + (tip.date || '') + '\',\'withdraw\')">换篇</button>';
-        }
+    if (tip.autoPublished && _fhAdmin && tip.reviewStatus !== 'confirmed') {
+        adminCtl = '<span style="font-size:10px;color:#B45309;background:#FEF3C7;border-radius:4px;padding:2px 6px;margin-right:6px;align-self:center;">AI预选·待复核</span>'
+            + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:6px;" onclick="_fhReviewAuto(\'' + (tip.date || '') + '\',\'confirm\')">保留</button>'
+            + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:8px;color:#B91C1C;" onclick="_fhReviewAuto(\'' + (tip.date || '') + '\',\'withdraw\')">换篇</button>';
     }
     el.innerHTML = '<div class="dt-head"><span>📚 食养堂 · 今日一课</span>'
         + '<span class="dt-head-btns">'
-        + yesterdayTag
         + adminCtl
         + '<button class="dt-btn dt-btn-primary" onclick="_openDailyTipFull()">读完整</button>'
         + '<button class="dt-btn" onclick="_collectDailyTip()">收藏</button>'
@@ -26511,7 +26513,7 @@ async function renderHomeDailyTipCard(force) {
         var resp2 = await fetch('/api/food-hall/published?date=' + encodeURIComponent(ydKey), { cache: 'no-store' });
         var out2 = await resp2.json();
         if (out2 && out2.published && out2.article && out2.article.title) {
-            _dtServerTip = Object.assign({}, out2.article, { _yesterdayLabel: true });
+            _dtServerTip = out2.article;
             _dtRenderCard(_dtServerTip);
             return;
         }
