@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V156-20261015';
+        var APP_VER = 'V158-20261015';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -26421,7 +26421,9 @@ function _dtRenderCard(tip) {
     }
     if (tip.autoPublished && _fhAdmin) {
         if (tip.reviewStatus === 'confirmed') {
-            adminCtl = '<span style="font-size:10px;color:#15803D;background:#DCFCE7;border-radius:4px;padding:2px 6px;margin-right:8px;align-self:center;">AI预选✓已确认</span>';
+            // V158: 已确认篇也给超管换篇入口（后端 /api/food-hall/review 支持撤回已确认篇目）
+            adminCtl = '<span style="font-size:10px;color:#15803D;background:#DCFCE7;border-radius:4px;padding:2px 6px;margin-right:6px;align-self:center;">AI预选✓已确认</span>'
+                + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:8px;color:#B91C1C;" onclick="_fhReviewAuto(\'' + (tip.date || '') + '\',\'withdraw\')">换篇</button>';
         } else {
             adminCtl = '<span style="font-size:10px;color:#B45309;background:#FEF3C7;border-radius:4px;padding:2px 6px;margin-right:6px;align-self:center;">AI预选·待复核</span>'
                 + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:6px;" onclick="_fhReviewAuto(\'' + (tip.date || '') + '\',\'confirm\')">保留</button>'
