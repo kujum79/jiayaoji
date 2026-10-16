@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V180-20261017';
+        var APP_VER = 'V181-20261017';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -60662,8 +60662,10 @@ function openMealRecordModal(mealKey, opts) {
     // V180: 每次打开都默认「全家一起吃」（不再记住上次分餐选择），本次打开内仍可手动切分餐
     let mode = 'family';
 
-    // 全家面板状态
-    let fDishes = (Array.isArray(opts.prefillDishes) ? opts.prefillDishes.slice() : []).filter(Boolean);
+    // 全家面板状态：V181 默认带入今日计划菜品（今晚就吃等场景用 prefillDishes 覆盖）
+    let fDishes = (Array.isArray(opts.prefillDishes) && opts.prefillDishes.length)
+        ? opts.prefillDishes.slice().filter(Boolean)
+        : _getMealPlanDishNames(dateKey, mealKey);
     let fRating = 0;
     let fDining = '在家做饭';
     let fLocation = '家';
@@ -60743,7 +60745,7 @@ function openMealRecordModal(mealKey, opts) {
     function renderFDishTags() {
         const box = $('umrFDishTags');
         if (!fDishes.length) {
-            box.innerHTML = '<span style="font-size:13px;color:#D1D5DB;line-height:30px;">还没添加菜品，可手动添加，或点下方「⚡ 快速记录」</span>';
+            box.innerHTML = '<span style="font-size:13px;color:#D1D5DB;line-height:30px;">还没有菜品，在下方输入框添加实际吃的菜</span>';
             return;
         }
         box.innerHTML = fDishes.map(function (n, i) {
@@ -60755,6 +60757,7 @@ function openMealRecordModal(mealKey, opts) {
             b.addEventListener('click', function () {
                 fDishes.splice(parseInt(this.dataset.i, 10), 1);
                 renderFDishTags();
+                renderFPlanHint(); // V181: 删除后提示条可变为"加回今日计划菜"
             });
         });
     }
@@ -60791,12 +60794,18 @@ function openMealRecordModal(mealKey, opts) {
     function renderFPlanHint() {
         const plan = _getMealPlanDishNames(dateKey, mealKey);
         const box = $('umrFPlanHint');
-        if (!plan.length) { box.innerHTML = ''; return; }
-        box.innerHTML = '<button type="button" id="umrFFillPlan" style="margin-top:6px;padding:4px 10px;border:1px dashed #93C5FD;background:#EFF6FF;color:#1E40AF;border-radius:8px;font-size:12px;cursor:pointer;">📋 填入今日计划（' + plan.length + '道：' + escapeHtml(plan.slice(0, 3).join('、')) + (plan.length > 3 ? '…' : '') + '）</button>';
-        $('umrFFillPlan').addEventListener('click', function () {
-            plan.forEach(function (n) { if (fDishes.indexOf(n) === -1) fDishes.push(n); });
-            renderFDishTags();
-        });
+        if (!plan.length) { box.innerHTML = '<div style="margin-top:6px;font-size:12px;color:#D1D5DB;">今日该餐暂无计划，手动添加实际吃的菜即可</div>'; return; }
+        const missing = plan.filter(function (n) { return fDishes.indexOf(n) === -1; });
+        if (missing.length) {
+            // 有计划菜被删掉了 → 可一键加回
+            box.innerHTML = '<button type="button" id="umrFFillPlan" style="margin-top:6px;padding:4px 10px;border:1px dashed #93C5FD;background:#EFF6FF;color:#1E40AF;border-radius:8px;font-size:12px;cursor:pointer;">＋ 加回今日计划菜（' + missing.length + '道：' + escapeHtml(missing.slice(0, 3).join('、')) + (missing.length > 3 ? '…' : '') + '）</button>';
+            $('umrFFillPlan').addEventListener('click', function () {
+                missing.forEach(function (n) { if (fDishes.indexOf(n) === -1) fDishes.push(n); });
+                renderFDishTags(); renderFPlanHint();
+            });
+        } else {
+            box.innerHTML = '<div style="margin-top:6px;font-size:12px;color:#6B7280;">📋 已带入今日计划 ' + plan.length + ' 道菜，可增删后「保存」，或直接「⚡ 快速记录」（4星一键存）</div>';
+        }
     }
 
     function addFDish() {
@@ -60807,6 +60816,7 @@ function openMealRecordModal(mealKey, opts) {
         fDishes.push(n);
         inp.value = '';
         renderFDishTags();
+        renderFPlanHint();
     }
 
     function doSave(quick) {
