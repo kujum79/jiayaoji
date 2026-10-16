@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V166-20261016';
+        var APP_VER = 'V167-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -19362,7 +19362,7 @@ function showDishDetail(dishName, dateKey, mealType) {
             <div class="dish-detail-header">
                 <button class="dish-detail-back" onclick="closeDishDetail()" title="返回" style="background:none;border:none;font-size:20px;cursor:pointer;padding:4px 6px;color:#6B7280;line-height:1;">〈</button>
                 <span class="dish-detail-title">${escapeHtml(dishName)}</span>
-                ${('speechSynthesis' in window) ? '<button id="helpDishSpeakBtn" title="朗读做法" style="background:none;border:none;font-size:16px;cursor:pointer;padding:4px;height:34px;color:#F97316;box-shadow:none;">▶️</button><button id="helpDishTtsCfgBtn" title="朗读设置" onclick="openTtsSettings()" style="background:none;border:none;font-size:14px;cursor:pointer;padding:4px;height:34px;color:#F97316;box-shadow:none;">⚙️</button>' : ''}
+                ${('speechSynthesis' in window) ? '<button id="helpDishSpeakBtn" title="朗读做法" style="background:none;border:none;font-size:16px;cursor:pointer;padding:4px;height:34px;color:#F97316;box-shadow:none;">🔊</button>' : ''}
                 <button class="dish-detail-explore" data-dish="${escapeHtml(dishName)}" title="认识这道菜" style="background:none;border:none;font-size:16px;cursor:pointer;padding:4px;height:34px;color:#F97316;box-shadow:none;">🔍</button>
             </div>
             <div class="dish-detail-body" id="dishDetailBody">
@@ -28368,7 +28368,7 @@ function _helpViewDish(dishId) {
         '<div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:12px;background:white;border-bottom:1px solid #FED7AA;">'
         + '<button onclick="var t=document.getElementById(\'helpDishTimer\');if(t)clearInterval(t);_hlDishStop();document.getElementById(\'helpDishOverlay\').remove();" style="width:32px;height:32px;border:none;background:#FFF7ED;border-radius:8px;font-size:18px;color:#C2410C;cursor:pointer;">〈</button>'
         + '<div style="flex:1;font-size:16px;font-weight:700;color:#9A3412;">' + d.name + '</div>'
-        + ('speechSynthesis' in window ? '<button id="helpDishSpeakBtn" title="朗读做法" style="width:32px;height:32px;border:none;background:#FFF7ED;border-radius:8px;font-size:15px;color:#F97316;cursor:pointer;">▶️</button><button id="helpDishTtsCfgBtn" title="朗读设置" onclick="openTtsSettings()" style="width:32px;height:32px;border:none;background:#FFF7ED;border-radius:8px;font-size:14px;color:#F97316;cursor:pointer;">⚙️</button>' : '')
+        + ('speechSynthesis' in window ? '<button id="helpDishSpeakBtn" title="朗读做法" style="width:32px;height:32px;border:none;background:#FFF7ED;border-radius:8px;font-size:15px;color:#F97316;cursor:pointer;">🔊</button>' : '')
         + '<button id="helpDishExploreBtn" data-dish="' + escapeAttr(d.name) + '" title="认识这道菜" style="width:32px;height:32px;border:none;background:#FFF7ED;border-radius:8px;font-size:16px;color:#F97316;cursor:pointer;">🔍</button>'
         + '</div>'
         + '<div id="helpDishCarousel" style="flex:1;overflow-y:auto;padding:12px;background:white;">'
@@ -28600,7 +28600,7 @@ function _helpViewDishLite(name) {
         '<div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:12px;background:white;border-bottom:1px solid #FED7AA;">'
         + '<button onclick="_hlDishStop();document.getElementById(\'helpDishOverlay\').remove();" style="width:32px;height:32px;border:none;background:#FFF7ED;border-radius:8px;font-size:18px;color:#C2410C;cursor:pointer;">〈</button>'
         + '<div style="flex:1;font-size:16px;font-weight:700;color:#9A3412;">' + escapeHtml(name) + '</div>'
-        + ('speechSynthesis' in window ? '<button id="helpDishSpeakBtn" title="朗读做法" style="width:32px;height:32px;border:none;background:#FFF7ED;border-radius:8px;font-size:15px;color:#F97316;cursor:pointer;">▶️</button><button id="helpDishTtsCfgBtn" title="朗读设置" onclick="openTtsSettings()" style="width:32px;height:32px;border:none;background:#FFF7ED;border-radius:8px;font-size:14px;color:#F97316;cursor:pointer;">⚙️</button>' : '')
+        + ('speechSynthesis' in window ? '<button id="helpDishSpeakBtn" title="朗读做法" style="width:32px;height:32px;border:none;background:#FFF7ED;border-radius:8px;font-size:15px;color:#F97316;cursor:pointer;">🔊</button>' : '')
         + '</div>'
         + '<div id="helpDishCarousel" style="flex:1;overflow-y:auto;padding:12px;background:white;">'
         + '<div style="font-size:13px;color:#B45309;margin-bottom:10px;background:#FEF3C7;border-radius:8px;padding:8px 10px;">💡 此菜暂无详细步骤，以下为快手做法参考</div>'
