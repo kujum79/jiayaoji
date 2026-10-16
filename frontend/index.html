@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V163-20261016';
+        var APP_VER = 'V164-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -26460,6 +26460,7 @@ function _dtRenderCard(tip) {
         + '<span class="dt-head-btns">'
         + adminCtl
         + '<button class="dt-btn dt-btn-primary" onclick="_openDailyTipFull()">读完整</button>'
+        + '<button class="dt-btn" id="dtCardSpeakBtn" onclick="_dtSpeakTip(\'card\')">🔊 朗读</button>'
         + '<button class="dt-btn" onclick="_collectDailyTip()">收藏</button>'
         + '</span></div>'
         + '<div class="dt-title">' + emoji + ' ' + (tip.title || '') + '</div>'
@@ -26622,11 +26623,44 @@ function _dtFavRemove(id) {
 function _closeDtFull() {
     var ov = document.getElementById('dtFullOv');
     if (!ov) return;
+    try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {}
+    _dtSpeaking = false;
     var sh = document.getElementById('dtFullSheet');
     if (sh) { sh.style.transition = 'transform .25s ease'; sh.style.transform = 'translateY(100%)'; }
     ov.style.transition = 'opacity .25s ease';
     ov.style.opacity = '0';
     setTimeout(function () { ov.remove(); }, 260);
+}
+// V163: 食养堂语音播报（Web Speech API，朗读标题+正文+小贴士）
+var _dtSpeaking = false;
+function _dtSpeakTip(from) {
+    if (!window.speechSynthesis) { showToast('当前浏览器不支持语音播报'); return; }
+    // 正在朗读则停止
+    if (_dtSpeaking) {
+        speechSynthesis.cancel();
+        _dtSpeaking = false;
+        _dtUpdateSpeakBtns('🔊 朗读');
+        return;
+    }
+    var tip = (from === 'full') ? _dtCurTip : (_dtServerTip || _dtGetCached());
+    if (!tip) { showToast('暂无内容可朗读'); return; }
+    var parts = [];
+    if (tip.title) parts.push(tip.title);
+    if (tip.content || tip.summary) parts.push(tip.content || tip.summary);
+    if (tip.tips && tip.tips.length) parts.push('小贴士。' + tip.tips.join('。'));
+    var text = parts.join('。');
+    if (!text.trim()) { showToast('暂无内容可朗读'); return; }
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN'; u.rate = 0.9; u.pitch = 1; u.volume = 1;
+    u.onend = function () { _dtSpeaking = false; _dtUpdateSpeakBtns('🔊 朗读'); };
+    u.onerror = function () { _dtSpeaking = false; _dtUpdateSpeakBtns('🔊 朗读'); };
+    speechSynthesis.speak(u);
+    _dtSpeaking = true;
+    _dtUpdateSpeakBtns('⏹ 停止');
+}
+function _dtUpdateSpeakBtns(label) {
+    var b1 = document.getElementById('dtCardSpeakBtn'); if (b1) b1.textContent = label;
+    var b2 = document.getElementById('dtFullSpeakBtn'); if (b2) b2.textContent = label;
 }
 var _dtCurTip = null; // 当前弹层展示的 tip（卡片/往期/收藏三个入口共用）
 function _openDailyTipFull(tip) {
@@ -26673,6 +26707,7 @@ function _openDailyTipFull(tip) {
         + '<div style="display:flex;gap:10px;">'
         + '<button id="dtFullFavBtn" type="button" onclick="_dtFavFromFull()" style="flex:1;height:38px;border-radius:12px;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:14px;cursor:pointer;">' + (_dtIsFav(tip) ? '⭐ 已收藏' : '收藏') + '</button>'
         + '<button type="button" onclick="_dtShareToFamily()" style="flex:1;height:38px;border-radius:12px;border:none;background:#F97316;color:white;font-size:14px;cursor:pointer;">分享到家庭</button>'
+        + '<button type="button" id="dtFullSpeakBtn" onclick="_dtSpeakTip(\'full\')" style="flex:1;height:38px;border-radius:12px;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:14px;cursor:pointer;">🔊 朗读</button>'
         + '<button type="button" onclick="_closeDtFull()" style="flex:1;height:38px;border-radius:12px;border:none;background:#F3F4F6;color:#4B5563;font-size:14px;cursor:pointer;">关闭</button>'
         + '</div>';
     sheet.appendChild(hdr);
