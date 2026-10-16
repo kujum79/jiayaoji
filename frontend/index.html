@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V177-20261016';
+        var APP_VER = 'V178-20261017';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -38948,6 +38948,7 @@ function submitAddRecord() {
     
     const record = {
         id: Date.now(),
+        mode: 'family', // V178: 全家模式标记
         date: date,
         mealType: currentRecordFormMeal,
         diningType: currentRecordFormDining,
@@ -50453,7 +50454,7 @@ function renderDiary() {
                         ? `<button onclick="openDiningOutModal('${meal.key}','confirmed')" style="background:#EFF6FF;color:#1E40AF;">记录实际</button>`
                         : `<button onclick="openDiningOutModal('${meal.key}','planning')" style="background:#FEF3C7;color:#92400E;">继续规划</button>`
                     ) : (window.__diaryPlanBtnHtml || '') + `
-                        <button onclick="openGroupRecordModal('${meal.key}')">记录</button>
+                        <button onclick="openMealRecordModal('${meal.key}')">记录</button>
                     `}
                     ${(typeof isChildMode === 'function' && isChildMode()) ? '<button onclick="openChildDiaryGuide(\'' + meal.key + '\',\'' + dateKey + '\')" style="background:linear-gradient(135deg,#FBBF24,#F472B6);color:white;font-weight:700;">🌈 写作引导</button>' : ''}
                 </div>
@@ -50498,7 +50499,7 @@ function renderDiary() {
                     ${(() => {
                         const rem = getMealReminder(meal.key);
                         if (rem) {
-                            return `<div onclick="openGroupRecordModal('${meal.key}')" style="position:absolute;top:-22px;left:50%;transform:translateX(-50%);padding:2px 12px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;white-space:nowrap;z-index:5;box-shadow:0 2px 6px rgba(0,0,0,0.08);transition:background 0.15s;">${rem.msg}</div>`;
+                            return `<div onclick="openMealRecordModal('${meal.key}')" style="position:absolute;top:-22px;left:50%;transform:translateX(-50%);padding:2px 12px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;white-space:nowrap;z-index:5;box-shadow:0 2px 6px rgba(0,0,0,0.08);transition:background 0.15s;">${rem.msg}</div>`;
                         }
                         return '';
                     })()}
@@ -60619,11 +60620,315 @@ function openDiaryRecordModal(mealKey) {
     });
 }
 
+// ==================== V178 统一记录弹窗：默认全家 + 分餐可选 ====================
+// 读取某日某餐的计划菜名（dietCalendar 的 plan.dishes）
+function _getMealPlanDishNames(dateKey, mealKey) {
+    try {
+        const data = getMealData(dateKey, mealKey);
+        return (data.plan && Array.isArray(data.plan.dishes))
+            ? data.plan.dishes.map(d => typeof d === 'string' ? d : ((d && d.name) || '')).filter(Boolean)
+            : [];
+    } catch (e) { return []; }
+}
+
+/**
+ * 全家模式落库（mode='family'，历史无 mode 字段的数据照常读取）
+ * o: {date, mealKey, mealLabel, diningType, location, restaurant, price, people, dishes:[name], rating, comment}
+ * @returns {{record:Object, deducted:number}|null}
+ */
+function saveFamilyMealRecord(o) {
+    const names = (o.dishes || []).map(function (s) { return String(s || '').trim(); }).filter(Boolean);
+    if (!names.length) { showToast('请至少添加一道菜'); return null; }
+    const date = o.date;
+    const solarTerm = getSolarTermForDate(new Date(date + 'T12:00:00'));
+    const record = {
+        id: Date.now(),
+        mode: 'family', // V178
+        date: date,
+        mealType: o.mealLabel, // 与旧版全家记录一致用中文餐次，统计/历史无需改动
+        mealLabel: o.mealLabel,
+        diningType: o.diningType || '在家做饭',
+        location: o.location || '家',
+        restaurant: o.restaurant || '',
+        price: parseFloat(o.price) || 0,
+        people: parseInt(o.people) || 0,
+        imageBase64: '',
+        rating: parseInt(o.rating) || 0,
+        dishes: names.map(function (n, i) { return { id: Date.now() + i, name: n, userComment: '', aiFeedback: '' }; }),
+        overallComment: o.comment || '',
+        solarTerm: solarTerm.name,
+        createdAt: Date.now(),
+        source: ''
+    };
+    const records = JSON.parse(lsGet('mealRecords')) || [];
+    records.push(record);
+    lsSet('mealRecords', JSON.stringify(records));
+
+    // 同步日历 actual（食记餐卡/统计读取）
+    try {
+        updateMealActual(String(date), o.mealKey, {
+            dishes: record.dishes,
+            diningType: record.diningType,
+            location: record.location,
+            comment: record.overallComment,
+            rating: record.rating,
+            mode: 'family',
+            savedAt: record.createdAt,
+            id: record.id,
+            price: record.price,
+            people: record.people,
+            imageBase64: null
+        });
+    } catch (e) { console.warn('同步日历实际记录失败：', e); }
+
+    // 在家做饭自动扣减冰箱食材
+    let deducted = 0;
+    if (record.diningType === '在家做饭') {
+        names.forEach(function (n) {
+            try { deducted += (deductIngredientsForDish(n) || []).length; } catch (e) {}
+        });
+    }
+    return { record: record, deducted: deducted };
+}
+
+function openMealRecordModal(mealKey) {
+    if (!requireLogin('记录实际就餐')) return;
+    const dateKey = dateToKey(currentDiaryDate);
+    const mealNames = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
+    const mealLabel = mealNames[mealKey] || '正餐';
+
+    // 记住上次模式（localStorage 键 recordMode），默认全家
+    let mode = localStorage.getItem('recordMode') === 'split' ? 'split' : 'family';
+
+    // 全家面板状态
+    let fDishes = [];
+    let fRating = 0;
+    let fDining = '在家做饭';
+    let fLocation = '家';
+    let splitBuilt = false;
+
+    // 已有同类型弹窗先移除，避免元素 id 冲突
+    const oldOv = document.getElementById('umrOverlay');
+    if (oldOv) oldOv.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'umrOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(31,41,55,0.5);display:flex;align-items:flex-end;justify-content:center;padding:0;';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeAll(); });
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:white;border-radius:20px 20px 0 0;width:420px;max-width:calc(100% - 10px);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 -4px 20px rgba(0,0,0,0.15);overflow:hidden;';
+    modal.innerHTML = ''
+        + '<div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:12px 16px 8px;">'
+        +   '<button id="umrBack" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6B7280;padding:2px 6px;line-height:1;">＜</button>'
+        +   '<div style="font-size:16px;font-weight:700;color:#374151;flex:1;">✍️ 记录' + escapeHtml(mealLabel) + '</div>'
+        + '</div>'
+        + '<div style="flex-shrink:0;display:flex;gap:8px;padding:0 16px 10px;">'
+        +   '<button id="umrTabFamily" type="button" style="flex:1;padding:9px 0;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;border:1px solid;">👨‍👩‍👦 全家一起吃</button>'
+        +   '<button id="umrTabSplit" type="button" style="flex:1;padding:9px 0;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;border:1px solid;">🔀 分餐记录</button>'
+        + '</div>'
+        + '<div style="flex:1;overflow-y:auto;">'
+        +   '<div id="umrFamilyPanel" style="padding:0 0 8px;">'
+        +     '<div style="padding:0 16px 8px;font-size:12px;color:#9CA3AF;line-height:1.6;">全家共吃一锅饭，记一次就好；需要按人分别记录可切到「🔀 分餐记录」</div>'
+        +     '<div style="padding:0 16px;">'
+        +       '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">🍽️ 菜品</div>'
+        +       '<div id="umrFDishTags" style="display:flex;flex-wrap:wrap;gap:6px;min-height:30px;"></div>'
+        +       '<div style="display:flex;gap:6px;margin-top:6px;">'
+        +         '<input id="umrFDishInput" placeholder="输入菜名，回车添加" style="flex:1;min-width:0;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        +         '<button id="umrFDishAdd" type="button" style="padding:0 14px;border:1px solid #FED7AA;background:#FFFBEB;color:#F97316;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">添加</button>'
+        +       '</div>'
+        +       '<div id="umrFPlanHint"></div>'
+        +       '<div style="display:flex;align-items:center;gap:10px;margin-top:14px;">'
+        +         '<span style="font-size:13px;font-weight:600;color:#374151;">⭐ 总体评分</span>'
+        +         '<span id="umrFStars" style="font-size:24px;line-height:1;letter-spacing:2px;user-select:none;"></span>'
+        +       '</div>'
+        +       '<input id="umrFComment" maxlength="60" placeholder="一句话评价（可选）" style="margin-top:10px;width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;box-sizing:border-box;">'
+        +       '<div style="margin-top:12px;">'
+        +         '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">用餐类型</div>'
+        +         '<div style="display:flex;gap:6px;">'
+        +           '<button type="button" class="umr-f-dining" data-v="在家做饭" style="padding:5px 14px;border-radius:14px;font-size:13px;border:1px solid;cursor:pointer;">🏠 在家做饭</button>'
+        +           '<button type="button" class="umr-f-dining" data-v="外出就餐" style="padding:5px 14px;border-radius:14px;font-size:13px;border:1px solid;cursor:pointer;">🍽️ 外出就餐</button>'
+        +         '</div>'
+        +       '</div>'
+        +       '<div id="umrFDiningExtra" style="display:none;margin-top:8px;">'
+        +         '<input id="umrFRestaurant" placeholder="餐厅名称（选填）" style="width:100%;padding:7px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;box-sizing:border-box;">'
+        +         '<div style="display:flex;gap:8px;margin-top:6px;">'
+        +           '<input id="umrFPrice" type="number" placeholder="人均消费" style="flex:1;min-width:0;padding:7px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;box-sizing:border-box;">'
+        +           '<input id="umrFPeople" type="number" placeholder="就餐人数" style="flex:1;min-width:0;padding:7px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;box-sizing:border-box;">'
+        +         '</div>'
+        +       '</div>'
+        +       '<div style="margin-top:12px;">'
+        +         '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">📍 就餐地点</div>'
+        +         '<div id="umrFLoc" style="display:flex;flex-wrap:wrap;gap:6px;"></div>'
+        +       '</div>'
+        +       '<div style="height:14px;"></div>'
+        +     '</div>'
+        +   '</div>'
+        +   '<div id="umrSplitPanel" style="padding:0 16px 14px;display:none;"></div>'
+        + '</div>'
+        + '<div id="umrFamilyFooter" style="flex-shrink:0;display:flex;gap:8px;padding:10px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid #F3F4F6;background:white;">'
+        +   '<button id="umrQuickBtn" type="button" style="flex:1;padding:12px 0;border:1px solid #FDBA74;background:#FFFBEB;color:#C2410C;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">⚡ 快速记录</button>'
+        +   '<button id="umrSaveBtn" type="button" style="flex:1;padding:12px 0;background:#F97316;color:white;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">保存</button>'
+        + '</div>';
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    function $(id) { return modal.querySelector('#' + id); }
+    function closeAll() { overlay.remove(); }
+
+    // ---------- 全家面板渲染 ----------
+    function renderFDishTags() {
+        const box = $('umrFDishTags');
+        if (!fDishes.length) {
+            box.innerHTML = '<span style="font-size:13px;color:#D1D5DB;line-height:30px;">还没添加菜品，可手动添加，或点下方「⚡ 快速记录」</span>';
+            return;
+        }
+        box.innerHTML = fDishes.map(function (n, i) {
+            return '<span style="display:inline-flex;align-items:center;gap:5px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:4px 6px 4px 10px;font-size:14px;color:#9A3412;">'
+                + '<span>' + escapeHtml(n) + '</span>'
+                + '<button type="button" data-i="' + i + '" class="umr-f-dish-del" style="background:none;border:none;color:#FB923C;font-size:12px;cursor:pointer;padding:0 2px;line-height:1;">✕</button></span>';
+        }).join('');
+        box.querySelectorAll('.umr-f-dish-del').forEach(function (b) {
+            b.addEventListener('click', function () {
+                fDishes.splice(parseInt(this.dataset.i, 10), 1);
+                renderFDishTags();
+            });
+        });
+    }
+    function renderFStars() {
+        const box = $('umrFStars');
+        box.innerHTML = [1, 2, 3, 4, 5].map(function (s) {
+            return '<span class="umr-f-star" data-s="' + s + '" style="color:' + (fRating >= s ? '#F59E0B' : '#E5E7EB') + ';">★</span>';
+        }).join('');
+        box.querySelectorAll('.umr-f-star').forEach(function (el) {
+            el.addEventListener('click', function () {
+                const s = parseInt(this.dataset.s, 10);
+                fRating = (fRating === s) ? 0 : s;
+                renderFStars();
+            });
+        });
+    }
+    function renderFPills() {
+        modal.querySelectorAll('.umr-f-dining').forEach(function (b) {
+            const on = b.dataset.v === fDining;
+            b.style.background = on ? '#F97316' : 'white';
+            b.style.color = on ? 'white' : '#6B7280';
+            b.style.borderColor = on ? '#F97316' : '#E5E7EB';
+        });
+        $('umrFDiningExtra').style.display = (fDining === '外出就餐') ? 'block' : 'none';
+        const locs = MEAL_LOCATION_OPTIONS;
+        $('umrFLoc').innerHTML = locs.map(function (l) {
+            const on = l === fLocation;
+            return '<button type="button" class="umr-f-loc" data-l="' + escapeAttr(l) + '" style="padding:5px 12px;border-radius:14px;font-size:13px;border:1px solid ' + (on ? '#F97316' : '#E5E7EB') + ';background:' + (on ? '#F97316' : 'white') + ';color:' + (on ? 'white' : '#6B7280') + ';cursor:pointer;">' + MEAL_LOCATION_ICONS[l] + ' ' + escapeHtml(l) + '</button>';
+        }).join('');
+        modal.querySelectorAll('.umr-f-loc').forEach(function (b) {
+            b.addEventListener('click', function () { fLocation = this.dataset.l; renderFPills(); });
+        });
+    }
+    function renderFPlanHint() {
+        const plan = _getMealPlanDishNames(dateKey, mealKey);
+        const box = $('umrFPlanHint');
+        if (!plan.length) { box.innerHTML = ''; return; }
+        box.innerHTML = '<button type="button" id="umrFFillPlan" style="margin-top:6px;padding:4px 10px;border:1px dashed #93C5FD;background:#EFF6FF;color:#1E40AF;border-radius:8px;font-size:12px;cursor:pointer;">📋 填入今日计划（' + plan.length + '道：' + escapeHtml(plan.slice(0, 3).join('、')) + (plan.length > 3 ? '…' : '') + '）</button>';
+        $('umrFFillPlan').addEventListener('click', function () {
+            plan.forEach(function (n) { if (fDishes.indexOf(n) === -1) fDishes.push(n); });
+            renderFDishTags();
+        });
+    }
+
+    function addFDish() {
+        const inp = $('umrFDishInput');
+        const n = (inp.value || '').trim();
+        if (!n) { showToast('请输入菜名'); return; }
+        if (fDishes.indexOf(n) > -1) { showToast('该菜已添加'); inp.value = ''; return; }
+        fDishes.push(n);
+        inp.value = '';
+        renderFDishTags();
+    }
+
+    function doSave(quick) {
+        let dishes, dining, location, rating, comment, restaurant = '', price = 0, people = 0;
+        if (quick) {
+            // 快速记录：计划菜 + 4星 + 空评价 + 在家/家，直接保存不弹确认
+            dishes = _getMealPlanDishNames(dateKey, mealKey);
+            if (!dishes.length) { showToast('今日' + mealLabel + '还没有计划菜品，可手动添加后保存'); return; }
+            dining = '在家做饭'; location = '家'; rating = 4; comment = '';
+        } else {
+            dishes = fDishes.slice();
+            dining = fDining; location = fLocation; rating = fRating;
+            comment = $('umrFComment').value.trim();
+            if (dining === '外出就餐') {
+                restaurant = $('umrFRestaurant').value.trim();
+                price = parseFloat($('umrFPrice').value) || 0;
+                people = parseInt($('umrFPeople').value) || 0;
+            }
+        }
+        const res = saveFamilyMealRecord({
+            date: dateKey, mealKey: mealKey, mealLabel: mealLabel,
+            diningType: dining, location: location, restaurant: restaurant, price: price, people: people,
+            dishes: dishes, rating: rating, comment: comment
+        });
+        if (!res) return;
+        closeAll();
+        renderDiary();
+        if (quick) {
+            showToast('已快速记录' + mealLabel + ' ✅');
+        } else {
+            showToast('✅ 记录已保存' + (res.deducted > 0 ? '，已扣除 ' + res.deducted + ' 种食材' : ''));
+        }
+    }
+
+    // ---------- 分餐面板（懒加载，复用 V154/V178 分餐 UI） ----------
+    function buildSplit() {
+        openGroupRecordModal(mealKey, {
+            embedded: true,
+            container: $('umrSplitPanel'),
+            onClose: function () { closeAll(); }
+        });
+    }
+    function switchMode(next) {
+        mode = next;
+        try { localStorage.setItem('recordMode', mode); } catch (e) {}
+        const onF = mode === 'family';
+        $('umrTabFamily').style.background = onF ? '#F97316' : 'white';
+        $('umrTabFamily').style.color = onF ? 'white' : '#6B7280';
+        $('umrTabFamily').style.borderColor = onF ? '#F97316' : '#E5E7EB';
+        $('umrTabSplit').style.background = onF ? 'white' : '#F97316';
+        $('umrTabSplit').style.color = onF ? '#6B7280' : 'white';
+        $('umrTabSplit').style.borderColor = onF ? '#E5E7EB' : '#F97316';
+        $('umrFamilyPanel').style.display = onF ? 'block' : 'none';
+        $('umrSplitPanel').style.display = onF ? 'none' : 'block';
+        $('umrFamilyFooter').style.display = onF ? 'flex' : 'none';
+        if (!onF && !splitBuilt) { buildSplit(); splitBuilt = true; }
+    }
+
+    // ---------- 事件绑定 ----------
+    $('umrBack').addEventListener('click', closeAll);
+    $('umrTabFamily').addEventListener('click', function () { switchMode('family'); });
+    $('umrTabSplit').addEventListener('click', function () { switchMode('split'); });
+    $('umrFDishAdd').addEventListener('click', addFDish);
+    $('umrFDishInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addFDish(); } });
+    modal.querySelectorAll('.umr-f-dining').forEach(function (b) {
+        b.addEventListener('click', function () { fDining = this.dataset.v; renderFPills(); });
+    });
+    $('umrQuickBtn').addEventListener('click', function () { doSave(true); });
+    $('umrSaveBtn').addEventListener('click', function () { doSave(false); });
+
+    renderFDishTags();
+    renderFStars();
+    renderFPills();
+    renderFPlanHint();
+    switchMode(mode);
+}
+
 // ==================== V154 分餐记录：一餐多人分别记录 ====================
 var GROUP_LOCATION_OPTIONS = ['家', '单位', '学校', '车上', '餐厅', '其他'];
 
-function openGroupRecordModal(mealKey) {
-    if (!requireLogin('记录实际就餐')) return;
+function openGroupRecordModal(mealKey, _hooks) {
+    // V178: _hooks.embedded=true 时作为统一记录弹窗的「分餐」面板嵌入，不自建遮罩
+    _hooks = _hooks || {};
+    const embedded = !!_hooks.embedded;
+    if (!embedded && !requireLogin('记录实际就餐')) return;
     const dateKey = dateToKey(currentDiaryDate);
     const data = getMealData(dateKey, mealKey);
     const planDishes = (data.plan && Array.isArray(data.plan.dishes))
@@ -60663,11 +60968,23 @@ function openGroupRecordModal(mealKey) {
         };
     }
 
-    // 初始化：优先恢复本餐已存的分餐记录 → 否则按当天就餐组成员建卡（菜品预填计划菜品）
+    // 初始化：优先恢复本餐已存的分餐记录 → V178 否则用「上次填过的成员名单」 → 再否则按当天就餐组成员建卡（菜品预填计划菜品）
     (function initMembers() {
         if (existingActual && existingActual.groupRecord && Array.isArray(existingActual.members) && existingActual.members.length > 0) {
             existingActual.members.forEach(m => members.push(_copyMember(m)));
             return;
+        }
+        // V178: 上次分餐成员（localStorage 键 lastSplitMembers），菜品仍预填今日计划
+        let roster = null;
+        try { roster = JSON.parse(localStorage.getItem('lastSplitMembers') || 'null'); } catch (e) { roster = null; }
+        if (Array.isArray(roster) && roster.length > 0) {
+            roster.forEach(function (r) {
+                if (!r || !String(r.memberName || '').trim()) return;
+                const mem = _newMember(String(r.memberName).trim(), r.location || '家', planDishes.slice());
+                if (r.memberId) mem.memberId = r.memberId;
+                members.push(mem);
+            });
+            if (members.length > 0) return;
         }
         let names = [];
         try {
@@ -60685,29 +61002,44 @@ function openGroupRecordModal(mealKey) {
         });
     })();
 
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(31,41,55,0.5);display:flex;align-items:flex-end;justify-content:center;padding:0;';
-    overlay.addEventListener('click', function(e) { if (e.target === this) overlay.remove(); });
+    // V178: 统一关闭（独立模式移除自建遮罩；嵌入模式交给父容器钩子）
+    let overlay = null;
+    function _closePanel() {
+        if (embedded) { if (_hooks.onClose) _hooks.onClose(); }
+        else if (overlay) overlay.remove();
+    }
+    if (!embedded) {
+        overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(31,41,55,0.5);display:flex;align-items:flex-end;justify-content:center;padding:0;';
+        overlay.addEventListener('click', function(e) { if (e.target === this) _closePanel(); });
+    }
 
     const modal = document.createElement('div');
-    modal.style.cssText = 'background:white;border-radius:20px 20px 0 0;padding:20px;width:420px;max-width:calc(100% - 10px);max-height:85vh;overflow-y:auto;box-shadow:0 -4px 20px rgba(0,0,0,0.15);';
-    modal.innerHTML = `
+    modal.style.cssText = embedded
+        ? 'width:100%;padding:4px 0 0;box-sizing:border-box;'
+        : 'background:white;border-radius:20px 20px 0 0;padding:20px;width:420px;max-width:calc(100% - 10px);max-height:85vh;overflow-y:auto;box-shadow:0 -4px 20px rgba(0,0,0,0.15);';
+    modal.innerHTML = (embedded ? '' : `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
             <button id="grpCloseBtn" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6B7280;padding:0;line-height:1;">＜</button>
             <div style="font-size:16px;font-weight:700;color:#374151;flex:1;">✍️ 记录${escapeHtml(mealLabel)}</div>
             <button id="grpSaveBtn" style="padding:6px 16px;background:#F97316;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">💾 保存</button>
-        </div>
+        </div>`) + `
         <div style="font-size:12px;color:#9CA3AF;margin-bottom:10px;">同一餐可按成员分别记录菜品、地点与时间</div>
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
             <button type="button" id="grpSyncAllBtn" style="padding:5px 12px;border:1px solid #FED7AA;background:#FFFBEB;color:#C2410C;border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;">⇋ 同步到所有人</button>
             <button type="button" id="grpCopyLastBtn" style="padding:5px 12px;border:1px solid #E5E7EB;background:#F9FAFB;color:#374151;border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;">📋 复制上次</button>
-            <button type="button" id="grpDetailBtn" style="padding:5px 12px;border:1px solid #E5E7EB;background:white;color:#6B7280;border-radius:14px;font-size:12px;cursor:pointer;margin-left:auto;">📝 详细记录 ›</button>
+            <button type="button" id="grpDetailBtn" style="padding:5px 12px;border:1px solid #E5E7EB;background:white;color:#6B7280;border-radius:14px;font-size:12px;cursor:pointer;${embedded ? '' : 'margin-left:auto;'}">📝 详细记录 ›</button>
         </div>
         <div id="grpMemberList"></div>
         <button type="button" id="grpAddMemberBtn" style="width:100%;padding:10px;border:1px dashed #FED7AA;background:#FFFBEB;color:#F97316;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;">＋ 添加其他成员</button>
+        ${embedded ? '<button type="button" id="grpSaveBtnEmbedded" style="width:100%;padding:11px;background:#F97316;color:white;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;">💾 保存分餐记录</button>' : ''}
     `;
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
+    if (embedded) {
+        if (_hooks.container) _hooks.container.appendChild(modal);
+    } else {
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+    }
 
     const memberListEl = () => document.getElementById('grpMemberList');
 
@@ -60888,7 +61220,8 @@ function openGroupRecordModal(mealKey) {
 
     renderGroupMembers();
 
-    document.getElementById('grpCloseBtn').addEventListener('click', () => overlay.remove());
+    const _grpCloseBtn = document.getElementById('grpCloseBtn');
+    if (_grpCloseBtn) _grpCloseBtn.addEventListener('click', () => _closePanel());
 
     // ＋ 添加其他成员
     document.getElementById('grpAddMemberBtn').addEventListener('click', function() {
@@ -60932,12 +61265,12 @@ function openGroupRecordModal(mealKey) {
 
     // 📝 详细记录：切换到包含图片/AI评价/心情的完整记录界面
     document.getElementById('grpDetailBtn').addEventListener('click', function() {
-        overlay.remove();
+        _closePanel();
         openDiaryRecordModal(mealKey);
     });
 
-    // 💾 保存
-    document.getElementById('grpSaveBtn').addEventListener('click', function() {
+    // 💾 保存（独立模式头部按钮 / V178 嵌入模式底部按钮共用）
+    function _doGroupSave() {
         for (let i = 0; i < members.length; i++) {
             if (!String(members[i].memberName || '').trim()) { showToast('请填写第' + (i + 1) + '位成员的称呼'); return; }
         }
@@ -60958,6 +61291,7 @@ function openGroupRecordModal(mealKey) {
         const record = {
             id: Date.now(),
             kind: 'group',
+            mode: 'split', // V178: 分餐模式标记（历史无此字段数据照常读取）
             date: dateKey,
             mealType: mealKey,
             mealLabel: mealLabel,
@@ -60965,6 +61299,12 @@ function openGroupRecordModal(mealKey) {
             solarTerm: solarTerm.name,
             createdAt: Date.now()
         };
+        // V178: 记住上次填过的成员名单（仅成员+地点，菜品仍按当日计划预填）
+        try {
+            localStorage.setItem('lastSplitMembers', JSON.stringify(cleanRecords.map(function (r) {
+                return { memberId: r.memberId, memberName: r.memberName, location: r.location };
+            })));
+        } catch (e) {}
         try {
             const recs = JSON.parse(lsGet('mealRecords')) || [];
             recs.push(record);
@@ -60999,10 +61339,16 @@ function openGroupRecordModal(mealKey) {
 
         try { updateMealActual(dateKey, mealKey, actualData); } catch (e) { console.warn('同步日历失败：', e); }
 
-        overlay.remove();
+        _closePanel();
         renderDiary();
         showToast('✅ 分餐记录已保存（' + cleanRecords.length + '位成员）');
-    });
+        if (_hooks.onSaved) { try { _hooks.onSaved(record); } catch (e) {} }
+    }
+    const _grpSaveA = document.getElementById('grpSaveBtn');
+    if (_grpSaveA) _grpSaveA.addEventListener('click', _doGroupSave);
+    const _grpSaveB = document.getElementById('grpSaveBtnEmbedded');
+    if (_grpSaveB) _grpSaveB.addEventListener('click', _doGroupSave);
+    return modal; // V178: 嵌入模式返回面板根节点
 }
 
 // 生成就餐整体AI建议
