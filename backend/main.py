@@ -18,6 +18,7 @@
 """
 
 import base64
+import asyncio
 import json
 import os
 import random
@@ -2856,6 +2857,72 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
         oldest = min(_DAILY_TIP_CACHE.items(), key=lambda kv: kv[1].get("expire", 0))[0]
         _DAILY_TIP_CACHE.pop(oldest, None)
     return result
+
+
+# ========== V162: 我的创作 · AI 作品配图（通义万相 wanx2.1-t2i-turbo 异步文生图） ==========
+class ChefImageRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=500)
+    size: str = "1024*1024"
+
+
+def _chef_image_prompt(raw: str) -> str:
+    """把菜名/食材拼成美食摄影提示词，固定风格、限制长度。"""
+    p = re.sub(r"[\r\n]+", "，", str(raw or "")).strip()[:280]
+    return (
+        f"中式家常美食摄影：{p}，盛在素雅陶瓷餐具中，精致摆盘，"
+        "自然柔和光线，浅色木质桌面背景，景深虚化，高清晰度，色彩真实，令人有食欲"
+    )
+
+
+@app.post("/api/chef-image")
+async def chef_image(req: ChefImageRequest) -> Dict[str, Any]:
+    """我的创作：按菜名/食材生成一张作品配图，返回万相临时图片 URL。"""
+    size = req.size if req.size in ("1024*1024", "720*1280", "1280*720") else "1024*1024"
+    prompt = _chef_image_prompt(req.prompt)
+    headers = {
+        "Authorization": f"Bearer {ALIYUN_API_KEY}",
+        "Content-Type": "application/json",
+        "X-DashScope-Async": "enable",
+    }
+    submit_url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis"
+    payload: Dict[str, Any] = {
+        "model": "wanx2.1-t2i-turbo",
+        "input": {"prompt": prompt},
+        "parameters": {"size": size, "n": 1, "prompt_extend": True},
+    }
+    task_id = None
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(submit_url, headers=headers, json=payload)
+            if r.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"图片服务提交失败：{r.text[:200]}")
+            data = r.json()
+            task_id = (data.get("output") or {}).get("task_id")
+            if not task_id:
+                raise HTTPException(status_code=502, detail="图片服务未返回任务号")
+            poll_url = f"https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}"
+            poll_headers = {"Authorization": f"Bearer {ALIYUN_API_KEY}"}
+            # 万相出图通常 5~20 秒，最多轮询 60 秒
+            for _ in range(30):
+                await asyncio.sleep(2)
+                pr = await client.get(poll_url, headers=poll_headers)
+                if pr.status_code != 200:
+                    continue
+                pdata = pr.json()
+                output = pdata.get("output") or {}
+                status = output.get("task_status")
+                if status == "SUCCEEDED":
+                    results = output.get("results") or []
+                    img_url = results[0].get("url") if results else None
+                    if not img_url:
+                        raise HTTPException(status_code=502, detail="图片已生成但未取得地址")
+                    return {"url": img_url}
+                if status in ("FAILED", "CANCELED", "UNKNOWN"):
+                    msg = output.get("message") or "图片生成失败，请稍后重试"
+                    raise HTTPException(status_code=502, detail=str(msg)[:200])
+        raise HTTPException(status_code=504, detail="图片生成超时，请稍后重试")
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"图片服务网络错误：{exc}") from exc
 
 
 # V157: 文件末尾补跑别名注册——覆盖定义在本块之后的 /api/daily-tip、/api/weather、

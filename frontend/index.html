@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V161-20261016';
+        var APP_VER = 'V162-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -30245,7 +30245,7 @@ function renderFamily() {
         var dgAddBtn = document.getElementById('addDiningGroupBtn');
         if (dgAddBtn) dgAddBtn.addEventListener('click', function() { _openAddSubGroupModal(); });
     })();
-    // V89: 膳食日记（宽减半）+ 我的创作（自「我的食记」组移出）并排一行
+    // V162: 膳食日记/我的外食/我的复刻/我的创作 四大模块 2×2 一级入口卡
     function _renderDiaryTopCard() {
         var weekCnt = 0;
         try {
@@ -30265,25 +30265,33 @@ function renderFamily() {
         } catch (e) {}
         var worksCnt = 0;
         try { worksCnt = JSON.parse(lsGet('chefWorks') || '[]').length; } catch (e) {}
-        var halfCard = 'flex:1 1 0;min-width:0;background:white;border:1px solid #F3F4F6;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04);padding:10px 14px;cursor:pointer;display:flex;flex-direction:column;gap:0;';
+        var outCnt = 0;
+        try { outCnt = _diningOutHistory().length; } catch (e) {}
+        var pendingCnt = 0, doneCnt = 0;
+        try {
+            var lib78 = JSON.parse(lsGet('outdoorDishes') || '[]');
+            pendingCnt = lib78.filter(function(x) { return !x.clonedAt; }).length;
+            doneCnt = lib78.filter(function(x) { return !!x.clonedAt; }).length;
+        } catch (e) {}
+        var cardStyle = 'flex:1 1 0;min-width:0;background:white;border:1px solid #F3F4F6;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04);padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:3px;';
+        function card(icon, title, sub, onclick) {
+            return '<div onclick="' + onclick + '" style="' + cardStyle + '">'
+                + '<div style="display:flex;align-items:center;gap:6px;">'
+                + '<span style="font-size:18px;flex:0 0 auto;line-height:1;">' + icon + '</span>'
+                + '<span style="font-size:14px;color:#1F2937;font-weight:600;flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + title + '</span>'
+                + '<span style="color:#D1D5DB;font-size:15px;flex:0 0 auto;line-height:1;">›</span>'
+                + '</div>'
+                + '<div style="font-size:12px;color:#9CA3AF;line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + sub + '</div>'
+                + '</div>';
+        }
         familyList.insertAdjacentHTML('beforeend', `
-            <div style="display:flex;gap:12px;margin-bottom:12px;">
-                <div onclick="openDiaryTimeline()" style="${halfCard}">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span style="font-size:20px;flex:0 0 auto;line-height:1;">📔</span>
-                        <span style="font-size:15px;color:#1F2937;font-weight:600;flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">膳食日记</span>
-                        <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:20px;flex:0 0 auto;visibility:hidden;line-height:1;">📔</span><span style="font-size:12px;color:#9CA3AF;line-height:1.2;">本周已记 ${weekCnt} 篇</span></div>
-                </div>
-                <div onclick="openMyWorksPage()" style="${halfCard}">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span style="font-size:20px;flex:0 0 auto;line-height:1;">👨‍🍳</span>
-                        <span style="font-size:15px;color:#1F2937;font-weight:600;flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">我的创作</span>
-                        <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:20px;flex:0 0 auto;visibility:hidden;line-height:1;">👨‍🍳</span><span style="font-size:12px;color:#9CA3AF;line-height:1.2;">${worksCnt ? worksCnt + ' 个作品' : '记录你的私房创作'}</span></div>
-                </div>
+            <div style="display:flex;gap:10px;margin-bottom:10px;">
+                ${card('📔', '膳食日记', '本周已记 ' + weekCnt + ' 篇', 'openDiaryTimeline()')}
+                ${card('🍽️', '我的外食', outCnt ? outCnt + ' 次外食记录' : '记录外出就餐', '_openDiningOutListModal()')}
+            </div>
+            <div style="display:flex;gap:10px;margin-bottom:12px;">
+                ${card('🔁', '我的复刻', '想复刻' + pendingCnt + ' · 已完成' + doneCnt, '_openCloneListModal(\'pending\')')}
+                ${card('👨‍🍳', '我的创作', worksCnt ? worksCnt + ' 个作品' : '记录你的私房创作', 'openMyWorksPage()')}
             </div>
         `);
     }
@@ -30692,27 +30700,16 @@ window.editMemberCard = function(id) {
                     <span class="fgroup-arrow" style="font-size:13px;color:#9CA3AF;font-weight:400;">▸</span>
                 </div>
                 <div class="fgroup-body" style="display:none;">
-                <div onclick="_openDiningOutListModal()" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
-                    <span style="font-size:18px;flex:0 0 auto;line-height:1;">🍽</span>
-                    <span style="font-size:14px;color:#4B5563;font-weight:500;flex:0 0 auto;">我的外食</span>
-                    <span style="font-size:12px;color:#9CA3AF;flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:right;">${outCnt ? outCnt + '次' : '暂无'}</span>
-                    <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
-                </div>
+                <!-- V162: 「我的外食」「我的复刻」已提升为顶部一级入口卡，此处仅保留清单快捷子项 -->
                 <div onclick="_openCloneListModal('pending')" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
-                    <span style="font-size:18px;flex:0 0 auto;line-height:1;">🔁</span>
-                    <span style="font-size:14px;color:#4B5563;font-weight:500;flex:0 0 auto;">我的复刻</span>
-                    <span style="font-size:12px;color:#9CA3AF;flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:right;">想复刻${pendingCnt} · 已完成${doneCnt}</span>
-                    <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
-                </div>
-                <div onclick="_openCloneListModal('pending')" style="display:flex;align-items:center;gap:8px;padding:10px 16px 10px 52px;border-top:1px solid #F9FAFB;cursor:pointer;">
                     <span style="font-size:15px;flex:0 0 auto;line-height:1;">📌</span>
-                    <span style="font-size:13px;color:#6B7280;flex:0 0 auto;">想复刻清单</span>
+                    <span style="font-size:14px;color:#6B7280;flex:0 0 auto;">想复刻清单</span>
                     <span style="font-size:12px;color:#9CA3AF;flex:1 1 auto;min-width:0;text-align:right;">${pendingCnt}道</span>
                     <span style="color:#D1D5DB;font-size:14px;flex:0 0 auto;line-height:1;">›</span>
                 </div>
-                <div onclick="_openCloneListModal('done')" style="display:flex;align-items:center;gap:8px;padding:10px 16px 10px 52px;border-top:1px solid #F9FAFB;cursor:pointer;">
+                <div onclick="_openCloneListModal('done')" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F9FAFB;cursor:pointer;">
                     <span style="font-size:15px;flex:0 0 auto;line-height:1;">✅</span>
-                    <span style="font-size:13px;color:#6B7280;flex:0 0 auto;">已完成复刻</span>
+                    <span style="font-size:14px;color:#6B7280;flex:0 0 auto;">已完成复刻</span>
                     <span style="font-size:12px;color:#9CA3AF;flex:1 1 auto;min-width:0;text-align:right;">${doneCnt}道</span>
                     <span style="color:#D1D5DB;font-size:14px;flex:0 0 auto;line-height:1;">›</span>
                 </div>
@@ -31253,28 +31250,150 @@ function _twRefreshSection(dishName) {
     sec.parentNode.replaceChild(tmp.firstChild, sec);
 }
 
-// ---- 🍽 我的外食（diningOutPlans） ----
+// ---- 🍽 我的外食（V162：聚合日历中已完成的外食记录 + 规划中待就餐） ----
+var _EATOUT_MEAL_RANK = { dinner: 3, lunch: 2, breakfast: 1, snack: 0 };
+var _EATOUT_MEAL_NAMES = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '加餐' };
+/** 从膳食日历汇总所有「外出就餐」已完成记录，日期/餐次倒序 */
+function _diningOutHistory() {
+    var rows = [];
+    try {
+        var cal = getDietCalendar();
+        Object.keys(cal || {}).forEach(function(dk) {
+            var day = cal[dk] || {};
+            Object.keys(day).forEach(function(mk) {
+                var md = day[mk];
+                var a = md && md.actual;
+                if (a && a.diningType === '外出就餐') {
+                    rows.push({ date: dk, meal: mk, actual: a });
+                }
+            });
+        });
+    } catch (e) {}
+    rows.sort(function(a, b) {
+        if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+        return (_EATOUT_MEAL_RANK[b.meal] || 0) - (_EATOUT_MEAL_RANK[a.meal] || 0);
+    });
+    return rows;
+}
+function _eatoutStars(rating) {
+    var n = Math.max(0, Math.min(5, parseInt(rating, 10) || 0));
+    var s = '';
+    for (var i = 0; i < 5; i++) s += i < n ? '★' : '☆';
+    return '<span style="color:' + (n ? '#F59E0B' : '#D1D5DB') + ';letter-spacing:1px;font-size:13px;">' + s + '</span>';
+}
+function _eatoutMoodLabel(key) {
+    if (!key) return '';
+    var m = MOODS.find(function(x) { return x.key === key; });
+    return m ? (m.icon + m.label) : '';
+}
 function _openDiningOutListModal() {
     if (!requireLogin('我的外食')) return;
+    var hist = _diningOutHistory();
+    var totalCost = 0;
+    hist.forEach(function(r) { totalCost += Number(r.actual.totalCost) || 0; });
+    // 规划中待就餐（diningOutPlans：无 actual/completed 标记）
     var plans = {};
     try { plans = JSON.parse(lsGet('diningOutPlans') || '{}'); } catch (e) {}
-    var mealNames = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '加餐' };
-    var keys = Object.keys(plans).sort().reverse();
-    var rows = keys.map(function(dk) {
+    var planKeys = Object.keys(plans).sort().reverse().filter(function(dk) {
         var p = plans[dk] || {};
-        var done = !!(p.actual || p.completed);
-        var parts = [mealNames[p.mealType] || '外食'];
-        if (p.peopleCount) parts.push(p.peopleCount + '人');
-        if (p.budget) parts.push('人均' + p.budget + '元');
-        if (p.restaurant) parts.push(escapeHtml(p.restaurant));
-        return '<div style="display:flex;align-items:center;gap:10px;padding:11px 12px;background:white;border:1px solid #F3F4F6;border-radius:12px;margin-bottom:8px;">'
-            + '<span style="font-size:18px;flex-shrink:0;">' + (done ? '✅' : '🍽') + '</span>'
-            + '<div style="flex:1;min-width:0;"><div style="font-size:14px;color:#374151;font-weight:500;">' + dk + ' · ' + parts.join(' · ') + '</div>'
-            + '<div style="font-size:12px;color:#9CA3AF;">' + (done ? '已完成外食' : '已规划待就餐') + '</div></div>'
+        return !(p.actual || p.completed);
+    });
+
+    var summary = '<div style="display:flex;background:white;border:1px solid #F3F4F6;border-radius:12px;padding:12px 0;margin-bottom:12px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.04);">'
+        + '<div style="flex:1;min-width:0;"><div style="font-size:18px;font-weight:700;color:#F97316;">' + hist.length + '</div><div style="font-size:11px;color:#9CA3AF;margin-top:2px;">外食次数</div></div>'
+        + '<div style="flex:1;min-width:0;border-left:1px solid #F3F4F6;"><div style="font-size:18px;font-weight:700;color:#F97316;">¥' + totalCost.toFixed(0) + '</div><div style="font-size:11px;color:#9CA3AF;margin-top:2px;">累计消费</div></div>'
+        + '<div style="flex:1;min-width:0;border-left:1px solid #F3F4F6;"><div style="font-size:18px;font-weight:700;color:#F97316;">' + planKeys.length + '</div><div style="font-size:11px;color:#9CA3AF;margin-top:2px;">待就餐</div></div>'
+        + '</div>';
+
+    var rows = hist.map(function(r, idx) {
+        var a = r.actual || {};
+        var dishes = Array.isArray(a.dishes) ? a.dishes : [];
+        var rated = dishes.filter(function(d) { return d && (d.rating | 0) > 0; });
+        var avg = rated.length ? (rated.reduce(function(s, d) { return s + (d.rating | 0); }, 0) / rated.length) : 0;
+        var dishTxt = dishes.map(function(d) { return d.name || ''; }).filter(Boolean).join('、');
+        var info = [];
+        if (a.peopleCount) info.push(a.peopleCount + '人');
+        if (a.totalCost) info.push('¥' + a.totalCost + (a.avgCost ? '（人均¥' + a.avgCost + '）' : ''));
+        return '<div onclick="_openDiningOutDetail(' + idx + ')" style="background:white;border:1px solid #F3F4F6;border-radius:12px;margin-bottom:8px;padding:11px 12px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.04);">'
+            + '<div style="display:flex;align-items:center;gap:8px;">'
+            + '<span style="font-size:13px;font-weight:700;color:#92400E;flex-shrink:0;">' + r.date.slice(5).replace('-', '/') + ' ' + (_EATOUT_MEAL_NAMES[r.meal] || '外食') + '</span>'
+            + '<span style="font-size:14px;color:#1F2937;font-weight:600;flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + escapeHtml(a.restaurantName || '未填餐厅') + '</span>'
+            + (avg ? _eatoutStars(Math.round(avg)) : '')
+            + '<span style="color:#D1D5DB;font-size:15px;flex-shrink:0;line-height:1;">›</span>'
+            + '</div>'
+            + '<div style="display:flex;gap:8px;align-items:center;margin-top:5px;font-size:12px;color:#6B7280;min-width:0;">'
+            + (info.length ? '<span style="flex-shrink:0;color:#C2410C;font-weight:600;">' + info.join(' · ') + '</span>' : '')
+            + '<span style="flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + escapeHtml(dishTxt || '（无菜品名）') + '</span>'
+            + '</div>'
+            + (a.overallComment ? '<div style="font-size:12px;color:#9CA3AF;margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">“' + escapeHtml(a.overallComment) + '”</div>' : '')
             + '</div>';
     }).join('');
-    var body = (rows || '<div style="text-align:center;padding:24px;color:#9CA3AF;font-size:13px;">暂无外食记录<br><span style="font-size:12px;">在「食记」页点「外出就餐」即可规划</span></div>');
+
+    var planRows = planKeys.map(function(dk) {
+        var p = plans[dk] || {};
+        var parts = [_EATOUT_MEAL_NAMES[p.mealType] || '外食'];
+        if (p.peopleCount) parts.push(p.peopleCount + '人');
+        if (p.budget) parts.push('人均' + p.budget + '元');
+        if (p.restaurant) parts.push(p.restaurant);
+        return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#FFFBF6;border:1px dashed #FDE68A;border-radius:12px;margin-bottom:8px;">'
+            + '<span style="font-size:16px;flex-shrink:0;">🍽️</span>'
+            + '<div style="flex:1;min-width:0;font-size:13px;color:#4B5563;font-weight:500;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + dk + ' · ' + escapeHtml(parts.join(' · ')) + '</div>'
+            + '<span style="flex-shrink:0;font-size:11px;color:#B45309;font-weight:600;">待就餐</span>'
+            + '</div>';
+    }).join('');
+
+    var body = summary
+        + (hist.length ? '<div style="font-size:12px;color:#9CA3AF;margin:2px 0 8px;">已完成外食（点击查看菜品评价）</div>' + rows
+            : '<div style="text-align:center;padding:20px 20px 12px;color:#9CA3AF;font-size:13px;">还没有已完成的外食记录<br><span style="font-size:12px;">在「食记」记录就餐时选择「在外就餐」即可</span></div>')
+        + (planRows ? '<div style="font-size:12px;color:#9CA3AF;margin:14px 0 8px;">规划中</div>' + planRows : '');
+    window.__eatoutHist = hist;
     _openFamilySubModal('🍽 我的外食', body);
+}
+/** 外食记录详情：餐厅/消费/整体评价 + 逐道菜星级口味评语/想复刻 + 照片 */
+function _openDiningOutDetail(idx) {
+    var hist = window.__eatoutHist || _diningOutHistory();
+    var r = hist[idx];
+    if (!r) { _openDiningOutListModal(); return; }
+    var a = r.actual || {};
+    var dishes = Array.isArray(a.dishes) ? a.dishes : [];
+    var info = [];
+    if (a.peopleCount) info.push(a.peopleCount + '人就餐');
+    if (a.totalCost) info.push('消费 ¥' + a.totalCost);
+    if (a.avgCost) info.push('人均 ¥' + a.avgCost);
+    var mood = _eatoutMoodLabel(a.mood);
+
+    var head = '<div style="background:white;border:1px solid #F3F4F6;border-radius:14px;padding:14px;margin-bottom:10px;">'
+        + '<div style="font-size:16px;font-weight:700;color:#1F2937;">' + escapeHtml(a.restaurantName || '未填餐厅') + '</div>'
+        + '<div style="font-size:12px;color:#9CA3AF;margin-top:4px;">' + r.date + ' · ' + (_EATOUT_MEAL_NAMES[r.meal] || '外食') + (info.length ? ' · ' + escapeHtml(info.join(' · ')) : '') + '</div>'
+        + (a.overallComment || mood ? '<div style="font-size:13px;color:#4B5563;line-height:1.6;margin-top:10px;padding-top:10px;border-top:1px dashed #FDE68A;">'
+            + (mood ? '<span style="margin-right:8px;">' + mood + '</span>' : '') + escapeHtml(a.overallComment || '') + '</div>' : '')
+        + (Array.isArray(a.tags) && a.tags.length ? '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;">' + a.tags.map(function(t) {
+            return '<span style="font-size:11px;padding:2px 8px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;color:#B45309;">#' + escapeHtml(t) + '</span>';
+        }).join('') + '</div>' : '')
+        + '</div>';
+
+    var dishCards = dishes.length ? dishes.map(function(d) {
+        d = d || {};
+        return '<div style="background:white;border:1px solid #F3F4F6;border-radius:12px;padding:10px 12px;margin-bottom:8px;">'
+            + '<div style="display:flex;align-items:center;gap:8px;">'
+            + '<span style="font-size:14px;font-weight:600;color:#374151;flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + escapeHtml(d.name || '未命名') + '</span>'
+            + (d.wantToClone ? '<span style="flex-shrink:0;font-size:10px;padding:2px 7px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:999px;color:#C2410C;font-weight:600;">📌 想复刻</span>' : '')
+            + _eatoutStars(d.rating)
+            + '</div>'
+            + (d.taste ? '<div style="font-size:12px;color:#C2410C;margin-top:5px;">口味：' + escapeHtml(d.taste) + '</div>' : '')
+            + (d.userComment ? '<div style="font-size:12px;color:#6B7280;margin-top:5px;line-height:1.6;">' + escapeHtml(d.userComment) + '</div>' : '')
+            + (d.aiFeedback ? '<div style="font-size:12px;color:#9CA3AF;margin-top:5px;line-height:1.6;background:#FFFBEB;border-radius:8px;padding:6px 8px;">🤖 ' + escapeHtml(d.aiFeedback) + '</div>' : '')
+            + '</div>';
+    }).join('') : '<div style="font-size:12px;color:#9CA3AF;padding:8px 2px;">（无逐道菜记录）</div>';
+
+    var photos = (Array.isArray(a.photos) && a.photos.length)
+        ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">' + a.photos.map(function(src) {
+            return '<img src="' + src + '" style="width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid #F3F4F6;">';
+        }).join('') + '</div>' : '';
+
+    var body = head + photos + '<div style="font-size:13px;font-weight:600;color:#374151;margin:2px 0 8px;">逐道菜评价（' + dishes.length + '）</div>' + dishCards
+        + '<button onclick="_openDiningOutListModal()" style="width:100%;margin-top:6px;padding:10px 0;background:white;border:1px solid #FED7AA;color:#C2410C;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">← 返回外食列表</button>';
+    _openFamilySubModal('🍽 外食详情', body);
 }
 
 // ---- 🔁 我的复刻（outdoorDishes：想复刻 pending / 已完成 clonedAt） ----
@@ -31544,6 +31663,139 @@ function _openWorkStatsPage(id) {
     document.body.appendChild(ov);
 }
 function _closeWorkStatsPage() { var old = document.getElementById('mwStatsPage'); if (old) old.remove(); }
+
+// ============ V162: 我的创作 · AI 辅助（灵感推荐 / 步骤补全 / AI 配图） ============
+/** 宽松解析 AI 返回：已是对象直接用；rawText/字符串里抠第一个 JSON 对象 */
+function _mwLooseJson(resp) {
+    if (!resp) return null;
+    if (typeof resp === 'object') {
+        if (resp.rawText) {
+            var m = String(resp.rawText).match(/\{[\s\S]*\}/);
+            if (m) { try { return JSON.parse(m[0]); } catch (e) {} }
+            return null;
+        }
+        return resp;
+    }
+    try { return JSON.parse(resp); } catch (e) {}
+    var m2 = String(resp).match(/\{[\s\S]*\}/);
+    if (m2) { try { return JSON.parse(m2[0]); } catch (e2) {} }
+    return null;
+}
+/** 按钮 loading 态切换：loading=true 禁用并替换文案，false 还原 */
+function _mwAiBtnSet(btn, loading, loadingText) {
+    if (!btn) return;
+    if (loading) {
+        btn.dataset._html = btn.innerHTML;
+        btn.disabled = true;
+        btn.style.opacity = '0.65';
+        btn.style.cursor = 'wait';
+        btn.innerHTML = loadingText || 'AI 思考中…';
+    } else {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        if (btn.dataset._html) btn.innerHTML = btn.dataset._html;
+    }
+}
+/** 灵感推荐：scope='add'（发布弹窗，仅填菜名+简介）或 'edit'（编辑弹窗，菜名+食材+标签） */
+async function _mwAiInspiration(scope, ev) {
+    var btn = ev && ev.currentTarget;
+    var hint = '';
+    try { hint = (window.prompt('想做什么类型的菜？（可填口味/食材/场景，留空让 AI 自由发挥）', '') || '').trim().slice(0, 60); } catch (e) {}
+    _mwAiBtnSet(btn, true, '✨ AI 找灵感中…');
+    var sys = '你是资深家常菜厨师与美食博主，擅长设计适合家庭制作、有食欲又有记忆点的私房菜。只输出 JSON，不要解释。';
+    var user = '请设计一道家常私房菜' + (hint ? '，要求：' + hint : '（自由发挥，优先当季常见食材、30分钟内可完成）') + '。\n'
+        + '严格输出 JSON：{"name":"菜名(8字内)","desc":"一句话亮点(25字内)","ingredients":["食材名，3到6种，不含用量"],"tags":["标签2到3个，如 下饭/快手/香辣"]}';
+    try {
+        var resp = await callAliyunQwenApi(sys, user, { jsonMode: true, skipCompliance: true });
+        var obj = _mwLooseJson(resp);
+        if (!obj || !obj.name) throw new Error('AI 返回格式异常');
+        if (scope === 'edit') {
+            var ne = document.getElementById('mwEditName'), ie = document.getElementById('mwEditIngredients'), te = document.getElementById('mwEditTags');
+            if (ne) ne.value = String(obj.name).trim().slice(0, 20);
+            if (ie && Array.isArray(obj.ingredients)) ie.value = obj.ingredients.map(function(s) { return String(s || '').trim(); }).filter(Boolean).slice(0, 12).join('\n');
+            if (te && Array.isArray(obj.tags)) te.value = obj.tags.map(function(s) { return String(s || '').trim(); }).filter(Boolean).slice(0, 6).join('，');
+        } else {
+            var nn = document.getElementById('mwNewName'), nd = document.getElementById('mwNewDesc');
+            if (nn) nn.value = String(obj.name).trim().slice(0, 20);
+            if (nd && obj.desc) nd.value = String(obj.desc).trim().slice(0, 50);
+        }
+        showToast('✨ 灵感已填入，可再调整');
+    } catch (err) {
+        console.warn('AI灵感推荐失败', err);
+        showToast('AI 暂时开小差，稍后再试');
+    } finally {
+        _mwAiBtnSet(btn, false);
+    }
+}
+/** 步骤补全：按菜名+食材生成 4~7 步家常做法，填入编辑弹窗；已有步骤时需确认覆盖 */
+async function _mwAiSteps(ev) {
+    var btn = ev && ev.currentTarget;
+    var name = (document.getElementById('mwEditName').value || '').trim();
+    if (!name) { showToast('请先填写菜名'); return; }
+    var ings = (document.getElementById('mwEditIngredients').value || '').trim();
+    var stepsEl = document.getElementById('mwEditSteps');
+    if (stepsEl && stepsEl.value.trim()) {
+        if (!window.confirm('已有步骤内容，AI 补全会覆盖当前步骤，继续吗？')) return;
+    }
+    _mwAiBtnSet(btn, true, '✨ AI 补全步骤中…');
+    var sys = '你是严谨的家常菜菜谱作者，步骤必须具体可操作（含火候、时间、关键动作），只输出 JSON，不要解释。';
+    var user = '菜品：' + name + '\n食材：' + (ings || '（由你按这道菜常规搭配）') + '\n'
+        + '请给出适合家庭厨房的做法，严格输出 JSON：{"steps":["第1步…","第2步…"]}，4 到 7 步，每步 15~40 字，按操作顺序。';
+    try {
+        var resp = await callAliyunQwenApi(sys, user, { jsonMode: true, skipCompliance: true });
+        var obj = _mwLooseJson(resp);
+        if (!obj || !Array.isArray(obj.steps) || !obj.steps.length) throw new Error('AI 返回格式异常');
+        stepsEl.value = obj.steps.map(function(s) { return String(s || '').trim(); }).filter(Boolean).slice(0, 10).join('\n');
+        showToast('✨ 步骤已补全（' + Math.min(obj.steps.length, 10) + ' 步）');
+    } catch (err) {
+        console.warn('AI步骤补全失败', err);
+        showToast('AI 暂时开小差，稍后再试');
+    } finally {
+        _mwAiBtnSet(btn, false);
+    }
+}
+/** AI 配图：按菜名+食材调后端万相文生图，生成后写入编辑弹窗图片区；约需 10~30 秒 */
+async function _mwAiImage(ev) {
+    var btn = ev && ev.currentTarget;
+    var name = (document.getElementById('mwEditName').value || '').trim();
+    if (!name) { showToast('请先填写菜名'); return; }
+    if (mwEditImage && !window.confirm('当前已有图片，AI 配图会替换它，继续吗？')) return;
+    _mwAiBtnSet(btn, true, '🎨 AI 绘图中，约 10~30 秒…');
+    try {
+        var ings = (document.getElementById('mwEditIngredients').value || '').split('\n').map(function(s) { return s.trim(); }).filter(Boolean).slice(0, 5).join('、');
+        var prompt = name + (ings ? '（主要食材：' + ings + '）' : '');
+        var imgUrl = '';
+        // 主通道：自家后端万相文生图；失败（如账户欠费）自动降级到免费图源
+        try {
+            var resp = await fetch(API_BASE + '/chef-image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: prompt, size: '1024*1024' })
+            });
+            if (resp.ok) {
+                var data = await resp.json();
+                if (data.url) imgUrl = data.url;
+            } else {
+                console.warn('万相配图失败，改用免费图源');
+            }
+        } catch (e1) { console.warn('配图服务不可达，改用免费图源', e1); }
+        // 降级通道：Pollinations 免费文生图（无需密钥，浏览器直接加载）
+        if (!imgUrl) {
+            var stylePrompt = '中式家常美食摄影：' + prompt + '，素雅陶瓷餐具，精致摆盘，自然柔和光线，浅色木质桌面，景深虚化，高清晰度，令人有食欲';
+            imgUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(stylePrompt) + '?width=1024&height=1024&nologo=true&seed=' + Date.now();
+        }
+        mwEditImage = imgUrl;
+        _mwRenderEditImg();
+        showToast('🎨 AI 配图已生成');
+    } catch (err) {
+        console.warn('AI配图失败', err);
+        showToast('AI 配图失败：' + (err.message || '稍后再试'));
+    } finally {
+        _mwAiBtnSet(btn, false);
+    }
+}
+
 // ---- V87: 编辑作品表单（菜名/图片/食材/步骤/标签/是否公开） ----
 var mwEditImage = '';
 function _openWorkEditModal(id) {
@@ -31562,10 +31814,12 @@ function _openWorkEditModal(id) {
         + '<button onclick="document.getElementById(\'mwEditOv\').remove()" style="background:none;border:none;color:white;font-size:18px;cursor:pointer;">✕</button>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;padding:16px 20px;">'
-        + '<div style="font-size:13px;color:#374151;font-weight:600;margin-bottom:6px;">菜名</div>'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><span style="font-size:13px;color:#374151;font-weight:600;">菜名</span>'
+        + '<button type="button" onclick="_mwAiInspiration(\'edit\', event)" style="background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;">✨ AI 灵感</button></div>'
         + '<input id="mwEditName" value="' + escapeHtml(w.name) + '" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #FED7AA;border-radius:10px;font-size:14px;outline:none;">'
         // 图片
-        + '<div style="font-size:13px;color:#374151;font-weight:600;margin:12px 0 6px;">作品图片</div>'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin:12px 0 6px;"><span style="font-size:13px;color:#374151;font-weight:600;">作品图片</span>'
+        + '<button type="button" onclick="_mwAiImage(event)" style="background:linear-gradient(135deg,#EC4899,#F472B6);color:white;border:none;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;">🎨 AI 生成配图</button></div>'
         + '<div id="mwEditImgZone" onclick="document.getElementById(\'mwEditImgInput\').click()" style="border:2px dashed #FDBA74;background:#FFFBEB;border-radius:12px;padding:14px;text-align:center;cursor:pointer;">'
         + '<div style="font-size:20px;">📷</div><div style="font-size:12px;color:#C2410C;margin-top:2px;">点击更换图片</div></div>'
         + '<div id="mwEditImgBox" style="display:none;position:relative;margin-top:8px;"></div>'
@@ -31574,7 +31828,8 @@ function _openWorkEditModal(id) {
         + '<div style="font-size:13px;color:#374151;font-weight:600;margin:12px 0 6px;">食材（每行一种）</div>'
         + '<textarea id="mwEditIngredients" rows="4" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #FED7AA;border-radius:10px;font-size:13px;line-height:1.6;resize:none;outline:none;">' + escapeHtml((w.ingredients || []).join('\n')) + '</textarea>'
         // 步骤
-        + '<div style="font-size:13px;color:#374151;font-weight:600;margin:12px 0 6px;">步骤（每行一步）</div>'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin:12px 0 6px;"><span style="font-size:13px;color:#374151;font-weight:600;">步骤（每行一步）</span>'
+        + '<button type="button" onclick="_mwAiSteps(event)" style="background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;">✨ AI 补全步骤</button></div>'
         + '<textarea id="mwEditSteps" rows="5" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #FED7AA;border-radius:10px;font-size:13px;line-height:1.6;resize:none;outline:none;">' + escapeHtml((w.steps || []).join('\n')) + '</textarea>'
         // 标签
         + '<div style="font-size:13px;color:#374151;font-weight:600;margin:12px 0 6px;">标签（用逗号分隔）</div>'
@@ -31825,7 +32080,8 @@ function _openWorkAddModal() {
         + '<div style="font-size:16px;font-weight:700;">✏️ 发布新作品</div>'
         + '<button onclick="document.getElementById(\'mwAddOv\').remove()" style="background:none;border:none;color:white;font-size:18px;cursor:pointer;">✕</button></div>'
         + '<div style="padding:16px 20px;">'
-        + '<div style="font-size:13px;color:#374151;font-weight:600;margin-bottom:6px;">作品名</div>'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><span style="font-size:13px;color:#374151;font-weight:600;">作品名</span>'
+        + '<button type="button" onclick="_mwAiInspiration(\'add\', event)" style="background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;">✨ AI 灵感推荐</button></div>'
         + '<input id="mwNewName" placeholder="如：三仁秘制拌面" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #FED7AA;border-radius:10px;font-size:14px;outline:none;">'
         + '<div style="font-size:13px;color:#374151;font-weight:600;margin:12px 0 6px;">简介（可选）</div>'
         + '<textarea id="mwNewDesc" rows="2" placeholder="这道菜的特别之处…" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #FED7AA;border-radius:10px;font-size:14px;resize:none;outline:none;"></textarea>'
@@ -59080,7 +59336,8 @@ function openDiaryRecordModal(mealKey) {
                 taste: d.taste || '',
                 quantity: d.quantity || '',
                 price: d.price || '',
-                aiFeedback: ''
+                wantToClone: !!d.wantToClone, // V162: 修复逐道菜评价「想复刻」开关保存时丢失
+                aiFeedback: d.aiFeedback || ''
             })),
             overallComment: overallComment,
             diningType: currentDiningType,
