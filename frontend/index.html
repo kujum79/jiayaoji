@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V174-20261016';
+        var APP_VER = 'V175-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -4591,6 +4591,22 @@
                                     <option value="0-6m">0-6个月（纯母乳/配方奶）</option>
                                     <option value="6-12m">6-12个月（泥糊状辅食）</option>
                                     <option value="12-36m">12-36个月（软烂辅食）</option>
+                                </select>
+                            </div>
+                            <!-- V175: 国籍（外籍自动兼顾国际风味） -->
+                            <div class="family-form-row" style="display:flex; gap:4px; align-items:center;">
+                                <span style="font-size:12px; color:#9A3412; white-space:nowrap;">🌍 国籍</span>
+                                <select id="famNationality" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
+                                    <option value="">中国（默认中式家常菜）</option>
+                                    <option value="意大利">意大利（兼顾意式菜）</option>
+                                    <option value="英国">英国（兼顾英式早餐）</option>
+                                    <option value="美国">美国</option>
+                                    <option value="法国">法国</option>
+                                    <option value="德国">德国</option>
+                                    <option value="俄罗斯">俄罗斯</option>
+                                    <option value="日本">日本</option>
+                                    <option value="韩国">韩国</option>
+                                    <option value="其他国家">其他国家（国际风味）</option>
                                 </select>
                             </div>
                             <!-- V156: 特殊人群标签（多选，触发专属推荐规则） -->
@@ -12177,6 +12193,16 @@ const DISH_INGREDIENTS = {
     '排骨藕汤': { ingredients: ['排骨', '莲藕', '生姜', '葱', '盐'], cuisine: '湖北菜', category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'排骨',quantity:120,unit:'克'},{name:'莲藕',quantity:150,unit:'克'},{name:'生姜',quantity:10,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'盐',quantity:2,unit:'克'}] },
     '清蒸武昌鱼': { ingredients: ['武昌鱼', '生姜', '葱', '蒸鱼豉油'], cuisine: '湖北菜', category: '水产', meals: ['lunch', 'dinner'], perServing: [{name:'武昌鱼',quantity:200,unit:'克'},{name:'生姜',quantity:10,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'蒸鱼豉油',quantity:10,unit:'毫升'}] },
     '热干面': { ingredients: ['面条', '芝麻酱', '葱', '酱油', '香油'], cuisine: '湖北菜', category: '主粮', meals: ['breakfast', 'lunch'], perServing: [{name:'面条',quantity:120,unit:'克'},{name:'芝麻酱',quantity:20,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'酱油',quantity:8,unit:'毫升'},{name:'香油',quantity:5,unit:'毫升'}] },
+    // ========== V175 国际风味：意式菜（意大利籍家庭优先） ==========
+    '奶油蘑菇意面': { ingredients: ['意大利面', '蘑菇', '牛奶', '洋葱', '大蒜'], cuisine: '国际菜', foreignRegion: '意大利', category: '主粮', meals: ['lunch', 'dinner'], perServing: [{name:'意大利面',quantity:100,unit:'克'},{name:'蘑菇',quantity:80,unit:'克'},{name:'牛奶',quantity:80,unit:'毫升'},{name:'洋葱',quantity:30,unit:'克'},{name:'大蒜',quantity:5,unit:'克'}] },
+    '玛格丽特披萨': { ingredients: ['面粉', '番茄', '奶酪', '洋葱'], cuisine: '国际菜', foreignRegion: '意大利', category: '主粮', meals: ['lunch', 'dinner'], perServing: [{name:'面粉',quantity:100,unit:'克'},{name:'番茄',quantity:80,unit:'克'},{name:'奶酪',quantity:30,unit:'克'},{name:'洋葱',quantity:20,unit:'克'}] },
+    '意式蔬菜汤': { ingredients: ['番茄', '土豆', '胡萝卜', '白菜', '意大利面'], cuisine: '国际菜', foreignRegion: '意大利', category: '蔬菜', meals: ['lunch', 'dinner'], perServing: [{name:'番茄',quantity:80,unit:'克'},{name:'土豆',quantity:60,unit:'克'},{name:'胡萝卜',quantity:40,unit:'克'},{name:'白菜',quantity:60,unit:'克'},{name:'意大利面',quantity:30,unit:'克'}] },
+    '香煎三文鱼': { ingredients: ['三文鱼', '西兰花', '洋葱', '大蒜'], cuisine: '国际菜', foreignRegion: '意大利', category: '水产', meals: ['lunch', 'dinner'], perServing: [{name:'三文鱼',quantity:120,unit:'克'},{name:'西兰花',quantity:120,unit:'克'},{name:'洋葱',quantity:30,unit:'克'},{name:'大蒜',quantity:5,unit:'克'}] },
+    '凯撒鸡肉沙拉': { ingredients: ['生菜', '鸡肉', '鸡蛋', '番茄'], cuisine: '国际菜', foreignRegion: '意大利', category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'生菜',quantity:100,unit:'克'},{name:'鸡肉',quantity:80,unit:'克'},{name:'鸡蛋',quantity:1,unit:'个'},{name:'番茄',quantity:60,unit:'克'}] },
+    // ========== V175 国际风味：英式菜（英国籍家庭优先，英式早餐） ==========
+    '英式全早餐': { ingredients: ['鸡蛋', '面包', '培根', '番茄', '牛奶'], cuisine: '国际菜', foreignRegion: '英国', category: '肉蛋奶', meals: ['breakfast'], perServing: [{name:'鸡蛋',quantity:2,unit:'个'},{name:'面包',quantity:80,unit:'克'},{name:'培根',quantity:40,unit:'克'},{name:'番茄',quantity:60,unit:'克'},{name:'牛奶',quantity:200,unit:'毫升'}] },
+    '炸鱼薯条': { ingredients: ['鳕鱼', '土豆', '面粉'], cuisine: '国际菜', foreignRegion: '英国', category: '水产', meals: ['lunch', 'dinner'], perServing: [{name:'鳕鱼',quantity:150,unit:'克'},{name:'土豆',quantity:150,unit:'克'},{name:'面粉',quantity:30,unit:'克'}] },
+    '牧羊人派': { ingredients: ['牛肉', '土豆', '胡萝卜', '洋葱'], cuisine: '国际菜', foreignRegion: '英国', category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'牛肉',quantity:100,unit:'克'},{name:'土豆',quantity:150,unit:'克'},{name:'胡萝卜',quantity:40,unit:'克'},{name:'洋葱',quantity:30,unit:'克'}] },
 };
 
 // ==================== V173 区域菜系库（按家庭住址匹配家乡风味） ====================
@@ -12256,6 +12282,151 @@ function buildRegionalCuisinePromptSection(address) {
     });
     lines.push('家乡风味菜的 reason 以"🏠家乡风味"开头；仍须遵守过敏原、忌口、节气与多样性约束，不得连续两餐重复同一道菜。');
     return lines.join('\n');
+}
+
+// ==================== V175 外国人饮食适配（识别国籍，兼顾国际风味，保留中式） ====================
+// 国籍规则：code 内部码，label 中文国名，re 匹配 nationality/籍贯/现住地/标签文本
+// generic:true 表示"外籍但国别不详/暂未建专属菜库"，统一推荐国际菜
+const FOREIGN_COUNTRY_RULES = [
+    { code: 'IT', label: '意大利', generic: false, re: /意大利|italy|italia|italian|罗马|米兰|都灵|威尼斯|佛罗伦萨/i },
+    { code: 'UK', label: '英国', generic: false, re: /英国|英格兰|苏格兰|威尔士|北爱尔兰|英吉利|\bUK\b|britain|british|england|伦敦|曼彻斯特|利物浦/i },
+    { code: 'US', label: '美国', generic: true, re: /美国|美利坚|\bUSA\b|\bUS\b|american|纽约|洛杉矶|旧金山|芝加哥/i },
+    { code: 'FR', label: '法国', generic: true, re: /法国|法兰西|france|french|paris|巴黎|里昂/i },
+    { code: 'JP', label: '日本', generic: true, re: /日本|japan|japanese|东京|大阪|京都|横滨/i },
+    { code: 'KR', label: '韩国', generic: true, re: /韩国|南韩|korea|korean|首尔|釜山/i },
+    { code: 'DE', label: '德国', generic: true, re: /德国|德意志|germany|german|柏林|慕尼黑/i },
+    { code: 'RU', label: '俄罗斯', generic: true, re: /俄罗斯|俄国|russia|russian|莫斯科|圣彼得堡/i },
+    { code: 'XX', label: '外国', generic: true, re: /^$/ /* 仅由"外国人"标签显式触发，不做文本误匹配 */ }
+];
+// 既有国际菜的国别补注（DISH_INGREDIENTS 新条目内联 foreignRegion；此处补旧条目）
+const FOREIGN_DISH_REGION_EXTRA = { '番茄肉酱意面': '意大利', '三明治': '英国' };
+function getDishForeignRegion(dishName) {
+    if (!dishName) return '';
+    var info = (typeof DISH_INGREDIENTS !== 'undefined') && DISH_INGREDIENTS[dishName];
+    return (info && info.foreignRegion) || FOREIGN_DISH_REGION_EXTRA[dishName] || '';
+}
+// 识别单个成员国籍；返回 {code,label,generic} 或 null（中国人/未标注）
+function getMemberNationality(m) {
+    if (!m) return null;
+    // 1) 显式国籍字段：nationality / country / citizenship
+    var direct = String(m.nationality || m.country || m.citizenship || '').trim();
+    if (direct && !/^中国$|^中华人民共和国$|^china$/i.test(direct)) {
+        for (var i = 0; i < FOREIGN_COUNTRY_RULES.length; i++) {
+            var r0 = FOREIGN_COUNTRY_RULES[i];
+            if (r0.code !== 'XX' && r0.re.test(direct)) return { code: r0.code, label: r0.label, generic: !!r0.generic };
+        }
+        // 外籍但国别不在列表（如加拿大/澳大利亚）→ 通用国际风味
+        return { code: 'XX', label: direct, generic: true };
+    }
+    if (/中国|中华人民共和国|china/i.test(direct)) return null;
+    // 2) 文本字段兜底：籍贯/现住地 + 标签数组里出现国名
+    var tags = Array.isArray(m.tags) ? m.tags.join(' ') : '';
+    var text = String((m.place || '') + ' ' + (m.currentCity || '') + ' ' + tags);
+    for (var j = 0; j < FOREIGN_COUNTRY_RULES.length; j++) {
+        var r = FOREIGN_COUNTRY_RULES[j];
+        if (r.code !== 'XX' && r.re.test(text)) return { code: r.code, label: r.label, generic: !!r.generic };
+    }
+    // 3) 仅打了"外国人"标签、无国别 → 通用国际风味
+    if (Array.isArray(m.tags) && m.tags.indexOf('外国人') > -1) {
+        return { code: 'XX', label: '外国', generic: true };
+    }
+    return null;
+}
+// 汇总就餐成员国籍：[{code,label,generic,members:[名字]}]，同国别合并
+function getFamilyForeigners(members) {
+    var arr = Array.isArray(members) ? members : [];
+    if (!arr.length) {
+        try { arr = (typeof getDiaryDiningMembersInfo === 'function') ? getDiaryDiningMembersInfo() : (Array.isArray(familyData) ? familyData : []); } catch (e) { arr = []; }
+    }
+    var map = {};
+    (arr || []).forEach(function (m) {
+        if (!m) return;
+        var nat = getMemberNationality(m);
+        if (!nat) return;
+        if (!map[nat.code]) map[nat.code] = { code: nat.code, label: nat.label, generic: nat.generic, members: [] };
+        var nm = m.name || '外籍成员';
+        if (map[nat.code].members.indexOf(nm) === -1) map[nat.code].members.push(nm);
+    });
+    return Object.keys(map).map(function (k) { return map[k]; });
+}
+// 按国别取国际菜（带餐次过滤）
+function getDishesByForeignRegion(region, meal) {
+    return Object.keys(DISH_INGREDIENTS).filter(function (n) {
+        if (getDishForeignRegion(n) !== region) return false;
+        if (meal) {
+            var ms = DISH_INGREDIENTS[n].meals || [];
+            if (ms.indexOf(meal) === -1) return false;
+        }
+        return true;
+    });
+}
+// AI 推荐 prompt 的外国人饮食适配段（无外籍成员返回 ''）
+function buildForeignDietPromptSection(members) {
+    var specs = (typeof getFamilyForeigners === 'function') ? getFamilyForeigners(members) : [];
+    if (!specs.length) return '';
+    var lines = ['【外籍成员饮食适配·已自动识别国籍】'];
+    specs.forEach(function (s) {
+        if (s.code === 'IT') {
+            var itNames = getDishesByForeignRegion('意大利');
+            lines.push('- ' + s.members.join('、') + '（意大利籍）：保留中式家常菜的同时，午晚餐每天安排约1道意式选项（可选：' + itNames.join('、') + '，也可搭配三明治、牛奶燕麦等西式早餐）；多番茄、奶酪、橄榄油风味，少辛辣。');
+        } else if (s.code === 'UK') {
+            var ukNames = getDishesByForeignRegion('英国');
+            lines.push('- ' + s.members.join('、') + '（英国籍）：早餐优先提供英式选项（英式全早餐：煎蛋+吐司+培根+番茄+牛奶，或三明治、牛奶燕麦）；午晚餐可安排' + ukNames.join('、') + '等；保留中式家常菜。');
+        } else {
+            var intl = getDishesByCuisine('国际菜');
+            lines.push('- ' + s.members.join('、') + '（' + s.label + '籍）：保留中式家常菜的同时，每天安排1-2道国际风味选项（可选：' + intl.slice(0, 12).join('、') + '），口味温和、少辛辣重口。');
+        }
+    });
+    lines.push('国际风味菜的 reason 以"🌍国际风味"开头；国际菜只作为选项增量，不得挤占全部餐次，中式家常菜仍占多数。');
+    return lines.join('\n');
+}
+/**
+ * 本地兜底评分：某道菜对在华外籍成员的国际风味加分
+ * @returns {{delta:number, reason:string|null}}
+ */
+function scoreDishForForeigners(dish, meal, specs) {
+    if (!(specs || []).length) return { delta: 0, reason: null };
+    var region = (typeof getDishForeignRegion === 'function') ? getDishForeignRegion(dish) : '';
+    var cuisine = (typeof getDishCuisine === 'function') ? getDishCuisine(dish) : '';
+    var delta = 0;
+    specs.forEach(function (s) {
+        if (s.code === 'IT') {
+            if (region === '意大利') delta += 10;
+            else if (cuisine === '国际菜') delta += 5;
+        } else if (s.code === 'UK') {
+            if (region === '英国') {
+                delta += 10;
+                if (meal === 'breakfast') delta += 4; // 英式早餐在早餐额外加权
+            } else if (cuisine === '国际菜') delta += 5;
+        } else {
+            // 其他国别/国别不详：所有国际菜均加权
+            if (cuisine === '国际菜') delta += 8;
+        }
+    });
+    return { delta: delta, reason: delta > 0 ? '🌍国际风味' : null };
+}
+// 本地兜底补齐池：外籍成员的国际风味候选（早餐/午餐/晚餐）
+function getForeignFriendlyFills(specs) {
+    var fills = { breakfast: [], lunch: [], dinner: [] };
+    function addUniq(mk, names) {
+        names.forEach(function (n) { if (fills[mk].indexOf(n) === -1) fills[mk].push(n); });
+    }
+    (specs || []).forEach(function (s) {
+        if (s.code === 'IT') {
+            addUniq('lunch', getDishesByForeignRegion('意大利', 'lunch'));
+            addUniq('dinner', getDishesByForeignRegion('意大利', 'dinner'));
+            addUniq('breakfast', ['牛奶燕麦', '酸奶麦片', '三明治']);
+        } else if (s.code === 'UK') {
+            addUniq('breakfast', getDishesByForeignRegion('英国', 'breakfast').concat(['三明治', '牛奶燕麦', '水煮蛋']));
+            addUniq('lunch', getDishesByForeignRegion('英国', 'lunch'));
+            addUniq('dinner', getDishesByForeignRegion('英国', 'dinner'));
+        } else {
+            addUniq('lunch', getDishesByCuisine('国际菜', 'lunch'));
+            addUniq('dinner', getDishesByCuisine('国际菜', 'dinner'));
+            addUniq('breakfast', ['三明治', '牛奶燕麦', '酸奶麦片']);
+        }
+    });
+    return fills;
 }
 
 // 根据用餐人数计算菜品食材用量（从DISH_INGREDIENTS的perServing数据按人数倍乘）
@@ -16958,6 +17129,9 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
     // V174: 儿童分龄配餐（按就餐成员年龄自动识别）——评分加权 + 儿童友好补齐池
     var _childStages = (typeof getFamilyChildStages === 'function') ? getFamilyChildStages() : [];
     var _childFills = _childStages.length && (typeof getChildFriendlyFills === 'function') ? getChildFriendlyFills(_childStages) : { breakfast: [], lunch: [], dinner: [] };
+    // V175: 外国人饮食适配（按国籍）——国际风味加权 + 国际菜补齐池，中式仍占多数
+    var _foreignSpecs = (typeof getFamilyForeigners === 'function') ? getFamilyForeigners() : [];
+    var _foreignFills = _foreignSpecs.length && (typeof getForeignFriendlyFills === 'function') ? getForeignFriendlyFills(_foreignSpecs) : { breakfast: [], lunch: [], dinner: [] };
     // V173: 区域菜系（按家庭住址）——评分加权 + 补齐池优先
     var _regCuisines = (typeof detectRegionalCuisines === 'function') ? detectRegionalCuisines() : [];
     var _regFills = { breakfast: [], lunch: [], dinner: [] };
@@ -17055,6 +17229,12 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
                     if (_childScore.delta) score += _childScore.delta;
                     if (_childScore.reason && reasons.indexOf(_childScore.reason) === -1) reasons.push(_childScore.reason);
                 }
+                // V175: 外籍成员国际风味加权（意式/英式等，保留中式主体）
+                if (_foreignSpecs.length) {
+                    var _foreignScore = scoreDishForForeigners(dish, meal, _foreignSpecs);
+                    if (_foreignScore.delta) score += _foreignScore.delta;
+                    if (_foreignScore.reason && reasons.indexOf(_foreignScore.reason) === -1) reasons.push(_foreignScore.reason);
+                }
                 // V173: 餐次强约束——菜品标注了 meals 但不含当前餐次时降权
                 // （避免大碴粥/窝头出现在晚餐、热干面出现在晚餐等错配）
                 var _mealListV173 = Array.isArray(info.meals) ? info.meals : null;
@@ -17141,8 +17321,8 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
 
             // ---- 补齐：按日偏移轮转 genericFills，三天不会全重复 ----
             if (picked.length < needCount) {
-                // V174 儿童友好菜 → V173 家乡菜 → 通用菜，保证有儿童时每餐优先补到适龄菜
-                var fills0 = (_childFills[meal] || []).concat(_regFills[meal] || []).concat(genericFills[meal] || []);
+                // 补齐优先级：V174 儿童友好菜 → V175 国际风味菜 → V173 家乡菜 → 通用菜
+                var fills0 = (_childFills[meal] || []).concat(_foreignFills[meal] || []).concat(_regFills[meal] || []).concat(genericFills[meal] || []);
                 var offset = (daySeed + dIdx * 5 + mm * 3 + (appearedLoopFillPenalty())) % Math.max(1, fills0.length);
                 var fills = fills0.slice(offset).concat(fills0.slice(0, offset));
                 for (var fi=0; fi<fills.length && picked.length < needCount; fi++) {
@@ -17157,6 +17337,10 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
                     // V174: 补齐池中的儿童友好菜标注（软嫩/钙蛋白等）
                     if (_childStages.length && (_childFills[meal] || []).indexOf(n) !== -1) {
                         reason2 = '🧒分龄配餐 · ' + reason2;
+                    }
+                    // V175: 补齐池中的国际风味菜标注
+                    if (_foreignSpecs.length && (_foreignFills[meal] || []).indexOf(n) !== -1) {
+                        reason2 = '🌍国际风味 · ' + reason2;
                     }
                     // V173: 补齐池中的家乡菜标注
                     if (_regCuisines.length) {
@@ -17360,7 +17544,15 @@ async function generateIngredientPrefRecipes() {
           + _v174Stages.map(function(s){ return s.members.join('、') + '（' + s.short + '）· ' + CHILD_AGE_RULES[s.code].focus; }).join('；')
           + '</div>'
         : '';
-    summaryEl.innerHTML = `正在融合：时节「<b>${solarTermName||'(无节气数据)'}</b>」 · 家人偏好 · 近 30 天爱吃食材 Top3：<b>${liked.slice(0,3).map(x=>x.name).join(' / ') || '(暂无偏好，先通用推荐)'}</b>…` + _v174Banner;
+    // V175: 外籍成员国际风味提示（保留中式家常菜，增加国际选项）
+    var _v175Foreigners = [];
+    try { _v175Foreigners = getFamilyForeigners(); } catch(e) { _v175Foreigners = []; }
+    var _v175Banner = _v175Foreigners.length
+        ? '<div style="margin-top:6px;padding:6px 10px;background:#EFF6FF;border:1px solid #93C5FD;border-radius:8px;color:#1E40AF;font-size:13px;">🌍 外籍成员饮食适配已开启：'
+          + _v175Foreigners.map(function(s){ return s.members.join('、') + '（' + s.label + '籍）'; }).join('；')
+          + '——保留中式家常菜，每餐增加国际风味选项</div>'
+        : '';
+    summaryEl.innerHTML = `正在融合：时节「<b>${solarTermName||'(无节气数据)'}</b>」 · 家人偏好 · 近 30 天爱吃食材 Top3：<b>${liked.slice(0,3).map(x=>x.name).join(' / ') || '(暂无偏好，先通用推荐)'}</b>…` + _v174Banner + _v175Banner;
     wrap.innerHTML = `<div style="text-align:center;padding:24px;color:#6B7280;font-size:14px;">正在生成今/明/后 × 3 餐 × 3-5 道菜推荐（优先走 AI，3.5s 未响应则使用本地偏好库）…</div>`;
     if (submitBtn) { submitBtn.disabled = true; submitBtn.classList.add('is-disabled'); submitBtn.textContent = '确认选择'; }
 
@@ -23007,6 +23199,9 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
             // V174: 儿童分龄配餐段（按就餐成员年龄自动识别 3-6/6-12/12-18）
             var childAgeSection = '';
             try { childAgeSection = buildChildAgePromptSection(dineMembers); } catch(e) { childAgeSection = ''; }
+            // V175: 外籍成员饮食适配段（按国籍：意大利→意式菜、英国→英式早餐，保留中式）
+            var foreignDietSection = '';
+            try { foreignDietSection = buildForeignDietPromptSection(dineMembers); } catch(e) { foreignDietSection = ''; }
             var sys = '你是家肴记饮食策划。只返回 JSON：{byDate:{"' + dateKey + '":{"' + mealKey + '":[{dish:"菜名",reason:"15-28字"}]}}}。'
                 + '每餐' + _needN + '道（' + _fmN + '人，宁少勿多）；菜名真实家常菜，reason 中文。'
                 + '结合节气与成员健康，优先当季：请优先推荐用当季食材制作的菜谱，并在 reason 中说明节气养生原则；使用当季食材的菜，reason 以"🌿当季食材"开头；健康推荐菜 reason 含"适合生长发育期/术后/慢病/孕期/产后"。'
@@ -23033,6 +23228,8 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                 + (regionSection ? ('；\n' + regionSection) : '')
                 // V174: 儿童分龄配餐（按年龄自动匹配）
                 + (childAgeSection ? ('；\n' + childAgeSection) : '')
+                // V175: 外籍成员国际风味适配（保留中式家常菜，增加国际选项）
+                + (foreignDietSection ? ('；\n' + foreignDietSection) : '')
                 // V150: 饮食偏好画像（优先级第6位，在天气之后）
                 + (prefSection ? ('；' + prefSection) : '')
                 + (function(){ var dc = getDiversityConstraints(dateKey); return dc ? ('；\n' + dc) : ''; })()
@@ -39233,20 +39430,22 @@ function guessFoodCategory(name) {
         '青椒': '蔬菜', '红椒': '蔬菜', '豆角': '蔬菜', '芹菜': '蔬菜', '韭菜': '蔬菜',
         '空心菜': '蔬菜', '大蒜': '蔬菜', '蒜头': '蔬菜', '葱': '蔬菜', '大葱': '蔬菜',
         '香菜': '蔬菜', '山药': '蔬菜', '红薯': '蔬菜', '生姜': '蔬菜', '姜片': '蔬菜', '姜': '蔬菜',
-        '辣椒': '蔬菜', '洋葱': '蔬菜', '酸菜': '蔬菜',
+        '辣椒': '蔬菜', '洋葱': '蔬菜', '酸菜': '蔬菜', '蘑菇': '蔬菜',
         // 肉蛋奶
         '牛肉': '肉蛋奶', '猪肉': '肉蛋奶', '鸡肉': '肉蛋奶', '排骨': '肉蛋奶', '牛腩': '肉蛋奶',
         '鸡蛋': '肉蛋奶', '牛奶': '肉蛋奶', '鸭蛋': '肉蛋奶', '肉片': '肉蛋奶', '肉丝': '肉蛋奶',
+        '奶酪': '肉蛋奶', '芝士': '肉蛋奶', '培根': '肉蛋奶',
         '肉末': '肉蛋奶', '牛肉末': '肉蛋奶', '虾仁': '肉蛋奶', '五花肉': '肉蛋奶', '鸭肉': '肉蛋奶', '羊肉': '肉蛋奶',
         '咸肉': '肉蛋奶', '猪里脊': '肉蛋奶', '里脊': '肉蛋奶',
         // 水产
         '虾': '水产', '鱼': '水产', '鲫鱼': '水产', '鲤鱼': '水产', '带鱼': '水产',
         '蟹': '水产', '蛤蜊': '水产', '扇贝': '水产', '鲈鱼': '水产', '草鱼': '水产',
+        '三文鱼': '水产', '鳕鱼': '水产', '龙利鱼': '水产', '武昌鱼': '水产',
         // 主粮
         '大米': '主粮', '米饭': '主粮', '面粉': '主粮', '面条': '主粮',
         '小米': '主粮', '红豆': '主粮', '绿豆': '主粮', '燕麦': '主粮', '薏米': '主粮',
         '黑米': '主粮', '糙米': '主粮', '莲子': '主粮', '红枣': '主粮', '枸杞': '主粮', '桂圆': '主粮',
-        '玉米面': '主粮', '玉米碴': '主粮', '米粉': '主粮', '意大利面': '主粮',
+        '玉米面': '主粮', '玉米碴': '主粮', '米粉': '主粮', '意大利面': '主粮', '面包': '主粮',
         // 水果
         '苹果': '水果', '香蕉': '水果', '橙子': '水果', '葡萄': '水果',
         '西瓜': '水果', '梨': '水果', '桃子': '水果', '草莓': '水果', '蓝莓': '水果', '猕猴桃': '水果',
@@ -61775,6 +61974,8 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
     const preference = _readPrefFromForm('famPref');
     // V151: 婴儿阶段
     const infantStage = document.getElementById('famInfantStage').value || '';
+    // V175: 国籍（外籍成员推荐时兼顾国际风味）
+    const nationality = (document.getElementById('famNationality') || {}).value ? document.getElementById('famNationality').value : '';
     // V156: 特殊人群标签（多选）
     const _famTagVals = Array.prototype.map.call(
         document.querySelectorAll('#famSpecialTags .fam-special-tag-cb:checked'),
@@ -61787,6 +61988,7 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
         trainingItem, trainingFreq, pregnancyWeek, diseaseType,
         healthStartDate, healthEndDate, healthNote, preference,
         isInfant: !!infantStage, infantStage: infantStage || undefined,
+        nationality: nationality || undefined,
         tags: _famTagVals
     });
     lsSet('familyData', JSON.stringify(familyData));
@@ -61830,6 +62032,8 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
     document.getElementById('famTaste').value = '';
     document.getElementById('famDiet').value = '';
     document.getElementById('famInfantStage').value = '';
+    const famNatEl = document.getElementById('famNationality');
+    if (famNatEl) famNatEl.value = '';
     // V148: 清空饮食偏好字段
     document.getElementById('famPrefLikes').value = '';
     document.getElementById('famPrefDislikes').value = '';
