@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V178-20261017';
+        var APP_VER = 'V179-20261017';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -24135,62 +24135,23 @@ function jumpToDinnerTonight(meal, src) {
     if (!name) { showToast('菜品名称无效'); return; }
     var source = /^(existing|shopping|weekend|ai|preferred|manual)$/.test(String(src||'')) ? String(src) : ((obj && obj.source) || 'shopping');
 
-    // 切 Tab（diary）→ 开记录实际 → 填 date=今天 / 餐次=晚餐 / 在家做饭 / 菜品=name(去重) / 带 sourceMeta / banner
+    // V179: 切到食记 → 打开统一记录弹窗（今天·晚餐·全家模式），菜品预填、在家做饭
     try { if (typeof switchTab === 'function') switchTab('diary'); } catch(e) {}
-    try { if (typeof openAddRecordModal === 'function') openAddRecordModal(); } catch(e) {}
-
-    const todayKey = typeof dateToKey === 'function' ? dateToKey(new Date()) : '';
-    // 覆盖日期/餐次/用餐类型（openAddRecordModal 会重置为 早餐/在家做饭/今天日期，所以要在它之后改）
+    try { currentDiaryDate = new Date(); } catch(e) {}
     try {
-        currentRecordFormMeal = '晚餐';
-        const mealBtns = document.querySelectorAll('#recordMealTypes .record-meal-type-btn');
-        mealBtns.forEach(b => b.classList.remove('active'));
-        const dinnerBtn = document.querySelector('#recordMealTypes .record-meal-type-btn[data-meal="晚餐"]');
-        if (dinnerBtn) dinnerBtn.classList.add('active');
-
-        currentRecordFormDining = '在家做饭';
-        const dinOpts = document.querySelectorAll('#recordDiningToggle .record-dining-option');
-        dinOpts.forEach(b => b.classList.remove('active'));
-        const homeOpt = document.querySelector('#recordDiningToggle .record-dining-option[data-dining="在家做饭"]');
-        if (homeOpt) homeOpt.classList.add('active');
-        const extra = document.getElementById('recordDiningExtra');
-        if (extra) extra.style.display = 'none';
-
-        const dt = document.getElementById('recordFormDate');
-        if (dt && todayKey) dt.value = todayKey;
-    } catch(e) {}
-
-    // 菜品去重 / 追加 / 填 sourceMeta
-    try {
-        var dishes = (typeof recordFormDishes !== 'undefined') ? (recordFormDishes || []) : [];
-        const exist = dishes.some(d => d && String(d.name||'').trim() === name);
-        if (exist) {
-            showToast('「' + name + '」已在记录表单里，请直接补评价后保存。');
-        } else {
-            if (typeof addDishToForm === 'function') addDishToForm(name);
-            var newList = (typeof recordFormDishes !== 'undefined') ? (recordFormDishes || []) : [];
-            var last = newList[newList.length - 1];
-            if (last && String(last.name || '').trim() === name) {
-                last.sourceMeta = { source: (source === 'shopping' ? 'shopping' : (source || '')), addedBy: 'tonight_button', at: Date.now() };
-                last.userComment = (last.userComment && last.userComment.trim()) ? last.userComment : '🛒 来源：现购食材推荐（今晚就吃）';
-            }
-            if (typeof renderFormDishList === 'function') renderFormDishList();
-        }
-        // 顶部来源 banner（记录 modal）
-        var bannerHost = document.getElementById('recordAiFeedbackArea');
-        if (bannerHost) {
-            bannerHost.innerHTML = '';
-            var banner = document.createElement('div');
-            banner.className = 'record-source-banner';
-            banner.textContent = '已从「现购食材·今晚就吃」带入：「' + name + '」 ｜ 已预设 今天 晚餐 · 在家做饭 ｜ 补个评价后按『保存』将自动扣食材库存 ✅';
-            bannerHost.insertBefore(banner, bannerHost.firstChild);
+        if (typeof openMealRecordModal === 'function') {
+            openMealRecordModal('dinner', {
+                prefillDishes: [name],
+                source: (source === 'shopping' ? 'shopping' : (source || '')),
+                banner: '已从「现购食材·今晚就吃」带入：「' + name + '」 ｜ 已预设 今天 晚餐 · 在家做饭 ｜ 补个评分/评价后按『保存』将自动扣食材库存 ✅'
+            });
         }
     } catch(e) {
-        console.warn('jumpToDinnerTonight 填菜失败：', e);
+        console.warn('jumpToDinnerTonight 打开记录弹窗失败：', e);
     }
 
     try { if (typeof closeFridgeResult === 'function') closeFridgeResult(); } catch(e) {}
-    showToast('✅ 已跳转到「食记·记录实际」：菜品已带入，记得补评价后保存～');
+    showToast('✅ 已跳转到「食记·记录晚餐」：菜品已带入，确认后保存～');
 }
 
 // 购物计划入库后再扣（仅今晚就吃 + shopping 触发，兜底 fridgeItems 里没有新购食材的情况）
@@ -27380,7 +27341,7 @@ function renderHomeDiaryCard() {
         + '</div>'
         + '<div class="hd-act-row">'
         + '<span class="hd-act-text" id="hdActText">' + actHtml + '</span>'
-        + '<button class="hd-pill-btn" onclick="openAddRecordModal()">记录</button>' // V106: 记录实际→记录
+        + '<button class="hd-pill-btn" onclick="openTodayMealRecordModal(\'' + mealKey + '\')">记录</button>' // V179: 统一记录弹窗（全家/分餐），直接记录本餐
         + '</div>'
         + costHtml;
     // V159: 餐卡重建后刷新成本行右侧「本月已省」槽
@@ -60658,7 +60619,7 @@ function saveFamilyMealRecord(o) {
         overallComment: o.comment || '',
         solarTerm: solarTerm.name,
         createdAt: Date.now(),
-        source: ''
+        source: o.source || ''
     };
     const records = JSON.parse(lsGet('mealRecords')) || [];
     records.push(record);
@@ -60691,17 +60652,20 @@ function saveFamilyMealRecord(o) {
     return { record: record, deducted: deducted };
 }
 
-function openMealRecordModal(mealKey) {
+function openMealRecordModal(mealKey, opts) {
     if (!requireLogin('记录实际就餐')) return;
+    opts = opts || {}; // V179: {prefillDishes:[], banner:'', source:''}
     const dateKey = dateToKey(currentDiaryDate);
     const mealNames = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
     const mealLabel = mealNames[mealKey] || '正餐';
 
-    // 记住上次模式（localStorage 键 recordMode），默认全家
-    let mode = localStorage.getItem('recordMode') === 'split' ? 'split' : 'family';
+    // 记住上次模式（localStorage 键 recordMode），默认全家；带预填菜（如今晚就吃）时强制全家
+    let mode = (opts.prefillDishes && opts.prefillDishes.length)
+        ? 'family'
+        : (localStorage.getItem('recordMode') === 'split' ? 'split' : 'family');
 
     // 全家面板状态
-    let fDishes = [];
+    let fDishes = (Array.isArray(opts.prefillDishes) ? opts.prefillDishes.slice() : []).filter(Boolean);
     let fRating = 0;
     let fDining = '在家做饭';
     let fLocation = '家';
@@ -60729,6 +60693,7 @@ function openMealRecordModal(mealKey) {
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;">'
         +   '<div id="umrFamilyPanel" style="padding:0 0 8px;">'
+        +     (opts.banner ? '<div id="umrBanner" style="margin:0 16px 8px;padding:8px 10px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;font-size:12px;color:#9A3412;line-height:1.6;"></div>' : '<div id="umrBanner"></div>')
         +     '<div style="padding:0 16px 8px;font-size:12px;color:#9CA3AF;line-height:1.6;">全家共吃一锅饭，记一次就好；需要按人分别记录可切到「🔀 分餐记录」</div>'
         +     '<div style="padding:0 16px;">'
         +       '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">🍽️ 菜品</div>'
@@ -60866,7 +60831,7 @@ function openMealRecordModal(mealKey) {
         const res = saveFamilyMealRecord({
             date: dateKey, mealKey: mealKey, mealLabel: mealLabel,
             diningType: dining, location: location, restaurant: restaurant, price: price, people: people,
-            dishes: dishes, rating: rating, comment: comment
+            dishes: dishes, rating: rating, comment: comment, source: opts.source || ''
         });
         if (!res) return;
         closeAll();
@@ -60918,7 +60883,14 @@ function openMealRecordModal(mealKey) {
     renderFStars();
     renderFPills();
     renderFPlanHint();
+    if (opts.banner) { const bn = $('umrBanner'); if (bn) bn.textContent = opts.banner; }
     switchMode(mode);
+}
+
+// V179: 首页餐卡入口——首页永远是"今天"，避免用户在食记浏览其他日期后从首页记错日期
+function openTodayMealRecordModal(mealKey) {
+    try { currentDiaryDate = new Date(); } catch (e) {}
+    openMealRecordModal(mealKey);
 }
 
 // ==================== V154 分餐记录：一餐多人分别记录 ====================
