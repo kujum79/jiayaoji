@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V173-20261016';
+        var APP_VER = 'V174-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -13940,6 +13940,117 @@ function classifyMemberDietaryType(member) {
     return '普通';
 }
 
+// ==================== V174 儿童分龄配餐（3-6 / 6-12 / 12-18，按年龄自动匹配） ====================
+/**
+ * 年龄 → 儿童阶段
+ * @returns {{code:'3-6'|'6-12'|'12-18', label:string}|null}
+ */
+function getChildAgeStage(age) {
+    var a = Number(age);
+    if (!isFinite(a) || a < 3 || a > 18) return null;
+    if (a < 6)    return { code: '3-6',   label: '学龄前儿童(3-6岁)', short: '3-6岁学龄前' };
+    if (a <= 12)  return { code: '6-12',  label: '学龄儿童(6-12岁)',  short: '6-12岁学龄期' };
+    return { code: '12-18', label: '青春期少年(12-18岁)', short: '12-18岁青春期' };
+}
+// 分龄配餐规则：preferRe 命中加分（食材/菜名），avoidRe 命中降权（仅3-6岁做软烂/刺激约束）
+const CHILD_AGE_RULES = {
+    '3-6': {
+        label: '学龄前儿童(3-6岁)', short: '3-6岁学龄前',
+        focus: '软烂易嚼、钙与蛋白质优先',
+        preferRe: /牛奶|酸奶|奶酪|芝士|鸡蛋|蛋羹|蒸蛋|豆腐|嫩豆腐|豆花|鱼肉|鱼片|鲈鱼|鳕鱼|龙利鱼|虾仁|虾|瘦肉|肉末|肉丸|排骨|牛腩|粥|软饭|面条|馄饨|小馄饨|南瓜|胡萝卜|西兰花|番茄|土豆|山药|玉米|菠菜|娃娃菜|冬瓜|丝瓜/,
+        softDishRe: /蒸|炖|煮|煲|羹|粥|焖|汆|熘/,
+        avoidRe: /辣子|剁椒|麻辣|麻婆|水煮(?!蛋)|干锅|火锅|烧烤|烤串|铁板|干煸|肥肠|毛肚|腊肉|腊肠|咸鱼|泡菜|酸菜|辣椒炒|苦瓜|整粒|蚕豆|硬果/,
+        aiRule: '菜品必须软烂易嚼、切小块，多用蒸/炖/煮/煲/羹/粥做法；每餐保证奶/蛋/豆腐/鱼虾/瘦肉中的1-2种补钙补蛋白；避免坚硬、整粒（整粒花生/蚕豆）、多刺、重辣重咸、油炸烧烤食物，少放刺激性调料。'
+    },
+    '6-12': {
+        label: '学龄儿童(6-12岁)', short: '6-12岁学龄期',
+        focus: '钙 + 铁 + 蛋白质',
+        preferRe: /牛奶|酸奶|奶酪|芝士|鸡蛋|豆腐|豆浆|豆干|牛肉|猪肝|瘦肉|排骨|鸡肉|鱼|虾|芝麻酱|菠菜|西兰花|黑木耳|木耳|红枣|紫菜|海带|蘑菇|香菇/,
+        avoidRe: null,
+        aiRule: '优先高钙（奶/奶酪/豆腐/芝麻酱/虾皮/绿叶菜）、富铁（瘦牛肉/猪肝/动物血/黑木耳）与高蛋白（蛋/鱼虾/瘦肉/豆制品）食物；每天1杯奶、1个蛋，荤素搭配，主食适量加粗粮，控制油炸、含糖饮料与零食。'
+    },
+    '12-18': {
+        label: '青春期少年(12-18岁)', short: '12-18岁青春期',
+        focus: '钙 + 蛋白质 + 充足能量',
+        preferRe: /牛奶|酸奶|奶酪|鸡蛋|牛肉|鸡肉|鸭肉|鱼|虾|排骨|瘦肉|豆腐|豆浆|米饭|面条|馒头|全麦|燕麦|红薯|紫薯|土豆|玉米|花生/,
+        avoidRe: null,
+        aiRule: '保证充足能量：每餐足量主食（米饭/面/杂粮），高蛋白（肉/蛋/鱼虾/奶/豆制品）助力生长发育，每天300-500ml奶补钙；运动量大时可加餐（牛奶/鸡蛋/水果/坚果），避免用垃圾食品填肚子。'
+    }
+};
+/**
+ * 汇总就餐成员中的儿童阶段：[{code,label,short,members:[名字]}]（按 3-6→6-12→12-18 排序）
+ */
+function getFamilyChildStages(members) {
+    var arr = Array.isArray(members) ? members : [];
+    if (!arr.length) {
+        try { arr = (typeof getDiaryDiningMembersInfo === 'function') ? getDiaryDiningMembersInfo() : (Array.isArray(familyData) ? familyData : []); } catch (e) { arr = []; }
+    }
+    var map = {};
+    (arr || []).forEach(function (m) {
+        if (!m) return;
+        var st = getChildAgeStage(m.age);
+        if (!st) return;
+        if (!map[st.code]) map[st.code] = { code: st.code, label: st.label, short: st.short, members: [] };
+        var nm = m.name || '孩子';
+        if (map[st.code].members.indexOf(nm) === -1) map[st.code].members.push(nm);
+    });
+    return ['3-6', '6-12', '12-18'].filter(function (c) { return map[c]; }).map(function (c) { return map[c]; });
+}
+/**
+ * AI 推荐 prompt 的儿童分龄配餐段（无儿童返回 ''）
+ */
+function buildChildAgePromptSection(members) {
+    var stages = (typeof getFamilyChildStages === 'function') ? getFamilyChildStages(members) : [];
+    if (!stages.length) return '';
+    var lines = ['【儿童分龄配餐·已按年龄自动识别】'];
+    stages.forEach(function (s) {
+        var r = CHILD_AGE_RULES[s.code];
+        lines.push('- ' + s.members.join('、') + '（' + s.label + '），重点：' + r.focus + '。' + r.aiRule);
+    });
+    lines.push('每餐至少安排1道适合上述儿童的菜品（全家可同食），该菜品 reason 以"🧒分龄配餐"开头并点明营养点（如"🧒分龄配餐·钙与蛋白质"）；多代同堂时老人菜与儿童菜分别安排，不得互相替代。');
+    return lines.join('\n');
+}
+/**
+ * 本地兜底评分：某道菜对儿童阶段的净加分（>0 时附带 reason 文案）
+ * @returns {{delta:number, reason:string|null}}
+ */
+function scoreDishForChildStages(dish, ings, meal, stages) {
+    var delta = 0, reasonBits = [];
+    var dishStr = String(dish || '') + ' ' + (ings || []).join(' ');
+    (stages || []).forEach(function (s) {
+        var r = CHILD_AGE_RULES[s.code];
+        if (!r) return;
+        if (r.preferRe && r.preferRe.test(dishStr)) {
+            delta += 6;
+            var focusShort = { '3-6': '钙与蛋白质', '6-12': '钙铁蛋白质', '12-18': '钙蛋白与能量' }[s.code];
+            if (reasonBits.indexOf(focusShort) === -1) reasonBits.push(focusShort);
+        }
+        // 3-6岁：软烂做法额外加分；刺激/坚硬/重口菜降权
+        if (s.code === '3-6') {
+            if (r.softDishRe && r.softDishRe.test(dish)) delta += 3;
+            if (r.avoidRe && r.avoidRe.test(dish)) delta -= 12;
+        }
+    });
+    return { delta: delta, reason: reasonBits.length ? ('🧒分龄配餐·' + reasonBits.join('/')) : null };
+}
+/**
+ * 本地兜底补齐池：按儿童阶段给出儿童友好菜（均为库内已存在的菜名）
+ */
+function getChildFriendlyFills(stages) {
+    // 菜名均取自应用现有补齐池/菜谱库；填充阶段允许库外菜名（与 genericFills 同机制）
+    var fills = {
+        breakfast: ['鸡蛋羹', '小米粥', '蒸南瓜', '酸奶麦片', '水煮蛋', '燕麦粥', '紫薯粥', '菜包', '豆浆'],
+        lunch:     ['清蒸鲈鱼', '香菇滑鸡', '番茄炒蛋', '番茄牛腩', '萝卜牛腩煲', '土豆烧鸡', '西兰花炒虾仁', '虾仁豆腐煲', '白菜炖豆腐'],
+        dinner:    ['山药排骨汤', '冬瓜排骨汤', '香菇青菜', '白灼生菜', '番茄鸡蛋汤', '玉米羹', '清炒丝瓜', '紫菜蛋花汤', '葱油面', '萝卜丝鲫鱼汤', '番茄鱼片']
+    };
+    if (!(stages || []).some(function (s) { return s.code === '3-6'; })) {
+        // 非学龄前可放宽口味：加入正常咸香/补铁家常菜
+        fills.lunch = fills.lunch.concat(['芹菜炒牛肉', '青椒肉丝', '麻婆豆腐', '宫保鸡丁', '蒜蓉西兰花', '洋葱炒蛋']);
+        fills.dinner = fills.dinner.concat(['蒜蓉西兰花', '洋葱炒蛋']);
+    }
+    return fills;
+}
+
 /**
  * 计算单成员的「营养调整因子」
  * 按《中国居民膳食指南》+ 用户要求的 5 类人群规则生成
@@ -16844,6 +16955,9 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
     }
 
     var allDishes = Object.entries((typeof DISH_INGREDIENTS === 'object' && DISH_INGREDIENTS) || {});
+    // V174: 儿童分龄配餐（按就餐成员年龄自动识别）——评分加权 + 儿童友好补齐池
+    var _childStages = (typeof getFamilyChildStages === 'function') ? getFamilyChildStages() : [];
+    var _childFills = _childStages.length && (typeof getChildFriendlyFills === 'function') ? getChildFriendlyFills(_childStages) : { breakfast: [], lunch: [], dinner: [] };
     // V173: 区域菜系（按家庭住址）——评分加权 + 补齐池优先
     var _regCuisines = (typeof detectRegionalCuisines === 'function') ? detectRegionalCuisines() : [];
     var _regFills = { breakfast: [], lunch: [], dinner: [] };
@@ -16935,6 +17049,12 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
                 }
                 // V173: 已识别家乡菜系时，其他区域菜系轻度降权（偶尔换口味仍可出现）
                 if (_regCuisines.length && _dishCuisine && _regCuisines.indexOf(_dishCuisine) === -1) score -= 5;
+                // V174: 儿童分龄配餐——按年龄自动加权（钙/蛋白质/铁/能量，3-6岁软烂约束）
+                if (_childStages.length) {
+                    var _childScore = scoreDishForChildStages(dish, ings, meal, _childStages);
+                    if (_childScore.delta) score += _childScore.delta;
+                    if (_childScore.reason && reasons.indexOf(_childScore.reason) === -1) reasons.push(_childScore.reason);
+                }
                 // V173: 餐次强约束——菜品标注了 meals 但不含当前餐次时降权
                 // （避免大碴粥/窝头出现在晚餐、热干面出现在晚餐等错配）
                 var _mealListV173 = Array.isArray(info.meals) ? info.meals : null;
@@ -17021,8 +17141,8 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
 
             // ---- 补齐：按日偏移轮转 genericFills，三天不会全重复 ----
             if (picked.length < needCount) {
-                // V173: 家乡菜系菜名排在补齐池最前，保证候选见底时仍优先上家乡菜
-                var fills0 = (_regFills[meal] || []).concat(genericFills[meal] || []);
+                // V174 儿童友好菜 → V173 家乡菜 → 通用菜，保证有儿童时每餐优先补到适龄菜
+                var fills0 = (_childFills[meal] || []).concat(_regFills[meal] || []).concat(genericFills[meal] || []);
                 var offset = (daySeed + dIdx * 5 + mm * 3 + (appearedLoopFillPenalty())) % Math.max(1, fills0.length);
                 var fills = fills0.slice(offset).concat(fills0.slice(0, offset));
                 for (var fi=0; fi<fills.length && picked.length < needCount; fi++) {
@@ -17034,6 +17154,10 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
                     if (_recentDishSet[n] && _recentDishSet[n] >= 1) continue;
                     seenName.add(n);
                     var reason2 = termName ? (termName+'时节家常推荐') : '家庭普适推荐';
+                    // V174: 补齐池中的儿童友好菜标注（软嫩/钙蛋白等）
+                    if (_childStages.length && (_childFills[meal] || []).indexOf(n) !== -1) {
+                        reason2 = '🧒分龄配餐 · ' + reason2;
+                    }
                     // V173: 补齐池中的家乡菜标注
                     if (_regCuisines.length) {
                         var _fc = (typeof getDishCuisine === 'function') ? getDishCuisine(n) : '';
@@ -17228,7 +17352,15 @@ async function generateIngredientPrefRecipes() {
         window._ingrRecMode = (['diet','preference','nutrition'].indexOf(currentMode) > -1) ? currentMode : 'diet';
     }
     syncIngrRecModeBtns(window._ingrRecMode);
-    summaryEl.innerHTML = `正在融合：时节「<b>${solarTermName||'(无节气数据)'}</b>」 · 家人偏好 · 近 30 天爱吃食材 Top3：<b>${liked.slice(0,3).map(x=>x.name).join(' / ') || '(暂无偏好，先通用推荐)'}</b>…`;
+    // V174: 儿童分龄配餐提示（按就餐成员年龄自动识别）
+    var _v174Stages = [];
+    try { _v174Stages = getFamilyChildStages(); } catch(e) { _v174Stages = []; }
+    var _v174Banner = _v174Stages.length
+        ? '<div style="margin-top:6px;padding:6px 10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;color:#9A3412;font-size:13px;">🧒 儿童分龄配餐已开启：'
+          + _v174Stages.map(function(s){ return s.members.join('、') + '（' + s.short + '）· ' + CHILD_AGE_RULES[s.code].focus; }).join('；')
+          + '</div>'
+        : '';
+    summaryEl.innerHTML = `正在融合：时节「<b>${solarTermName||'(无节气数据)'}</b>」 · 家人偏好 · 近 30 天爱吃食材 Top3：<b>${liked.slice(0,3).map(x=>x.name).join(' / ') || '(暂无偏好，先通用推荐)'}</b>…` + _v174Banner;
     wrap.innerHTML = `<div style="text-align:center;padding:24px;color:#6B7280;font-size:14px;">正在生成今/明/后 × 3 餐 × 3-5 道菜推荐（优先走 AI，3.5s 未响应则使用本地偏好库）…</div>`;
     if (submitBtn) { submitBtn.disabled = true; submitBtn.classList.add('is-disabled'); submitBtn.textContent = '确认选择'; }
 
@@ -22872,6 +23004,9 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
             // V173: 区域菜系段（按家庭住址推荐家乡风味：铁岭→东北菜、贵阳→贵州菜、上海→本帮+国际、武汉→湖北菜）
             var regionSection = '';
             try { regionSection = buildRegionalCuisinePromptSection(); } catch(e) { regionSection = ''; }
+            // V174: 儿童分龄配餐段（按就餐成员年龄自动识别 3-6/6-12/12-18）
+            var childAgeSection = '';
+            try { childAgeSection = buildChildAgePromptSection(dineMembers); } catch(e) { childAgeSection = ''; }
             var sys = '你是家肴记饮食策划。只返回 JSON：{byDate:{"' + dateKey + '":{"' + mealKey + '":[{dish:"菜名",reason:"15-28字"}]}}}。'
                 + '每餐' + _needN + '道（' + _fmN + '人，宁少勿多）；菜名真实家常菜，reason 中文。'
                 + '结合节气与成员健康，优先当季：请优先推荐用当季食材制作的菜谱，并在 reason 中说明节气养生原则；使用当季食材的菜，reason 以"🌿当季食材"开头；健康推荐菜 reason 含"适合生长发育期/术后/慢病/孕期/产后"。'
@@ -22896,6 +23031,8 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                 + (specialTagSection ? ('；' + specialTagSection) : '')
                 // V173: 家乡风味（区域菜系，按家庭住址）
                 + (regionSection ? ('；\n' + regionSection) : '')
+                // V174: 儿童分龄配餐（按年龄自动匹配）
+                + (childAgeSection ? ('；\n' + childAgeSection) : '')
                 // V150: 饮食偏好画像（优先级第6位，在天气之后）
                 + (prefSection ? ('；' + prefSection) : '')
                 + (function(){ var dc = getDiversityConstraints(dateKey); return dc ? ('；\n' + dc) : ''; })()
