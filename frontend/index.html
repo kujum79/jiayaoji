@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V167-20261016';
+        var APP_VER = 'V168-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -30819,6 +30819,13 @@ window.editMemberCard = function(id) {
                 <button onclick="copyFamilyCode()" style="flex-shrink:0;padding:4px 12px;font-size:12px;font-weight:600;color:#C2410C;background:#FFF7ED;border:1px solid #FED7AA;border-radius:999px;cursor:pointer;">📋 复制</button>
             </div>
             ${isAdminUser ? `
+            <div onclick="editHomeAddress()" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
+                <span style="font-size:18px;flex:0 0 auto;line-height:1;">📍</span>
+                <span style="font-size:14px;color:#4B5563;font-weight:500;flex:0 0 auto;">家庭住址</span>
+                <span style="font-size:12px;color:${familyHomeAddress ? '#9CA3AF' : '#C2410C'};flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:right;">${familyHomeAddress ? escapeHtml(familyHomeAddress) : '未设置'}</span>
+                <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
+            </div>` : ''}
+            ${isAdminUser ? `
             <div onclick="_toggleFamilyGroup(this)" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 6px;border-top:1px solid #F3F4F6;font-size:15px;font-weight:700;color:#1F2937;cursor:pointer;">
                 <span style="display:flex;align-items:center;gap:8px;"><span style="font-size:18px;line-height:1;">🛡️</span><span style="font-size:14px;color:#4B5563;font-weight:600;">家庭管理员</span><span style="font-size:12px;color:#9CA3AF;font-weight:400;">统一管理</span></span>
                 <span class="fgroup-arrow" style="font-size:13px;color:#9CA3AF;font-weight:400;">▸</span>
@@ -30828,12 +30835,6 @@ window.editMemberCard = function(id) {
                     <span style="font-size:18px;flex:0 0 auto;line-height:1;">👥</span>
                     <span style="font-size:14px;color:#4B5563;font-weight:500;flex:1;">成员与角色</span>
                     <span style="font-size:12px;color:#9CA3AF;flex:0 0 auto;">升降级 · 移除（成员卡 ⋯）</span>
-                    <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
-                </div>
-                <div onclick="editHomeAddress()" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
-                    <span style="font-size:18px;flex:0 0 auto;line-height:1;">📍</span>
-                    <span style="font-size:14px;color:#4B5563;font-weight:500;flex:0 0 auto;">家庭住址</span>
-                    <span style="font-size:12px;color:${familyHomeAddress ? '#9CA3AF' : '#C2410C'};flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:right;">${familyHomeAddress ? escapeHtml(familyHomeAddress) : '未设置'}</span>
                     <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;">
@@ -30863,41 +30864,10 @@ window.editMemberCard = function(id) {
                     <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
                 </div>
             </div>` : ''}
-            ${isSuper ? `
-            <div id="familyAdminEntry" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
-                <span style="font-size:18px;flex:0 0 auto;line-height:1;">🛡️</span>
-                <span id="familyAdminEntryBtnLabel" style="font-size:14px;color:#4B5563;font-weight:500;flex:1;">文库管理</span>
-                <span style="font-size:12px;color:#9CA3AF;flex:0 0 auto;">分类 · 审核 · 条目</span>
-                <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
-            </div>
-            ${(isSuper || getCurrentUserContext().isSuperAdmin) ? `
-            <div onclick="_openFoodHallMgr()" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
-                <span style="font-size:18px;flex:0 0 auto;line-height:1;">🍂</span>
-                <span style="font-size:14px;color:#4B5563;font-weight:500;flex:1;">食养堂管理</span>
-                <span style="font-size:12px;color:#9CA3AF;flex:0 0 auto;">草稿 · 审核 · 发布</span>
-                <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
-            </div>` : ''}
-            <div id="aiUsageEntry" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
-                <span style="font-size:18px;flex:0 0 auto;line-height:1;">📊</span>
-                <span style="font-size:14px;color:#4B5563;font-weight:500;flex:1;">AI 用量</span>
-                <span style="font-size:12px;color:#9CA3AF;flex:0 0 auto;">成本 · 预算</span>
-                <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
-            </div>` : ''}
             </div>
         </div>
     `);
-    // 文库管理行点击（超管）：跳转食知文库视图并打开管理面板
-    if (isSuper) {
-        var _adminRow = document.getElementById('familyAdminEntry');
-        if (_adminRow) _adminRow.addEventListener('click', function() {
-            switchTab('knowledge');
-            switchKnowledgeView('library'); // 先切到文库列表视图（管理面板所在容器），否则仍停留在 AI 对话页
-            switchKnowledgeVisibility('admin');
-        });
-        // V118: AI 用量入口（超管）
-        var _aiUsageRow = document.getElementById('aiUsageEntry');
-        if (_aiUsageRow) _aiUsageRow.addEventListener('click', openAiUsagePanel);
-    }
+    // V168: 文库管理/食养堂管理/AI 用量三入口已移至四宫格下方超管快捷条，此处不再重复
 
     // 退出登录（组外）+ 版本长按
     familyList.insertAdjacentHTML('beforeend', `
