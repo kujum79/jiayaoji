@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V170-20261016';
+        var APP_VER = 'V171-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -2394,6 +2394,8 @@
     .diet-shopping-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
     .diet-shopping-tag { padding:3px 8px; background:#FFEDD5; color:#9A3412; border-radius:8px; font-size:13px; }
     .constitution-tag { display:inline-block; padding:2px 8px; background:#ECFDF5; color:#065F46; border-radius:10px; font-size:12px; margin-left:4px; }
+    /* V171: 节气当季食材标签 */
+    .solar-term-tag { display:inline-block; padding:2px 8px; background:#F0FDF4; color:#15803D; border:1px solid #BBF7D0; border-radius:10px; font-size:12px; margin-left:4px; white-space:nowrap; }
     .diet-constitution-info { background:linear-gradient(135deg,#ECFDF5,#D1FAE5); border:1px solid #A7F3D0; border-radius:12px; padding:10px 12px; margin:8px 0; font-size:14px; color:#065F46; }
     /* ====== 冰箱 ====== */
     .fridge-header { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:linear-gradient(135deg,#FFF7ED,#FFEDD5); border-bottom:1px solid #FED7AA; }
@@ -11190,6 +11192,60 @@ function solarTermRangeText(term) {
     } catch(e) { return ''; }
 }
 
+// V171: 节气推荐食材（SOLAR_TERMS_2026 用 foods 字段，兼容旧的 suggestIngredients 命名）
+function getSolarTermFoods(term) {
+    if (!term) return [];
+    var arr = Array.isArray(term.foods) ? term.foods
+        : (Array.isArray(term.suggestIngredients) ? term.suggestIngredients : []);
+    return arr.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+}
+
+// V171: 节气推荐食谱（term.dishes，如小暑：绿豆汤/冬瓜排骨汤…）
+function getSolarTermDishes(term) {
+    if (!term || !Array.isArray(term.dishes)) return [];
+    return term.dishes.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+}
+
+// V171: 判断菜品是否使用当季食材
+// 命中规则：菜名含节气食材 / 菜名命中节气推荐食谱 / 食材清单含节气食材
+function dishUsesSeasonalIngredient(dishName, ingredients, term) {
+    try {
+        var t = term || getSolarTermForDate(new Date());
+        if (!t || !t.name) return false;
+        var name = String(dishName || '');
+        if (!name) return false;
+        var foods = getSolarTermFoods(t);
+        for (var i = 0; i < foods.length; i++) {
+            if (foods[i] && name.indexOf(foods[i]) > -1) return true;
+        }
+        var termDishes = getSolarTermDishes(t);
+        for (var j = 0; j < termDishes.length; j++) {
+            if (termDishes[j] && name.indexOf(termDishes[j]) > -1) return true;
+        }
+        var ings = (Array.isArray(ingredients) ? ingredients : [])
+            .map(function (x) { return typeof x === 'string' ? x : ((x && (x.name || x.dish)) || ''); })
+            .filter(Boolean);
+        if (!ings.length && typeof getDishIngredients === 'function') ings = getDishIngredients(name);
+        for (var a = 0; a < foods.length; a++) {
+            for (var b = 0; b < ings.length; b++) {
+                if (foods[a] && ings[b] && ings[b].indexOf(foods[a]) > -1) return true;
+            }
+        }
+        return false;
+    } catch (e) { return false; }
+}
+
+// V171: 菜品节气标签 HTML——当季菜返回「🌿 当季 · 小暑 · 清热解暑」，非当季返回空串
+function solarTermTagHtmlForDish(dishName, ingredients, term) {
+    try {
+        var t = term || getSolarTermForDate(new Date());
+        if (!t || !t.name) return '';
+        if (!dishUsesSeasonalIngredient(dishName, ingredients, t)) return '';
+        return '<span class="solar-term-tag">🌿 当季 · ' + escapeHtml(t.name)
+            + (t.diet ? (' · ' + escapeHtml(t.diet)) : '') + '</span>';
+    } catch (e) { return ''; }
+}
+
 function getSolarTermFromText(text, dateInfo = null) {
     for (const term of getSolarTermEntries()) {
         if (text.includes(term.name)) return term;
@@ -16594,7 +16650,9 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
     var _fmN = (servings || (typeof getXiaojiaMemberCount === 'function' ? getXiaojiaMemberCount() : (getFamilyMembers().length || 3)));
     var _dcCnt = getDishCountByMembers(_fmN);
     var NEED_BY_MEAL = { breakfast: _dcCnt.breakNum, lunch: _dcCnt.lunchNum, dinner: _dcCnt.dinnerNum };
-    var termIngs = (solarTermObj && solarTermObj.suggestIngredients) || [];
+    var termIngs = (typeof getSolarTermFoods === 'function')
+        ? getSolarTermFoods(solarTermObj)
+        : ((solarTermObj && solarTermObj.suggestIngredients) || []);
     var mealTag = {
         breakfast: { want: ['粥','饼','包子','蛋','豆浆','奶','燕麦','馒头','面','米'], cat: ['早餐','主食','汤/粥','蛋奶'] },
         lunch:     { want: ['肉','鸡','鱼','牛','虾','排骨'], cat: ['家常菜','肉菜','水产','汤','主食','蔬菜'] },
@@ -16970,7 +17028,8 @@ async function generateIngredientPrefRecipes() {
     var term = null;
     try { term = getSolarTermForDate(new Date()); } catch(e) {}
     var solarTermName = (term && term.name) ? term.name : '';
-    var solarIngs = (term && term.suggestIngredients) ? term.suggestIngredients : [];
+    var solarIngs = (typeof getSolarTermFoods === 'function') ? getSolarTermFoods(term) : [];
+    var solarDiet = (term && term.diet) ? term.diet : '';
     openPrepIngrRecPlans();
     // 页面本地模式归一（当季已作为基础层，不再作为可选模式）
     if (['diet','preference','nutrition'].indexOf(window._ingrRecMode) === -1) {
@@ -17015,7 +17074,7 @@ async function generateIngredientPrefRecipes() {
             var _longStored = getLongStoredFridgeItems(_freshFridge, 5);
             var freshText = _longStored.slice(0, 10).map(function (i) { return i.name + '（已存放' + getStorageDays(i.purchaseDate) + '天）'; }).join('、') || '无';
             var freshnessRule = '【新鲜度优先·减少浪费】家中有存放较久的食材需要优先消耗：存放超过5天的食材，推荐权重提高50%；存放超过7天的食材，推荐权重提高100%。多推荐能用这些食材做的菜，涉及这些食材的菜，其 reason 末尾必须标注"，建议优先使用XX"（XX为食材名）。';
-            var sys = modePrefix + ' 当季食材作为基础层自动融入所有推荐（用户无需选择时节）。' + freshnessRule + '仅返回一个严格 JSON，无任何 Markdown/解释：{ byDate: { "YYYYMMDD": { breakfast:[ {dish:"菜名", reason:"15-22字说明"} ], lunch:[...], dinner:[...] } } }，3 天每天 3 餐，每餐 ' + _dcCnt.dinnerNum + ' 道菜（宁少勿多，不得超出），家常菜；所有 reason 必须是中文，且必须标注节气信息（如"大暑节气推荐"、"大暑宜食冬瓜"），结合用户给的"当前节气+家人偏好+爱吃食材 Top8+久放食材"，例如"爸爸喜欢牛肉，近30天出现4次"；不要重复同一天同一道菜；菜名必须是真实家常菜；日期 key 必须严格等于用户给的 3 个 YYYYMMDD。';
+            var sys = modePrefix + ' 当季食材作为基础层自动融入所有推荐（用户无需选择时节）。请优先推荐用当季食材制作的菜谱，并在 reason 中说明节气养生原则；使用当季食材的菜，reason 以"🌿当季食材"开头。' + freshnessRule + '仅返回一个严格 JSON，无任何 Markdown/解释：{ byDate: { "YYYYMMDD": { breakfast:[ {dish:"菜名", reason:"15-22字说明"} ], lunch:[...], dinner:[...] } } }，3 天每天 3 餐，每餐 ' + _dcCnt.dinnerNum + ' 道菜（宁少勿多，不得超出），家常菜；所有 reason 必须是中文，且必须标注节气信息（如"大暑节气推荐"、"大暑宜食冬瓜"），结合用户给的"当前节气+家人偏好+爱吃食材 Top8+久放食材"，例如"爸爸喜欢牛肉，近30天出现4次"；不要重复同一天同一道菜；菜名必须是真实家常菜；日期 key 必须严格等于用户给的 3 个 YYYYMMDD。';
             // 多样性约束注入（固定策略：避免7天内重复+换菜系+避免连续同主食材）
             var divText = getDiversityConstraints(days[0] ? days[0].dateKey : undefined);
             // V155: 体质匹配段（优先级第3位；冲突分别推荐）
@@ -17024,7 +17083,10 @@ async function generateIngredientPrefRecipes() {
             // V156: 特殊人群标签段（触发专属推荐规则）
             var _tagSec = '';
             try { _tagSec = buildSpecialTagPromptSection(family); } catch(e) { _tagSec = ''; }
-            var usr = `当前节气/时节：${solarTermName}（${solarTermRangeText(term)}，建议食材：${solarIngs.join('、')||'无提示'}）；目标日期：${daysText}；家庭成员/口味：${familyText || '（2 人家庭，默认）'}；近 30 天爱吃食材 Top：${topLiked}；家中久放需优先消耗的食材：${freshText}；${divText ? divText.replace(/\n/g, ' ') + '；' : ''}${modeHint}${_constSec}${_tagSec}；每道菜 reason 需包含节气标注（如"${solarTermName||'当季'}节气推荐"），用到久放食材的菜需在 reason 中标注"建议优先使用XX"；请输出 3 天 3 餐的 ${_dcCnt.dinnerNum} 道菜/餐个性化推荐（${servings}人家庭，宁少勿多，不得超出），并为每道菜给出 15~22 字中文推荐理由。流质类（粥/稀饭/豆浆/米糊/羹/甜汤）同一餐最多 1 道（早餐不能又粥又豆浆）。`;
+            var usr = `当前节气：${solarTermName||'无'}（${solarTermRangeText(term)}，节气养生原则：${solarDiet||'顺时而食'}）
+推荐食材：${solarIngs.join('、')||'无'}
+请优先推荐当季食材制作的菜谱，并在推荐理由中说明${solarTermName||'当季'}节气养生原则；使用当季食材的菜，reason 以"🌿当季食材"开头。
+目标日期：${daysText}；家庭成员/口味：${familyText || '（2 人家庭，默认）'}；近 30 天爱吃食材 Top：${topLiked}；家中久放需优先消耗的食材：${freshText}；${divText ? divText.replace(/\n/g, ' ') + '；' : ''}${modeHint}${_constSec}${_tagSec}；每道菜 reason 需包含节气标注（如"${solarTermName||'当季'}节气推荐"），用到久放食材的菜需在 reason 中标注"建议优先使用XX"；请输出 3 天 3 餐的 ${_dcCnt.dinnerNum} 道菜/餐个性化推荐（${servings}人家庭，宁少勿多，不得超出），并为每道菜给出 15~22 字中文推荐理由。流质类（粥/稀饭/豆浆/米糊/羹/甜汤）同一餐最多 1 道（早餐不能又粥又豆浆）。`;
             var fastFb = new Promise(function(r){ setTimeout(function(){ r(null); }, 5000); });
             var res = await Promise.race([ callAliyunQwenApi(sys, usr, { mode: modeKey }), fastFb ]);
             if (res && res.byDate && typeof res.byDate === 'object') {
@@ -19587,6 +19649,12 @@ function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra
         var _dc = (typeof getDishConstitutions === 'function') ? getDishConstitutions(dishName, normalizedIngs) : [];
         if (_dc.length) constHtml = '<div style="margin-bottom:6px;"><span class="constitution-tag">🥗 适合：' + escapeHtml(_dc.join('、')) + '</span></div>';
     } catch(e) {}
+    // V171: 节气当季食材标签
+    var solarHtml = '';
+    try {
+        var _stTag = (typeof solarTermTagHtmlForDish === 'function') ? solarTermTagHtmlForDish(dishName, normalizedIngs) : '';
+        if (_stTag) solarHtml = '<div style="margin-bottom:6px;">' + _stTag + '</div>';
+    } catch(e) {}
     // 营养数据（知识库 nutrition）
     var nutritionHtml = '';
     if (recipe.nutrition && typeof recipe.nutrition === 'object') {
@@ -19607,6 +19675,7 @@ function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra
         ${reasonHtml}
         ${suitableHtml}
         ${constHtml}
+        ${solarHtml}
         ${nutritionHtml}
         ${amountBlockHtml}
         ${_twReqHtml(dishName)}
@@ -19713,9 +19782,16 @@ async function generateDishRecipeAI(dishName, savedIngredients) {
             var _aic = (typeof getDishConstitutions === 'function') ? getDishConstitutions(dishName, aiIngs) : [];
             if (_aic.length) _aiConstHtml = '<div style="margin-bottom:6px;"><span class="constitution-tag">🥗 适合：' + escapeHtml(_aic.join('、')) + '</span></div>';
         } catch(e) {}
+        // V171: 节气当季食材标签（AI路径）
+        var _aiSolarHtml = '';
+        try {
+            var _aiStTag = (typeof solarTermTagHtmlForDish === 'function') ? solarTermTagHtmlForDish(dishName, aiIngs) : '';
+            if (_aiStTag) _aiSolarHtml = '<div style="margin-bottom:6px;">' + _aiStTag + '</div>';
+        } catch(e) {}
 
         body.innerHTML = `
             ${_aiConstHtml}
+            ${_aiSolarHtml}
             ${aiAmountBlockHtml}
             ${_twReqHtml(dishName)}
             <div class="dish-detail-section">
@@ -22478,7 +22554,8 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
     var term = null;
     try { term = getSolarTermForDate(new Date()); } catch(e) {}
     var solarTermName = (term && term.name) ? term.name : '';
-    var solarIngs = (term && term.suggestIngredients) ? term.suggestIngredients : [];
+    var solarIngs = (typeof getSolarTermFoods === 'function') ? getSolarTermFoods(term) : [];
+    var solarDiet = (term && term.diet) ? term.diet : '';
     var _fmArr = (typeof getDiaryDiningMembersInfo === 'function') ? getDiaryDiningMembersInfo() : (Array.isArray(familyData) ? familyData : []);
     var _fmN = (_fmArr && _fmArr.length) ? _fmArr.length : (getFamilyMembers().length || 3);
     var _needN = getDishCountByMembers(_fmN).dinnerNum; // 每餐道数按人数（1人=2道）
@@ -22550,12 +22627,15 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
             try { specialTagSection = buildSpecialTagPromptSection(dineMembers); } catch(e) { specialTagSection = ''; }
             var sys = '你是家肴记饮食策划。只返回 JSON：{byDate:{"' + dateKey + '":{"' + mealKey + '":[{dish:"菜名",reason:"15-28字"}]}}}。'
                 + '每餐' + _needN + '道（' + _fmN + '人，宁少勿多）；菜名真实家常菜，reason 中文。'
-                + '结合节气与成员健康，优先当季；健康推荐菜 reason 含"适合生长发育期/术后/慢病/孕期/产后"。'
+                + '结合节气与成员健康，优先当季：请优先推荐用当季食材制作的菜谱，并在 reason 中说明节气养生原则；使用当季食材的菜，reason 以"🌿当季食材"开头；健康推荐菜 reason 含"适合生长发育期/术后/慢病/孕期/产后"。'
                 + '流质（粥/豆浆/羹/甜汤）与汤同餐≤1道，超出换炒菜/凉拌。';
             // V138: 天气段等待（最多 3s，与 sys 构建并行）
             var weatherHint = '';
             try { weatherHint = await Promise.race([weatherP, new Promise(function(r){ setTimeout(function(){ r(''); }, 3000); })]) || ''; } catch(e) { weatherHint = ''; }
-            var usr = '当前节气：' + (solarTermName || '无') + '；目标日期：' + dateKey + '；餐次：' + mealKey
+            var usr = '当前节气：' + (solarTermName || '无') + '（节气养生原则：' + (solarDiet || '顺时而食') + '）'
+                + '\n推荐食材：' + (solarIngs.join('、') || '无')
+                + '\n请优先推荐当季食材制作的菜谱，并在推荐理由中说明' + (solarTermName || '当季') + '节气养生原则；使用当季食材的菜，reason 以"🌿当季食材"开头。'
+                + '\n目标日期：' + dateKey + '；餐次：' + mealKey
                 + '；近30天爱吃食材：' + (liked.slice(0,3).map(function(x){return x.name;}).join('、') || '无')
                 + (healthProfiles ? ('；家庭成员健康状态：\n' + healthProfiles) : '')
                 + (healthRules ? ('；\n健康适配要求（必须遵守）：\n' + healthRules) : '')
@@ -25183,12 +25263,16 @@ function _renderDiaryRecipePickerSection(sourceKey, title, dishes, defaultChecke
                 var scColor = sc >= 80 ? '#16A34A' : (sc >= 60 ? '#D97706' : '#DC2626');
                 scoreBadge = '<span style="margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10.5px;font-weight:600;background:' + (sc >= 80 ? '#F0FDF4' : (sc >= 60 ? '#FFFBEB' : '#FEF2F2')) + ';color:' + scColor + ';flex:0 0 auto;">' + (audit.passed === false ? '审核 ' : '✓ ') + sc + '分</span>';
             }
+            // V171: 当季食材标注（菜名/食材命中当前节气食材即标注）
+            var solarBadge = (typeof dishUsesSeasonalIngredient === 'function' && dishUsesSeasonalIngredient(name, d.ingredients))
+                ? '<span class="solar-term-tag" style="margin-left:6px;flex:0 0 auto;">🌿 当季食材</span>' : '';
             return '<div class="diary-dish-row">'
                 + '<input type="checkbox" class="diary-dish-cb" data-source="' + escapeAttr(sourceKey) + '" data-dish="' + escapeAttr(name) + '"'
                 + (isChecked ? ' checked' : '')
                 + ' onchange="onDiaryRecipePickerToggle(\'' + escapeAttr(sourceKey) + '\',\'' + escapeAttr(name) + '\', this.checked)"/>'
                 + '<span class="dish-tag-clickable">' + escapeHtml(name) + '</span>'
                 + scoreBadge
+                + solarBadge
                 + renderHealthTagsHtml(d.reason || '')
                 + warnHtml
                 + '</div>';
@@ -27735,8 +27819,17 @@ function _renderBangSeasonDetail(body) {
             return;
         }
         var icon = { '春': '🌸', '夏': '☀️', '秋': '🍂', '冬': '❄️' }[term.season] || '🌿';
-        var foods = (term.foods || []).join('、');
-        var dishes = (term.dishes || []).join('、');
+        var foods = (typeof getSolarTermFoods === 'function' ? getSolarTermFoods(term) : (term.foods || [])).join('、');
+        var dishList = (typeof getSolarTermDishes === 'function' ? getSolarTermDishes(term) : (term.dishes || []));
+        // V171: 推荐食谱可点击跳详情
+        var dishChips = dishList.map(function (dn) {
+            dn = String(dn || '').trim();
+            if (!dn) return '';
+            return '<span onclick="showDishDetail(this.getAttribute(\'data-dish\'))" data-dish="' + escapeAttr(dn) + '"'
+                + ' style="display:inline-block;padding:4px 12px;margin:3px 6px 3px 0;background:#fff;border:1px solid #FDBA74;color:#C2410C;'
+                + 'border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;">🍲 ' + escapeHtml(dn) + '</span>';
+        }).join('');
+        var dishes = dishChips || '<span style="font-size:14px;color:#7A4A21;line-height:1.8;">暂无</span>';
         var html =
             '<div style="background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FED7AA;border-radius:16px;padding:20px;margin-bottom:12px;">'
             + '<div style="text-align:center;font-size:48px;">' + icon + '</div>'
@@ -33015,10 +33108,13 @@ function renderPlan() {
             ? item.constitutions
             : (typeof getDishConstitutions === 'function' ? getDishConstitutions(dishName, item.ingredients) : []);
         var _consTagHtml = _dishCons.length ? `<div class="dish-constitution" style="margin-top:4px;"><span class="constitution-tag" style="margin-left:0;">🥗 适合：${escapeHtml(_dishCons.join('、'))}</span></div>` : '';
+        var _solarTagInner = (typeof solarTermTagHtmlForDish === 'function') ? solarTermTagHtmlForDish(dishName, item.ingredients) : '';
+        var _solarTagHtml = _solarTagInner ? `<div class="dish-solar" style="margin-top:4px;">${_solarTagInner.replace('class="solar-term-tag"', 'class="solar-term-tag" style="margin-left:0;"')}</div>` : '';
         html += `<div class="plan-dish-card">
             <div class="dish-name">${escapeHtml(dishName)}${renderHealthTagsHtml(reason)}</div>
             <div class="dish-for-whom">${escapeHtml(forWhom)}</div>
             ${_consTagHtml}
+            ${_solarTagHtml}
             ${taste ? `<div class="dish-taste">${escapeHtml(taste)}</div>` : ''}
             ${ingredientsHtml ? `<div class="dish-ingredients">${ingredientsHtml}</div>` : ''}
             ${fetchQtyBtn}
@@ -36212,9 +36308,17 @@ function _syTermGuideHtml(termName, info, items) {
         html += '</div>';
     }
     if (dishes.length) {
-        html += '<div style="display:flex;align-items:baseline;gap:8px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:9px 12px;margin-bottom:12px;">'
-            + '<span style="flex:0 0 82px;font-size:13px;font-weight:700;color:#9A3412;">宜食谱搭配</span>'
-            + '<span style="font-size:13px;color:#5B4632;line-height:1.7;">' + escapeHtml(dishes.join('、')) + '</span></div>';
+        // V171: 推荐食谱可点击，跳转到菜品详情
+        var _dishChips = dishes.map(function (d) {
+            var dn = String(d || '').trim();
+            if (!dn) return '';
+            return '<span onclick="showDishDetail(this.getAttribute(\'data-dish\'))" data-dish="' + escapeAttr(dn) + '"'
+                + ' style="display:inline-block;padding:4px 12px;margin:3px 6px 3px 0;background:#fff;border:1px solid #FDBA74;color:#C2410C;'
+                + 'border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;">🍲 ' + escapeHtml(dn) + '</span>';
+        }).join('');
+        html += '<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:9px 12px 11px;margin-bottom:12px;">'
+            + '<div style="font-size:13px;font-weight:700;color:#9A3412;margin-bottom:4px;">🥘 推荐食谱（点击查看做法）</div>'
+            + '<div style="line-height:1.7;">' + _dishChips + '</div></div>';
     }
     if (info && (info.tip || info.diet)) {
         html += '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#92400E;line-height:1.8;">'
@@ -49180,6 +49284,7 @@ function renderDiary() {
                     + ('speechSynthesis' in window ? '<button type="button" title="朗读" onclick="event.preventDefault();event.stopPropagation();_dishListenReadDirect(\'' + escapeAttr(it.name) + '\');" style="border:none;background:none;padding:0;font-size:14px;line-height:1;color:#F97316;cursor:pointer;flex-shrink:0;margin-left:2px;vertical-align:middle;">🔊</button>' : '')
                     + hTagsHtml
                     + (typeof constitutionTagHtmlForDish === 'function' ? constitutionTagHtmlForDish(it.name) : '')
+                    + (typeof solarTermTagHtmlForDish === 'function' ? solarTermTagHtmlForDish(it.name) : '')
                     + '</label>';
             }).join('');
             var planConfirmedLocal = (data.plan.state === 'confirmed' || data.plan.confirmed === true || data.plan.state === 'completed');
