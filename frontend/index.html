@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V172-20261016';
+        var APP_VER = 'V173-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -12150,7 +12150,113 @@ const DISH_INGREDIENTS = {
     '油焖茭白': { ingredients: ['茭白', '葱', '酱油', '糖', '食用油'], category: '蔬菜', meals: ['lunch', 'dinner'], perServing: [{name:'茭白',quantity:200,unit:'克'},{name:'葱',quantity:5,unit:'克'},{name:'酱油',quantity:10,unit:'毫升'},{name:'糖',quantity:5,unit:'克'},{name:'食用油',quantity:12,unit:'毫升'}] },
     '红烧黄颡鱼': { ingredients: ['黄颡鱼', '姜', '葱', '蒜', '酱油', '料酒', '糖'], category: '水产', meals: ['lunch', 'dinner'], perServing: [{name:'黄颡鱼',quantity:300,unit:'克'},{name:'姜',quantity:10,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'蒜',quantity:10,unit:'克'},{name:'酱油',quantity:15,unit:'毫升'},{name:'料酒',quantity:10,unit:'毫升'},{name:'糖',quantity:5,unit:'克'}] },
     '黄颡鱼炖豆腐': { ingredients: ['黄颡鱼', '豆腐', '姜', '葱', '盐', '料酒'], category: '水产', meals: ['lunch', 'dinner'], perServing: [{name:'黄颡鱼',quantity:250,unit:'克'},{name:'豆腐',quantity:100,unit:'克'},{name:'姜',quantity:10,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'盐',quantity:2,unit:'克'},{name:'料酒',quantity:10,unit:'毫升'}] },
+    // ========== V173 区域菜系：东北菜 ==========
+    '猪肉炖粉条': { ingredients: ['五花肉', '粉条', '大白菜', '生姜', '葱', '酱油'], cuisine: '东北菜', category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'五花肉',quantity:80,unit:'克'},{name:'粉条',quantity:50,unit:'克'},{name:'大白菜',quantity:150,unit:'克'},{name:'生姜',quantity:5,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'酱油',quantity:10,unit:'毫升'}] },
+    '酸菜白肉': { ingredients: ['酸菜', '五花肉', '生姜', '葱', '大蒜', '料酒'], cuisine: '东北菜', category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'酸菜',quantity:150,unit:'克'},{name:'五花肉',quantity:100,unit:'克'},{name:'生姜',quantity:10,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'大蒜',quantity:10,unit:'克'},{name:'料酒',quantity:10,unit:'毫升'}] },
+    '地三鲜': { ingredients: ['茄子', '土豆', '青椒', '大蒜', '酱油', '淀粉'], cuisine: '东北菜', category: '蔬菜', meals: ['lunch', 'dinner'], perServing: [{name:'茄子',quantity:150,unit:'克'},{name:'土豆',quantity:100,unit:'克'},{name:'青椒',quantity:60,unit:'克'},{name:'大蒜',quantity:10,unit:'克'},{name:'酱油',quantity:10,unit:'毫升'},{name:'淀粉',quantity:5,unit:'克'}] },
+    '大碴粥': { ingredients: ['玉米碴', '红豆'], cuisine: '东北菜', category: '主粮', meals: ['breakfast'], perServing: [{name:'玉米碴',quantity:60,unit:'克'},{name:'红豆',quantity:15,unit:'克'}] },
+    '锅包肉': { ingredients: ['猪里脊', '淀粉', '胡萝卜', '葱', '生姜', '大蒜', '糖', '醋'], cuisine: '东北菜', category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'猪里脊',quantity:120,unit:'克'},{name:'淀粉',quantity:30,unit:'克'},{name:'胡萝卜',quantity:30,unit:'克'},{name:'葱',quantity:15,unit:'克'},{name:'生姜',quantity:5,unit:'克'},{name:'大蒜',quantity:5,unit:'克'},{name:'糖',quantity:15,unit:'克'},{name:'醋',quantity:15,unit:'毫升'}] },
+    '小鸡炖蘑菇': { ingredients: ['鸡肉', '香菇', '粉条', '生姜', '葱', '酱油'], cuisine: '东北菜', category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'鸡肉',quantity:120,unit:'克'},{name:'香菇',quantity:40,unit:'克'},{name:'粉条',quantity:40,unit:'克'},{name:'生姜',quantity:10,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'酱油',quantity:10,unit:'毫升'}] },
+    '东北乱炖': { ingredients: ['排骨', '土豆', '茄子', '豆角', '玉米', '生姜', '葱', '酱油'], cuisine: '东北菜', category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'排骨',quantity:100,unit:'克'},{name:'土豆',quantity:80,unit:'克'},{name:'茄子',quantity:80,unit:'克'},{name:'豆角',quantity:80,unit:'克'},{name:'玉米',quantity:50,unit:'克'},{name:'生姜',quantity:5,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'酱油',quantity:10,unit:'毫升'}] },
+    // ========== V173 区域菜系：农村家常菜 ==========
+    '大锅菜': { ingredients: ['五花肉', '大白菜', '豆腐', '粉条', '海带', '生姜', '葱', '酱油'], cuisine: '农村家常菜', category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'五花肉',quantity:60,unit:'克'},{name:'大白菜',quantity:150,unit:'克'},{name:'豆腐',quantity:80,unit:'克'},{name:'粉条',quantity:30,unit:'克'},{name:'海带',quantity:30,unit:'克'},{name:'生姜',quantity:5,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'酱油',quantity:10,unit:'毫升'}] },
+    '腌菜炒肉': { ingredients: ['酸菜', '猪肉', '大蒜', '干辣椒', '酱油'], cuisine: '农村家常菜', category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'酸菜',quantity:120,unit:'克'},{name:'猪肉',quantity:80,unit:'克'},{name:'大蒜',quantity:10,unit:'克'},{name:'干辣椒',quantity:3,unit:'克'},{name:'酱油',quantity:8,unit:'毫升'}] },
+    '土豆炖豆角': { ingredients: ['土豆', '豆角', '猪肉', '生姜', '葱', '酱油'], cuisine: '农村家常菜', category: '蔬菜', meals: ['lunch', 'dinner'], perServing: [{name:'土豆',quantity:150,unit:'克'},{name:'豆角',quantity:120,unit:'克'},{name:'猪肉',quantity:60,unit:'克'},{name:'生姜',quantity:5,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'酱油',quantity:10,unit:'毫升'}] },
+    '贴饼子': { ingredients: ['玉米面'], cuisine: '农村家常菜', category: '主粮', meals: ['breakfast'], perServing: [{name:'玉米面',quantity:80,unit:'克'}] },
+    '玉米面窝头': { ingredients: ['玉米面'], cuisine: '农村家常菜', category: '主粮', meals: ['breakfast'], perServing: [{name:'玉米面',quantity:80,unit:'克'}] },
+    // ========== V173 区域菜系：贵州菜（贵阳优先） ==========
+    '酸汤鱼': { ingredients: ['草鱼', '番茄', '豆腐', '生姜', '大蒜', '辣椒'], cuisine: '贵州菜', category: '水产', meals: ['lunch', 'dinner'], perServing: [{name:'草鱼',quantity:150,unit:'克'},{name:'番茄',quantity:80,unit:'克'},{name:'豆腐',quantity:80,unit:'克'},{name:'生姜',quantity:10,unit:'克'},{name:'大蒜',quantity:10,unit:'克'},{name:'辣椒',quantity:5,unit:'克'}] },
+    '酸汤肥牛': { ingredients: ['牛肉', '番茄', '金针菇', '生姜', '大蒜', '辣椒'], cuisine: '贵州菜', category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'牛肉',quantity:120,unit:'克'},{name:'番茄',quantity:80,unit:'克'},{name:'金针菇',quantity:60,unit:'克'},{name:'生姜',quantity:5,unit:'克'},{name:'大蒜',quantity:10,unit:'克'},{name:'辣椒',quantity:5,unit:'克'}] },
+    '花溪牛肉粉': { ingredients: ['牛肉', '米粉', '酸菜', '葱'], cuisine: '贵州菜', category: '肉蛋奶', meals: ['breakfast', 'lunch'], perServing: [{name:'牛肉',quantity:80,unit:'克'},{name:'米粉',quantity:100,unit:'克'},{name:'酸菜',quantity:40,unit:'克'},{name:'葱',quantity:10,unit:'克'}] },
+    '贵州辣子鸡': { ingredients: ['鸡肉', '干辣椒', '大蒜', '生姜', '酱油'], cuisine: '贵州菜', category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'鸡肉',quantity:150,unit:'克'},{name:'干辣椒',quantity:15,unit:'克'},{name:'大蒜',quantity:15,unit:'克'},{name:'生姜',quantity:10,unit:'克'},{name:'酱油',quantity:10,unit:'毫升'}] },
+    // ========== V173 区域菜系：本帮菜/国际菜（上海优先） ==========
+    '腌笃鲜': { ingredients: ['咸肉', '五花肉', '竹笋', '豆腐', '生姜', '葱'], cuisine: '本帮菜', category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'咸肉',quantity:40,unit:'克'},{name:'五花肉',quantity:60,unit:'克'},{name:'竹笋',quantity:100,unit:'克'},{name:'豆腐',quantity:80,unit:'克'},{name:'生姜',quantity:5,unit:'克'},{name:'葱',quantity:10,unit:'克'}] },
+    '生煎包': { ingredients: ['面粉', '猪肉', '葱', '芝麻'], cuisine: '本帮菜', category: '主粮', meals: ['breakfast'], perServing: [{name:'面粉',quantity:80,unit:'克'},{name:'猪肉',quantity:50,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'芝麻',quantity:3,unit:'克'}] },
+    '番茄肉酱意面': { ingredients: ['意大利面', '猪肉', '番茄', '洋葱', '大蒜'], cuisine: '国际菜', category: '主粮', meals: ['lunch', 'dinner'], perServing: [{name:'意大利面',quantity:100,unit:'克'},{name:'猪肉',quantity:80,unit:'克'},{name:'番茄',quantity:100,unit:'克'},{name:'洋葱',quantity:40,unit:'克'},{name:'大蒜',quantity:5,unit:'克'}] },
+    // ========== V173 区域菜系：湖北菜（武汉优先） ==========
+    '排骨藕汤': { ingredients: ['排骨', '莲藕', '生姜', '葱', '盐'], cuisine: '湖北菜', category: '肉蛋奶', meals: ['lunch', 'dinner'], perServing: [{name:'排骨',quantity:120,unit:'克'},{name:'莲藕',quantity:150,unit:'克'},{name:'生姜',quantity:10,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'盐',quantity:2,unit:'克'}] },
+    '清蒸武昌鱼': { ingredients: ['武昌鱼', '生姜', '葱', '蒸鱼豉油'], cuisine: '湖北菜', category: '水产', meals: ['lunch', 'dinner'], perServing: [{name:'武昌鱼',quantity:200,unit:'克'},{name:'生姜',quantity:10,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'蒸鱼豉油',quantity:10,unit:'毫升'}] },
+    '热干面': { ingredients: ['面条', '芝麻酱', '葱', '酱油', '香油'], cuisine: '湖北菜', category: '主粮', meals: ['breakfast', 'lunch'], perServing: [{name:'面条',quantity:120,unit:'克'},{name:'芝麻酱',quantity:20,unit:'克'},{name:'葱',quantity:10,unit:'克'},{name:'酱油',quantity:8,unit:'毫升'},{name:'香油',quantity:5,unit:'毫升'}] },
 };
+
+// ==================== V173 区域菜系库（按家庭住址匹配家乡风味） ====================
+// 菜名 → 菜系（DISH_INGREDIENTS 新条目已内联 cuisine；此表补充标注既有经典菜）
+const DISH_CUISINE_EXTRA = {
+    '红烧肉': '本帮菜', '糖醋排骨': '本帮菜', '葱油拌面': '本帮菜',
+    '三明治': '国际菜'
+};
+function getDishCuisine(dishName) {
+    if (!dishName) return '';
+    var info = (typeof DISH_INGREDIENTS !== 'undefined') && DISH_INGREDIENTS[dishName];
+    return (info && info.cuisine) || DISH_CUISINE_EXTRA[dishName] || '';
+}
+// 住址关键词 → 优先菜系（顺序即优先级；同省城市一并覆盖）
+// exclude: 同名歧义城市排除（如"朝阳"既是辽宁朝阳市，也出现在"北京朝阳区"）
+const REGIONAL_CUISINE_RULES = [
+    { re: /铁岭|沈阳|大连|鞍山|抚顺|本溪|丹东|锦州|营口|阜新|辽阳|盘锦|朝阳|葫芦岛|长春|吉林市|四平|辽源|通化|白山|松原|白城|延边|哈尔滨|齐齐哈尔|牡丹江|佳木斯|大庆|伊春|鸡西|鹤岗|双鸭山|七台河|黑河|绥化|辽宁|吉林|黑龙江|东北/, exclude: /北京.*(朝阳|长春|吉林)/, cuisines: ['东北菜'], label: '东北' },
+    { re: /贵阳|遵义|六盘水|安顺|毕节|铜仁|凯里|都匀|兴义|清镇|黔东南|黔南|黔西南|贵州/, cuisines: ['贵州菜'], label: '贵州' },
+    { re: /上海/, cuisines: ['本帮菜', '国际菜'], label: '上海' },
+    { re: /武汉|黄石|襄阳|十堰|宜昌|鄂州|荆门|孝感|荆州|黄冈|咸宁|随州|恩施|仙桃|潜江|天门|湖北/, cuisines: ['湖北菜'], label: '湖北' }
+];
+// 村镇乡屯等农村住址 → 农村家常菜（作为附加优先级）
+const RURAL_ADDR_RE = /村|乡|屯|嘎查|旗|组|大队|集镇/;
+// 规则命中判断（支持 exclude 歧义排除）
+function _regionalRuleMatch(rule, addr) {
+    if (!rule.re.test(addr)) return false;
+    if (rule.exclude && rule.exclude.test(addr)) return false;
+    return true;
+}
+// 根据家庭住址返回应优先的菜系数组（如 ['东北菜','农村家常菜']）；无匹配返回 []
+function detectRegionalCuisines(address) {
+    var addr = String(address == null ? '' : address);
+    if (!addr) {
+        try { addr = (typeof familyHomeAddress !== 'undefined' && familyHomeAddress) || lsGet('familyHomeAddress') || ''; } catch (e) { addr = ''; }
+        if (!addr) { try { addr = (familyData && familyData.address) || ''; } catch (e2) {} }
+    }
+    if (!addr) return [];
+    var out = [];
+    for (var i = 0; i < REGIONAL_CUISINE_RULES.length; i++) {
+        if (_regionalRuleMatch(REGIONAL_CUISINE_RULES[i], addr)) {
+            REGIONAL_CUISINE_RULES[i].cuisines.forEach(function (c) { if (out.indexOf(c) === -1) out.push(c); });
+        }
+    }
+    if (RURAL_ADDR_RE.test(addr) && out.indexOf('农村家常菜') === -1) out.push('农村家常菜');
+    return out;
+}
+// 返回 {label, cuisines} 的命中规则描述（用于提示文案）
+function getRegionalCuisineInfo(address) {
+    var addr = String(address == null ? '' : address);
+    if (!addr) {
+        try { addr = (typeof familyHomeAddress !== 'undefined' && familyHomeAddress) || lsGet('familyHomeAddress') || ''; } catch (e) {}
+    }
+    var labels = [];
+    REGIONAL_CUISINE_RULES.forEach(function (r) { if (_regionalRuleMatch(r, addr) && labels.indexOf(r.label) === -1) labels.push(r.label); });
+    if (RURAL_ADDR_RE.test(addr)) labels.push('农村');
+    return { address: addr, labels: labels, cuisines: detectRegionalCuisines(addr) };
+}
+// 取某菜系在本地菜谱库中的菜名列表（按餐次过滤）
+function getDishesByCuisine(cuisine, meal) {
+    return Object.keys(DISH_INGREDIENTS).filter(function (n) {
+        if (getDishCuisine(n) !== cuisine) return false;
+        if (meal) {
+            var ms = DISH_INGREDIENTS[n].meals || [];
+            if (ms.indexOf(meal) === -1) return false;
+        }
+        return true;
+    });
+}
+// AI 推荐 prompt 的区域菜系段（无住址返回 ''）
+function buildRegionalCuisinePromptSection(address) {
+    var cuisines = detectRegionalCuisines(address);
+    if (!cuisines.length) return '';
+    var lines = ['【家乡风味偏好】根据家庭住址，每餐尽量安排 1 道家乡风味菜（优先从下列本地菜谱库中选菜名，不要自造菜名）：'];
+    cuisines.forEach(function (c) {
+        var names = getDishesByCuisine(c).slice(0, 12);
+        if (names.length) lines.push('- ' + c + '可选：' + names.join('、'));
+    });
+    lines.push('家乡风味菜的 reason 以"🏠家乡风味"开头；仍须遵守过敏原、忌口、节气与多样性约束，不得连续两餐重复同一道菜。');
+    return lines.join('\n');
+}
 
 // 根据用餐人数计算菜品食材用量（从DISH_INGREDIENTS的perServing数据按人数倍乘）
 // 返回 [{name, quantity, unit}] 格式
@@ -16738,6 +16844,18 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
     }
 
     var allDishes = Object.entries((typeof DISH_INGREDIENTS === 'object' && DISH_INGREDIENTS) || {});
+    // V173: 区域菜系（按家庭住址）——评分加权 + 补齐池优先
+    var _regCuisines = (typeof detectRegionalCuisines === 'function') ? detectRegionalCuisines() : [];
+    var _regFills = { breakfast: [], lunch: [], dinner: [] };
+    if (_regCuisines.length && typeof getDishesByCuisine === 'function') {
+        _regCuisines.forEach(function (cz) {
+            ['breakfast', 'lunch', 'dinner'].forEach(function (mk) {
+                getDishesByCuisine(cz, mk).forEach(function (n) {
+                    if (_regFills[mk].indexOf(n) === -1) _regFills[mk].push(n);
+                });
+            });
+        });
+    }
     var genericFills = {
         breakfast: ['小米粥','韭菜鸡蛋饼','拌黄瓜','豆浆','小笼包','凉拌萝卜丝','燕麦粥','水煮蛋','蒸南瓜','皮蛋瘦肉粥','葱油饼','鸡蛋羹','酸奶麦片','豆沙包','紫薯粥','菜包'],
         lunch:     ['番茄牛腩','宫保鸡丁','蒜蓉西兰花','青椒肉丝','清蒸鲈鱼','酸辣土豆丝','米饭','香菇滑鸡','鱼香茄子','凉拌三丝','麻婆豆腐','土豆烧鸡','红烧鱼块','冬瓜海带','蒜蓉油麦菜','萝卜牛腩煲','豆角茄子','洋葱炒蛋','西芹炒肉','拍黄瓜','番茄鸡蛋汤'],
@@ -16807,6 +16925,20 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
                     });
                 }
                 if (fbBoost.dishRe && fbBoost.dishRe.test(dish)) { score += 7; reasons.push((modeReasonMap[fbMode]||'') + '侧重推荐'); }
+                // V173: 家庭住址对应的家乡菜系强加权（+14，保证每餐有1道家乡风味的机会）
+                if (_regCuisines.length) {
+                    var _dishCuisine = (info.cuisine) || (typeof getDishCuisine === 'function' ? getDishCuisine(dish) : '') || '';
+                    if (_dishCuisine && _regCuisines.indexOf(_dishCuisine) !== -1) {
+                        score += 14;
+                        if (reasons.indexOf('🏠家乡风味') === -1) reasons.push('🏠家乡风味');
+                    }
+                }
+                // V173: 已识别家乡菜系时，其他区域菜系轻度降权（偶尔换口味仍可出现）
+                if (_regCuisines.length && _dishCuisine && _regCuisines.indexOf(_dishCuisine) === -1) score -= 5;
+                // V173: 餐次强约束——菜品标注了 meals 但不含当前餐次时降权
+                // （避免大碴粥/窝头出现在晚餐、热干面出现在晚餐等错配）
+                var _mealListV173 = Array.isArray(info.meals) ? info.meals : null;
+                if (_mealListV173 && _mealListV173.length && _mealListV173.indexOf(meal) === -1) score -= 35;
                 if (meal === 'breakfast' && /蛋|粥|饼|包|馒头|奶|燕麦/.test(dish)) score += 3;
                 if (meal !== 'breakfast' && /炒|烧|炖|蒸|煲|汤/.test(dish)) score += 1;
                 // 早餐强约束：明显"硬菜/大肉/重口味午晚菜"要直接排除或巨量罚分
@@ -16889,7 +17021,8 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
 
             // ---- 补齐：按日偏移轮转 genericFills，三天不会全重复 ----
             if (picked.length < needCount) {
-                var fills0 = genericFills[meal] || [];
+                // V173: 家乡菜系菜名排在补齐池最前，保证候选见底时仍优先上家乡菜
+                var fills0 = (_regFills[meal] || []).concat(genericFills[meal] || []);
                 var offset = (daySeed + dIdx * 5 + mm * 3 + (appearedLoopFillPenalty())) % Math.max(1, fills0.length);
                 var fills = fills0.slice(offset).concat(fills0.slice(0, offset));
                 for (var fi=0; fi<fills.length && picked.length < needCount; fi++) {
@@ -16901,6 +17034,11 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
                     if (_recentDishSet[n] && _recentDishSet[n] >= 1) continue;
                     seenName.add(n);
                     var reason2 = termName ? (termName+'时节家常推荐') : '家庭普适推荐';
+                    // V173: 补齐池中的家乡菜标注
+                    if (_regCuisines.length) {
+                        var _fc = (typeof getDishCuisine === 'function') ? getDishCuisine(n) : '';
+                        if (_fc && _regCuisines.indexOf(_fc) !== -1) reason2 = '🏠家乡风味 · ' + reason2;
+                    }
                     if (topIngsLiked[0]) reason2 += ' · 兼顾爱吃的'+topIngsLiked[0];
                     if (dIdx > 0) reason2 = '第'+(dIdx+1)+'天家常·' + reason2;
                     picked.push({ dish: n, category: '家常菜', ingredients: (DISH_INGREDIENTS && DISH_INGREDIENTS[n] && DISH_INGREDIENTS[n].ingredients) || [n], reason: reason2.slice(0, 28) });
@@ -22731,6 +22869,9 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
             // V156: 特殊人群标签段（体育生/高龄老人/婴儿/外国人/产后妈妈/体力劳动者，触发专属推荐规则）
             var specialTagSection = '';
             try { specialTagSection = buildSpecialTagPromptSection(dineMembers); } catch(e) { specialTagSection = ''; }
+            // V173: 区域菜系段（按家庭住址推荐家乡风味：铁岭→东北菜、贵阳→贵州菜、上海→本帮+国际、武汉→湖北菜）
+            var regionSection = '';
+            try { regionSection = buildRegionalCuisinePromptSection(); } catch(e) { regionSection = ''; }
             var sys = '你是家肴记饮食策划。只返回 JSON：{byDate:{"' + dateKey + '":{"' + mealKey + '":[{dish:"菜名",reason:"15-28字"}]}}}。'
                 + '每餐' + _needN + '道（' + _fmN + '人，宁少勿多）；菜名真实家常菜，reason 中文。'
                 + '结合节气与成员健康，优先当季：请优先推荐用当季食材制作的菜谱，并在 reason 中说明节气养生原则；使用当季食材的菜，reason 以"🌿当季食材"开头；健康推荐菜 reason 含"适合生长发育期/术后/慢病/孕期/产后"。'
@@ -22753,6 +22894,8 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                 + (constitutionSection ? ('；' + constitutionSection) : '')
                 // V156: 特殊人群标签（在体质之后、偏好画像之前）
                 + (specialTagSection ? ('；' + specialTagSection) : '')
+                // V173: 家乡风味（区域菜系，按家庭住址）
+                + (regionSection ? ('；\n' + regionSection) : '')
                 // V150: 饮食偏好画像（优先级第6位，在天气之后）
                 + (prefSection ? ('；' + prefSection) : '')
                 + (function(){ var dc = getDiversityConstraints(dateKey); return dc ? ('；\n' + dc) : ''; })()
@@ -38953,11 +39096,12 @@ function guessFoodCategory(name) {
         '青椒': '蔬菜', '红椒': '蔬菜', '豆角': '蔬菜', '芹菜': '蔬菜', '韭菜': '蔬菜',
         '空心菜': '蔬菜', '大蒜': '蔬菜', '蒜头': '蔬菜', '葱': '蔬菜', '大葱': '蔬菜',
         '香菜': '蔬菜', '山药': '蔬菜', '红薯': '蔬菜', '生姜': '蔬菜', '姜片': '蔬菜', '姜': '蔬菜',
-        '辣椒': '蔬菜', '洋葱': '蔬菜',
+        '辣椒': '蔬菜', '洋葱': '蔬菜', '酸菜': '蔬菜',
         // 肉蛋奶
         '牛肉': '肉蛋奶', '猪肉': '肉蛋奶', '鸡肉': '肉蛋奶', '排骨': '肉蛋奶', '牛腩': '肉蛋奶',
         '鸡蛋': '肉蛋奶', '牛奶': '肉蛋奶', '鸭蛋': '肉蛋奶', '肉片': '肉蛋奶', '肉丝': '肉蛋奶',
         '肉末': '肉蛋奶', '牛肉末': '肉蛋奶', '虾仁': '肉蛋奶', '五花肉': '肉蛋奶', '鸭肉': '肉蛋奶', '羊肉': '肉蛋奶',
+        '咸肉': '肉蛋奶', '猪里脊': '肉蛋奶', '里脊': '肉蛋奶',
         // 水产
         '虾': '水产', '鱼': '水产', '鲫鱼': '水产', '鲤鱼': '水产', '带鱼': '水产',
         '蟹': '水产', '蛤蜊': '水产', '扇贝': '水产', '鲈鱼': '水产', '草鱼': '水产',
@@ -38965,6 +39109,7 @@ function guessFoodCategory(name) {
         '大米': '主粮', '米饭': '主粮', '面粉': '主粮', '面条': '主粮',
         '小米': '主粮', '红豆': '主粮', '绿豆': '主粮', '燕麦': '主粮', '薏米': '主粮',
         '黑米': '主粮', '糙米': '主粮', '莲子': '主粮', '红枣': '主粮', '枸杞': '主粮', '桂圆': '主粮',
+        '玉米面': '主粮', '玉米碴': '主粮', '米粉': '主粮', '意大利面': '主粮',
         // 水果
         '苹果': '水果', '香蕉': '水果', '橙子': '水果', '葡萄': '水果',
         '西瓜': '水果', '梨': '水果', '桃子': '水果', '草莓': '水果', '蓝莓': '水果', '猕猴桃': '水果',
