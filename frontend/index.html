@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V164-20261016';
+        var APP_VER = 'V165-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -26460,7 +26460,7 @@ function _dtRenderCard(tip) {
         + '<span class="dt-head-btns">'
         + adminCtl
         + '<button class="dt-btn dt-btn-primary" onclick="_openDailyTipFull()">读完整</button>'
-        + '<button class="dt-btn" id="dtCardSpeakBtn" onclick="_dtSpeakTip(\'card\')">🔊 朗读</button>'
+        + '<button id="dtCardSpeakBtn" onclick="_dtSpeakTip(\'card\')" style="border:none;background:none;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;color:#6B7280;" title="语音播报">🔊</button>'
         + '<button class="dt-btn" onclick="_collectDailyTip()">收藏</button>'
         + '</span></div>'
         + '<div class="dt-title">' + emoji + ' ' + (tip.title || '') + '</div>'
@@ -26639,7 +26639,7 @@ function _dtSpeakTip(from) {
     if (_dtSpeaking) {
         speechSynthesis.cancel();
         _dtSpeaking = false;
-        _dtUpdateSpeakBtns('🔊 朗读');
+        _dtUpdateSpeakBtns('🔊');
         return;
     }
     var tip = (from === 'full') ? _dtCurTip : (_dtServerTip || _dtGetCached());
@@ -26652,11 +26652,11 @@ function _dtSpeakTip(from) {
     if (!text.trim()) { showToast('暂无内容可朗读'); return; }
     var u = new SpeechSynthesisUtterance(text);
     u.lang = 'zh-CN'; u.rate = 0.9; u.pitch = 1; u.volume = 1;
-    u.onend = function () { _dtSpeaking = false; _dtUpdateSpeakBtns('🔊 朗读'); };
-    u.onerror = function () { _dtSpeaking = false; _dtUpdateSpeakBtns('🔊 朗读'); };
+    u.onend = function () { _dtSpeaking = false; _dtUpdateSpeakBtns('🔊'); };
+    u.onerror = function () { _dtSpeaking = false; _dtUpdateSpeakBtns('🔊'); };
     speechSynthesis.speak(u);
     _dtSpeaking = true;
-    _dtUpdateSpeakBtns('⏹ 停止');
+    _dtUpdateSpeakBtns('⏹');
 }
 function _dtUpdateSpeakBtns(label) {
     var b1 = document.getElementById('dtCardSpeakBtn'); if (b1) b1.textContent = label;
@@ -26693,7 +26693,9 @@ function _openDailyTipFull(tip) {
     hdr.innerHTML = '<div style="width:36px;height:4px;border-radius:2px;background:#E5E7EB;margin:0 auto 10px;"></div>'
         + '<div style="display:flex;align-items:center;gap:8px;">'
         + '<button type="button" onclick="_closeDtFull()" style="border:none;background:none;font-size:18px;color:#6B7280;cursor:pointer;padding:2px 6px;line-height:1;">←</button>'
-        + '<span style="font-size:15px;font-weight:700;color:#1F2937;">食养堂</span></div>';
+        + '<span style="font-size:15px;font-weight:700;color:#1F2937;">食养堂</span>'
+        + '<button type="button" id="dtFullSpeakBtn" onclick="_dtSpeakTip(\'full\')" title="语音播报" style="margin-left:auto;border:none;background:none;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1;color:#6B7280;">🔊</button>'
+        + '</div>';
     var body = document.createElement('div');
     body.style.cssText = 'flex:1;overflow-y:auto;padding:16px 20px 12px;';
     body.innerHTML = '<div style="font-size:18px;font-weight:700;color:#1F2937;line-height:1.5;">' + emoji + ' ' + (tip.title || '') + '</div>'
@@ -26707,7 +26709,6 @@ function _openDailyTipFull(tip) {
         + '<div style="display:flex;gap:10px;">'
         + '<button id="dtFullFavBtn" type="button" onclick="_dtFavFromFull()" style="flex:1;height:38px;border-radius:12px;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:14px;cursor:pointer;">' + (_dtIsFav(tip) ? '⭐ 已收藏' : '收藏') + '</button>'
         + '<button type="button" onclick="_dtShareToFamily()" style="flex:1;height:38px;border-radius:12px;border:none;background:#F97316;color:white;font-size:14px;cursor:pointer;">分享到家庭</button>'
-        + '<button type="button" id="dtFullSpeakBtn" onclick="_dtSpeakTip(\'full\')" style="flex:1;height:38px;border-radius:12px;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:14px;cursor:pointer;">🔊 朗读</button>'
         + '<button type="button" onclick="_closeDtFull()" style="flex:1;height:38px;border-radius:12px;border:none;background:#F3F4F6;color:#4B5563;font-size:14px;cursor:pointer;">关闭</button>'
         + '</div>';
     sheet.appendChild(hdr);
