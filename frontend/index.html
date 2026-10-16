@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V165-20261016';
+        var APP_VER = 'V166-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -26380,7 +26380,7 @@ function renderHomeDiaryCard() {
             return '<span class="hd-dish">'
                 + '<input type="checkbox" ' + (confirmed ? 'disabled ' : '') + (checked.indexOf(name) >= 0 ? 'checked' : '') + ' onchange="_hdToggleDish(\'' + escapeAttr(name) + '\', this.checked)">'
                 + '<span class="hd-dish-name" onclick="_hdViewDishByName(\'' + escapeAttr(name) + '\')" title="看做法">' + escapeHtml(name) + '</span>'
-                + '<button class="hd-listen" onclick="_hdListenByName(\'' + escapeAttr(name) + '\')" title="朗读">🎧</button>'
+                + '<button class="hd-listen" onclick="_hdListenByName(\'' + escapeAttr(name) + '\')" title="朗读">🔊</button>'
                 + '</span>';
         }).join('') : '<span style="font-size:13px;color:#9CA3AF;">（未计划，点右上角 ＋ 规划）</span>') + '</div>'
         + '</div>'
