@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V175-20261016';
+        var APP_VER = 'V176-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -12429,6 +12429,99 @@ function getForeignFriendlyFills(specs) {
     return fills;
 }
 
+// ==================== V176 体力劳动者高能量配餐（务农/建筑等，主食+30%、蛋白+20%） ====================
+// 汇总家庭/就餐成员中的体力劳动者：[{members:[名字]}]，无则 []
+function getFamilyManualLaborers(members) {
+    var arr = Array.isArray(members) ? members : [];
+    if (!arr.length) {
+        try { arr = (typeof getDiaryDiningMembersInfo === 'function') ? getDiaryDiningMembersInfo() : (Array.isArray(familyData) ? familyData : []); } catch (e) { arr = []; }
+    }
+    var names = [];
+    (arr || []).forEach(function (m) {
+        if (!m) return;
+        if ((typeof _isManualLaborDiner === 'function' ? _isManualLaborDiner(m) : false) && names.indexOf(m.name) === -1) {
+            names.push(m.name || '体力劳动者');
+        }
+    });
+    return names.length ? [{ members: names }] : [];
+}
+// 菜品能量画像：是否含主粮类食材 / 高蛋白类食材（食材分类 + 菜名兜底）
+function _dishEnergyProfile(dish, ings) {
+    var list = (ings && ings.length) ? ings : (((typeof DISH_INGREDIENTS !== 'undefined') && DISH_INGREDIENTS[dish] && DISH_INGREDIENTS[dish].ingredients) || []);
+    var hasStaple = false, hasProtein = false;
+    (list || []).forEach(function (n) {
+        var k = (typeof _ingAmountKind === 'function') ? _ingAmountKind(n) : 'other';
+        if (k === 'staple') hasStaple = true;
+        if (k === 'protein') hasProtein = true;
+    });
+    var dn = String(dish || '');
+    // 菜名兜底（盖浇饭/牛肉面/猪肉炖粉条等库内主食菜）
+    if (/饭|面|粉|馒头|包子|饺子|馄饨|饼|粥|红薯|地瓜|土豆|马铃薯|玉米|山药|芋头|燕麦|麦片|意面|挂面|年糕|三明治|吐司/.test(dn)) hasStaple = true;
+    if (/肉|牛腩|牛排|排骨|猪肝|猪|羊|鸡|鸭|鹅|鱼|虾|蟹|贝|蛋|奶|豆腐|豆干|腐竹|豆皮/.test(dn)) hasProtein = true;
+    return { staple: hasStaple, protein: hasProtein };
+}
+/**
+ * 本地兜底评分：体力劳动者高能量菜加分（主食扛饿 + 高蛋白硬菜）
+ * @returns {{delta:number, reason:string|null}}
+ */
+function scoreDishForManualLabor(dish, ings, meal, specs) {
+    if (!(specs || []).length) return { delta: 0, reason: null };
+    var p = _dishEnergyProfile(dish, ings);
+    var delta = 0, bit = '';
+    if (p.staple && p.protein) { delta += 10; bit = '主食+蛋白'; }
+    else if (p.staple) { delta += 7; bit = '主食充足'; }
+    else if (p.protein) { delta += 5; bit = '蛋白充足'; }
+    // 纯素清炒/清汤不加分但不扣分（每餐仍需蔬菜搭配）
+    return { delta: delta, reason: delta ? ('💪高能量配餐·' + bit) : null };
+}
+/**
+ * 本地兜底补齐池：高能量管饱菜（均取自菜谱库），主食菜优先于纯蛋白菜
+ */
+function getHighEnergyFills(specs) {
+    var fills = { breakfast: [], lunch: [], dinner: [] };
+    if (!(specs || []).length || (typeof DISH_INGREDIENTS === 'undefined')) return fills;
+    var ranked = [];
+    Object.keys(DISH_INGREDIENTS).forEach(function (n) {
+        // 轻食/沙拉/清淡汤不作高能量补齐
+        if (/沙拉|凉拌黄瓜|拍黄瓜|白灼生菜$/.test(n)) return;
+        var info = DISH_INGREDIENTS[n];
+        var p = _dishEnergyProfile(n, info.ingredients);
+        if (!p.staple && !p.protein) return;
+        var rank = (p.staple && p.protein) ? 2 : (p.staple ? 1 : 0);
+        var meals = (info.meals && info.meals.length) ? info.meals : ['breakfast', 'lunch', 'dinner'];
+        meals.forEach(function (mk) {
+            if (!fills[mk]) return;
+            ranked.push({ meal: mk, name: n, rank: rank });
+        });
+    });
+    // rank 降序，同级按菜名稳定排序
+    ranked.sort(function (a, b) { return (b.rank - a.rank) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
+    ranked.forEach(function (r) {
+        if (fills[r.meal].indexOf(r.name) === -1) fills[r.meal].push(r.name);
+    });
+    return fills;
+}
+// AI 推荐 prompt 的体力劳动者高能量配餐段（无体力劳动者返回 ''）
+function buildManualLaborPromptSection(members) {
+    var specs = (typeof getFamilyManualLaborers === 'function') ? getFamilyManualLaborers(members) : [];
+    if (!specs.length) return '';
+    var names = specs[0].members.join('、');
+    var he = (typeof getHighEnergyFills === 'function') ? getHighEnergyFills(specs) : { lunch: [], dinner: [], breakfast: [] };
+    var stapleExamples = he.lunch.filter(function (n) {
+        var p = _dishEnergyProfile(n);
+        return p.staple;
+    }).slice(0, 10);
+    var breakfastExamples = he.breakfast.slice(0, 8);
+    return [
+        '【体力劳动者高能量配餐·已自动识别标签】',
+        '- ' + names + ' 从事体力劳动（务农/建筑/搬运等），能量消耗大：每餐主食比普通成人增加约30%（米饭/面条/馒头/饼等足量管饱），优先安排主食菜（可选：' + stapleExamples.join('、') + '）；',
+        '- 高蛋白食材（猪牛羊肉、鸡鸭肉、鱼、蛋、豆制品）增加约20%，午晚餐每餐至少一道肉/鱼/蛋/豆腐硬菜，避免全素或清汤寡水；',
+        '- 早餐同样要顶饱扛饿（可选：' + breakfastExamples.join('、') + '）；',
+        '- 同时搭配适量当季蔬菜保证营养均衡，不得三餐全是大肉无菜。',
+        '高能量菜的 reason 以"💪高能量配餐"开头。'
+    ].join('\n');
+}
+
 // 根据用餐人数计算菜品食材用量（从DISH_INGREDIENTS的perServing数据按人数倍乘）
 // 返回 [{name, quantity, unit}] 格式
 function getDishIngredientsWithServings(dishName, servings) {
@@ -17132,6 +17225,9 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
     // V175: 外国人饮食适配（按国籍）——国际风味加权 + 国际菜补齐池，中式仍占多数
     var _foreignSpecs = (typeof getFamilyForeigners === 'function') ? getFamilyForeigners() : [];
     var _foreignFills = _foreignSpecs.length && (typeof getForeignFriendlyFills === 'function') ? getForeignFriendlyFills(_foreignSpecs) : { breakfast: [], lunch: [], dinner: [] };
+    // V176: 体力劳动者高能量配餐——主食/高蛋白菜加权 + 高能量补齐池
+    var _laborSpecs = (typeof getFamilyManualLaborers === 'function') ? getFamilyManualLaborers() : [];
+    var _laborFills = _laborSpecs.length && (typeof getHighEnergyFills === 'function') ? getHighEnergyFills(_laborSpecs) : { breakfast: [], lunch: [], dinner: [] };
     // V173: 区域菜系（按家庭住址）——评分加权 + 补齐池优先
     var _regCuisines = (typeof detectRegionalCuisines === 'function') ? detectRegionalCuisines() : [];
     var _regFills = { breakfast: [], lunch: [], dinner: [] };
@@ -17235,6 +17331,12 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
                     if (_foreignScore.delta) score += _foreignScore.delta;
                     if (_foreignScore.reason && reasons.indexOf(_foreignScore.reason) === -1) reasons.push(_foreignScore.reason);
                 }
+                // V176: 体力劳动者高能量配餐加权（主食扛饿 + 高蛋白硬菜）
+                if (_laborSpecs.length) {
+                    var _laborScore = scoreDishForManualLabor(dish, ings, meal, _laborSpecs);
+                    if (_laborScore.delta) score += _laborScore.delta;
+                    if (_laborScore.reason && reasons.indexOf(_laborScore.reason) === -1) reasons.push(_laborScore.reason);
+                }
                 // V173: 餐次强约束——菜品标注了 meals 但不含当前餐次时降权
                 // （避免大碴粥/窝头出现在晚餐、热干面出现在晚餐等错配）
                 var _mealListV173 = Array.isArray(info.meals) ? info.meals : null;
@@ -17321,8 +17423,8 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
 
             // ---- 补齐：按日偏移轮转 genericFills，三天不会全重复 ----
             if (picked.length < needCount) {
-                // 补齐优先级：V174 儿童友好菜 → V175 国际风味菜 → V173 家乡菜 → 通用菜
-                var fills0 = (_childFills[meal] || []).concat(_foreignFills[meal] || []).concat(_regFills[meal] || []).concat(genericFills[meal] || []);
+                // 补齐优先级：V174 儿童友好菜 → V175 国际风味菜 → V176 高能量菜 → V173 家乡菜 → 通用菜
+                var fills0 = (_childFills[meal] || []).concat(_foreignFills[meal] || []).concat(_laborFills[meal] || []).concat(_regFills[meal] || []).concat(genericFills[meal] || []);
                 var offset = (daySeed + dIdx * 5 + mm * 3 + (appearedLoopFillPenalty())) % Math.max(1, fills0.length);
                 var fills = fills0.slice(offset).concat(fills0.slice(0, offset));
                 for (var fi=0; fi<fills.length && picked.length < needCount; fi++) {
@@ -17341,6 +17443,10 @@ function _staticFallbackIngrPrefRecipes(dateKeys, liked, solarTermObj, seedOffse
                     // V175: 补齐池中的国际风味菜标注
                     if (_foreignSpecs.length && (_foreignFills[meal] || []).indexOf(n) !== -1) {
                         reason2 = '🌍国际风味 · ' + reason2;
+                    }
+                    // V176: 补齐池中的高能量菜标注
+                    if (_laborSpecs.length && (_laborFills[meal] || []).indexOf(n) !== -1) {
+                        reason2 = '💪高能量配餐 · ' + reason2;
                     }
                     // V173: 补齐池中的家乡菜标注
                     if (_regCuisines.length) {
@@ -17552,7 +17658,15 @@ async function generateIngredientPrefRecipes() {
           + _v175Foreigners.map(function(s){ return s.members.join('、') + '（' + s.label + '籍）'; }).join('；')
           + '——保留中式家常菜，每餐增加国际风味选项</div>'
         : '';
-    summaryEl.innerHTML = `正在融合：时节「<b>${solarTermName||'(无节气数据)'}</b>」 · 家人偏好 · 近 30 天爱吃食材 Top3：<b>${liked.slice(0,3).map(x=>x.name).join(' / ') || '(暂无偏好，先通用推荐)'}</b>…` + _v174Banner + _v175Banner;
+    // V176: 体力劳动者高能量配餐提示（主食+30%、蛋白+20%）
+    var _v176Laborers = [];
+    try { _v176Laborers = getFamilyManualLaborers(); } catch(e) { _v176Laborers = []; }
+    var _v176Banner = _v176Laborers.length
+        ? '<div style="margin-top:6px;padding:6px 10px;background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px;color:#92400E;font-size:13px;">💪 高能量配餐已开启：'
+          + _v176Laborers[0].members.join('、')
+          + '（体力劳动者）——主食增加约30%、蛋白质增加约20%，多选管饱主食与肉鱼蛋硬菜；食材用量已按 主食×1.3 / 高蛋白×1.2 自动加量</div>'
+        : '';
+    summaryEl.innerHTML = `正在融合：时节「<b>${solarTermName||'(无节气数据)'}</b>」 · 家人偏好 · 近 30 天爱吃食材 Top3：<b>${liked.slice(0,3).map(x=>x.name).join(' / ') || '(暂无偏好，先通用推荐)'}</b>…` + _v174Banner + _v175Banner + _v176Banner;
     wrap.innerHTML = `<div style="text-align:center;padding:24px;color:#6B7280;font-size:14px;">正在生成今/明/后 × 3 餐 × 3-5 道菜推荐（优先走 AI，3.5s 未响应则使用本地偏好库）…</div>`;
     if (submitBtn) { submitBtn.disabled = true; submitBtn.classList.add('is-disabled'); submitBtn.textContent = '确认选择'; }
 
@@ -19779,12 +19893,14 @@ function _isInfantDiner(m) {
     var a = _memberAgeNum(m);
     return a !== null && a < 1;
 }
-// 体力劳动者（务农、建筑等）：职业字段或文本命中
+// 体力劳动者（务农、建筑等）：标签 / 职业字段 / 职业文本命中
 function _isManualLaborDiner(m) {
     if (!m) return false;
+    // V176: 显式"体力劳动者"标签（添加成员表单复选框写入 tags）
+    if (Array.isArray(m.tags) && m.tags.indexOf('体力劳动者') > -1) return true;
     if (m.occupation === '体力劳动者' || m.role === '体力劳动者') return true;
     var blob = [m.occupation, m.workSchedule, m.taste, m.dietaryPreference, m.healthConcerns, m.place, m.constitutionDetail].join(' ');
-    return /务农|农民|农活|建筑|工地|工人|搬运|重体力|体力劳动/.test(blob);
+    return /务农|农民|农活|种植|建筑|工地|工人|搬运|重体力|体力劳动|快递|外卖员|物流|装修|采矿|矿工|渔民|捕鱼|钢筋|架子工|焊工|钣金|流水线/.test(blob);
 }
 // 单个成员对某类食材的份量系数（互斥优先级：婴儿0 → 老人70+×0.8 → 儿童3-6岁×0.5 → 体力劳动者 主食1.3/蛋白1.2 → 普通1）
 function _memberServingWeight(m, kind) {
@@ -23202,6 +23318,9 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
             // V175: 外籍成员饮食适配段（按国籍：意大利→意式菜、英国→英式早餐，保留中式）
             var foreignDietSection = '';
             try { foreignDietSection = buildForeignDietPromptSection(dineMembers); } catch(e) { foreignDietSection = ''; }
+            // V176: 体力劳动者高能量配餐段（务农/建筑等，主食+30%、蛋白+20%）
+            var laborDietSection = '';
+            try { laborDietSection = buildManualLaborPromptSection(dineMembers); } catch(e) { laborDietSection = ''; }
             var sys = '你是家肴记饮食策划。只返回 JSON：{byDate:{"' + dateKey + '":{"' + mealKey + '":[{dish:"菜名",reason:"15-28字"}]}}}。'
                 + '每餐' + _needN + '道（' + _fmN + '人，宁少勿多）；菜名真实家常菜，reason 中文。'
                 + '结合节气与成员健康，优先当季：请优先推荐用当季食材制作的菜谱，并在 reason 中说明节气养生原则；使用当季食材的菜，reason 以"🌿当季食材"开头；健康推荐菜 reason 含"适合生长发育期/术后/慢病/孕期/产后"。'
@@ -23230,6 +23349,8 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                 + (childAgeSection ? ('；\n' + childAgeSection) : '')
                 // V175: 外籍成员国际风味适配（保留中式家常菜，增加国际选项）
                 + (foreignDietSection ? ('；\n' + foreignDietSection) : '')
+                // V176: 体力劳动者高能量配餐（主食+30%、蛋白+20%）
+                + (laborDietSection ? ('；\n' + laborDietSection) : '')
                 // V150: 饮食偏好画像（优先级第6位，在天气之后）
                 + (prefSection ? ('；' + prefSection) : '')
                 + (function(){ var dc = getDiversityConstraints(dateKey); return dc ? ('；\n' + dc) : ''; })()
