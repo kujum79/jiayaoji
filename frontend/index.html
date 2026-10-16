@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V169-20261016';
+        var APP_VER = 'V170-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -6080,6 +6080,24 @@ function resetFamilyMemoryToGuest() {
 }
 // 从家庭住址中提取城市信息(用于成员"现住地"自动填充)
 // 支持格式: "北京市朝阳区xxx"、"上海市浦东新区xxx"、"杭州市西湖区xxx"、"江苏省南京市鼓楼区xxx"
+// V170: 新增城市名列表匹配，处理"武汉光谷大道xxx"等不含"市"字的地址
+var MAJOR_CN_CITIES = [
+    '乌鲁木齐','哈尔滨','石家庄','呼和浩特','马鞍山','秦皇岛','驻马店','三门峡','防城港',
+    '北京','上海','天津','重庆',
+    '深圳','广州','成都','杭州','南京','武汉','西安','沈阳','长春','大连','青岛','济南','宁波','厦门',
+    '太原','合肥','福州','南昌','郑州','长沙','海口','贵阳','昆明','兰州','西宁','银川','拉萨','南宁',
+    '苏州','无锡','温州','佛山','东莞','珠海','中山','惠州','常州','徐州','扬州','台州','绍兴','嘉兴',
+    '烟台','潍坊','淄博','唐山','保定','大同','洛阳','开封','黄石','襄阳','宜昌','株洲','湘潭','衡阳',
+    '桂林','柳州','绵阳','德阳','遵义','鞍山','抚顺','锦州','吉林','齐齐哈尔','大庆','牡丹江','连云港',
+    '镇江','泰州','盐城','宿迁','丽水','金华','衢州','舟山','蚌埠','芜湖','淮南','安庆','泉州','漳州',
+    '莆田','九江','赣州','临沂','威海','日照','德州','滨州','东营','菏泽','枣庄','济宁','泰安','聊城',
+    '商丘','信阳','周口','南阳','新乡','焦作','许昌','平顶山','随州','鄂州','荆门','荆州','黄冈','咸宁',
+    '孝感','十堰','岳阳','常德','益阳','郴州','永州','怀化','娄底','汕头','汕尾','湛江','茂名','江门',
+    '韶关','清远','肇庆','云浮','阳江','河源','揭阳','潮州','梅州','钦州','北海','玉林','百色','河池',
+    '来宾','贵港','贺州','崇左','梧州','丹东','营口','盘锦','阜新','辽阳','朝阳','葫芦岛','铁岭',
+    '白山','白城','辽源','松原','通化','四平','蚌埠','宿州','亳州','滁州','六安','宣城','池州','黄山',
+    '九江','宜春','萍乡','新余','吉安','上饶','抚州','景德镇','鹰潭','咸宁','随州','仙桃','潜江','天门'
+];
 function extractCityFromAddress(addr) {
     if (!addr) return '';
     addr = String(addr).trim();
@@ -6095,6 +6113,12 @@ function extractCityFromAddress(addr) {
     // 简单兜底: 取到第一个"市/州/地区/盟"之前
     m = addr.match(/^(.+?)(?:市|自治州|地区|盟)/);
     if (m) return m[1];
+    // V170: 城市名列表匹配——处理"武汉光谷大道xxx"等不含"市"字的地址
+    // 按名称长度降序匹配，避免短名误匹配（如"马鞍山"优先于单字匹配）
+    var sorted = MAJOR_CN_CITIES.slice().sort(function(a, b) { return b.length - a.length; });
+    for (var i = 0; i < sorted.length; i++) {
+        if (addr.indexOf(sorted[i]) === 0) return sorted[i];
+    }
     return '';
 }
 
@@ -30444,7 +30468,7 @@ window.editMemberCard = function(id) {
                     <!-- 籍贯 | 现住地 | 职业 | 作息类型 -->
                     <div class="family-form-row" style="display:flex; gap:4px;">
                         <input type="text" id="editPlace_${id}" value="${escapeHtml(member.place||'')}" placeholder="籍贯" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
-                        <input type="text" id="editCity_${id}" value="${extractCityFromAddress(familyHomeAddress) || escapeHtml(member.currentCity || '')}" placeholder="现住地" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
+                        <input type="text" id="editCity_${id}" value="${escapeHtml(member.currentCity || '') || extractCityFromAddress(familyHomeAddress)}" placeholder="现住地" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
                         <select id="editOccupation_${id}" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
                             <option value="">职业</option>
                             <option value="学生"${member.occupation==='学生'?' selected':''}>学生</option>
