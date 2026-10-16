@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V176-20261016';
+        var APP_VER = 'V177-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -4770,6 +4770,18 @@
                         <label>就餐人数</label>
                         <input type="number" id="recordFormPeople" placeholder="选填">
                     </div>
+                </div>
+            </div>
+            <!-- V177: 就餐地点（家/单位/学校/车上/餐厅/其他），用于按地点统计 -->
+            <div class="record-form-group">
+                <label>📍 就餐地点</label>
+                <div class="record-meal-types" id="recordLocationToggle">
+                    <div class="record-meal-type-btn record-location-btn active" data-loc="家">🏠 家</div>
+                    <div class="record-meal-type-btn record-location-btn" data-loc="单位">💼 单位</div>
+                    <div class="record-meal-type-btn record-location-btn" data-loc="学校">🏫 学校</div>
+                    <div class="record-meal-type-btn record-location-btn" data-loc="车上">🚗 车上</div>
+                    <div class="record-meal-type-btn record-location-btn" data-loc="餐厅">🍽️ 餐厅</div>
+                    <div class="record-meal-type-btn record-location-btn" data-loc="其他">📌 其他</div>
                 </div>
             </div>
             <div id="recordAiFeedbackArea"></div>
@@ -29935,6 +29947,140 @@ function _dtStats() {
 function _dtKeyOf(d) {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
+
+// ==================== V177: 就餐地点分析（mealRecords 按 家/单位/学校/车上/餐厅/其他 聚合） ====================
+const MEAL_LOCATION_OPTIONS = ['家', '单位', '学校', '车上', '餐厅', '其他'];
+const MEAL_LOCATION_ICONS = { '家': '🏠', '单位': '💼', '学校': '🏫', '车上': '🚗', '餐厅': '🍽️', '其他': '📌' };
+// 取一条 mealRecord 涉及的就餐地点：分餐记录按成员展开；普通记录取 location；旧数据按就餐类型推断
+function getMealRecordLocations(r) {
+    if (!r) return [];
+    if (r.kind === 'group' && Array.isArray(r.records) && r.records.length) {
+        return r.records.map(function (x) { return (x && x.location) || '家'; });
+    }
+    if (r.location) return [r.location];
+    return [String(r.diningType || '') === '外出就餐' ? '餐厅' : '家'];
+}
+function _normalizeRecordMeal(r) {
+    var s = String((r && (r.mealLabel || r.mealType)) || '');
+    if (/早餐|breakfast/i.test(s)) return '早餐';
+    if (/午餐|lunch/i.test(s)) return '午餐';
+    if (/晚餐|dinner/i.test(s)) return '晚餐';
+    return '加餐/其他';
+}
+/**
+ * 聚合 mealRecords 的就餐地点统计
+ * @param {number|null} days 近 N 天（null/0=全部）
+ * @returns {{total:number, locs:Object, mealLoc:Object, days:number|null, spend:number, spendCount:number}}
+ * 计数口径=人次：普通记录每条1人次，分餐记录每位成员1人次
+ */
+function getMealLocationStats(days) {
+    var records = [];
+    try { records = JSON.parse(lsGet('mealRecords')) || []; } catch (e) { records = []; }
+    var cutoffKey = '';
+    if (days) {
+        var d0 = new Date(); d0.setHours(0, 0, 0, 0); d0.setDate(d0.getDate() - days + 1);
+        cutoffKey = _dtKeyOf(d0);
+    }
+    var locs = {}, mealLoc = { '早餐': {}, '午餐': {}, '晚餐': {}, '加餐/其他': {} };
+    var total = 0, spend = 0, spendCount = 0, recordCnt = 0;
+    records.forEach(function (r) {
+        if (!r || !r.date) return;
+        if (cutoffKey && String(r.date) < cutoffKey) return;
+        recordCnt++;
+        var meal = _normalizeRecordMeal(r);
+        var ls = getMealRecordLocations(r);
+        ls.forEach(function (loc0) {
+            var loc = MEAL_LOCATION_OPTIONS.indexOf(loc0) > -1 ? loc0 : '其他';
+            locs[loc] = (locs[loc] || 0) + 1;
+            mealLoc[meal][loc] = (mealLoc[meal][loc] || 0) + 1;
+            total++;
+        });
+        // 餐厅花费（按记录计一次，price 为人均时即人均花费合计）
+        var isRestaurant = (r.kind !== 'group') && (r.location === '餐厅' || (!r.location && String(r.diningType || '') === '外出就餐'));
+        if (isRestaurant && r.price) {
+            var p = parseFloat(r.price) || 0;
+            if (p > 0) { spend += p; spendCount++; }
+        }
+    });
+    return { total: total, recordCount: recordCnt, locs: locs, mealLoc: mealLoc, days: days || null, spend: Math.round(spend * 100) / 100, spendCount: spendCount };
+}
+// 时间轴回顾卡用的一句话摘要（近30天）
+function _mealLocationBrief() {
+    var st = getMealLocationStats(30);
+    if (!st.total) return '';
+    var top = MEAL_LOCATION_OPTIONS.filter(function (l) { return st.locs[l]; })
+        .sort(function (a, b) { return st.locs[b] - st.locs[a]; })[0];
+    if (!top) return '';
+    var pct = Math.round(st.locs[top] / st.total * 100);
+    return '近30天' + MEAL_LOCATION_ICONS[top] + top + '就餐占 ' + pct + '%（' + st.locs[top] + '/' + st.total + ' 人次）';
+}
+/** 打开就餐地点分析弹窗 */
+function openMealLocationStatsModal(days) {
+    var old = document.getElementById('mealLocStatsPage');
+    if (old) old.remove();
+    var curDays = days || 30;
+    var ov = document.createElement('div');
+    ov.id = 'mealLocStatsPage';
+    ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:100001;background:#FFFBEB;display:flex;flex-direction:column;max-width:430px;margin:0 auto;box-shadow:0 0 40px rgba(0,0,0,0.15);';
+    document.body.appendChild(ov);
+
+    function render() {
+        var st = getMealLocationStats(curDays);
+        var periodBtns = [[7, '近7天'], [30, '近30天'], [0, '全部']].map(function (t) {
+            var on = curDays === t[0];
+            return '<button data-d="' + t[0] + '" style="flex:1;padding:8px 0;border-radius:10px;font-size:13px;cursor:pointer;border:1px solid ' + (on ? '#F97316' : '#E5E7EB') + ';background:' + (on ? '#F97316' : 'white') + ';color:' + (on ? 'white' : '#4B5563') + ';font-weight:' + (on ? '700' : '400') + ';">' + t[1] + '</button>';
+        }).join('');
+        var rowsHtml;
+        if (!st.total) {
+            rowsHtml = '<div style="text-align:center;padding:48px 20px;color:#9CA3AF;"><div style="font-size:42px;margin-bottom:10px;">📍</div><div style="font-size:14px;">该时段还没有就餐记录</div><div style="font-size:12px;margin-top:6px;">在「食记」记录实际就餐时选择地点即可统计</div></div>';
+        } else {
+            rowsHtml = MEAL_LOCATION_OPTIONS.map(function (loc) {
+                var cnt = st.locs[loc] || 0;
+                var pct = cnt ? Math.round(cnt / st.total * 100) : 0;
+                var barW = Math.max(cnt ? 3 : 0, pct);
+                var meals = ['早餐', '午餐', '晚餐', '加餐/其他'].map(function (mk) {
+                    var mc = st.mealLoc[mk][loc] || 0;
+                    return mc ? (mk === '加餐/其他' ? '加餐' : mk.slice(0, 1)) + mc : '';
+                }).filter(Boolean).join(' · ');
+                return '<div style="background:white;border:1px solid #F3F4F6;border-radius:12px;padding:10px 12px;margin-bottom:8px;">'
+                    + '<div style="display:flex;align-items:center;gap:8px;">'
+                    + '<span style="font-size:17px;">' + MEAL_LOCATION_ICONS[loc] + '</span>'
+                    + '<span style="font-size:14px;font-weight:600;color:#1F2937;min-width:38px;">' + loc + '</span>'
+                    + '<span style="flex:1;font-size:13px;color:#6B7280;">' + cnt + ' 人次 · ' + pct + '%</span>'
+                    + '</div>'
+                    + '<div style="height:8px;background:#F3F4F6;border-radius:5px;margin:7px 0 5px;overflow:hidden;"><div style="height:100%;width:' + barW + '%;background:linear-gradient(90deg,#FDBA74,#F97316);border-radius:5px;transition:width .3s;"></div></div>'
+                    + (meals ? '<div style="font-size:12px;color:#9CA3AF;">' + meals + '</div>' : '')
+                    + '</div>';
+            }).join('');
+        }
+        var spendHtml = (st.spendCount > 0)
+            ? '<div style="background:white;border:1px solid #F3F4F6;border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#4B5563;">🍽️ 餐厅记录 <b>' + st.spendCount + '</b> 餐，合计花费 <b style="color:#F97316;">¥' + st.spend.toFixed(1) + '</b></div>'
+            : '';
+        ov.innerHTML = ''
+            + '<div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:white;border-bottom:1px solid #F3F4F6;">'
+            + '<button onclick="closeMealLocationStatsModal()" style="background:none;border:none;font-size:20px;color:#374151;cursor:pointer;padding:4px 8px;line-height:1;">←</button>'
+            + '<div style="font-size:16px;font-weight:700;color:#1F2937;">📍 就餐地点分析</div>'
+            + '<span style="width:40px;"></span>'
+            + '</div>'
+            + '<div style="flex:1;overflow-y:auto;padding:12px 14px 30px;">'
+            + '<div style="display:flex;gap:8px;margin-bottom:12px;">' + periodBtns + '</div>'
+            + '<div style="background:white;border:1px solid #F3F4F6;border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#4B5563;">共 <b style="color:#F97316;">' + st.total + '</b> 就餐人次' + (st.recordCount !== st.total ? '（' + st.recordCount + ' 条记录，含分餐）' : '') + '</div>'
+            + spendHtml
+            + rowsHtml
+            + '</div>';
+        ov.querySelectorAll('button[data-d]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                curDays = parseInt(btn.dataset.d, 10) || 0;
+                render();
+            });
+        });
+    }
+    render();
+}
+function closeMealLocationStatsModal() {
+    var old = document.getElementById('mealLocStatsPage');
+    if (old) old.remove();
+}
 /** 打开「我家 → 膳食日记」时间轴页面（全屏） */
 function openDiaryTimeline() {
     closeDiaryTimeline();
@@ -29959,6 +30105,12 @@ function openDiaryTimeline() {
         + '<div style="flex:1;border-left:1px solid #F3F4F6;"><div style="font-size:20px;font-weight:700;color:#F97316;">' + st.img + '</div><div style="font-size:12px;color:#9CA3AF;margin-top:2px;">含图片</div></div>'
         + '</div>'
         + '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed #FED7AA;font-size:13px;color:#C2410C;font-weight:600;">' + (st.streak > 0 ? '🔥 连续记录 ' + st.streak + ' 天，保持哦～' : '今天还没记录，随时记一笔吧～') + '</div>'
+        + (function () {
+            var brief = '';
+            try { brief = _mealLocationBrief(); } catch (e) { brief = ''; }
+            return '<div onclick="openMealLocationStatsModal(30)" style="margin-top:8px;padding:8px 10px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;font-size:13px;color:#9A3412;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:space-between;">'
+                + '<span>📍 就餐地点分析' + (brief ? '：' + brief : '') + '</span><span style="color:#F97316;">›</span></div>';
+        })()
         + '</div>'
         // 筛选 Tab
         + '<div id="dtFilterBar" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;-webkit-overflow-scrolling:touch;scrollbar-width:none;">'
@@ -34027,6 +34179,7 @@ function renderPlan() {
                 mealType: meal === 'breakfast' ? '早餐' : meal === 'lunch' ? '午餐' : '晚餐',
                 dishName: name,
                 diningType: '在家做饭',
+                location: '家', // V177: 计划菜标记已完成默认在家
                 imageBase64: '',
                 modification: '',
                 userComment: '',
@@ -35110,6 +35263,7 @@ function transferDiningToRecord() {
             mealType: mealType,
             dishName: dish,
             diningType: '外出就餐',
+            location: '餐厅', // V177: 外出就餐默认餐厅
             restaurant: restaurant,
             people: people,
             price: budget,
@@ -38612,6 +38766,7 @@ function handleFullHistoryClick(type, indexValue, source, sessionIdx) {
 // ==================== 食录：添加记录 ====================
 let currentRecordFormMeal = '早餐';
 let currentRecordFormDining = '在家做饭';
+let currentRecordFormLocation = '家'; // V177: 就餐地点（家/单位/学校/车上/餐厅/其他）
 let currentRecordFormImage = '';
 
 function openAddRecordModal() {
@@ -38637,6 +38792,9 @@ function openAddRecordModal() {
     document.querySelectorAll('#recordDiningToggle .record-dining-option').forEach(b => b.classList.remove('active'));
     document.querySelector('#recordDiningToggle .record-dining-option[data-dining="在家做饭"]').classList.add('active');
     document.getElementById('recordDiningExtra').style.display = 'none';
+    // V177: Reset 就餐地点
+    currentRecordFormLocation = '家';
+    document.querySelectorAll('#recordLocationToggle .record-location-btn').forEach(b => b.classList.toggle('active', b.dataset.loc === '家'));
     // Reset image preview（V108: .record-img-area 已不在弹窗 HTML 中，加 null 保护避免打开时抛错）
     const previewArea = document.querySelector('.record-img-area');
     if (previewArea) {
@@ -38793,6 +38951,7 @@ function submitAddRecord() {
         date: date,
         mealType: currentRecordFormMeal,
         diningType: currentRecordFormDining,
+        location: currentRecordFormLocation || '家', // V177: 就餐地点
         restaurant: document.getElementById('recordFormRestaurant').value.trim(),
         price: parseFloat(document.getElementById('recordFormPrice').value) || 0,
         people: parseInt(document.getElementById('recordFormPeople').value) || 0,
@@ -38839,6 +38998,7 @@ function submitAddRecord() {
             updateMealActual(String(date), mealKey, {
                 dishes: record.dishes,
                 diningType: currentRecordFormDining,
+                location: record.location, // V177: 就餐地点同步到日历
                 comment: overallComment,
                 source: record.source,
                 savedAt: record.createdAt,
@@ -38887,13 +39047,26 @@ document.addEventListener('DOMContentLoaded', function() {
             currentRecordFormMeal = this.dataset.meal;
         };
     });
-    // 用餐类型切换
+    // 用餐类型切换（V177: 联动就餐地点——在家做饭默认家、外出就餐默认餐厅，用户仍可手动改）
     document.querySelectorAll('#recordDiningToggle .record-dining-option').forEach(btn => {
         btn.onclick = function() {
             document.querySelectorAll('#recordDiningToggle .record-dining-option').forEach(b => b.classList.remove('active'));
             this.classList.add('active');
             currentRecordFormDining = this.dataset.dining;
             document.getElementById('recordDiningExtra').style.display = currentRecordFormDining === '外出就餐' ? 'block' : 'none';
+            var _autoLoc = currentRecordFormDining === '外出就餐' ? '餐厅' : '家';
+            currentRecordFormLocation = _autoLoc;
+            document.querySelectorAll('#recordLocationToggle .record-location-btn').forEach(function(b) {
+                b.classList.toggle('active', b.dataset.loc === _autoLoc);
+            });
+        };
+    });
+    // V177: 就餐地点切换
+    document.querySelectorAll('#recordLocationToggle .record-location-btn').forEach(btn => {
+        btn.onclick = function() {
+            document.querySelectorAll('#recordLocationToggle .record-location-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentRecordFormLocation = this.dataset.loc;
         };
     });
 });
@@ -39785,6 +39958,7 @@ function generateAIResponse(text) {
                 mealType: mealType ? getMealLabel(mealType) : '正餐',
                 dishName: name,
                 diningType: '在家做饭',
+                location: '家', // V177: 语音评价记录默认在家
                 imageBase64: '',
                 modification: '',
                 userComment: cleanText,
@@ -50329,6 +50503,7 @@ function renderDiary() {
                         return '';
                     })()}
                     <div><span class="diary-section-label">实际：</span>${actualText}${actualEmoji}</div>
+                    ${hasActual && !data.actual.groupRecord && data.actual.location ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">📍 ${escapeHtml(data.actual.location)}${data.actual.location !== '家' ? ' 就餐' : ''}</div>` : ''}
                     ${hasActual && data.actual.groupRecord && data.actual.locationSummary ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">👥 ${escapeHtml(data.actual.locationSummary)}</div>` : ''}
                     ${hasActual && data.actual.photos && data.actual.photos.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${data.actual.photos.slice(0,4).map(p => `<img src="${p}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">`).join('')}</div>` : ''}
                     ${buildMealSavingBarHtml(data)}
@@ -55626,6 +55801,7 @@ function saveOrderToDiary() {
             mealType: mealLabels[mealType] || '午餐',
             dishName: d.name,
             diningType: '外出就餐',
+            location: '餐厅', // V177: 餐厅点菜默认地点餐厅
             restaurantName: r.name,
             imageBase64: '',
             modification: '',
@@ -61848,6 +62024,7 @@ if (planList) planList.addEventListener('click', function(e) {
                 mealType: '正餐',
                 dishName: d,
                 diningType: '家宴',
+                location: '家', // V177: 家宴默认在家
                 groupName: dayPlan.groupName || '',
                 members: dayPlan.members || [],
                 theme: dayPlan.theme || '',
