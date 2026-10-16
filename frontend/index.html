@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V168-20261016';
+        var APP_VER = 'V169-20261016';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -30784,8 +30784,8 @@ window.editMemberCard = function(id) {
     var dayOpts = ['6','0','1','2','3','4','5'];
     var dayNames = {'6':'周六','0':'周日','1':'周一','2':'周二','3':'周三','4':'周四','5':'周五'};
     var curOpForSettings = getCurrentMember();
-    var isAdminUser = !!(curOpForSettings && curOpForSettings.role === 'admin');
     var isSuper = (typeof isSuperAdmin === 'function') ? isSuperAdmin() : false;
+    var isAdminUser = !!(curOpForSettings && curOpForSettings.role === 'admin') || isSuper;
     familyList.insertAdjacentHTML('beforeend', `
         <div style="background:white;border:1px solid #F3F4F6;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04);margin-bottom:12px;overflow:hidden;">
             <div onclick="_toggleFamilyGroup(this)" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 6px;font-size:15px;font-weight:700;color:#1F2937;cursor:pointer;">
