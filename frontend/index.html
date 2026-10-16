@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V179-20261017';
+        var APP_VER = 'V180-20261017';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -60659,10 +60659,8 @@ function openMealRecordModal(mealKey, opts) {
     const mealNames = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
     const mealLabel = mealNames[mealKey] || '正餐';
 
-    // 记住上次模式（localStorage 键 recordMode），默认全家；带预填菜（如今晚就吃）时强制全家
-    let mode = (opts.prefillDishes && opts.prefillDishes.length)
-        ? 'family'
-        : (localStorage.getItem('recordMode') === 'split' ? 'split' : 'family');
+    // V180: 每次打开都默认「全家一起吃」（不再记住上次分餐选择），本次打开内仍可手动切分餐
+    let mode = 'family';
 
     // 全家面板状态
     let fDishes = (Array.isArray(opts.prefillDishes) ? opts.prefillDishes.slice() : []).filter(Boolean);
@@ -60852,8 +60850,7 @@ function openMealRecordModal(mealKey, opts) {
         });
     }
     function switchMode(next) {
-        mode = next;
-        try { localStorage.setItem('recordMode', mode); } catch (e) {}
+        mode = next; // V180: 仅本次打开内切换，不写 localStorage（重开仍默认全家）
         const onF = mode === 'family';
         $('umrTabFamily').style.background = onF ? '#F97316' : 'white';
         $('umrTabFamily').style.color = onF ? 'white' : '#6B7280';
