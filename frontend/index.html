@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V184-20261017';
+        var APP_VER = 'V185-20261017';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -60775,7 +60775,7 @@ function openMealRecordModal(mealKey, opts) {
         +       '</div>'
         +       '<input id="umrFComment" maxlength="60" placeholder="一句话评价（可选）" style="margin-top:10px;width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;box-sizing:border-box;">'
         +       '<div style="margin-top:12px;">'
-        +         '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">📍 就餐地点</div>'
+        +         '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">📍 其他就餐地点<span style="font-size:12px;color:#9CA3AF;font-weight:400;">（默认在家，外食可不选）</span></div>'
         +         '<div id="umrFLoc" style="display:flex;flex-wrap:wrap;gap:6px;"></div>'
         +       '</div>'
         +       '<div style="height:14px;"></div>'
@@ -60893,13 +60893,19 @@ function openMealRecordModal(mealKey, opts) {
         renderEatOut();
     }
     function renderFPills() {
-        const locs = MEAL_LOCATION_OPTIONS;
+        // V185: 默认在家，这里只列"其他就餐地点"（家不作为按钮），按钮不带图标
+        const locs = MEAL_LOCATION_OPTIONS.filter(function (l) { return l !== '家'; });
         $('umrFLoc').innerHTML = locs.map(function (l) {
             const on = l === fLocation;
-            return '<button type="button" class="umr-f-loc" data-l="' + escapeAttr(l) + '" style="padding:5px 12px;border-radius:14px;font-size:13px;border:1px solid ' + (on ? '#F97316' : '#E5E7EB') + ';background:' + (on ? '#F97316' : 'white') + ';color:' + (on ? 'white' : '#6B7280') + ';cursor:pointer;">' + MEAL_LOCATION_ICONS[l] + ' ' + escapeHtml(l) + '</button>';
+            return '<button type="button" class="umr-f-loc" data-l="' + escapeAttr(l) + '" style="padding:5px 12px;border-radius:14px;font-size:13px;border:1px solid ' + (on ? '#F97316' : '#E5E7EB') + ';background:' + (on ? '#F97316' : 'white') + ';color:' + (on ? 'white' : '#6B7280') + ';cursor:pointer;">' + escapeHtml(l) + '</button>';
         }).join('');
         modal.querySelectorAll('.umr-f-loc').forEach(function (b) {
-            b.addEventListener('click', function () { fLocation = this.dataset.l; renderFPills(); });
+            b.addEventListener('click', function () {
+                // V185: 再点一次已选地点 → 取消，回到默认"家"（外食模式锁定为餐厅，不可回到家）
+                if (fLocation === this.dataset.l) { fLocation = fEatingOut ? '餐厅' : '家'; }
+                else fLocation = this.dataset.l;
+                renderFPills();
+            });
         });
     }
     function renderFPlanHint() {
@@ -60921,7 +60927,7 @@ function openMealRecordModal(mealKey, opts) {
                 renderFDishTags(); renderFPlanHint();
             });
         } else {
-            box.innerHTML = '<div style="margin-top:6px;font-size:12px;color:#6B7280;">📋 已带入今日计划 ' + plan.length + ' 道菜，可增删后「保存」，或直接「⚡ 快速记录」（4星一键存）</div>';
+            box.innerHTML = '<div style="margin-top:6px;font-size:12px;color:#6B7280;">可评价增删后「保存」，或直接「⚡ 快速记录」（4星一键存）</div>';
         }
     }
 
