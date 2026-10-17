@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V181-20261017';
+        var APP_VER = 'V182-20261017';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -60615,12 +60615,28 @@ function saveFamilyMealRecord(o) {
         people: parseInt(o.people) || 0,
         imageBase64: '',
         rating: parseInt(o.rating) || 0,
-        dishes: names.map(function (n, i) { return { id: Date.now() + i, name: n, userComment: '', aiFeedback: '' }; }),
+        dishes: names.map(function (n, i) {
+            return {
+                id: Date.now() + i,
+                name: n,
+                userComment: ((o.dishComments && o.dishComments[n]) || '').trim(),
+                aiFeedback: ''
+            };
+        }),
         overallComment: o.comment || '',
         solarTerm: solarTerm.name,
         createdAt: Date.now(),
         source: o.source || ''
     };
+    // V182: 仅对写了评价的菜品生成 AI 复盘建议（与旧版记录一致）
+    record.dishes.forEach(function (dish) {
+        if (dish.userComment && typeof generateMealRecordFeedback === 'function') {
+            try {
+                dish.aiFeedback = generateMealRecordFeedback(Object.assign({}, record, { dishName: dish.name, userComment: dish.userComment }));
+            } catch (e) { dish.aiFeedback = ''; }
+        }
+    });
+
     const records = JSON.parse(lsGet('mealRecords')) || [];
     records.push(record);
     lsSet('mealRecords', JSON.stringify(records));
@@ -60669,6 +60685,7 @@ function openMealRecordModal(mealKey, opts) {
     let fRating = 0;
     let fDining = '在家做饭';
     let fLocation = '家';
+    let fDishComments = {}; // V182: 每道菜的单独评价 {菜名: 评价}
     let splitBuilt = false;
 
     // 已有同类型弹窗先移除，避免元素 id 冲突
@@ -60744,20 +60761,36 @@ function openMealRecordModal(mealKey, opts) {
     // ---------- 全家面板渲染 ----------
     function renderFDishTags() {
         const box = $('umrFDishTags');
+        box.style.display = 'block';
         if (!fDishes.length) {
             box.innerHTML = '<span style="font-size:13px;color:#D1D5DB;line-height:30px;">还没有菜品，在下方输入框添加实际吃的菜</span>';
             return;
         }
+        // V182: 每道菜一张小卡，菜名行（可删）+ 该菜单独评价输入框（写了评价才生成AI复盘）
         box.innerHTML = fDishes.map(function (n, i) {
-            return '<span style="display:inline-flex;align-items:center;gap:5px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:4px 6px 4px 10px;font-size:14px;color:#9A3412;">'
-                + '<span>' + escapeHtml(n) + '</span>'
-                + '<button type="button" data-i="' + i + '" class="umr-f-dish-del" style="background:none;border:none;color:#FB923C;font-size:12px;cursor:pointer;padding:0 2px;line-height:1;">✕</button></span>';
+            const cmt = fDishComments[n] || '';
+            return '<div style="background:#F9FAFB;border:1px solid #F3F4F6;border-radius:10px;padding:7px 9px;margin-bottom:6px;">'
+                + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">'
+                +   '<span style="font-size:12px;color:#F97316;font-weight:700;flex-shrink:0;">菜' + (i + 1) + '</span>'
+                +   '<span style="font-size:14px;color:#9A3412;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(n) + '</span>'
+                +   '<button type="button" data-i="' + i + '" class="umr-f-dish-del" style="background:none;border:none;color:#FB923C;font-size:12px;cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;">✕ 删除</button>'
+                + '</div>'
+                + '<input type="text" data-name="' + escapeAttr(n) + '" class="umr-f-dish-cmt" value="' + escapeAttr(cmt) + '" placeholder="这道菜的评价（可选，写了才生成 AI 复盘建议）" style="width:100%;padding:6px 8px;border:1px solid #E5E7EB;border-radius:7px;font-size:13px;box-sizing:border-box;">'
+                + '</div>';
         }).join('');
         box.querySelectorAll('.umr-f-dish-del').forEach(function (b) {
             b.addEventListener('click', function () {
-                fDishes.splice(parseInt(this.dataset.i, 10), 1);
+                const idx = parseInt(this.dataset.i, 10);
+                const removed = fDishes[idx];
+                fDishes.splice(idx, 1);
+                if (removed) delete fDishComments[removed];
                 renderFDishTags();
                 renderFPlanHint(); // V181: 删除后提示条可变为"加回今日计划菜"
+            });
+        });
+        box.querySelectorAll('.umr-f-dish-cmt').forEach(function (inp) {
+            inp.addEventListener('input', function () {
+                fDishComments[this.dataset.name] = this.value;
             });
         });
     }
@@ -60839,7 +60872,8 @@ function openMealRecordModal(mealKey, opts) {
         const res = saveFamilyMealRecord({
             date: dateKey, mealKey: mealKey, mealLabel: mealLabel,
             diningType: dining, location: location, restaurant: restaurant, price: price, people: people,
-            dishes: dishes, rating: rating, comment: comment, source: opts.source || ''
+            dishes: dishes, rating: rating, comment: comment, source: opts.source || '',
+            dishComments: fDishComments
         });
         if (!res) return;
         closeAll();
