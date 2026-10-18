@@ -5,7 +5,7 @@
 set -euo pipefail
 
 APP_DIR="${JIAYAOJI_DIR:-/var/www/jiayaoji}"
-BASE_URL="${JIAYAOJI_BASE_URL:-http://127.0.0.1:8012}"
+BASE_URL="${JIAYAOJI_BASE_URL:-http://127.0.0.1:8000}"
 TOKEN_FILE="$APP_DIR/backend/data/.internal_token"
 
 if [ ! -r "$TOKEN_FILE" ]; then
