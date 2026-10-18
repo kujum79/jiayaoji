@@ -14,7 +14,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V186-20261017';
+        var APP_VER = 'V187-20261018';
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
@@ -6010,6 +6010,7 @@ async function afterLoginCheck() {
             var code = r.data.family_code;
             if (code) {
                 setFamilyId(code);
+                try { cloudBackupRestoreIfNeeded(); } catch(e) {}   // V187: 本地无数据则自动从云端恢复
             } else {
                 showToast('⚠️ 该家庭尚未生成家庭码，请联系家庭创建者');
             }
@@ -6437,6 +6438,7 @@ async function doFamilyLogin() {
         if (code) {
             setFamilyId(code);
             try { localStorage.setItem('familyName_' + code, famName); } catch(e) {}
+            try { cloudBackupRestoreIfNeeded(); } catch(e) {}   // V187: 新设备/清缓存后登录，本地无数据则自动从云端恢复
         } else {
             showToast('⚠️ 该家庭尚未生成家庭码，请联系家庭创建者');
         }
@@ -8703,13 +8705,69 @@ function lsGet(key) {
     }
     return null;
 }
-function lsSet(key, val) { localStorage.setItem(familyKey(key), val); }
+function lsSet(key, val) { localStorage.setItem(familyKey(key), val); try { if (_isBackupKey(key)) cloudBackupSchedule(); } catch(e) {} }
 function lsRemove(key) { localStorage.removeItem(familyKey(key)); }
 function lsGetJSON(key, defaultVal) {
     try { var v = lsGet(key); return v ? JSON.parse(v) : (defaultVal || null); }
     catch(e) { return defaultVal || null; }
 }
 function lsSetJSON(key, val) { localStorage.setItem(familyKey(key), JSON.stringify(val)); }
+
+// ========== V187: 家庭数据云端自动备份（防 localStorage 丢失） ==========
+// 推送：lsSet 写入家庭键时触发，8s 防抖后把全量快照 POST 到 /api/family-backup（服务器按家庭码存一份最新快照）
+// 恢复：启动时本地无 familyData（__hadLocalFamilyData===false）且已登录 → 拉云端快照写入本地前缀键并重载一次
+var _FAMILY_BACKUP_KEYS = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
+    'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
+    'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
+    'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile'];
+var _cloudBackupTimer = null;
+function _isBackupKey(key) {
+    if (typeof _FAMILY_BACKUP_KEYS === 'undefined' || !key) return false; // var 不提升，启动早期 lsSet 调用时静默跳过
+    for (var i = 0; i < _FAMILY_BACKUP_KEYS.length; i++) {
+        if (key === _FAMILY_BACKUP_KEYS[i] || key.indexOf(_FAMILY_BACKUP_KEYS[i]) === 0) return true;
+    }
+    return false;
+}
+function cloudBackupSchedule() {
+    if (typeof getFamilyId !== 'function' || !getFamilyId()) return;
+    if (_cloudBackupTimer) clearTimeout(_cloudBackupTimer);
+    _cloudBackupTimer = setTimeout(cloudBackupPush, 8000);
+}
+function cloudBackupPush() {
+    var fid = getFamilyId();
+    if (!fid) return;
+    var data = {};
+    for (var i = 0; i < _FAMILY_BACKUP_KEYS.length; i++) {
+        var v = lsGet(_FAMILY_BACKUP_KEYS[i]);
+        if (v !== null && typeof v !== 'undefined') data[_FAMILY_BACKUP_KEYS[i]] = v;
+    }
+    if (!Object.keys(data).length) return;
+    try {
+        var body = JSON.stringify({ familyId: fid, data: data });
+        if (body.length > 2500000) return; // 超大体量不推送（服务器上限 3MB）
+        fetch('/api/family-backup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body }).catch(function () {});
+    } catch (e) {}
+}
+async function cloudBackupRestoreIfNeeded() {
+    try {
+        var fid = getFamilyId();
+        if (!fid) return false;
+        if (window.__hadLocalFamilyData !== false) return false; // 仅"启动时本地无数据"才恢复，绝不覆盖现有数据
+        if (sessionStorage.getItem('_cloudRestored') === fid) return false; // 防恢复后重载死循环
+        var r = await fetch('/api/family-backup/get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ familyId: fid }) });
+        var j = await r.json();
+        if (!j || !j.ok || !j.data || !Object.keys(j.data).length) return false;
+        sessionStorage.setItem('_cloudRestored', fid);
+        Object.keys(j.data).forEach(function (k) {
+            if (_isBackupKey(k) && typeof j.data[k] === 'string') {
+                try { localStorage.setItem(fid + '_' + k, j.data[k]); } catch (e) {}
+            }
+        });
+        console.log('[云端备份] 已恢复家庭数据（备份于 ' + new Date((j.updatedAt || 0) * 1000).toLocaleString() + '），即将刷新页面');
+        location.reload();
+        return true;
+    } catch (e) { return false; }
+}
 
 // 将全局数据认领到当前家庭前缀下（仅在首次创建/加入家庭时执行）
 function claimGlobalDataForFamily() {
@@ -62927,6 +62985,7 @@ if (!lsGet('foodArticlesSeed_v19')) {
 // V21 食养合并：旧 节气/茶饮/营养/食疗/对症 一次性迁移至「食养」（migrated_shiyang_v3 标记，只执行一次）
 try { migrateShiyangData(); } catch (e) { console.error('migrateShiyangData error:', e); }
 try { migrateXiaojiaThree(); } catch (e) { console.error('migrateXiaojiaThree error:', e); }
+try { window.__hadLocalFamilyData = !!lsGet('familyData'); } catch(e) { window.__hadLocalFamilyData = true; } // V187: 云端恢复判定（写入默认值之前捕获，出错则保守不恢复）
 if (!lsGet('familyData')) lsSet('familyData', JSON.stringify(DEFAULT_FAMILY));
 familyData = JSON.parse(lsGet('familyData'));
 familyData = familyData.map(member => {
@@ -64387,6 +64446,7 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
     function start() {
         // 记录启动时的家庭命名空间：登录后若家庭未变化则无需整页重载（弱网下重载易中断导致"退回登录页"）
         window.__bootFamilyId = getFamilyId();
+        try { cloudBackupRestoreIfNeeded(); } catch (e) {}   // V187: 启动时本地无数据且已登录 → 尝试云端恢复（内部有防重载死循环保护）
         // 密码重置邮件回跳：URL 带 #...type=recovery，supabase-js 会自动建立会话，弹出"设置新密码"窗并跳过正常启动
         try {
             if ((location.hash || '').indexOf('type=recovery') > -1) {

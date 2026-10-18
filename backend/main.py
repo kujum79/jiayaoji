@@ -2925,6 +2925,78 @@ async def chef_image(req: ChefImageRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=502, detail=f"图片服务网络错误：{exc}") from exc
 
 
+# ========== V187: 家庭数据云端自动备份（localStorage 兜底） ==========
+# 家庭成员等数据仅存浏览器 localStorage，清缓存/换设备即丢。此处提供按家庭码存取的
+# 快照接口：前端数据变动时防抖推送全量快照，本地数据缺失且云端有备份时自动恢复。
+_FAMILY_BACKUP_DIR = Path(__file__).resolve().parent / "data" / "family_backups"
+_FAMILY_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+# 允许备份的键（与前端 familyKey 隔离清单一致；值一律为原始字符串）
+_FAMILY_BACKUP_KEYS = {
+    "dietCalendar", "familyData", "contactsData", "diningGroups", "familyHomeAddress",
+    "shoppingDay", "chatHistory", "dietKnowledge", "fridgeItems", "shoppingPlans",
+    "purchaseHistory", "shoppingChecked", "currentDiningGroup", "snackItems",
+    "lastAutoRecommendDate", "behaviorProfile", "dismissedRecommendDishes",
+    "implicitPreferences", "preferenceProfile",
+}
+_FAMILY_BACKUP_ID_RE = re.compile(r"^[A-HJ-NP-Z2-9]{8}$")  # 与前端 generateFamilyCode 字符集一致
+_FAMILY_BACKUP_MAX_BYTES = 3 * 1024 * 1024
+
+
+class FamilyBackupRequest(BaseModel):
+    familyId: str = Field(..., min_length=8, max_length=8)
+    data: Dict[str, str] = Field(default_factory=dict)
+
+
+def _family_backup_path(fid: str) -> Path:
+    return _FAMILY_BACKUP_DIR / f"{fid}.json"
+
+
+@app.post("/api/family-backup")
+async def save_family_backup(req: FamilyBackupRequest) -> Dict[str, Any]:
+    fid = (req.familyId or "").strip().upper()
+    if not _FAMILY_BACKUP_ID_RE.match(fid):
+        return {"ok": False, "error": "家庭码格式不正确"}
+    clean: Dict[str, str] = {}
+    total = 0
+    for k, v in (req.data or {}).items():
+        if k not in _FAMILY_BACKUP_KEYS or not isinstance(v, str):
+            continue
+        total += len(v.encode("utf-8"))
+        if total > _FAMILY_BACKUP_MAX_BYTES:
+            return {"ok": False, "error": "备份内容过大（>3MB），已拒绝"}
+        clean[k] = v
+    if not clean:
+        return {"ok": False, "error": "备份内容为空"}
+    payload = {"familyId": fid, "updatedAt": int(time.time()), "data": clean}
+    tmp = _family_backup_path(fid).with_suffix(".tmp")
+    try:
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, _family_backup_path(fid))  # 原子替换，防写一半断电留坏文件
+    except OSError as exc:
+        return {"ok": False, "error": f"写入失败：{exc}"}
+    return {"ok": True, "updatedAt": payload["updatedAt"]}
+
+
+class FamilyBackupGetRequest(BaseModel):
+    familyId: str = Field(..., min_length=8, max_length=8)
+
+
+# 读取用 POST 而非 GET——先注册的 GET catch-all（/{path:path} 静态回退）会吞掉后注册的 GET 路由
+@app.post("/api/family-backup/get")
+async def get_family_backup(req: FamilyBackupGetRequest) -> Dict[str, Any]:
+    fid = (req.familyId or "").strip().upper()
+    if not _FAMILY_BACKUP_ID_RE.match(fid):
+        return {"ok": False, "error": "家庭码格式不正确"}
+    path = _family_backup_path(fid)
+    if not path.exists():
+        return {"ok": False, "error": "无云端备份"}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"ok": False, "error": "备份文件损坏"}
+    return {"ok": True, "updatedAt": payload.get("updatedAt", 0), "data": payload.get("data", {})}
+
+
 # V157: 文件末尾补跑别名注册——覆盖定义在本块之后的 /api/daily-tip、/api/weather、
 # /api/migration 等 POST 路由（catch-all 仅 GET，POST 别名无被吞风险；已注册路径自动去重）
 _register_api_prefix_aliases()
