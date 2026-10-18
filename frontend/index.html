@@ -8,13 +8,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="format-detection" content="telephone=no,email=no,address=no" />
     <title>家肴记 · AI 家庭膳食助理</title>
-    <script>console.log('%c家肴记前端版本: 2026-10-07-V134（首页精简：移除食帮/食榜顶部入口——食帮四功能迁入食知文库/我家，食榜成为食知文库Tab；AI输入框增加提示短语，「今天吃什么」自动走食帮式三餐推荐）', 'color:#F97316;font-weight:bold;font-size:14px;');</script>
     <script>
     /* V137: 版本自检——localStorage 版本号与代码内 APP_VER 不一致时自动强刷一次
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
         var APP_VER = 'V187-20261018';
+        console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
                 sessionStorage.setItem('_reloadVer', APP_VER);
