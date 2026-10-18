@@ -2997,6 +2997,42 @@ async def get_family_backup(req: FamilyBackupGetRequest) -> Dict[str, Any]:
     return {"ok": True, "updatedAt": payload.get("updatedAt", 0), "data": payload.get("data", {})}
 
 
+# ========== V188: 意见反馈收集（测试期轻量方案，追加写 jsonl） ==========
+_FEEDBACK_PATH = Path(__file__).resolve().parent / "data" / "feedback.jsonl"
+
+
+class FeedbackRequest(BaseModel):
+    content: str = Field(..., max_length=2000)
+    contact: str = Field(default="", max_length=100)
+    familyId: str = Field(default="", max_length=20)
+    page: str = Field(default="", max_length=300)
+    appVer: str = Field(default="", max_length=40)
+    ua: str = Field(default="", max_length=300)
+
+
+@app.post("/api/feedback")
+async def save_feedback(req: FeedbackRequest) -> Dict[str, Any]:
+    content = req.content.strip()
+    if not content:
+        return {"ok": False, "error": "反馈内容为空"}
+    record = {
+        "ts": _dt_cls.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "familyId": req.familyId.strip().upper(),
+        "contact": req.contact.strip(),
+        "page": req.page.strip(),
+        "appVer": req.appVer.strip(),
+        "ua": req.ua.strip(),
+        "content": content,
+    }
+    try:
+        _FEEDBACK_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(_FEEDBACK_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        return {"ok": False, "error": f"写入失败：{exc}"}
+    return {"ok": True}
+
+
 # V157: 文件末尾补跑别名注册——覆盖定义在本块之后的 /api/daily-tip、/api/weather、
 # /api/migration 等 POST 路由（catch-all 仅 GET，POST 别名无被吞风险；已注册路径自动去重）
 _register_api_prefix_aliases()

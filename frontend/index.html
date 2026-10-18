@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V187-20261018';
+        var APP_VER = 'V188-20261019';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -3961,6 +3961,62 @@
         <div onclick="closeFamilyResetModal()" style="font-size:13px;color:#9CA3AF;margin-top:10px;text-align:center;cursor:pointer;text-decoration:underline;">取消</div>
     </div>
 </div>
+
+<!-- ====== V188: 意见反馈弹窗（我家→设置→意见反馈；测试期收集问题与建议） ====== -->
+<div id="feedbackModal" style="position:fixed;inset:0;z-index:100013;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) _closeFeedbackModal()">
+    <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
+        <div style="font-size:17px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">💬 意见反馈</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-bottom:14px;text-align:center;">遇到的问题、不顺手的地方、想要的东西，都可以写</div>
+        <textarea id="feedbackContent" maxlength="2000" placeholder="请描述问题或建议（如：几点左右、在哪个页面、点了什么、看到了什么）" style="width:100%;height:120px;padding:11px 14px;font-size:14px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;resize:vertical;box-sizing:border-box;font-family:inherit;"></textarea>
+        <input id="feedbackContact" type="text" maxlength="100" placeholder="联系方式（选填，方便我们追问细节）" style="width:100%;padding:11px 14px;font-size:14px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <button id="feedbackSubmitBtn" onclick="_submitFeedback()" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">提交反馈</button>
+        <div onclick="_closeFeedbackModal()" style="font-size:13px;color:#9CA3AF;margin-top:10px;text-align:center;cursor:pointer;text-decoration:underline;">取消</div>
+    </div>
+</div>
+<script>
+function _openFeedbackModal() {
+    var m = document.getElementById('feedbackModal');
+    if (m) m.style.display = 'flex';
+}
+function _closeFeedbackModal() {
+    var m = document.getElementById('feedbackModal');
+    if (m) m.style.display = 'none';
+}
+async function _submitFeedback() {
+    var ta = document.getElementById('feedbackContent');
+    var ct = document.getElementById('feedbackContact');
+    var btn = document.getElementById('feedbackSubmitBtn');
+    var content = ((ta && ta.value) || '').trim();
+    if (!content) { showToast('请填写反馈内容'); return; }
+    if (btn) { btn.disabled = true; btn.textContent = '提交中…'; }
+    try {
+        var r = await fetch(API_BASE + '/api/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                content: content,
+                contact: ((ct && ct.value) || '').trim(),
+                familyId: (typeof getFamilyId === 'function' ? (getFamilyId() || '') : ''),
+                page: location.href,
+                appVer: localStorage.getItem('_appVer') || '',
+                ua: navigator.userAgent
+            })
+        });
+        var j = await r.json();
+        if (j && j.ok) {
+            showToast('✅ 已收到，感谢反馈！');
+            if (ta) ta.value = '';
+            _closeFeedbackModal();
+        } else {
+            showToast('提交失败：' + ((j && j.error) || '请稍后重试'));
+        }
+    } catch (e) {
+        showToast('网络异常，请稍后重试');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '提交反馈'; }
+    }
+}
+</script>
 
 <script>
 // 登录页加载保护：本文件较大，慢网络下登录页先渲染而功能脚本尚未解析完成，
@@ -31963,6 +32019,12 @@ window.editMemberCard = function(id) {
             <div onclick="_openAccountSettingsModal()" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
                 <span style="font-size:18px;flex:0 0 auto;line-height:1;">👤</span>
                 <span style="font-size:14px;color:#4B5563;font-weight:500;flex:1;">账号设置</span>
+                <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
+            </div>
+            <div onclick="_openFeedbackModal()" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
+                <span style="font-size:18px;flex:0 0 auto;line-height:1;">💬</span>
+                <span style="font-size:14px;color:#4B5563;font-weight:500;flex:1;">意见反馈</span>
+                <span style="font-size:12px;color:#9CA3AF;flex:0 0 auto;">问题 · 建议</span>
                 <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
             </div>
             <div style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;">
