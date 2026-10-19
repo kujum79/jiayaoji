@@ -63160,36 +63160,35 @@ diningGroups.forEach(g => {
         if (__changedGrp) lsSet('diningGroups', JSON.stringify(diningGroups));
     }
 })();
-// V189: 家庭数据自愈——如果 fid_familyData 只剩 DEFAULT_FAMILY 的 3 个名字，
-// 但 autoBackup 或云端有更丰富的数据，自动回滚。兜底防登录轮转覆盖。
+// V189: 家庭数据自愈——如果某个家庭的 familyData 只剩 DEFAULT_FAMILY 的 3 个名字，
+// 但同家庭 autoBackup 有更丰富的数据，自动回滚。
+// 注意：不依赖 getFamilyId()（启动时登录态可能还没准备好），直接遍历 localStorage 所有 *_familyData 键。
 (function _selfHealFamilyData() {
-    var _fid = (typeof getFamilyId === 'function' ? getFamilyId() : null) || null;
-    if (!_fid) return; // 游客态不做
     try {
-        var _cur = JSON.parse(localStorage.getItem(_fid + '_familyData') || '[]');
-        if (!Array.isArray(_cur) || !_cur.length) return;
-        var _curNames = _cur.map(function(m) { return m.name; }).sort().join(',');
         var _defNames = DEFAULT_FAMILY.map(function(m) { return m.name; }).sort().join(',');
-        var _onlyDefaults = (_curNames === _defNames);
-        if (!_onlyDefaults) return; // 当前数据不是默认3人，无需自愈
-        // 查 autoBackup
-        var _backup = null;
-        var _abRaw = localStorage.getItem(_fid + '_familyData_autoBackup');
-        if (_abRaw) { try { _backup = JSON.parse(_abRaw); } catch(e) {} }
-        if (!_backup || !Array.isArray(_backup) || _backup.length <= _cur.length) {
-            // autoBackup 没救，再查其他家庭前缀键（可能是多家庭设备上的遗留）
-            for (var i = 0; i < localStorage.length; i++) {
-                var k = localStorage.key(i);
-                if (k && k.endsWith('_familyData') && k !== (_fid + '_familyData')) {
-                    try { var _v = JSON.parse(localStorage.getItem(k)); if (Array.isArray(_v) && _v.length > _cur.length) { _backup = _v; break; } } catch(e2) {}
-                }
+        for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (!k || !k.endsWith('_familyData') || k === 'familyData') continue;
+            var _fid = k.slice(0, -'_familyData'.length);
+            var _curRaw = localStorage.getItem(k);
+            var _cur; try { _cur = JSON.parse(_curRaw || '[]'); } catch(e) { continue; }
+            if (!Array.isArray(_cur) || !_cur.length) continue;
+            var _curNames = _cur.map(function(m) { return m.name; }).sort().join(',');
+            if (_curNames !== _defNames) continue; // 不是默认3人，无需自愈
+            // 查同家庭 autoBackup
+            var _backup = null;
+            var _abRaw = localStorage.getItem(_fid + '_familyData_autoBackup');
+            if (_abRaw) { try { _backup = JSON.parse(_abRaw); } catch(e2) {} }
+            if (!_backup || !Array.isArray(_backup) || _backup.length <= _cur.length) continue;
+            // 回滚
+            try { localStorage.setItem(k, JSON.stringify(_backup)); } catch(e3) { continue; }
+            // 如果当前登录的就是这个家庭，也同步更新内存变量
+            if (typeof getFamilyId === 'function' && getFamilyId() === _fid) {
+                try { localStorage.setItem('familyData_autoBackup', JSON.stringify(_cur)); } catch(e4) {}
+                try { localStorage.setItem('familyData', JSON.stringify(_backup)); } catch(e5) {}
+                if (typeof familyData !== 'undefined') familyData = _backup;
             }
-        }
-        if (_backup && Array.isArray(_backup) && _backup.length > _cur.length) {
-            lsSet('familyData_autoBackup', JSON.stringify(_cur)); // 当前默认3人也存一份备份（防误操作）
-            lsSet('familyData', JSON.stringify(_backup));
-            familyData = _backup;
-            console.log('[自愈] familyData 被默认值覆盖，已从 autoBackup 回滚到 ' + _backup.length + ' 人');
+            console.log('[自愈] ' + _fid + ' familyData 被默认值覆盖，已从 autoBackup 回滚到 ' + _backup.length + ' 人');
         }
     } catch(e) { console.warn('[自愈] familyData 自愈异常:', e); }
 })();
