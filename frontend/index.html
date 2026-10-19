@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V188-20261019';
+        var APP_VER = 'V189-20261019';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -63047,8 +63047,30 @@ if (!lsGet('foodArticlesSeed_v19')) {
 // V21 食养合并：旧 节气/茶饮/营养/食疗/对症 一次性迁移至「食养」（migrated_shiyang_v3 标记，只执行一次）
 try { migrateShiyangData(); } catch (e) { console.error('migrateShiyangData error:', e); }
 try { migrateXiaojiaThree(); } catch (e) { console.error('migrateXiaojiaThree error:', e); }
-try { window.__hadLocalFamilyData = !!lsGet('familyData'); } catch(e) { window.__hadLocalFamilyData = true; } // V187: 云端恢复判定（写入默认值之前捕获，出错则保守不恢复）
-if (!lsGet('familyData')) lsSet('familyData', JSON.stringify(DEFAULT_FAMILY));
+// V189: 修复启动流程在游客态污染全局键的 bug（lsGet 在 fid 缺失时读全局键，
+// 启动代码又把 DEFAULT_FAMILY 写回全局键，后续登录家庭时回退链读到这份污染数据，
+// 覆盖掉真实的 fid_familyData）
+(function _initFamilyDataSafely() {
+    var _fid = (typeof getFamilyId === 'function' ? getFamilyId() : null) || null;
+    var _fdKey = _fid ? (_fid + '_familyData') : null;
+    var _hasFidData = _fdKey ? !!localStorage.getItem(_fdKey) : false;
+    var _hasGlobalData = !!localStorage.getItem('familyData');
+    // 云端恢复判定：已登录且 fid 前缀键存在才算"有本地数据"，否则保守设 true（不触发恢复，避免覆盖）
+    try { window.__hadLocalFamilyData = _hasFidData || (_hasGlobalData && !_fid); }
+    catch(e) { window.__hadLocalFamilyData = true; }
+    // DEFAULT_FAMILY 写入：仅当已登录且 fid_familyData 不存在时才写；
+    // 游客态绝不写任何默认值到全局键（防污染后续登录的回退链）
+    if (_fid && !_hasFidData && !_hasGlobalData) {
+        lsSet('familyData', JSON.stringify(DEFAULT_FAMILY));
+    } else if (!_fid && !_hasGlobalData) {
+        // 游客态不写全局键，仅保证内存变量有默认值供未登录浏览态使用
+        familyData = DEFAULT_FAMILY.slice();
+        return; // 跳过下面的 lsGet/lsSet（避免游客态触发不需要的写入）
+    }
+})();
+if (!familyData || !Array.isArray(familyData) || !familyData.length) {
+    familyData = JSON.parse(lsGet('familyData') || null) || DEFAULT_FAMILY.slice();
+}
 familyData = JSON.parse(lsGet('familyData'));
 familyData = familyData.map(member => {
     const defaultMember = DEFAULT_FAMILY.find(item => item.name === member.name);
@@ -63137,6 +63159,39 @@ diningGroups.forEach(g => {
         if (__changedFam) lsSet('familyData', JSON.stringify(familyData));
         if (__changedGrp) lsSet('diningGroups', JSON.stringify(diningGroups));
     }
+})();
+// V189: 家庭数据自愈——如果 fid_familyData 只剩 DEFAULT_FAMILY 的 3 个名字，
+// 但 autoBackup 或云端有更丰富的数据，自动回滚。兜底防登录轮转覆盖。
+(function _selfHealFamilyData() {
+    var _fid = (typeof getFamilyId === 'function' ? getFamilyId() : null) || null;
+    if (!_fid) return; // 游客态不做
+    try {
+        var _cur = JSON.parse(localStorage.getItem(_fid + '_familyData') || '[]');
+        if (!Array.isArray(_cur) || !_cur.length) return;
+        var _curNames = _cur.map(function(m) { return m.name; }).sort().join(',');
+        var _defNames = DEFAULT_FAMILY.map(function(m) { return m.name; }).sort().join(',');
+        var _onlyDefaults = (_curNames === _defNames);
+        if (!_onlyDefaults) return; // 当前数据不是默认3人，无需自愈
+        // 查 autoBackup
+        var _backup = null;
+        var _abRaw = localStorage.getItem(_fid + '_familyData_autoBackup');
+        if (_abRaw) { try { _backup = JSON.parse(_abRaw); } catch(e) {} }
+        if (!_backup || !Array.isArray(_backup) || _backup.length <= _cur.length) {
+            // autoBackup 没救，再查其他家庭前缀键（可能是多家庭设备上的遗留）
+            for (var i = 0; i < localStorage.length; i++) {
+                var k = localStorage.key(i);
+                if (k && k.endsWith('_familyData') && k !== (_fid + '_familyData')) {
+                    try { var _v = JSON.parse(localStorage.getItem(k)); if (Array.isArray(_v) && _v.length > _cur.length) { _backup = _v; break; } } catch(e2) {}
+                }
+            }
+        }
+        if (_backup && Array.isArray(_backup) && _backup.length > _cur.length) {
+            lsSet('familyData_autoBackup', JSON.stringify(_cur)); // 当前默认3人也存一份备份（防误操作）
+            lsSet('familyData', JSON.stringify(_backup));
+            familyData = _backup;
+            console.log('[自愈] familyData 被默认值覆盖，已从 autoBackup 回滚到 ' + _backup.length + ' 人');
+        }
+    } catch(e) { console.warn('[自愈] familyData 自愈异常:', e); }
 })();
 // 统一清理：迁移"三口之家"→"小家"，移除所有"聚餐"后缀组，确保7个默认组存在
 if (!lsGet('diningGroupsV5_final')) {
