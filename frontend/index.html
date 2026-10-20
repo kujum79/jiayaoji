@@ -6863,6 +6863,11 @@ try { if (!lsGet('superAdmin')) lsSet('superAdmin', JSON.stringify({ isLoggedIn:
 // 迁移只跑一次，完成后写 familyRolesMigrated=true 标记，避免覆盖用户手动修改
 function migrateFamilyRoles() {
     if (lsGet('familyRolesMigrated') === 'true') return;
+    // V191: 游客态（未登录无家庭码）直接跳过，不得在游客态写全局 familyData——
+    // 否则 __hadLocalFamilyData 被置 true，V187 云端恢复被永久阻断；默认4人数据还会
+    // 经 lsGet 全局回退显示、8秒后被自动备份覆盖云端真实数据（Bug#11，三仁佳欢事故同款机制）
+    var _fid191 = (typeof getFamilyId === 'function' ? getFamilyId() : null);
+    if (!_fid191) return;
     try {
         var data = JSON.parse(lsGet('familyData') || '[]');
         if (!Array.isArray(data)) data = [];
