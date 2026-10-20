@@ -48674,6 +48674,22 @@ async function generateWeeklyAiMealRecommendation(days) {
 }
 
 // 显示AI推荐确认弹窗
+// V190: AI食谱推荐弹窗免责声明级别（婴儿=专属版；慢病/孕妇/高龄等=强化版；其余=通用版）
+function _weeklyAiDisclaimerKind() {
+    const ms = Array.isArray(familyData) ? familyData : [];
+    if (ms.some(m => m && m.isInfant)) return 'infant';
+    const sp = ms.some(m => {
+        if (!m) return false;
+        if (m.diseaseType && String(m.diseaseType).trim()) return true;
+        if (m.groupType && (m.groupType === '慢病管理' || (typeof NUTRITION_SPECIAL_GROUPS === 'object' && NUTRITION_SPECIAL_GROUPS[m.groupType]))) return true;
+        const tags = Array.isArray(m.tags) ? m.tags.join(',') : '';
+        if (/慢病|高龄|孕妇|产后/.test(tags)) return true;
+        if ((m.age || 0) >= 80) return true;
+        return false;
+    });
+    return sp ? 'special' : 'general';
+}
+
 function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
     dayCount = dayCount || 7;
     // 移除已有弹窗
@@ -48936,6 +48952,7 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
                 </div>` : ''}
             </div>
             <div style="padding:12px 20px;border-top:1px solid #F3F4F6;flex-shrink:0;display:flex;flex-direction:column;gap:8px;">
+                ${dietDisclaimerFooterHtml(_weeklyAiDisclaimerKind())}
                 <div style="display:flex;gap:10px;">
                     <button onclick="closeWeeklyAiRecommendationModal()" style="flex:1;padding:10px;background:#F3F4F6;color:#4B5563;border:none;border-radius:10px;font-size:14px;cursor:pointer;">再想想</button>
                     <button onclick="confirmWeeklyAiRecommendation()" id="weeklyAiRecommendConfirmBtn" style="flex:2;padding:10px;background:#F97316;color:white;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">✅ 采用并填入食记</button>
@@ -48951,6 +48968,8 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
     overlay.dataset.isAi = (recommendation._source === 'ai') ? 'true' : 'false';
 
     document.body.appendChild(overlay);
+    // V190: 首次查看AI食谱方案强制二次确认（已确认过则不弹）
+    try { ensureDietDisclaimer(); } catch(e) {}
 }
 
 // 批量获取多日规划弹窗中所有菜品的食材用量
