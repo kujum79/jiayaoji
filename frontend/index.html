@@ -48435,7 +48435,7 @@ function collectMemberHealthProfiles(members) {
     members.forEach(mem => {
         const name = (typeof mem === 'string') ? mem : (mem && mem.name);
         if (!name) return;
-        const m = familyData.find(f => f.name === name);
+        const m = (familyData || []).find(f => f.name === name);
         if (!m) return;
         let parts = [];
         // 人群类型 + 健康状态周期（仅在进行中的状态才喂给 AI）
@@ -48482,7 +48482,7 @@ function getGroupTypeConstraints(members) {
     members.forEach(mem => {
         const name = (typeof mem === 'string') ? mem : (mem && mem.name);
         if (!name) return;
-        const m = familyData.find(f => f.name === name);
+        const m = (familyData || []).find(f => f.name === name);
         // 仅对当前进行中的健康状态生成强约束
         if (m && m.groupType && m.groupType !== '普通' && isHealthStateActive(m)) groupTypes.add(m.groupType);
     });
@@ -63093,8 +63093,9 @@ try { migrateXiaojiaThree(); } catch (e) { console.error('migrateXiaojiaThree er
 if (!familyData || !Array.isArray(familyData) || !familyData.length) {
     familyData = JSON.parse(lsGet('familyData') || null) || DEFAULT_FAMILY.slice();
 }
-familyData = JSON.parse(lsGet('familyData'));
-familyData = familyData.map(member => {
+// V190: 游客态 lsGet 返回 null（V189 起不再写全局键），必须保留上方已兜底的内存 familyData，否则 null.map 启动即崩
+familyData = JSON.parse(lsGet('familyData')) || familyData || DEFAULT_FAMILY.slice();
+familyData = (familyData || []).map(member => {
     const defaultMember = DEFAULT_FAMILY.find(item => item.name === member.name);
     return {
         ...member,
