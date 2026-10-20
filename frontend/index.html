@@ -50024,16 +50024,17 @@ let currentDiaryDate = new Date();
 // getDiaryDiningGroup() 无参调用 = 当前查看日期（currentDiaryDate），老调用点自动获得"当天"语义
 // 获取食记当前选中的就餐人
 function _defaultDiningGroup() {
-    let defaultGroup = diningGroups.find(g => g.name === '小家') || diningGroups.find(g => g.groupType !== 'social') || diningGroups[0];
-    if (!defaultGroup) return { groupId: null, groupName: '无就餐组', members: [] };
+    const __dgs = Array.isArray(diningGroups) ? diningGroups : [];
+    let defaultGroup = __dgs.find(g => g && g.name === '小家') || __dgs.find(g => g && g.groupType !== 'social') || __dgs[0];
+    if (!defaultGroup || !Array.isArray(defaultGroup.members)) return { groupId: null, groupName: '无就餐组', members: [] };
     return { groupId: defaultGroup.id, groupName: defaultGroup.name, members: [...defaultGroup.members] };
 }
 
 // 某天的就餐成员列表（过滤已删除成员）
 function _dayDiningMembers(dateKey) {
-    const day = getDietCalendar()[dateKey];
+    const day = (getDietCalendar() || {})[dateKey];
     if (day && day.dining && Array.isArray(day.dining.members) && day.dining.members.length > 0) {
-        const valid = day.dining.members.filter(m => familyData.some(f => f.name === m));
+        const valid = day.dining.members.filter(m => (familyData || []).some(f => f.name === m));
         if (valid.length > 0) return valid;
     }
     try {
@@ -50055,7 +50056,9 @@ function saveDayDiningMembers(dateKey, members) {
 
 // 成员集合恰等于某组全成员时返回该组（用于按钮标签显示组名）
 function _matchDiningGroup(members) {
-    return diningGroups.find(g => g.members.length === members.length && g.members.every(m => members.includes(m))) || null;
+    const __dgs = Array.isArray(diningGroups) ? diningGroups : [];
+    const __ms = Array.isArray(members) ? members : [];
+    return __dgs.find(g => g && Array.isArray(g.members) && g.members.length === __ms.length && g.members.every(m => __ms.includes(m))) || null;
 }
 
 function getDiaryDiningGroup(dateKey) {
@@ -50073,9 +50076,9 @@ function saveDiaryDiningGroup(groupId, members, dateKey) {
 
 // 获取食记当前就餐人的详细成员信息（含口味、偏好等）
 function getDiaryDiningMembersInfo() {
-    let dining = getDiaryDiningGroup();
-    return dining.members.map(name => {
-        let member = familyData.find(m => m.name === name);
+    let dining = getDiaryDiningGroup() || { members: [] };
+    return (dining.members || []).map(name => {
+        let member = (familyData || []).find(m => m && m.name === name);
         if (member) return member;
         return { name: name, age: '?', taste: '无特殊偏好', dietaryPreference: '无特殊要求', constitution: '未知' };
     });
@@ -63098,13 +63101,34 @@ if (!lsGet('socialMembersMerged_v2')) {
 }
 lsSet('familyData', JSON.stringify(familyData));
 if (!lsGet('contactsData')) lsSet('contactsData', JSON.stringify(DEFAULT_CONTACTS));
-if (!lsGet('diningGroups')) lsSet('diningGroups', JSON.stringify(DEFAULT_DINING_GROUPS));
-contactsData = JSON.parse(lsGet('contactsData'));
-diningGroups = JSON.parse(lsGet('diningGroups'));
+// V190: 新家庭初始化就餐组时，「小家」成员直接取真实家庭成员名单，不再套用「我/爸爸/妈妈」模板（Bug#3：6人家庭按3人算用量）
+if (!lsGet('diningGroups')) {
+    const __dgInit = JSON.parse(JSON.stringify(DEFAULT_DINING_GROUPS));
+    const __initNames = (familyData || []).map(m => m && m.name).filter(Boolean);
+    if (__initNames.length && __dgInit[0]) __dgInit[0].members = __initNames;
+    lsSet('diningGroups', JSON.stringify(__dgInit));
+}
+contactsData = JSON.parse(lsGet('contactsData')) || DEFAULT_CONTACTS;
+diningGroups = JSON.parse(lsGet('diningGroups')) || JSON.parse(JSON.stringify(DEFAULT_DINING_GROUPS));
 // 给旧就餐组补上 groupType 字段
-diningGroups.forEach(g => {
+(diningGroups || []).forEach(g => {
     if (g.groupType === undefined) g.groupType = g.type === 'social' ? 'social' : 'core';
 });
+// V190: 存量家庭「小家」名单纠偏——若小家成员与真实家庭成员零交集（历史默认模板残留/跨家庭串号），按真实成员重建
+(function healXiaojiaMismatch() {
+    try {
+        if (!Array.isArray(familyData) || !familyData.length) return;
+        const __xj = (diningGroups || []).find(g => g && g.name === '小家');
+        if (!__xj) return;
+        const __real = familyData.map(m => m && m.name).filter(Boolean);
+        if (!__real.length) return;
+        const __cur = Array.isArray(__xj.members) ? __xj.members : [];
+        const __overlap = __cur.filter(n => __real.includes(n));
+        if (__cur.length && __overlap.length) return; // 有交集视为用户自行维护，不动
+        __xj.members = [...__real];
+        lsSet('diningGroups', JSON.stringify(diningGroups));
+    } catch(e) {}
+})();
 // 小家成员自愈（跨源）：小家组成员名单（当前前缀 + 遗留无前缀键）里出现、但成员库缺失的成员自动补回。
 // 资料来源优先级：自动备份 → 遗留无前缀 familyData → 其他家庭前缀 familyData → 空壳。防止"小家只剩我"。
 (function healXiaojiaMembers() {
