@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V194-20261021';
+        var APP_VER = 'V195-20261021';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -30,9 +30,56 @@
     })();
     </script>
     <script>
+    /* V195: 演示模式（?demo=铁岭之家 / ?demo=KWL47P39）
+       - 免登录直接看该家庭 7 天真实数据；只读；独立 DEMO_ 存储命名空间，不碰真实账号会话
+       - 首次进入先把云端快照灌入演示命名空间，再带同一 URL 重载一次，保证首屏就有数据 */
+    (function () {
+        var DEMO_MAP = {
+            '铁岭之家': 'KWL47P39', '小高之家': 'V2C8WRFR',
+            '三仁佳欢': 'BHDVWN36', '非英中义': 'NJQSFVA5',
+            'KWL47P39': 'KWL47P39', 'V2C8WRFR': 'V2C8WRFR',
+            'BHDVWN36': 'BHDVWN36', 'NJQSFVA5': 'NJQSFVA5'
+        };
+        var DEMO_NAMES = { KWL47P39: '铁岭之家', V2C8WRFR: '小高之家', BHDVWN36: '三仁佳欢', NJQSFVA5: '非英中义' };
+        try {
+            var q = new URLSearchParams(location.search).get('demo');
+            var fid = q ? (DEMO_MAP[q] || null) : null;
+            if (!fid) { window.__demoMode = false; return; }
+            window.__demoMode = true;
+            window.__demoFid = fid;
+            window.__demoName = DEMO_NAMES[fid] || '演示家庭';
+            if (sessionStorage.getItem('__demoLoaded') !== fid) {
+                sessionStorage.setItem('__demoLoaded', fid);
+                fetch('/api/family-backup/get', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ familyId: fid })
+                }).then(function (r) { return r.json(); }).then(function (j) {
+                    if (j && j.ok && j.data) {
+                        Object.keys(j.data).forEach(function (k) {
+                            if (typeof j.data[k] === 'string') {
+                                try { localStorage.setItem('DEMO_' + fid + '_' + k, j.data[k]); } catch (e) {}
+                            }
+                        });
+                    }
+                    location.reload();
+                }).catch(function () { location.reload(); });
+            }
+        } catch (e) { window.__demoMode = false; }
+    })();
+    </script>
+    <script>
     /* V137: 双击打开（file:// 协议）时相对路径 fetch 必然失败（Failed to fetch），
        统一为后端 API 绝对地址；http/https 打开（同源部署）保持相对路径不变 */
     var API_BASE = (location.protocol === 'http:' || location.protocol === 'https:') ? '' : 'http://127.0.0.1:8012'; // V138: 换8012端口——旧8011 URL缓存问题，同8010→8011原理
+    /* V195: 家庭备份键清单必须在所有启动期迁移之前初始化——migrateStripPlainRice / migrateFamilyRoles 等
+       在脚本更早位置就会调用 lsSet，若此处尚未赋值，_isBackupKey 全部返回 false，
+       演示模式只读拦截与游客态写键拦截都会被绕过（实测演示日历被改写为 24590 字节）。 */
+    var _FAMILY_BACKUP_KEYS = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
+        'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
+        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
+        'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
+        'diningOutPlans'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -3830,6 +3877,46 @@
     </style>
 </head>
 <body>
+<!-- ====== V195: 演示模式水印（?demo=xxx 时显示，退出即清空演示数据） ====== -->
+<style>
+body.demo-mode #appRoot { align-self: flex-start; height: calc(100vh - 26px); margin-top: 26px; }
+body.demo-mode .phone-frame { height: 100%; }
+#demoWatermark { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px;
+    height: 26px; display: none; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px;
+    box-sizing: border-box; background: linear-gradient(90deg, #F59E0B, #F97316); color: #fff; font-size: 12px;
+    font-weight: 600; z-index: 100007; }
+#demoWatermark .dw-exit { background: rgba(255,255,255,0.92); color: #B45309; border: none; border-radius: 10px;
+    padding: 2px 8px; font-size: 11px; font-weight: 700; cursor: pointer; }
+</style>
+<div id="demoWatermark">
+    <span>👁 演示数据 · <b id="demoFamName">演示家庭</b></span>
+    <button class="dw-exit" id="demoExitBtn">退出演示</button>
+</div>
+<script>
+(function () {
+    if (!window.__demoMode) return;
+    function init() {
+        var bar = document.getElementById('demoWatermark');
+        if (!bar) return;
+        bar.style.display = 'flex';
+        var nm = document.getElementById('demoFamName');
+        if (nm) nm.textContent = window.__demoName || '演示家庭';
+        document.body.classList.add('demo-mode');
+        var btn = document.getElementById('demoExitBtn');
+        if (btn) btn.onclick = function () {
+            try {
+                Object.keys(localStorage).forEach(function (k) {
+                    if (k.indexOf('DEMO_') === 0) localStorage.removeItem(k);
+                });
+            } catch (e) {}
+            try { sessionStorage.removeItem('__demoLoaded'); } catch (e) {}
+            location.href = location.pathname;
+        };
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+})();
+</script>
 
 <!-- ====== 启动闪屏：文件较大，弱网下加载期间统一显示此页，就绪后自动切换到 APP/登录页 ====== -->
 <div id="bootSplash" style="position:fixed;inset:0;z-index:100006;background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 40%,#FED7AA 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;">
@@ -5627,8 +5714,15 @@ async function aiChatMultiProvider(systemContent, userPrompt, opts) {
 }
 
 // 当前登录用户与家庭信息（缓存在 localStorage）
-function getLoginUser() { try { return JSON.parse(localStorage.getItem('jj_login_user') || 'null'); } catch(e) { return null; } }
-function setLoginUser(u) { localStorage.setItem('jj_login_user', JSON.stringify(u||null)); }
+function getLoginUser() {
+    // V195: 演示模式免登录，返回内存中的演示身份（不写 jj_login_user，退出后真实会话原样保留）
+    if (window.__demoMode) return { id: '__demo__', name: window.__demoName || '演示家庭', familyName: window.__demoName, demo: true };
+    try { return JSON.parse(localStorage.getItem('jj_login_user') || 'null'); } catch(e) { return null; }
+}
+function setLoginUser(u) {
+    if (window.__demoMode) return; // 演示模式只读，不落真实登录态
+    localStorage.setItem('jj_login_user', JSON.stringify(u||null));
+}
 
 // 超级管理员账号（邮箱与用户名同时匹配才生效）
 const SUPER_ADMIN = {
@@ -5673,8 +5767,8 @@ function isSuperAdmin() {
     return hit;
 }
 function getLoginFamily() { try { return JSON.parse(localStorage.getItem('jj_login_family') || 'null'); } catch(e) { return null; } }
-function setLoginFamily(f) { localStorage.setItem('jj_login_family', JSON.stringify(f||null)); }
-function clearLogin() { localStorage.removeItem('jj_login_user'); localStorage.removeItem('jj_login_family'); }
+function setLoginFamily(f) { if (window.__demoMode) return; localStorage.setItem('jj_login_family', JSON.stringify(f||null)); }
+function clearLogin() { if (window.__demoMode) return; localStorage.removeItem('jj_login_user'); localStorage.removeItem('jj_login_family'); }
 
 // 隐藏启动闪屏（页面就绪、目标界面已确定时调用）
 function hideBootSplash() { var bs = document.getElementById('bootSplash'); if (bs) bs.style.display = 'none'; }
@@ -6147,6 +6241,15 @@ async function doCreateFamily() {
 
 // 退出登录
 function doLogout() {
+    // V195: 演示模式下「退出登录」等同于退出演示——不触碰真实账号会话
+    if (window.__demoMode) {
+        try {
+            Object.keys(localStorage).forEach(function (k) { if (k.indexOf('DEMO_') === 0) localStorage.removeItem(k); });
+        } catch (e) {}
+        try { sessionStorage.removeItem('__demoLoaded'); } catch (e) {}
+        location.href = location.pathname;
+        return;
+    }
     if (sb) { try { sb.auth.signOut(); } catch(e) {} }
     clearLogin();
     // 登出后: 1) 内存家庭数据回退到未登录浏览态(getFamilyId 为 null → familyKey 走全局 key);
@@ -8009,6 +8112,8 @@ function generateFamilyCode() {
 // 家庭码按登录账号隔离存储（familyId_<用户id>），避免同一设备上切换账号后
 // 沿用上一个账号的家庭数据（历史 bug：B 登录后看到 A 的家庭数据）。
 function getFamilyId() {
+    // V195: 演示模式使用独立的 DEMO_ 命名空间，绝不读写真家庭的数据键
+    if (window.__demoMode && window.__demoFid) return 'DEMO_' + window.__demoFid;
     var u = null;
     try { u = JSON.parse(localStorage.getItem('jj_login_user') || 'null'); } catch(e) { u = null; }
     if (u && u.id) { return localStorage.getItem('familyId_' + u.id) || null; }
@@ -8779,14 +8884,12 @@ function showExploreModal(title, body, isTTS) {
 }
 
 // 统一读写函数
-// V192: 备份键清单必须在 lsSet / lsSetJSON 之前初始化（游客态拦截依赖它）
-var _FAMILY_BACKUP_KEYS = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
-    'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
-    'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
-    'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-    'diningOutPlans'];
+// V195: 备份键清单已在主脚本顶部（API_BASE 之后）初始化，此处保留注释说明，避免再次被前移/后移
+
 function lsGet(key) {
     var prefixedKey = familyKey(key);
+    // V195: 演示模式只读演示命名空间，业务键不回退全局键（防止串读真实账号残留在本机的数据）
+    if (window.__demoMode && _isBackupKey(key)) return localStorage.getItem(prefixedKey);
     var val = localStorage.getItem(prefixedKey);
     if (val !== null) return val;
     // V133: 仅保留全局键回退（登录前存的数据，属同一设备同一用户可认领）。
@@ -8799,6 +8902,8 @@ function lsGet(key) {
     return null;
 }
 function lsSet(key, val) {
+    // V195: 演示模式只读——业务数据一律不写（数据只来自云端快照），非业务键（种植/设置等）可正常落，与游客态一致
+    if (window.__demoMode && _isBackupKey(key)) return;
     // V192: 游客态禁止把家庭业务键写进全局 localStorage（V189/V190/V191 三次游客态写键回归的最终收口）。
     // 全局业务键会污染后续登录的 lsGet 回退链：__hadLocalFamilyData 被误判为 true → 云端恢复不触发 → 8 秒后默认数据覆盖云端真实备份。
     if (!getFamilyId()) {
@@ -8819,6 +8924,8 @@ function lsGetJSON(key, defaultVal) {
     catch(e) { return defaultVal || null; }
 }
 function lsSetJSON(key, val) {
+    // V195: 演示模式只读——业务数据一律不写
+    if (window.__demoMode && _isBackupKey(key)) return;
     // V192: 与 lsSet 同规则——游客态不写家庭业务键
     if (!getFamilyId() && _isBackupKey(key)) {
         try {
@@ -8845,11 +8952,13 @@ function _isBackupKey(key) {
     return false;
 }
 function cloudBackupSchedule() {
+    if (window.__demoMode) return; // V195: 演示模式绝不推送云端
     if (typeof getFamilyId !== 'function' || !getFamilyId()) return;
     if (_cloudBackupTimer) clearTimeout(_cloudBackupTimer);
     _cloudBackupTimer = setTimeout(cloudBackupPush, 8000);
 }
 function cloudBackupPush() {
+    if (window.__demoMode) return; // V195: 演示模式绝不推送云端
     var fid = getFamilyId();
     if (!fid) return;
     var data = {};
@@ -8866,6 +8975,7 @@ function cloudBackupPush() {
 }
 async function cloudBackupRestoreIfNeeded() {
     try {
+        if (window.__demoMode) return false; // V195: 演示数据由引导脚本单独灌入，不走恢复链路
         var fid = getFamilyId();
         if (!fid) return false;
         if (window.__hadLocalFamilyData !== false) return false; // 仅"启动时本地无数据"才恢复，绝不覆盖现有数据
@@ -8887,6 +8997,8 @@ async function cloudBackupRestoreIfNeeded() {
 
 // 将全局数据认领到当前家庭前缀下（仅在首次创建/加入家庭时执行）
 function claimGlobalDataForFamily() {
+    // V195: 演示模式绝不认领/清除真实账号的全局键
+    if (window.__demoMode) return;
     var fid = getFamilyId();
     if (!fid) return;
     var claimFlag = 'dataClaimed_' + fid;
@@ -11186,6 +11298,8 @@ try { processPendingAudits(); } catch(e) { console.warn('processPendingAudits er
 // 只执行一次（localStorage 标记）；knowledge 缺失时从旧 content 字段读取（兼容 string/array）
 function _migrateIngredientKnowledgeV1() {
     try {
+        // V195: 演示模式跳过——此迁移直接写全局 dietKnowledge，会污染真实账号的本地数据
+        if (window.__demoMode) return;
         // 标记用裸 localStorage（不走 lsGet 家庭前缀 fallback，避免历史前缀键导致永久跳过）
         if (localStorage.getItem('dietKnowledgeIngMigratedV1') === '1') return;
         var changed = false;
@@ -63333,6 +63447,8 @@ diningGroups = JSON.parse(lsGet('diningGroups')) || JSON.parse(JSON.stringify(DE
 // 注意：不依赖 getFamilyId()（启动时登录态可能还没准备好），直接遍历 localStorage 所有 *_familyData 键。
 (function _selfHealFamilyData() {
     try {
+        // V195: 演示模式跳过——该函数会遍历并改写所有家庭前缀键（含真实账号的数据）
+        if (window.__demoMode) return;
         var _defNames = DEFAULT_FAMILY.map(function(m) { return m.name; }).sort().join(',');
         for (var i = 0; i < localStorage.length; i++) {
             var k = localStorage.key(i);
@@ -63474,7 +63590,8 @@ if (!lsGet('diningGroupsV7_rename')) {
 // 数据恢复：补回被 V9 清理误删的家人（老公/儿子）
 (function _restoreFamilyMembers() {
     // V192: 游客态/未登录不执行任何数据恢复与写入（此段是历史开发者数据修复，绝不能碰线上家庭数据）
-    if (!getFamilyId()) return;
+    // V195: 演示模式同样跳过——该段会直接写全局 familyData 与 DQ2LCWYY_ 前缀键
+    if (window.__demoMode || !getFamilyId()) return;
     var fam = JSON.parse(localStorage.getItem('familyData') || '[]');
     var changed = false;
     if (fam.length === 1 && fam[0].name === '我') {
@@ -64746,6 +64863,8 @@ console.log('🍳 家肴记 v1.0 已完整加载！');
         } catch (e) {}
         var u = getLoginUser();
         if (!u) { showAppRootGuest(); return; }
+        // V195: 演示模式免登录，直接进主界面（不做 Supabase 会话校验）
+        if (window.__demoMode) { showAppRoot(); return; }
         // 家庭快捷登录会话（无 Supabase 会话）：直接按已存储的家庭码进入主界面
         if (u.familySession) { showAppRoot(); return; }
         // 已登录过，检查是否仍有有效 supabase 会话 + 家庭归属

@@ -31,7 +31,7 @@ from urllib.parse import quote, urljoin
 import httpx
 import requests
 from bs4 import BeautifulSoup
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -182,9 +182,11 @@ class ParseVoiceRequest(BaseModel):
 
 
 @app.get("/")
-def root() -> RedirectResponse:
+def root(request: Request) -> RedirectResponse:
     # 根路径直接进入家肴记应用，避免浏览器裸显 JSON（健康检查见 /health）
-    return RedirectResponse(url="/app")
+    # V195: 保留查询参数（如 ?demo=铁岭之家 的演示模式入口）
+    q = request.url.query
+    return RedirectResponse(url="/app" + (("?" + q) if q else ""))
 
 
 @app.get("/health")
