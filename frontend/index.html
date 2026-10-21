@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V189-20261019';
+        var APP_VER = 'V192-20261021';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -6647,7 +6647,8 @@ function migrateToDietCalendar() {
 }
 
 // 页面加载时执行迁移（每个都包 try-catch，防止单个迁移崩溃阻塞整个脚本块）
-try { migrateToDietCalendar(); } catch(e) { console.error('migrateToDietCalendar error:', e); }
+// V192: 仅登录后迁移——游客态跑了迁移会把 dietCalendarMigrated 标记置位，导致真实家庭登录后反而跳过迁移
+try { if (getFamilyId()) migrateToDietCalendar(); } catch(e) { console.error('migrateToDietCalendar error:', e); }
 
 // ==================== 数据清洗：已保存计划中的纯米饭类菜品 ====================
 // 历史生成的计划里含"米饭/大米饭"等单调主食；新生成已从源头过滤（stripPlainRiceFromPlan + prompt），
@@ -8753,6 +8754,11 @@ function showExploreModal(title, body, isTTS) {
 }
 
 // 统一读写函数
+// V192: 备份键清单必须在 lsSet / lsSetJSON 之前初始化（游客态拦截依赖它）
+var _FAMILY_BACKUP_KEYS = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
+    'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
+    'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
+    'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile'];
 function lsGet(key) {
     var prefixedKey = familyKey(key);
     var val = localStorage.getItem(prefixedKey);
@@ -8766,24 +8772,47 @@ function lsGet(key) {
     }
     return null;
 }
-function lsSet(key, val) { localStorage.setItem(familyKey(key), val); try { if (_isBackupKey(key)) cloudBackupSchedule(); } catch(e) {} }
+function lsSet(key, val) {
+    // V192: 游客态禁止把家庭业务键写进全局 localStorage（V189/V190/V191 三次游客态写键回归的最终收口）。
+    // 全局业务键会污染后续登录的 lsGet 回退链：__hadLocalFamilyData 被误判为 true → 云端恢复不触发 → 8 秒后默认数据覆盖云端真实备份。
+    if (!getFamilyId()) {
+        try {
+            if (_isBackupKey(key)) {
+                if (!window.__guestWriteWarned) {
+                    window.__guestWriteWarned = true;
+                    console.error('[游客态写键拦截] 未登录却尝试写入业务键 "' + key + '"，已阻止（防云端数据被默认值覆盖）');
+                }
+                return;
+            }
+        } catch(e) {}
+    }
+    localStorage.setItem(familyKey(key), val); try { if (_isBackupKey(key)) cloudBackupSchedule(); } catch(e) {} }
 function lsRemove(key) { localStorage.removeItem(familyKey(key)); }
 function lsGetJSON(key, defaultVal) {
     try { var v = lsGet(key); return v ? JSON.parse(v) : (defaultVal || null); }
     catch(e) { return defaultVal || null; }
 }
-function lsSetJSON(key, val) { localStorage.setItem(familyKey(key), JSON.stringify(val)); }
+function lsSetJSON(key, val) {
+    // V192: 与 lsSet 同规则——游客态不写家庭业务键
+    if (!getFamilyId() && _isBackupKey(key)) {
+        try {
+            if (!window.__guestWriteWarned) {
+                window.__guestWriteWarned = true;
+                console.error('[游客态写键拦截] 未登录却尝试写入业务键 "' + key + '"，已阻止');
+            }
+        } catch(e) {}
+        return;
+    }
+    localStorage.setItem(familyKey(key), JSON.stringify(val));
+}
 
 // ========== V187: 家庭数据云端自动备份（防 localStorage 丢失） ==========
 // 推送：lsSet 写入家庭键时触发，8s 防抖后把全量快照 POST 到 /api/family-backup（服务器按家庭码存一份最新快照）
 // 恢复：启动时本地无 familyData（__hadLocalFamilyData===false）且已登录 → 拉云端快照写入本地前缀键并重载一次
-var _FAMILY_BACKUP_KEYS = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
-    'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
-    'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
-    'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile'];
+// V192: 备份键清单上移（必须在 lsSet 之前完成初始化），否则启动早期迁移写键会绕过游客态拦截
 var _cloudBackupTimer = null;
 function _isBackupKey(key) {
-    if (typeof _FAMILY_BACKUP_KEYS === 'undefined' || !key) return false; // var 不提升，启动早期 lsSet 调用时静默跳过
+    if (typeof _FAMILY_BACKUP_KEYS === 'undefined' || !key) return false;
     for (var i = 0; i < _FAMILY_BACKUP_KEYS.length; i++) {
         if (key === _FAMILY_BACKUP_KEYS[i] || key.indexOf(_FAMILY_BACKUP_KEYS[i]) === 0) return true;
     }
@@ -47442,14 +47471,36 @@ async function generateMultiDayRecommendation(days) {
             aiResponse = await callAliyunQwenApi(systemPrompt, userMessage, { mode: getCurrentRecommendMode(), jsonMode: true }); // V140: 多天计划要 JSON，显式开启 json_mode（/plan 缺省不再强制）
             break;
         } catch (retryError) {
-            if (retry === 2) throw retryError;
+            if (retry === 2) {
+                console.warn('AI推荐三次均失败，转本地兜底：', retryError);
+                aiResponse = null; // V192: 不再直接抛错，交给下面的本地兜底
+                break;
+            }
             console.warn(`AI推荐第${retry + 1}次尝试失败，重试中...`);
         }
     }
 
-    // 解析并填入计划区
+    // V192: AI 不可用 / 返回缺 days / 解析失败时，改用「节气 + 偏好」本地库生成，保证计划区一定能出餐
     if (!aiResponse || !aiResponse.days || !Array.isArray(aiResponse.days)) {
-        throw new Error('AI返回数据格式异常，缺少days字段');
+        try {
+            var _fbLiked = (typeof _extractUserLikedIngredients === 'function') ? _extractUserLikedIngredients(30) : [];
+            var _fbServ = (recData && recData.servings) || 3;
+            var _fbPlan = _staticFallbackIngrPrefRecipes(weekDateKeys, _fbLiked, solarTerm || {}, 0, _fbServ);
+            aiResponse = { days: weekDateKeys.map(function(dk) {
+                var m = _fbPlan[dk] || {};
+                var mk = function(mt) {
+                    return { dishes: (m[mt] || []).map(function(r) {
+                        return { name: r.dish || r.name, reason: r.reason || '', ingredients: r.ingredients || null };
+                    }) };
+                };
+                return { meals: { breakfast: mk('breakfast'), lunch: mk('lunch'), dinner: mk('dinner') } };
+            }) };
+            showToast('AI 暂不可用，已用「节气 + 偏好」本地库生成计划');
+            console.warn('[AI兜底] 已用本地库生成 ' + weekDateKeys.length + ' 天计划');
+        } catch (fbErr) {
+            console.warn('本地兜底生成失败：', fbErr);
+            throw new Error('AI返回数据格式异常，缺少days字段');
+        }
     }
 
     // 跨天去重：同一餐型在不同天不重复同一道菜（AI可能返回重复菜品）
@@ -47862,6 +47913,40 @@ async function callAIWithCache(taskType, sys, usr, coreFn) {
 // V152: 所有 AI 饮食类生成的强制合规指令（统一在 callAliyunQwenApi 入口注入）
 var AI_DIET_COMPLIANCE_PROMPT = '合规要求（必须严格遵守）：禁止使用以下词汇：治疗、治愈、根治、改善、降低、预防、抗癌、排毒、降三高、消炎、杀菌、缓解、调理。禁止提及任何疾病名称。所有建议必须标注"仅供参考"。';
 
+// ============ V192: AI 输出 markdown 残留清洗 ============
+// AI 偶发不严格遵守「只返回 JSON/纯文本」，字段里会带 ```json、## 标题、**加粗**、- 列表、[文字](链接) 等残留。
+// 在 AI 返回入口统一清洗一次，所有下游（推荐理由/步骤/聊天回复/摘要）都用干净文本。
+function _aiMdClean(s) {
+    if (s == null) return s;
+    var t = String(s);
+    if (!t) return t;
+    t = t.replace(/```[a-zA-Z0-9_-]*\s*\n?/g, '');          // 代码块围栏
+    t = t.replace(/^\s{0,3}#{1,6}[ \t]*/gm, '');            // 行首 # 标题
+    t = t.replace(/^\s{0,3}>[ \t]?/gm, '');                 // 引用 >
+    t = t.replace(/^\s{0,3}(?:[-*+]|\d+[.)])[ \t]+/gm, ''); // 列表/有序列表前缀
+    t = t.replace(/^\s*([-*_])(?:\s*\1){2,}\s*$/gm, '');    // 分隔线
+    t = t.replace(/\*\*([^*\n]+)\*\*/g, '$1');               // **加粗**
+    t = t.replace(/__([^_\n]+)__/g, '$1');                  // __加粗__
+    t = t.replace(/`([^`\n]+)`/g, '$1');                    // 行内代码
+    t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');         // 图片
+    t = t.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');          // 链接
+    t = t.replace(/[ \t]+\n/g, '\n');
+    t = t.replace(/\n{3,}/g, '\n\n');
+    return t.trim();
+}
+// 递归清洗 AI 结构化返回里的所有字符串值（不改 key）
+function _aiDeepClean(o, depth) {
+    if (depth > 10) return o;
+    if (typeof o === 'string') return _aiMdClean(o);
+    if (Array.isArray(o)) return o.map(function(x) { return _aiDeepClean(x, depth + 1); });
+    if (o && typeof o === 'object') {
+        var r = {};
+        Object.keys(o).forEach(function(k) { r[k] = _aiDeepClean(o[k], depth + 1); });
+        return r;
+    }
+    return o;
+}
+
 async function callAliyunQwenApi(systemPrompt, userMessage, opts) {
     // V152: 统一注入医疗禁词与"仅供参考"合规要求（opts.skipCompliance=true 可跳过，如纯 NLP 提取任务）
     if (!(opts && opts.skipCompliance)) {
@@ -47869,12 +47954,16 @@ async function callAliyunQwenApi(systemPrompt, userMessage, opts) {
     }
     // V116: 识别任务类型，命中缓存直接返回（家庭档案/反馈/模式变化 → prompt 变化 → 键变化 → 自然失效）
     const __taskType = (opts && opts.taskType) || _aiCacheDetectTask(systemPrompt, userMessage);
+    var __aiRes;
     if (__taskType && _AI_CACHE_TTL[__taskType]) {
-        return await callAIWithCache(__taskType, systemPrompt, userMessage, async function(){
+        __aiRes = await callAIWithCache(__taskType, systemPrompt, userMessage, async function(){
             return await _callAliyunQwenApiCore(systemPrompt, userMessage, opts);
         });
+    } else {
+        __aiRes = await _callAliyunQwenApiCore(systemPrompt, userMessage, opts);
     }
-    return await _callAliyunQwenApiCore(systemPrompt, userMessage, opts);
+    // V192: 统一清洗 markdown 残留（含缓存命中与 rawText 降级文本）
+    try { return _aiDeepClean(__aiRes); } catch(e) { return __aiRes; }
 }
 
 async function _callAliyunQwenApiCore(systemPrompt, userMessage, opts) {
@@ -63113,6 +63202,8 @@ familyData.forEach(m => {
     if (m.relationship === undefined) m.relationship = '家人';
     if (m.isFamily === undefined) m.isFamily = true;
 });
+// V192: 游客态只在内存里做初始化与合并，一律不写业务键（lsSet 内也有拦截，这里是双保险）
+const __bootFid = (typeof getFamilyId === 'function' ? getFamilyId() : null) || null;
 if (!lsGet('socialMembersMerged_v2')) {
     const existingNames = new Set(familyData.map(m => m.name));
     DEFAULT_SOCIAL_MEMBERS.forEach(sm => {
@@ -63121,13 +63212,15 @@ if (!lsGet('socialMembersMerged_v2')) {
             existingNames.add(sm.name);
         }
     });
-    lsSet('familyData', JSON.stringify(familyData));
-    lsSet('socialMembersMerged_v2', 'true');
+    if (__bootFid) {
+        lsSet('familyData', JSON.stringify(familyData));
+        lsSet('socialMembersMerged_v2', 'true');
+    }
 }
-lsSet('familyData', JSON.stringify(familyData));
-if (!lsGet('contactsData')) lsSet('contactsData', JSON.stringify(DEFAULT_CONTACTS));
+if (__bootFid) lsSet('familyData', JSON.stringify(familyData));
+if (__bootFid && !lsGet('contactsData')) lsSet('contactsData', JSON.stringify(DEFAULT_CONTACTS));
 // V190: 新家庭初始化就餐组时，「小家」成员直接取真实家庭成员名单，不再套用「我/爸爸/妈妈」模板（Bug#3：6人家庭按3人算用量）
-if (!lsGet('diningGroups')) {
+if (__bootFid && !lsGet('diningGroups')) {
     const __dgInit = JSON.parse(JSON.stringify(DEFAULT_DINING_GROUPS));
     const __initNames = (familyData || []).map(m => m && m.name).filter(Boolean);
     if (__initNames.length && __dgInit[0]) __dgInit[0].members = __initNames;
@@ -63354,6 +63447,8 @@ if (!lsGet('diningGroupsV7_rename')) {
 
 // 数据恢复：补回被 V9 清理误删的家人（老公/儿子）
 (function _restoreFamilyMembers() {
+    // V192: 游客态/未登录不执行任何数据恢复与写入（此段是历史开发者数据修复，绝不能碰线上家庭数据）
+    if (!getFamilyId()) return;
     var fam = JSON.parse(localStorage.getItem('familyData') || '[]');
     var changed = false;
     if (fam.length === 1 && fam[0].name === '我') {
