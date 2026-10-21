@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V192-20261021';
+        var APP_VER = 'V193-20261021';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -6066,6 +6066,7 @@ async function afterLoginCheck() {
             var code = r.data.family_code;
             if (code) {
                 setFamilyId(code);
+                migrateGlobalDiningOutPlans(code);   // V193: 外食计划历史全局键迁移到家庭前缀
                 try { cloudBackupRestoreIfNeeded(); } catch(e) {}   // V187: 本地无数据则自动从云端恢复
             } else {
                 showToast('⚠️ 该家庭尚未生成家庭码，请联系家庭创建者');
@@ -6493,6 +6494,7 @@ async function doFamilyLogin() {
         var code = fam.family_code;
         if (code) {
             setFamilyId(code);
+            migrateGlobalDiningOutPlans(code);   // V193: 外食计划历史全局键迁移到家庭前缀
             try { localStorage.setItem('familyName_' + code, famName); } catch(e) {}
             try { cloudBackupRestoreIfNeeded(); } catch(e) {}   // V187: 新设备/清缓存后登录，本地无数据则自动从云端恢复
         } else {
@@ -8017,6 +8019,7 @@ function familyKey(key) {
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
+        'diningOutPlans',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
         if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
@@ -8024,6 +8027,19 @@ function familyKey(key) {
         }
     }
     return key;
+}
+
+// V193: 外食计划（diningOutPlans）历史上未加家庭前缀，多家共用同一份键会串号（A 家的外食计划出现在 B 家）。
+// 登录拿到家庭码后，把遗留的全局键搬到当前家庭的前缀键下（不覆盖已有前缀数据），再删掉全局键。
+function migrateGlobalDiningOutPlans(fid) {
+    try {
+        if (!fid) return;
+        var legacy = localStorage.getItem('diningOutPlans');
+        if (legacy === null) return;
+        var prefixed = fid + '_diningOutPlans';
+        if (localStorage.getItem(prefixed) === null) localStorage.setItem(prefixed, legacy);
+        localStorage.removeItem('diningOutPlans');
+    } catch(e) {}
 }
 
 // ============ 模块定制系统 ============
@@ -8758,7 +8774,8 @@ function showExploreModal(title, body, isTTS) {
 var _FAMILY_BACKUP_KEYS = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
     'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
     'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
-    'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile'];
+    'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
+    'diningOutPlans'];
 function lsGet(key) {
     var prefixedKey = familyKey(key);
     var val = localStorage.getItem(prefixedKey);
