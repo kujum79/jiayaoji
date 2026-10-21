@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V193-20261021';
+        var APP_VER = 'V194-20261021';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -6577,7 +6577,16 @@ async function doFamilyLogin() {
 // ==================== 数据迁移：mealPlans + mealRecords → dietCalendar ====================
 function migrateToDietCalendar() {
     if (lsGet('dietCalendarMigrated')) return; // 已迁移过则跳过
-    
+    // V194: 已有日历数据时绝不覆盖。云端恢复后 dietCalendarMigrated 不在备份键内，重载会再跑一次迁移，
+    // 而从 mealPlans/mealRecords 迁移出的 calendar 是空对象，会把刚恢复的整本日历覆盖成 {}，随后又推空云端。
+    try {
+        var _existCal = JSON.parse(lsGet('dietCalendar') || '{}');
+        if (_existCal && typeof _existCal === 'object' && Object.keys(_existCal).length) {
+            lsSet('dietCalendarMigrated', 'true');
+            return;
+        }
+    } catch (e) {}
+
     const plans = JSON.parse(lsGet('mealPlans')) || {};
     const records = JSON.parse(lsGet('mealRecords')) || [];
     const calendar = {};
