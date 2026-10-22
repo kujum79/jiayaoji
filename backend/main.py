@@ -91,7 +91,7 @@ class PlanRequest(BaseModel):
     # V140: json_mode 显式开关（缺省关）。/plan 是多任务统一代理入口（周计划/聊天回复/食材估算等均经此路由），
     # V139 曾无条件强制 JSON 导致聊天回复也输出原始 JSON（用户不可读）——现仅周计划等明确要 JSON 的调用方传 true
     json_mode: bool = False
-    subscriptionPlan: Optional[str] = None  # V199: 订阅套餐（education/special_care/premium），后端追加专属 Prompt 指令
+    subscriptionPlan: Optional[str] = None  # V199/V202: 订阅 tier（basic/premium），后端追加专属 Prompt 指令
 
 
 class RecommendRestaurantsRequest(BaseModel):
@@ -2788,46 +2788,63 @@ class DailyTipRequest(BaseModel):
     solarTerm: str = ""
     weather: Optional[Dict[str, Any]] = None
     variant: int = 0  # V139: "换一条"用，0=默认（缓存键兼容原规格 daily_tip_${familyId}_${date}）
-    subscriptionPlan: Optional[str] = None  # V199: 订阅套餐（education/special_care/premium），后端追加专属 Prompt
+    subscriptionPlan: Optional[str] = None  # V199/V202: 订阅 tier（basic/premium），后端追加专属 Prompt
+    needTags: Optional[List[str]] = None  # V202: premium 全家桶套餐下勾选的家庭需求（婴儿/老人/增高/体育生/康养），动态追加人群 Prompt
 
 
 # V199: 订阅专属 Prompt 段——按套餐类型追加不同的侧重指令
 # 注意：必须与 _DAILY_TIP_SYSTEM 的「禁止疾病名称/医疗词汇」条款兼容，
 # 因此慢病关怀一律用生活化表述（低盐低糖、长辈适量、不宜多吃），不得出现疾病名。
 # V199.1 提高 prompt 版本号，缓存键带上它 → 改动措辞后旧缓存自动失效
-_SUBSCRIPTION_PROMPT_VER = "v3"
+_SUBSCRIPTION_PROMPT_VER = "v4"  # V202: 双轨 tier + 动态 needTags
 _SUBSCRIPTION_PROMPT_SEGMENTS = {
-    "education": (
-        "【订阅专享：饮食教育包】\n"
-        "- 内容必须偏向少儿食育、食材科普、营养小知识，用生动有趣的语气，适合 6-12 岁孩子听读\n"
-        "- tips 的第 1 条必须严格以「给孩子的饮食小贴士：」开头，20字以内，口语化\n"
-        "- 食材选择优先孩子常见的（鸡蛋/牛奶/胡萝卜/菠菜/燕麦/鱼虾等），避免过于生僻\n"
+    # V202: 基础服务——日常营养建议，无特殊人群定制
+    "basic": (
+        "【订阅专享：基础服务】\\n"
+        "- 内容聚焦家庭日常三餐营养建议，语气亲切实用，适合普通家庭参考\\n"
+        "- tips 侧重食材选择/搭配/储存的生活化小技巧\\n"
     ),
-    "special_care": (
-        "【订阅专享：特殊关怀包】\n"
-        "- 内容必须偏向低盐低糖、少油少盐的实操做法，以及需要家人适量或少吃的食材提醒，语气严谨克制\n"
-        "- 正文中必须明确列出 2-3 种「不宜多吃」的食材或调味方式（例如腌制品、蜜饯、浓汤宝、糖醋做法）\n"
-        "- 正文末尾必须单独一行以内以「⚠️ 留意：」开头，给出长辈或需要控制饮食的家人应注意的实操提醒\n"
-        "- 以上提醒一律使用生活化表述（少盐、少糖、少油、适量、少吃），"
-        "同样适用上文禁止条款：不得出现疾病名称与禁词\n"
-    ),
+    # V202: 全家桶订阅——动态叠加 needTags 人群段
     "premium": (
-        "【订阅专享：高阶品质包】\n"
-        "- 内容必须偏向卡路里计算、宏量营养素（碳水/蛋白/脂肪）配比、健身餐搭配\n"
-        "- 正文中出现任何菜品或食材时，必须标注大致的每 100g 热量范围\n"
-        "- tips 的第 1 条必须给出「推荐摄入时段」（如训练前 1h / 训练后 30min / 睡前 3h）\n"
+        "【订阅专享：全家桶订阅】\\n"
+        "- 内容必须紧扣该家庭勾选的特殊人群需求（详见下文【家庭需求绑定】段）\\n"
+        "- 正文必须明确指出 2-3 个与家庭需求匹配的实操建议或食材选择要点\\n"
+        "- 语气严谨克制，避免空泛的养生话术\\n"
     ),
 }
 
-# V199.3: 硬性格式要求放在 user 轮次（system 里规则过多时模型容易漏），逐条可校验
-_SUBSCRIPTION_USER_REQUIREMENTS = {
-    "education": "【输出硬要求】tips 数组第 1 条必须以「给孩子的饮食小贴士：」开头，20字以内。",
-    "special_care": (
-        "【输出硬要求】正文必须明确列出 2-3 种不宜多吃或应少用的食材/调味（如腌制品、浓汤宝、蜜饯、糖醋做法）；"
-        "正文最后一句话必须单独成段、以「⚠️ 留意：」开头，写给家里长辈或需要控制饮食的家人，"
-        "只许用少盐/少糖/少油/适量/少吃这类生活化表述，不得出现任何疾病名称。"
+# V202: premium 全家桶下 needTags 命中时追加的人群专属 Prompt 段
+_SUBSCRIPTION_NEED_PROMPT_SEGMENTS = {
+    "婴儿": (
+        "- 婴儿（0-3岁辅食）：正文中必须包含 1-2 条适合婴儿初次添加的泥糊状辅食建议，"
+        "标注「初次添加请少量尝试，观察 3 天」，不得推荐含有蜂蜜/盐/糖的辅食，不得提及牛奶（1岁以下）\\n"
     ),
-    "premium": "【输出硬要求】正文至少标注 2 处「每100g约XX千卡」；tips 第 1 条必须是「推荐摄入时段：…」。",
+    "老人": (
+        "- 老人（慢病/软食）：正文必须列出 2-3 种「不宜多吃」的食材或调味方式（如腌制品、浓汤宝、糖醋做法），"
+        "末尾必须有一行以「⚠️ 留意：」开头的生活化提醒（少盐/少糖/少油/适量/少吃），不得出现疾病名称\\n"
+    ),
+    "增高": (
+        "- 发育期青少年增高：内容需提到高蛋白/高钙食材的搭配，以及有助于长高的作息/运动小提示，"
+        "避免推荐容易饱腹感强但营养密度低的食物\\n"
+    ),
+    "体育生": (
+        "- 体育生（高能/增肌）：正文至少标注 2 处食材的大致每 100g 热量范围，"
+        "tips 第 1 条必须给出「推荐摄入时段」（如训练前 1h / 训练后 30min）\\n"
+    ),
+    "康养": (
+        "- 康养恢复（术后/血虚/孕妇）：内容侧重清淡易消化、补气养血类食材的温和做法，"
+        "避免寒凉生冷、辛辣刺激食材的推荐，语气平和克制\\n"
+    ),
+}
+
+# V199.3/V202: 硬性格式要求放在 user 轮次（system 里规则过多时模型容易漏）
+_SUBSCRIPTION_USER_REQUIREMENTS = {
+    "basic": "【输出硬要求】tips 数组第 1 条必须是生活化小技巧，20 字以内。",
+    "premium": (
+        "【输出硬要求】正文必须明确列出 2-3 条与该家庭需求匹配的实操建议；"
+        "正文最后一句话必须单独成段、以「⚠️ 留意：」开头，内容与勾选的家庭需求相关，"
+        "只许用生活化表述，不得出现任何疾病名称。"
+    ),
 }
 
 
@@ -2842,7 +2859,9 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
     sub_plan = (req.subscriptionPlan or "").strip()
     # V199: 订阅类型必须进缓存键——否则用户先未订阅访问（缓存一条非订阅 tip），
     # 再订阅会命中旧缓存、拿不到 subscriptionExclusive=true 的内容
-    cache_key = f"{family_id}|{date_str}|{max(0, int(req.variant))}|{sub_plan}|{_SUBSCRIPTION_PROMPT_VER if sub_plan else ''}"
+    need_tags = [str(t).strip() for t in (req.needTags or []) if str(t).strip()]
+    need_tags_for_cache = "|".join(sorted(set(need_tags)))
+    cache_key = f"{family_id}|{date_str}|{max(0, int(req.variant))}|{sub_plan}|{need_tags_for_cache}|{_SUBSCRIPTION_PROMPT_VER if sub_plan else ''}"
     hit = _DAILY_TIP_CACHE.get(cache_key)
     now_ts = time.time()
     if hit:
@@ -2871,9 +2890,14 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
         if parts:
             weather_line = " ".join(parts)
 
-    # 订阅专属 Prompt 段（V199，复用上面已声明的 sub_plan 避免重复 strip）
+    # 订阅专属 Prompt 段（V199/V202）
     exclusive_seg = _SUBSCRIPTION_PROMPT_SEGMENTS.get(sub_plan, "") if sub_plan else ""
-    system_prompt = _DAILY_TIP_SYSTEM + ("\n\n" + exclusive_seg if exclusive_seg else "")
+    # V202: premium 全家桶下按 needTags 动态拼接人群专属 Prompt（need_tags 已在上方 cache_key 前声明）
+    if sub_plan == "premium" and need_tags:
+        tagged = [_SUBSCRIPTION_NEED_PROMPT_SEGMENTS[t] for t in need_tags if t in _SUBSCRIPTION_NEED_PROMPT_SEGMENTS]
+        need_seg = "【家庭需求绑定】\\n" + "".join(tagged)
+        exclusive_seg = exclusive_seg + need_seg if exclusive_seg else need_seg
+    system_prompt = _DAILY_TIP_SYSTEM + ("\\n\\n" + exclusive_seg if exclusive_seg else "")
 
     user_lines = [
         f"【日期】{date_str}",
@@ -2902,12 +2926,11 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
         if len(c) < 80:
             return False
         tips_ = t.get("tips") or []
-        if sub_plan == "education":
-            return bool(tips_) and str(tips_[0]).startswith("给孩子的饮食小贴士")
-        if sub_plan == "special_care":
-            return "⚠️" in c
+        if sub_plan == "basic":
+            return bool(tips_)
         if sub_plan == "premium":
-            return any(k in c for k in ("千卡", "大卡", "kcal"))
+            # premium 全家桶：至少要有 ⚠️ 提醒或一个实操建议
+            return "⚠️" in c or any(k in c for k in ("建议", "适合", "推荐", "不宜"))
         return True
 
     tip = None
@@ -2949,6 +2972,8 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
     if sub_plan:
         result["subscriptionExclusive"] = True
         result["subscriptionPlan"] = sub_plan
+        if sub_plan == "premium" and need_tags:
+            result["needTags"] = need_tags
     _DAILY_TIP_CACHE[cache_key] = {"expire": _daily_tip_expire_ts(date_str), "data": result}
     # 防膨胀：最多缓存 120 个 家庭|日期 条目，超出淘汰最先过期者
     if len(_DAILY_TIP_CACHE) > 120:
