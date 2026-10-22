@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V202.7-20261022';
+        var APP_VER = 'V202.8-20261022';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -59307,7 +59307,7 @@ function _kpiRadarSvg(items) {
         else if (i === 3) { lx = 6; ly = 122; anchor = 'start'; }
         labels.push('<text x="' + lx + '" y="' + ly + '" text-anchor="' + anchor + '" font-size="11" fill="' + color + '" font-weight="600">' + it.label + ' ' + it.pct + '%</text>');
     });
-    return '<svg viewBox="0 0 240 240" style="width:100%;max-width:250px;height:auto;display:block;margin:0 auto;">'
+    return '<svg viewBox="0 0 240 240" style="width:100%;max-width:210px;height:auto;display:block;margin:0 auto;">'
         + grids + axes
         + '<polygon points="' + pts.join(' ') + '" fill="rgba(249,115,22,0.18)" stroke="#F97316" stroke-width="2"/>'
         + dots.join('') + labels.join('') + '</svg>';
@@ -59465,11 +59465,11 @@ function _openWeeklyKpiReport() {
     if (old) { _closeWeeklyKpiReport(); }
     var overlay = document.createElement('div');
     overlay.id = 'weeklyKpiOverlay';
-    // 兼容老版本 webview：不用 inset，四边显式定位；overflow:hidden 防背景横向溢出
-    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;background:rgba(17,24,39,0.5);z-index:99999;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;';
-    overlay.onclick = function (e) { if (e.target === overlay) _closeWeeklyKpiReport(); };
-    overlay.innerHTML = '<div style="background:#fff;width:100%;max-width:520px;max-height:88vh;max-height:88dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;border-radius:18px 18px 0 0;box-sizing:border-box;padding:0 16px calc(20px + env(safe-area-inset-bottom,0px));">'
-        + '<div style="position:sticky;top:0;background:#fff;z-index:3;padding:14px 0 8px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid #F3F4F6;">'
+    // V202.8: 改为全屏报告页（不再半透明遮罩+底部弹窗），彻底消除"界面溢出/被截断"观感
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;background:#F7F5F2;z-index:99999;display:block;overflow:hidden;';
+    overlay.onclick = null;
+    overlay.innerHTML = '<div style="background:#F7F5F2;width:100%;max-width:720px;margin:0 auto;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box;padding:0 14px calc(24px + env(safe-area-inset-bottom,0px));">'
+        + '<div style="position:sticky;top:0;background:#fff;z-index:3;margin:0 -14px 8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid #EFE9E3;">'
         + '<button type="button" onclick="_closeWeeklyKpiReport()" style="border:none;background:#F3F4F6;color:#374151;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;flex:0 0 auto;">← 返回</button>'
         + '<div style="font-size:15px;font-weight:700;color:#1F2937;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📈 健康 KPI 深度归因</div>'
         + '<button type="button" onclick="_closeWeeklyKpiReport()" style="border:none;background:#F3F4F6;color:#6B7280;width:30px;height:30px;border-radius:50%;font-size:15px;cursor:pointer;flex:0 0 auto;">✕</button>'
@@ -59490,7 +59490,7 @@ function _openWeeklyKpiReport() {
                 + '</div>'
                 + '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px;">'
                 + '<div style="font-size:13px;font-weight:700;color:#1E40AF;margin-bottom:6px;">🎯 下周纠偏计划</div>'
-                + '<div style="font-size:13px;color:#1E40AF;line-height:1.6;margin-bottom:10px;">' + escapeHtml(attr.advice) + ' 一键把下周计划的蔬菜量提高 20%，明天起生效。</div>'
+                + '<div style="font-size:13px;color:#1E40AF;line-height:1.6;margin-bottom:10px;">' + escapeHtml(attr.advice) + '。<div style="margin-top:4px;font-size:12px;color:#3B82F6;">一键把下周计划的蔬菜量提高 20%，明天起生效。</div></div>'
                 + (btnState || '<button type="button" onclick="_applyNextWeekVegBoost(this)" style="width:100%;padding:11px;border:1px solid #BFDBFE;border-radius:10px;background:#DBEAFE;color:#1D4ED8;font-size:14px;font-weight:700;cursor:pointer;">🥬 一键将下周蔬菜量增加 20%</button>')
                 + '</div>')
         + '<button type="button" onclick="_closeWeeklyKpiReport()" style="margin-top:14px;width:100%;padding:11px;border:1px solid #E5E7EB;border-radius:10px;background:#fff;color:#6B7280;font-size:14px;font-weight:600;cursor:pointer;">返回复盘</button>'
