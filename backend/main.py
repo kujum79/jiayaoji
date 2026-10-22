@@ -3340,6 +3340,49 @@ def _sanitize_course_medical(text: str) -> Any:
     return s, sorted(set(hits))
 
 
+# ----- 定制课程审核队列（服务端持久化，超管审核的唯一事实源） -----
+_CCQ_PATH = Path(__file__).resolve().parent / "data" / "custom_course_queue.json"
+
+
+def _ccq_load() -> Dict[str, Any]:
+    try:
+        if _CCQ_PATH.exists():
+            data = json.loads(_CCQ_PATH.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        print(f"[custom_course] 队列读取失败: {exc}")
+    return {}
+
+
+def _ccq_save(data: Dict[str, Any]) -> None:
+    try:
+        _CCQ_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _CCQ_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        tmp.replace(_CCQ_PATH)  # 原子替换，避免半截文件
+    except Exception as exc:
+        print(f"[custom_course] 队列写入失败: {exc}")
+
+
+def _ccq_reason(member, is_child: bool, is_elder: bool,
+                has_insomnia: bool, is_picky: bool) -> str:
+    """生成"定制原因"摘要，超管列表直接展示。"""
+    parts: List[str] = []
+    if has_insomnia:
+        parts.append("该家庭成员有失眠/睡眠不佳")
+    if is_child:
+        parts.append(f"为 {member.age} 岁孩子定制（童话口吻）")
+    if is_elder:
+        parts.append(f"为 {member.age} 岁老人定制（通俗软食版）")
+    if is_picky:
+        parts.append("该家庭成员存在挑食情况")
+    if not parts and member.healthTags:
+        parts.append("健康标签：" + "、".join(member.healthTags))
+    if not parts:
+        parts.append("家庭通用定制")
+    return "；".join(parts)
+
+
 class CustomCourseMember(BaseModel):
     """V204: 课程定制目标成员画像"""
     name: str = ""
@@ -3356,6 +3399,9 @@ class CustomCourseRequest(BaseModel):
     familyMember: CustomCourseMember = Field(default_factory=CustomCourseMember)
     familyId: str = "default"
     tier: str = "premium"
+    familyName: str = ""      # 超管审核列表展示用
+    force: bool = False       # 超管驳回重生成时跳过缓存
+    skipStore: bool = False   # 内部调用（驳回重生成）不重复入库
 
 
 _CUSTOM_COURSE_SYSTEM = """你是一位专业的饮食教育专家。请基于给定的基础课程内容，为目标用户定制一份专属课程。
@@ -3396,9 +3442,10 @@ async def custom_course(req: CustomCourseRequest) -> Dict[str, Any]:
 
     member_sig = f"{member.name}|{age}|{member.profession}|{','.join(sorted(tags))}"
     cache_key = f"{family_id}|{base_id}|{member_sig}"
-    hit = _CUSTOM_COURSE_CACHE.get(cache_key)
-    if hit and time.time() - hit.get("ts", 0) < 24 * 3600:
-        return hit["data"]
+    if not req.force:
+        hit = _CUSTOM_COURSE_CACHE.get(cache_key)
+        if hit and time.time() - hit.get("ts", 0) < 24 * 3600:
+            return hit["data"]
 
     profile_bits = []
     if member.name:
@@ -3521,7 +3568,121 @@ async def custom_course(req: CustomCourseRequest) -> Dict[str, Any]:
     if len(_CUSTOM_COURSE_CACHE) > 60:
         oldest = min(_CUSTOM_COURSE_CACHE.items(), key=lambda kv: kv[1].get("ts", 0))[0]
         _CUSTOM_COURSE_CACHE.pop(oldest, None)
+
+    # 入服务端审核队列（超管审核的唯一事实源；前端 localStorage 仅为家庭侧镜像）
+    if not req.skipStore:
+        queue = _ccq_load()
+        queue[course["id"]] = {
+            "id": course["id"],
+            "familyId": family_id,
+            "familyName": (req.familyName or "").strip()[:40],
+            "baseCourseId": base_id,
+            "baseTitle": base_title,
+            "baseContent": base_content,
+            "member": course["member"],
+            "reason": _ccq_reason(member, is_child, is_elder, has_insomnia, is_picky),
+            "course": course,
+            "status": "pending_review",
+            "rejectCount": 0,
+            "createdAt": course["createdAt"],
+        }
+        _ccq_save(queue)
     return result
+
+
+# ========== V205: 定制课程审核（超管后台） ==========
+class AdminCourseReviewRequest(BaseModel):
+    id: str
+    action: str = ""  # approve 通过并推送 / reject 驳回并重新生成
+
+
+class AdminCourseListRequest(BaseModel):
+    status: str = "pending_review"
+
+
+# 读取用 POST 而非 GET——先注册的 GET catch-all（/{path:path} 静态回退）会吞掉后注册的 GET 路由
+@app.post("/api/admin/custom-courses", include_in_schema=False)
+async def admin_custom_courses(req: AdminCourseListRequest) -> Dict[str, Any]:
+    """V205: 超管审核列表。鉴权沿用前端超管口令门信任模型（同食养堂 pending-list）。"""
+    status = (req.status or "").strip()
+    queue = _ccq_load()
+    items = [v for v in queue.values() if (not status or v.get("status") == status)]
+    items.sort(key=lambda x: x.get("createdAt", 0), reverse=True)
+    return {"ok": True, "courses": items, "total": len(items)}
+
+
+@app.post("/api/admin/custom-course/review", include_in_schema=False)
+async def admin_custom_course_review(req: AdminCourseReviewRequest) -> Dict[str, Any]:
+    """V205: 超管审核操作——approve 发布到该家庭"我的专属课堂"；reject 触发 AI 重新生成。"""
+    queue = _ccq_load()
+    rec = queue.get(req.id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="课程不存在")
+    action = (req.action or "").strip()
+    now_ms = int(time.time() * 1000)
+
+    if action == "approve":
+        rec["status"] = "published"
+        rec["reviewedAt"] = now_ms
+        rec["publishedAt"] = now_ms
+        rec["course"]["status"] = "published"
+        _ccq_save(queue)
+        return {"ok": True, "id": req.id, "status": "published"}
+
+    if action == "reject":
+        rec["rejectCount"] = int(rec.get("rejectCount") or 0) + 1
+        rec["reviewedAt"] = now_ms
+        # 退回 AI 重新生成（force 跳过缓存，避免拿到同一篇）
+        try:
+            regen = await custom_course(CustomCourseRequest(
+                baseCourseId=rec.get("baseCourseId", ""),
+                baseTitle=rec.get("baseTitle", ""),
+                baseContent=rec.get("baseContent", ""),
+                familyMember=CustomCourseMember(**(rec.get("member") or {})),
+                familyId=rec.get("familyId", "default"),
+                familyName=rec.get("familyName", ""),
+                force=True,
+                skipStore=True,
+            ))
+            if regen.get("ok") and regen.get("course") and regen["course"].get("content"):
+                nc = regen["course"]
+                nc["id"] = rec["id"]  # 保留原课程 id，审核列表不重复
+                rec["course"] = nc
+                rec["status"] = "pending_review"
+                rec["regeneratedAt"] = now_ms
+                _ccq_save(queue)
+                return {"ok": True, "id": req.id, "status": "pending_review", "regenerated": True}
+        except Exception as exc:
+            print(f"[custom_course] 驳回重生成失败: {exc}")
+        # 重新生成失败 → 标记 rejected，家庭端可重新发起
+        rec["status"] = "rejected"
+        _ccq_save(queue)
+        return {"ok": True, "id": req.id, "status": "rejected", "regenerated": False}
+
+    raise HTTPException(status_code=400, detail="action 仅支持 approve/reject")
+
+
+class CustomCourseMineRequest(BaseModel):
+    familyId: str = ""
+
+
+# 同样用 POST 避开 catch-all
+@app.post("/api/custom-course/mine", include_in_schema=False)
+async def custom_course_mine(req: CustomCourseMineRequest) -> Dict[str, Any]:
+    """V205: 家庭端拉取已发布的专属课程（"我的专属课堂"数据源）。"""
+    fid = (req.familyId or "").strip()[:32]
+    if not fid:
+        return {"ok": True, "courses": []}
+    queue = _ccq_load()
+    items = []
+    for v in queue.values():
+        if v.get("familyId") == fid and v.get("status") == "published":
+            c = dict(v.get("course") or {})
+            c["status"] = "published"
+            c["publishedAt"] = v.get("publishedAt")
+            items.append(c)
+    items.sort(key=lambda x: x.get("createdAt", 0), reverse=True)
+    return {"ok": True, "courses": items}
 
 
 # ========== V162: 我的创作 · AI 作品配图（通义万相 wanx2.1-t2i-turbo 异步文生图） ==========
