@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V202.5-20261022';
+        var APP_VER = 'V202.6-20261022';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -58895,6 +58895,11 @@ let reviewRecordsCustomStart = '';
 let reviewRecordsCustomEnd = '';
 
 function switchReviewTab(tab) {
+    // V202.6: premium 订阅用户点「本周趋势」→ 健康 KPI 深度归因报告
+    if (tab === 'weekly' && typeof isSubscribed === 'function' && isSubscribed() && _subTier() === 'premium') {
+        _openWeeklyKpiReport();
+        return;
+    }
     reviewActiveTab = tab;
     // 更新所有Tab样式
     const tabs = ['daily','weekly','period','records'];
@@ -59197,6 +59202,295 @@ async function loadDailyReview() {
     lsSet('dailyReviewDone_' + dateToKey(currentDiaryDate), '1');
 
     renderReviewSection();
+}
+
+// ==================== V202.6 健康 KPI 深度归因报告（premium 专享）====================
+var _WEEK_KPI_VEG_RE = /菜|蔬|豆|瓜|茄|笋|菌|菇|萝卜|白菜|西兰花|菠菜|生菜|芹|椒|藕|番茄|西红柿|黄瓜|芥蓝|油菜|空心菜|莴|苦瓜|冬瓜|南瓜|丝瓜|韭菜|蒜苗|香菜|木耳|海带|紫菜|土豆|山药|秋葵|芦笋|荷兰豆|豌豆|毛豆|豆芽/;
+function _isVegDishName(nm) {
+    if (!nm) return false;
+    var s = String(nm);
+    if (/肉|鱼|虾|排骨|鸡翅|牛排|猪|羊|蛋/.test(s) && !/菜|蔬/.test(s)) return false;
+    return _WEEK_KPI_VEG_RE.test(s);
+}
+function _kpiWeekDayLabel(d) {
+    return '周' + ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
+}
+function _kpiJoinDates(dates) {
+    return dates.map(function (d) { return _kpiWeekDayLabel(d); }).join('、');
+}
+// 采集某周（offsetWeeks=0 本周往前6天，-1 上一周）营养与饮食结构数据
+function _weekKpiCollect(offsetWeeks) {
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var start = new Date(today); start.setDate(today.getDate() + offsetWeeks * 7 - 6);
+    var calendar = getDietCalendar();
+    var totals = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
+    var recordedDays = 0, recordedMeals = 0, outMeals = 0;
+    var outDates = [], veglessDates = [], vegCount = 0, dishCount = 0;
+    for (var i = 0; i < 7; i++) {
+        var d = new Date(start); d.setDate(start.getDate() + i);
+        var day = calendar[dateToKey(d)] || {};
+        var dayDishes = [], dayOut = false;
+        ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+            var md = day[mt];
+            if (!md || !md.actual) return;
+            var dishes = Array.isArray(md.actual.dishes) ? md.actual.dishes : [];
+            if (!dishes.length) return;
+            recordedMeals++;
+            var dt = String(md.actual.diningType || '');
+            if (dt === '外出就餐' || dt === '外卖' || dt === '外带+自制') { outMeals++; dayOut = true; }
+            dishes.forEach(function (dish) {
+                var nm = (typeof dish === 'string') ? dish : (dish && dish.name);
+                if (!nm) return;
+                dayDishes.push(nm); dishCount++;
+                if (_isVegDishName(nm)) vegCount++;
+            });
+        });
+        if (dayDishes.length) {
+            recordedDays++;
+            var n = calculateMealNutrition(dayDishes);
+            totals.calories += n.calories; totals.protein += n.protein;
+            totals.carbs += n.carbs; totals.fat += n.fat; totals.fiber += n.fiber;
+            if (dayDishes.filter(_isVegDishName).length === 0) veglessDates.push(d);
+            if (dayOut) outDates.push(d);
+        }
+    }
+    var avg = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
+    if (recordedDays > 0) {
+        Object.keys(avg).forEach(function (k) { avg[k] = totals[k] / recordedDays; });
+    }
+    var t = DAILY_NUTRITION_TARGETS;
+    var pct = {
+        protein: recordedDays ? Math.round(avg.protein / t.protein * 100) : 0,
+        carbs: recordedDays ? Math.round(avg.carbs / t.carbs * 100) : 0,
+        fat: recordedDays ? Math.round(avg.fat / t.fat * 100) : 0,
+        fiber: recordedDays ? Math.round(avg.fiber / t.fiber * 100) : 0
+    };
+    return {
+        start: start,
+        end: new Date(start.getTime() + 6 * 86400000),
+        avg: avg, pct: pct,
+        recordedDays: recordedDays, recordedMeals: recordedMeals, outMeals: outMeals,
+        outDates: outDates, veglessDates: veglessDates,
+        vegCount: vegCount, dishCount: dishCount,
+        vegRatio: dishCount ? Math.round(vegCount / dishCount * 100) : 0
+    };
+}
+function _kpiRadarSvg(items) {
+    var cx = 120, cy = 118, R = 76;
+    var angles = [-90, 0, 90, 180];
+    function pt(angle, ratio) {
+        var rad = angle * Math.PI / 180;
+        return [cx + Math.cos(rad) * R * ratio, cy + Math.sin(rad) * R * ratio];
+    }
+    var grids = [0.25, 0.5, 0.75, 1].map(function (g) {
+        var ps = angles.map(function (a) {
+            var p = pt(a, g);
+            return p[0].toFixed(1) + ',' + p[1].toFixed(1);
+        }).join(' ');
+        return '<polygon points="' + ps + '" fill="none" stroke="#E5E7EB" stroke-width="1"/>';
+    }).join('');
+    var axes = angles.map(function (a) {
+        var p = pt(a, 1);
+        return '<line x1="' + cx + '" y1="' + cy + '" x2="' + p[0].toFixed(1) + '" y2="' + p[1].toFixed(1) + '" stroke="#E5E7EB" stroke-width="1"/>';
+    }).join('');
+    var pts = [], dots = [], labels = [];
+    items.forEach(function (it, i) {
+        var ratio = Math.min(1.2, Math.max(0, it.pct / 100)) / 1.2;
+        var p = pt(angles[i], ratio);
+        pts.push(p[0].toFixed(1) + ',' + p[1].toFixed(1));
+        dots.push('<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="3.5" fill="#F97316"/>');
+        var lp = pt(angles[i], 1.26);
+        var anchor = i === 0 ? 'middle' : (i === 2 ? 'middle' : (i === 1 ? 'start' : 'end'));
+        var dy = i === 0 ? -4 : (i === 2 ? 12 : 4);
+        var color = (it.pct >= 90 && it.pct <= 120) ? '#16A34A' : '#9A3412';
+        labels.push('<text x="' + lp[0].toFixed(1) + '" y="' + (lp[1] + dy).toFixed(1) + '" text-anchor="' + anchor + '" font-size="11" fill="' + color + '" font-weight="600">' + it.label + ' ' + it.pct + '%</text>');
+    });
+    return '<svg viewBox="0 0 240 240" width="100%" style="max-width:250px;display:block;margin:0 auto;">'
+        + grids + axes
+        + '<polygon points="' + pts.join(' ') + '" fill="rgba(249,115,22,0.18)" stroke="#F97316" stroke-width="2"/>'
+        + dots.join('') + labels.join('') + '</svg>';
+}
+// 深度归因：用本周实际记录 + 上周同期数据做对比
+function _weekKpiAttribution(cur, last) {
+    var items = [
+        { key: 'fiber', label: '膳食纤维', pct: cur.pct.fiber },
+        { key: 'protein', label: '蛋白质', pct: cur.pct.protein },
+        { key: 'carbs', label: '碳水', pct: cur.pct.carbs },
+        { key: 'fat', label: '脂肪', pct: cur.pct.fat }
+    ];
+    var lowest = items.slice().sort(function (a, b) { return a.pct - b.pct; })[0];
+    var highest = items.slice().sort(function (a, b) { return b.pct - a.pct; })[0];
+    var headline = '', reason = '', advice = '';
+    if (cur.recordedDays === 0) {
+        return {
+            headline: '本周还没有就餐记录，无法做营养归因。',
+            reason: '记录是归因的前提，没有记录就无法判断缺口来自哪一餐。',
+            advice: '建议从今天开始，每餐吃完顺手记录一道菜。'
+        };
+    }
+    if (lowest.pct < 70) {
+        if (lowest.key === 'fiber') {
+            if (cur.outDates.length > 0) {
+                reason = '' + _kpiJoinDates(cur.outDates) + '把蔬菜换成了外卖/外食';
+                advice = '下周在冰箱常备免洗生菜、小番茄，外食那餐也补一份蔬菜';
+            } else if (cur.veglessDates.length > 0) {
+                reason = '' + _kpiJoinDates(cur.veglessDates) + '的餐单里一道蔬菜都没有';
+                advice = '下周每天固定安排一道绿叶菜，午餐或晚餐都可以';
+            } else {
+                reason = '本周蔬菜类菜品只占 ' + cur.vegRatio + '%，餐盘以肉蛋主食为主';
+                advice = '下周把蔬菜占比提到每餐一半，先加菜再加肉';
+            }
+        } else if (lowest.key === 'protein') {
+            reason = '本周蛋白质日均只有 ' + Math.round(cur.avg.protein) + 'g，早餐普遍缺蛋奶豆';
+            advice = '下周早餐固定加一个鸡蛋或一杯牛奶，午晚餐各留一道肉/鱼/豆腐';
+        } else if (lowest.key === 'carbs') {
+            reason = '本周主食偏少，碳水日均 ' + Math.round(cur.avg.carbs) + 'g，可能有餐次漏吃主食';
+            advice = '下周每餐保证一拳主食，运动日可以再加半碗饭';
+        } else {
+            reason = '本周脂肪日均 ' + Math.round(cur.avg.fat) + 'g，低于需要量，可能是烹饪油太少';
+            advice = '下周适当用一点坚果或植物油，别过度水煮';
+        }
+    } else if (highest.pct > 130) {
+        if (highest.key === 'fat') {
+            reason = '本周脂肪达成率 ' + highest.pct + '%，' + (cur.outMeals ? '外食 ' + cur.outMeals + ' 餐是主要来源' : '油炸和红烧类菜品偏多');
+            advice = '下周六成菜品改用蒸煮炖，外食时少点油炸和浓汁';
+        } else if (highest.key === 'carbs') {
+            reason = '本周碳水达成率 ' + highest.pct + '%，主食和加餐偏多';
+            advice = '下周主食减到一拳，加餐换成水果或无糖酸奶';
+        } else {
+            reason = '本周' + highest.label + '达成率 ' + highest.pct + '%，摄入明显超出需要';
+            advice = '下周按一拳主食、一掌蛋白、两拳蔬菜的比例配餐';
+        }
+    } else {
+        reason = '四项指标都在合理区间，膳食结构比较均衡';
+        advice = '下周保持现有搭配，重点增加菜品多样性';
+    }
+    var head = '本周' + lowest.label + '达标率 ' + lowest.pct + '%。';
+    headline = head + '归因：' + reason + '。建议：' + advice + '。';
+    // 关联历史数据
+    var historyNote = '';
+    if (last && last.recordedDays > 0) {
+        var diff = lowest.pct - last.pct[lowest.key];
+        if (diff <= -3) historyNote = '较上周（' + last.pct[lowest.key] + '%）下降 ' + Math.abs(diff) + ' 个百分点，属于持续走低，需要在下周优先补上。';
+        else if (diff >= 3) historyNote = '较上周（' + last.pct[lowest.key] + '%）提升 ' + diff + ' 个百分点，方向是对的，下周继续保持。';
+        else historyNote = '与上周（' + last.pct[lowest.key] + '%）基本持平，说明这是长期习惯，不是偶发情况。';
+    } else {
+        historyNote = '上周记录不足 1 天，暂无法做周对周对比，本周数据将作为下周的基线。';
+    }
+    return { headline: headline, reason: reason, advice: advice, historyNote: historyNote, lowest: lowest };
+}
+// 一键把下周蔬菜量提高 20%
+function _applyNextWeekVegBoost(btn) {
+    // 游客态不写家庭业务键（与全站规则一致），避免产生"提示成功但未生效"
+    if (typeof getFamilyId === 'function' && !getFamilyId()) {
+        showToast && showToast('请先登录家庭账号，再调整下周计划');
+        return;
+    }
+    var calendar = getDietCalendar();
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var days = 0, dishes = 0, added = 0;
+    for (var i = 1; i <= 7; i++) {
+        var d = new Date(today); d.setDate(today.getDate() + i);
+        var day = calendar[dateToKey(d)];
+        if (!day) continue;
+        ['lunch', 'dinner'].forEach(function (mt) {
+            var plan = day[mt] && day[mt].plan;
+            if (!plan || !Array.isArray(plan.dishes) || !plan.dishes.length) return;
+            plan.dishMeta = plan.dishMeta || {};
+            var vegs = plan.dishes.filter(function (x) {
+                return _isVegDishName(typeof x === 'string' ? x : (x && x.name));
+            });
+            if (vegs.length) {
+                vegs.forEach(function (x) {
+                    var nm = typeof x === 'string' ? x : (x && x.name);
+                    if (!nm) return;
+                    plan.dishMeta[nm] = Object.assign({}, plan.dishMeta[nm] || {}, { portionFactor: 1.2, vegBoostAt: Date.now() });
+                    dishes++;
+                });
+            } else {
+                plan.dishes.push('时令蔬菜');
+                plan.dishMeta['时令蔬菜'] = { portionFactor: 1.2, vegBoostAt: Date.now() };
+                added++;
+            }
+            plan.vegBoost = 1.2;
+            days++;
+        });
+    }
+    if (days === 0) {
+        showToast && showToast('下周还没有食谱计划，先排好计划再加量');
+        return;
+    }
+    saveDietCalendar(calendar);
+    try {
+        localStorage.setItem('kpiVegBoostWeek', JSON.stringify({ at: Date.now(), days: days, dishes: dishes, added: added }));
+    } catch (e) {}
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '✅ 已加入下周纠偏（' + days + ' 餐蔬菜 +20%）';
+        btn.style.background = '#DCFCE7';
+        btn.style.color = '#166534';
+        btn.style.borderColor = '#BBF7D0';
+        btn.style.cursor = 'default';
+    }
+    showToast && showToast('已为下周 ' + days + ' 餐蔬菜加量 20%' + (added ? '，并补了 ' + added + ' 道时令蔬菜' : ''));
+}
+function _openWeeklyKpiReport() {
+    var cur = _weekKpiCollect(0);
+    var last = _weekKpiCollect(-1);
+    var attr = _weekKpiAttribution(cur, last);
+    var items = [
+        { label: '蛋白质', pct: cur.pct.protein },
+        { label: '碳水', pct: cur.pct.carbs },
+        { label: '脂肪', pct: cur.pct.fat },
+        { label: '膳食纤维', pct: cur.pct.fiber }
+    ];
+    var chips = items.map(function (it) {
+        var good = it.pct >= 90 && it.pct <= 120;
+        return '<div style="flex:1 1 45%;background:' + (good ? '#F0FDF4' : '#FFF7ED') + ';border:1px solid ' + (good ? '#BBF7D0' : '#FED7AA') + ';border-radius:10px;padding:8px 10px;">'
+            + '<div style="font-size:12px;color:#6B7280;">' + it.label + '</div>'
+            + '<div style="font-size:16px;font-weight:700;color:' + (good ? '#16A34A' : '#C2410C') + ';">' + it.pct + '%</div>'
+            + '</div>';
+    }).join('');
+    var rangeText = (cur.start.getMonth() + 1) + '月' + cur.start.getDate() + '日 - ' + (cur.end.getMonth() + 1) + '月' + cur.end.getDate() + '日';
+    var btnState = '';
+    try {
+        var prev = JSON.parse(localStorage.getItem('kpiVegBoostWeek') || 'null');
+        if (prev && prev.at && (Date.now() - prev.at) < 7 * 86400000) {
+            btnState = '<div style="font-size:12px;color:#166534;background:#DCFCE7;border-radius:8px;padding:8px 10px;">✅ 本周已执行过纠偏：' + prev.days + ' 餐蔬菜已加量 20%</div>';
+        }
+    } catch (e) {}
+    var old = document.getElementById('weeklyKpiOverlay');
+    if (old) old.remove();
+    var overlay = document.createElement('div');
+    overlay.id = 'weeklyKpiOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(17,24,39,0.5);z-index:99999;display:flex;align-items:flex-end;justify-content:center;';
+    overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
+    overlay.innerHTML = '<div style="background:#fff;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:18px 16px 24px;box-sizing:border-box;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">'
+        + '<div style="font-size:17px;font-weight:700;color:#1F2937;">📈 健康 KPI 深度归因</div>'
+        + '<button onclick="document.getElementById(\'weeklyKpiOverlay\').remove()" style="border:none;background:#F3F4F6;color:#6B7280;width:28px;height:28px;border-radius:50%;font-size:15px;cursor:pointer;">✕</button>'
+        + '</div>'
+        + '<div style="font-size:12px;color:#9CA3AF;margin-bottom:12px;">' + rangeText + ' · 记录 ' + cur.recordedDays + ' 天 / ' + cur.recordedMeals + ' 餐</div>'
+        + (cur.recordedDays === 0
+            ? '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:12px;padding:16px;font-size:14px;color:#92400E;line-height:1.6;">本周还没有就餐记录。先在食记里记录几餐，再回来看归因报告。</div>'
+            : '<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:12px;padding:12px;margin-bottom:12px;">'
+                + '<div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:6px;">🍽 膳食结构雷达</div>'
+                + _kpiRadarSvg(items)
+                + '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">' + chips + '</div>'
+                + '<div style="font-size:11px;color:#9CA3AF;margin-top:8px;text-align:center;">达成率 = 本周日均摄入 ÷ 成人推荐量</div>'
+                + '</div>'
+                + '<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:14px;margin-bottom:12px;">'
+                + '<div style="font-size:13px;font-weight:700;color:#9A3412;margin-bottom:6px;">🔍 深度归因</div>'
+                + '<div style="font-size:14px;color:#7C2D12;line-height:1.7;">' + escapeHtml(attr.headline) + '</div>'
+                + '<div style="font-size:12px;color:#9A3412;line-height:1.6;margin-top:8px;padding-top:8px;border-top:1px dashed #FED7AA;">📎 依据：本周外食 ' + cur.outMeals + ' 餐、蔬菜菜品 ' + cur.vegCount + ' 道（占比 ' + cur.vegRatio + '%）。' + escapeHtml(attr.historyNote || '') + '</div>'
+                + '</div>'
+                + '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px;">'
+                + '<div style="font-size:13px;font-weight:700;color:#1E40AF;margin-bottom:6px;">🎯 下周纠偏计划</div>'
+                + '<div style="font-size:13px;color:#1E40AF;line-height:1.6;margin-bottom:10px;">' + escapeHtml(attr.advice) + ' 一键把下周计划的蔬菜量提高 20%，明天起生效。</div>'
+                + (btnState || '<button type="button" onclick="_applyNextWeekVegBoost(this)" style="width:100%;padding:11px;border:1px solid #BFDBFE;border-radius:10px;background:#DBEAFE;color:#1D4ED8;font-size:14px;font-weight:700;cursor:pointer;">🥬 一键将下周蔬菜量增加 20%</button>')
+                + '</div>')
+        + '</div>';
+    document.body.appendChild(overlay);
 }
 
 // ==================== 本周趋势数据加载 ====================
@@ -61049,6 +61343,11 @@ function estimateNutrition(dishNames) {
     };
 }
 function showDiaryWeekTrend() {
+    // V202.6: premium 订阅用户直接打开健康 KPI 深度归因报告
+    if (typeof isSubscribed === 'function' && isSubscribed() && _subTier() === 'premium') {
+        _openWeeklyKpiReport();
+        return;
+    }
     showToast('📊 本周趋势功能开发中');
 }
 function openDiaryQuickAdd() {
