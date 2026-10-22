@@ -2896,26 +2896,52 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
         art = _fh_row_to_article(row)
         return art  # 不写缓存：下次请求仍会重试专属生成
 
-    try:
-        content = await call_qwen(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "\n".join(user_lines)},
-            ],
-            json_mode=True,
-            max_tokens=1200,
-            task_type="daily_tip",
-        )
-    except Exception as e:  # AI 不可用不阻塞：返回降级提示
-        print(f"[daily-tip] call_qwen error: {e}")
-        return _published_fallback() or {"error": "每日一课生成失败，请稍后重试"}
+    # V199.4: 订阅内容质量校验——模型偶发漏要求或输出截断，校验不达标自动重试一次
+    def _sub_content_ok(t: Dict[str, Any]) -> bool:
+        c = str(t.get("content") or "")
+        if len(c) < 80:
+            return False
+        tips_ = t.get("tips") or []
+        if sub_plan == "education":
+            return bool(tips_) and str(tips_[0]).startswith("给孩子的饮食小贴士")
+        if sub_plan == "special_care":
+            return "⚠️" in c
+        if sub_plan == "premium":
+            return any(k in c for k in ("千卡", "大卡", "kcal"))
+        return True
 
-    parsed = extract_json_object(content)
-    if not isinstance(parsed, dict) or not parsed.get("title"):
-        return _published_fallback() or {"error": "每日一课生成失败，请稍后重试"}
+    tip = None
+    for attempt in range(2 if sub_plan else 1):
+        try:
+            content = await call_qwen(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": "\n".join(user_lines)},
+                ],
+                json_mode=True,
+                max_tokens=1200,
+                task_type="daily_tip",
+            )
+        except Exception as e:  # AI 不可用不阻塞：返回降级提示
+            print(f"[daily-tip] call_qwen error (attempt {attempt + 1}): {e}")
+            continue
+        try:
+            parsed = extract_json_object(content)
+        except Exception as e:
+            print(f"[daily-tip] json parse error (attempt {attempt + 1}): {e}")
+            continue
+        if not isinstance(parsed, dict) or not parsed.get("title"):
+            continue
+        cand = _clean_daily_tip(parsed)
+        if not cand["title"] or not cand["content"]:
+            continue
+        if not sub_plan or _sub_content_ok(cand):
+            tip = cand
+            break
+        print(f"[daily-tip] 订阅内容未达标，重试（plan={sub_plan}, len={len(cand['content'])}）")
+        tip = cand  # 保留最后一次结果，重试仍不达标时兜底展示
 
-    tip = _clean_daily_tip(parsed)
-    if not tip["title"] or not tip["content"]:
+    if tip is None:
         return _published_fallback() or {"error": "每日一课生成失败，请稍后重试"}
 
     result = {"id": f"tip_{date_str.replace('-', '')}", "date": date_str, **tip}
