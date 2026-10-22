@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V198-20261022';
+        var APP_VER = 'V199-20261022';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -5689,11 +5689,16 @@ async function aiChatMultiProvider(systemContent, userPrompt, opts) {
     var maxTokens = opts.maxTokens || 2000;
     var temperature = (opts.temperature !== undefined) ? opts.temperature : 0.7;
     var taskType = (opts.taskType && /^[a-z_]{1,24}$/.test(opts.taskType)) ? opts.taskType : 'plan';
+    // V199: 订阅用户的 plan 类请求，把 subscriptionPlan 带给后端追加专属 Prompt
+    var subPlan = null;
+    try { var s = _getSubscriptionStatus(); if (s && isSubscribed() && s.planType) subPlan = s.planType; } catch (e) {}
     try {
+        var postBody = { system_prompt: systemContent, user_prompt: userPrompt, max_tokens: maxTokens, task_type: taskType };
+        if (subPlan && taskType.indexOf('plan') >= 0) postBody.subscriptionPlan = subPlan;
         var proxyRes = await fetch(API_BASE + '/plan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ system_prompt: systemContent, user_prompt: userPrompt, max_tokens: maxTokens, task_type: taskType })
+            body: JSON.stringify(postBody)
         });
         if (proxyRes.ok) {
             var proxyData = await proxyRes.json();
@@ -27707,8 +27712,12 @@ function _dtRenderCard(tip) {
     } else {
         subBtnHtml = '<button class="dt-btn" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;" onclick="event.stopPropagation(); _openSubscribeModal()">订阅</button>';
     }
+    // V199: 订阅专享徽标——后端返回 tip.subscriptionExclusive=true 时渲染在标题旁
+    var exclusiveBadge = (tip && tip.subscriptionExclusive)
+        ? '<span style="font-size:10px;color:white;background:linear-gradient(90deg,#F97316,#B45309);border-radius:6px;padding:1px 6px;margin-left:6px;align-self:center;font-weight:600;">订阅专享内容</span>'
+        : '';
     // V197: 移除「收藏」按钮，替换为「订阅」入口；标题+摘要整块可点开详情
-    el.innerHTML = '<div class="dt-head"><span>📚 食养堂 · 今日一课</span>'
+    el.innerHTML = '<div class="dt-head"><span>📚 食养堂 · 今日一课' + exclusiveBadge + '</span>'
         + '<span class="dt-head-btns" onclick="event.stopPropagation()">'
         + adminCtl
         + '<button id="dtCardSpeakBtn" onclick="event.stopPropagation(); _dtSpeakTip(\'card\')" style="border:none;background:none;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;color:#6B7280;" title="语音播报">🔊</button>'
@@ -27752,6 +27761,11 @@ async function _fetchDailyTip(variant) {
         familyBrief: _dtFamilyBrief(),
         solarTerm: String(window.__currentSolarTerm || '')
     };
+    // V199: 订阅用户传 subscriptionPlan 到后端，后端追加专属 Prompt 指令
+    try {
+        var st = _getSubscriptionStatus();
+        if (st && isSubscribed() && st.planType) body.subscriptionPlan = st.planType;
+    } catch (e) {}
     var wx = _dtCollectWeather();
     if (wx) body.weather = wx;
     if (variant) body.variant = variant;

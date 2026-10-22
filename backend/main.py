@@ -91,6 +91,7 @@ class PlanRequest(BaseModel):
     # V140: json_mode 显式开关（缺省关）。/plan 是多任务统一代理入口（周计划/聊天回复/食材估算等均经此路由），
     # V139 曾无条件强制 JSON 导致聊天回复也输出原始 JSON（用户不可读）——现仅周计划等明确要 JSON 的调用方传 true
     json_mode: bool = False
+    subscriptionPlan: Optional[str] = None  # V199: 订阅套餐（education/special_care/premium），后端追加专属 Prompt 指令
 
 
 class RecommendRestaurantsRequest(BaseModel):
@@ -648,6 +649,10 @@ async def plan(req: PlanRequest) -> Dict[str, str]:
         foodhall_ctx = _foodhall_plan_context()
         if foodhall_ctx:
             system_content += foodhall_ctx + "\n\n"
+        # V199: 订阅用户的食谱计划——追加专属 Prompt 指令（必须是 plan 类任务，聊天回复不污染）
+        sub_plan = (req.subscriptionPlan or "").strip()
+        if sub_plan and sub_plan in _SUBSCRIPTION_PROMPT_SEGMENTS:
+            system_content += _SUBSCRIPTION_PROMPT_SEGMENTS[sub_plan] + "\n\n"
     system_content += req.system_prompt
     content = await call_qwen(
         [
@@ -2783,6 +2788,30 @@ class DailyTipRequest(BaseModel):
     solarTerm: str = ""
     weather: Optional[Dict[str, Any]] = None
     variant: int = 0  # V139: "换一条"用，0=默认（缓存键兼容原规格 daily_tip_${familyId}_${date}）
+    subscriptionPlan: Optional[str] = None  # V199: 订阅套餐（education/special_care/premium），后端追加专属 Prompt
+
+
+# V199: 订阅专属 Prompt 段——按套餐类型追加不同的侧重指令
+_SUBSCRIPTION_PROMPT_SEGMENTS = {
+    "education": (
+        "【订阅专享：饮食教育包】\n"
+        "- 内容必须偏向少儿食育、食材科普、营养小知识，用生动有趣的语气，适合 6-12 岁孩子听读\n"
+        "- 每条小贴士必须包含一条「给孩子的饮食小贴士」，20字以内，口语化\n"
+        "- 食材选择优先孩子常见的（鸡蛋/牛奶/胡萝卜/菠菜/燕麦/鱼虾等），避免过于生僻\n"
+    ),
+    "special_care": (
+        "【订阅专享：特殊关怀包】\n"
+        "- 内容必须偏向慢病注意事项、低钠低糖实操、食材禁忌提醒，用严谨但不生硬的语气\n"
+        "- 必须显式列出 2-3 种该节气/天气下慢病患者应规避或谨慎食用的食材\n"
+        "- 正文中出现任何慢病风险食材时，必须标注「⚠️ 慢病慎食」\n"
+    ),
+    "premium": (
+        "【订阅专享：高阶品质包】\n"
+        "- 内容必须偏向卡路里计算、宏量营养素（碳水/蛋白/脂肪）配比、健身餐搭配\n"
+        "- 正文中出现任何菜品或食材时，必须标注大致的每 100g 热量范围\n"
+        "- 如有相关数据，可给出一份「推荐摄入时段」（训练前 1h / 训练后 30min / 睡前 3h 等）\n"
+    ),
+}
 
 
 @app.post("/api/daily-tip")
@@ -2793,7 +2822,10 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
         return {"error": "日期格式应为 YYYY-MM-DD"}
 
-    cache_key = f"{family_id}|{date_str}|{max(0, int(req.variant))}"
+    sub_plan = (req.subscriptionPlan or "").strip()
+    # V199: 订阅类型必须进缓存键——否则用户先未订阅访问（缓存一条非订阅 tip），
+    # 再订阅会命中旧缓存、拿不到 subscriptionExclusive=true 的内容
+    cache_key = f"{family_id}|{date_str}|{max(0, int(req.variant))}|{sub_plan}"
     hit = _DAILY_TIP_CACHE.get(cache_key)
     now_ts = time.time()
     if hit:
@@ -2821,6 +2853,10 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
         if parts:
             weather_line = " ".join(parts)
 
+    # 订阅专属 Prompt 段（V199，复用上面已声明的 sub_plan 避免重复 strip）
+    exclusive_seg = _SUBSCRIPTION_PROMPT_SEGMENTS.get(sub_plan, "") if sub_plan else ""
+    system_prompt = _DAILY_TIP_SYSTEM + ("\n\n" + exclusive_seg if exclusive_seg else "")
+
     user_lines = [
         f"【日期】{date_str}",
         f"【节气】{req.solarTerm.strip() or '不在节气当天'}",
@@ -2833,7 +2869,7 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
     try:
         content = await call_qwen(
             [
-                {"role": "system", "content": _DAILY_TIP_SYSTEM},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": "\n".join(user_lines)},
             ],
             json_mode=True,
@@ -2853,6 +2889,10 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
         return {"error": "每日一课生成失败，请稍后重试"}
 
     result = {"id": f"tip_{date_str.replace('-', '')}", "date": date_str, **tip}
+    # V199: 订阅用户的 tip 带 subscriptionExclusive=true，前端据此渲染「订阅专享内容」徽标
+    if sub_plan:
+        result["subscriptionExclusive"] = True
+        result["subscriptionPlan"] = sub_plan
     _DAILY_TIP_CACHE[cache_key] = {"expire": _daily_tip_expire_ts(date_str), "data": result}
     # 防膨胀：最多缓存 120 个 家庭|日期 条目，超出淘汰最先过期者
     if len(_DAILY_TIP_CACHE) > 120:

@@ -1,0 +1,1437 @@
+window.familyData = {
+ "BHDVWN36": {
+  "name": "三仁佳欢",
+  "days": {
+   "2026-10-19": {
+    "breakfast": {
+     "plan_dishes": [
+      "煮玉米",
+      "水煮蛋",
+      "梨"
+     ],
+     "actual_dishes": [
+      "煮玉米",
+      "水煮蛋",
+      "梨"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "红豆饭",
+      "牛肉炒青椒",
+      "清炒蒜苗",
+      "冬瓜虾仁汤"
+     ],
+     "actual_dishes": [
+      "红豆饭",
+      "牛肉炒青椒",
+      "清炒蒜苗",
+      "冬瓜虾仁汤"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "小米粥",
+      "香煎豆腐",
+      "蒜蓉菠菜",
+      "白萝卜排骨汤"
+     ],
+     "actual_dishes": [
+      "小米粥",
+      "香煎豆腐",
+      "蒜蓉菠菜",
+      "白萝卜排骨汤"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    }
+   },
+   "2026-10-20": {
+    "breakfast": {
+     "plan_dishes": [
+      "杂粮煎饼",
+      "豆浆",
+      "香蕉"
+     ],
+     "actual_dishes": [
+      "杂粮煎饼",
+      "豆浆",
+      "香蕉"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "菠菜豆腐汤"
+     ],
+     "actual_dishes": [
+      "清蒸武昌鱼",
+      "沔阳三蒸",
+      "排骨藕汤",
+      "清炒时蔬"
+     ],
+     "actual_type": "外食",
+     "rating": null,
+     "restaurant": "湖锦酒楼武昌店",
+     "people": 3,
+     "total": 580,
+     "perPerson": 193.3,
+     "actual_rating": null
+    },
+    "dinner": {
+     "plan_dishes": [
+      "南瓜粥",
+      "红烧排骨",
+      "蒜蓉油麦菜",
+      "白萝卜丝鲫鱼汤",
+      "番茄豆腐汤",
+      "菠菜炒鸡蛋"
+     ],
+     "actual_dishes": [
+      "南瓜粥",
+      "红烧排骨",
+      "蒜蓉油麦菜",
+      "白萝卜丝鲫鱼汤",
+      "番茄豆腐汤",
+      "菠菜炒鸡蛋"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    }
+   },
+   "2026-10-21": {
+    "breakfast": {
+     "plan_dishes": [
+      "燕麦粥",
+      "柚子"
+     ],
+     "actual_dishes": [
+      "燕麦粥",
+      "柚子"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "紫薯饭",
+      "牛肉炒西兰花",
+      "清炒茼蒿",
+      "番茄豆腐汤"
+     ],
+     "actual_dishes": [
+      "紫薯饭",
+      "牛肉炒西兰花",
+      "清炒茼蒿",
+      "番茄豆腐汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "小米南瓜粥",
+      "香煎鸡腿",
+      "清炒空心菜",
+      "山药玉米汤"
+     ],
+     "actual_dishes": [
+      "小米南瓜粥",
+      "香煎鸡腿",
+      "清炒空心菜",
+      "山药玉米汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-22": {
+    "breakfast": {
+     "plan_dishes": [
+      "红豆粥",
+      "蒸蛋羹",
+      "苹果"
+     ],
+     "actual_dishes": [
+      "红豆粥",
+      "蒸蛋羹",
+      "苹果"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "糙米饭",
+      "鸡丁炒菜",
+      "清炒冬瓜",
+      "菌菇鸡汤"
+     ],
+     "actual_dishes": [
+      "糙米饭",
+      "鸡丁炒菜",
+      "清炒冬瓜",
+      "菌菇鸡汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "杂粮粥",
+      "牛肉炒洋葱",
+      "蒜蓉生菜",
+      "萝卜丝骨头汤"
+     ],
+     "actual_dishes": [
+      "杂粮粥",
+      "牛肉炒洋葱",
+      "蒜蓉生菜",
+      "萝卜丝骨头汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-23": {
+    "breakfast": {
+     "plan_dishes": [
+      "红薯粥"
+     ],
+     "actual_dishes": [
+      "红薯粥"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "黑米饭",
+      "猪肉炒豆角",
+      "清炒芥蓝",
+      "番茄金针菇汤"
+     ],
+     "actual_dishes": [
+      "黑米饭",
+      "猪肉炒豆角",
+      "清炒芥蓝",
+      "番茄金针菇汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "红烧鸭肉",
+      "蒜蓉菜心",
+      "山药乌鸡汤"
+     ],
+     "actual_dishes": [
+      "红烧鸭肉",
+      "蒜蓉菜心",
+      "山药乌鸡汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-24": {
+    "breakfast": {
+     "plan_dishes": [
+      "山药小米粥",
+      "鲜肉小馄饨",
+      "蒸南瓜饼配水煮蛋"
+     ],
+     "actual_dishes": [
+      "山药小米粥",
+      "鲜肉小馄饨",
+      "蒸南瓜饼配水煮蛋"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "清炒时蔬白菜",
+      "土豆炖牛肉",
+      "西红柿炒鸡蛋",
+      "胡萝卜排骨汤"
+     ],
+     "actual_dishes": [
+      "清炒时蔬白菜",
+      "土豆炖牛肉",
+      "西红柿炒鸡蛋",
+      "胡萝卜排骨汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "蒜蓉炒菠菜",
+      "红烧豆腐",
+      "清炒藕片",
+      "紫菜虾皮汤"
+     ],
+     "actual_dishes": [
+      "蒜蓉炒菠菜",
+      "红烧豆腐",
+      "清炒藕片",
+      "紫菜虾皮汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-25": {
+    "breakfast": {
+     "plan_dishes": [
+      "板栗红枣粥",
+      "鸡蛋灌饼",
+      "蒸红薯配牛奶"
+     ],
+     "actual_dishes": [
+      "板栗红枣粥",
+      "鸡蛋灌饼",
+      "蒸红薯配牛奶"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "山药炒肉片",
+      "清蒸鲈鱼",
+      "蒜蓉炒小白菜",
+      "玉米排骨汤"
+     ],
+     "actual_dishes": [
+      "山药炒肉片",
+      "清蒸鲈鱼",
+      "蒜蓉炒小白菜",
+      "玉米排骨汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "青椒炒牛肉",
+      "白萝卜烧豆腐",
+      "藕带炒木耳",
+      "菌菇鸡汤"
+     ],
+     "actual_dishes": [
+      "青椒炒牛肉",
+      "白萝卜烧豆腐",
+      "藕带炒木耳",
+      "菌菇鸡汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   }
+  }
+ },
+ "NJQSFVA5": {
+  "name": "非英中义",
+  "days": {
+   "2026-10-19": {
+    "breakfast": {
+     "plan_dishes": [
+      "南瓜板栗粥",
+      "芝麻糊",
+      "胡萝卜丝蛋饼"
+     ],
+     "actual_dishes": [
+      "南瓜板栗粥",
+      "芝麻糊",
+      "胡萝卜丝蛋饼"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "山药排骨汤",
+      "意式蔬菜汤",
+      "菠菜猪肝面",
+      "板栗烧鸡"
+     ],
+     "actual_dishes": [
+      "山药排骨汤",
+      "意式蔬菜汤",
+      "菠菜猪肝面",
+      "板栗烧鸡"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "番茄肉酱意面",
+      "清蒸鲈鱼",
+      "白萝卜炖牛腩",
+      "山药鸡汤"
+     ],
+     "actual_dishes": [
+      "番茄肉酱意面",
+      "清蒸鲈鱼",
+      "白萝卜炖牛腩",
+      "山药鸡汤"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    }
+   },
+   "2026-10-20": {
+    "breakfast": {
+     "plan_dishes": [
+      "菠菜猪肝面",
+      "南瓜小米糊",
+      "蒸蛋羹"
+     ],
+     "actual_dishes": [
+      "菠菜猪肝面",
+      "南瓜小米糊",
+      "蒸蛋羹"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "意式蔬菜汤",
+      "莲藕炒木耳",
+      "白萝卜炖牛腩",
+      "香煎三文鱼"
+     ],
+     "actual_dishes": [
+      "意式蔬菜汤",
+      "莲藕炒木耳",
+      "白萝卜炖牛腩",
+      "香煎三文鱼"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [],
+     "actual_dishes": [
+      "奶油蘑菇意面",
+      "玛格丽特披萨",
+      "意式蔬菜汤"
+     ],
+     "actual_type": "外食",
+     "rating": 0,
+     "restaurant": "外滩意式餐厅",
+     "people": 1,
+     "total": 460,
+     "perPerson": 460,
+     "actual_rating": 0
+    }
+   },
+   "2026-10-21": {
+    "breakfast": {
+     "plan_dishes": [
+      "南瓜板栗粥",
+      "胡萝卜丝蛋饼",
+      "黑芝麻糊"
+     ],
+     "actual_dishes": [
+      "南瓜板栗粥",
+      "胡萝卜丝蛋饼",
+      "黑芝麻糊"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "番茄肉酱意面",
+      "菠菜蛋羹",
+      "山药鸡汤",
+      "板栗烧鸡"
+     ],
+     "actual_dishes": [
+      "番茄肉酱意面",
+      "菠菜蛋羹",
+      "山药鸡汤",
+      "板栗烧鸡"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "意式蔬菜汤",
+      "白萝卜炖牛腩",
+      "香煎三文鱼",
+      "莲藕炒木耳"
+     ],
+     "actual_dishes": [
+      "意式蔬菜汤",
+      "白萝卜炖牛腩",
+      "香煎三文鱼",
+      "莲藕炒木耳"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-22": {
+    "breakfast": {
+     "plan_dishes": [
+      "菠菜猪肝面",
+      "南瓜山药糊",
+      "蒸蛋羹"
+     ],
+     "actual_dishes": [
+      "菠菜猪肝面",
+      "南瓜山药糊",
+      "蒸蛋羹"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "山药排骨汤",
+      "奶油蘑菇意面",
+      "板栗烧鸡",
+      "番茄浓汤"
+     ],
+     "actual_dishes": [
+      "山药排骨汤",
+      "奶油蘑菇意面",
+      "板栗烧鸡",
+      "番茄浓汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "白萝卜炖牛腩",
+      "香煎三文鱼",
+      "菠菜蛋花汤",
+      "山药鸡汤"
+     ],
+     "actual_dishes": [
+      "白萝卜炖牛腩",
+      "香煎三文鱼",
+      "菠菜蛋花汤",
+      "山药鸡汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-23": {
+    "breakfast": {
+     "plan_dishes": [
+      "小米南瓜粥",
+      "水煮蛋",
+      "鲜肉小笼包"
+     ],
+     "actual_dishes": [
+      "小米南瓜粥",
+      "水煮蛋",
+      "鲜肉小笼包"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "白萝卜牛腩",
+      "清炒菠菜",
+      "番茄炒蛋",
+      "蒜蓉上海青",
+      "意式蔬菜汤"
+     ],
+     "actual_dishes": [
+      "白萝卜牛腩",
+      "清炒菠菜",
+      "番茄炒蛋",
+      "蒜蓉上海青",
+      "意式蔬菜汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "山药排骨汤",
+      "醋溜白菜",
+      "西兰花炒木耳",
+      "清蒸鲈鱼",
+      "香煎三文鱼"
+     ],
+     "actual_dishes": [
+      "山药排骨汤",
+      "醋溜白菜",
+      "西兰花炒木耳",
+      "清蒸鲈鱼",
+      "香煎三文鱼"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-24": {
+    "breakfast": {
+     "plan_dishes": [
+      "红枣银耳羹",
+      "葱油饼",
+      "蒸蛋羹"
+     ],
+     "actual_dishes": [
+      "红枣银耳羹",
+      "葱油饼",
+      "蒸蛋羹"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "板栗烧鸡",
+      "清炒藕片",
+      "番茄肉酱意面",
+      "蒜蓉西兰花"
+     ],
+     "actual_dishes": [
+      "板栗烧鸡",
+      "清炒藕片",
+      "番茄肉酱意面",
+      "蒜蓉西兰花"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "白萝卜炖豆腐",
+      "清炒山药片",
+      "香煎鸡腿肉",
+      "紫菜虾皮汤"
+     ],
+     "actual_dishes": [
+      "白萝卜炖豆腐",
+      "清炒山药片",
+      "香煎鸡腿肉",
+      "紫菜虾皮汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-25": {
+    "breakfast": {
+     "plan_dishes": [
+      "山药小米粥",
+      "茶叶蛋",
+      "鲜肉月饼"
+     ],
+     "actual_dishes": [
+      "山药小米粥",
+      "茶叶蛋",
+      "鲜肉月饼"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "菠菜猪肝汤",
+      "蒜蓉空心菜",
+      "玛格丽特披萨",
+      "清炒荷兰豆"
+     ],
+     "actual_dishes": [
+      "菠菜猪肝汤",
+      "蒜蓉空心菜",
+      "玛格丽特披萨",
+      "清炒荷兰豆"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "山药蒸排骨",
+      "番茄蛋花汤",
+      "香煎鳕鱼",
+      "蒜蓉生菜"
+     ],
+     "actual_dishes": [
+      "山药蒸排骨",
+      "番茄蛋花汤",
+      "香煎鳕鱼",
+      "蒜蓉生菜"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   }
+  }
+ },
+ "KWL47P39": {
+  "name": "铁岭之家",
+  "days": {
+   "2026-10-19": {
+    "breakfast": {
+     "plan_dishes": [
+      "山药红枣蒸蛋",
+      "鲜肉小笼包",
+      "南瓜小米粥",
+      "葱油花卷"
+     ],
+     "actual_dishes": [
+      "山药红枣蒸蛋",
+      "鲜肉小笼包",
+      "南瓜小米粥",
+      "葱油花卷"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "山药排骨汤",
+      "时蔬炒肉片",
+      "蒜蓉炒菠菜",
+      "白米饭"
+     ],
+     "actual_dishes": [
+      "山药排骨汤",
+      "时蔬炒肉片",
+      "蒜蓉炒菠菜",
+      "白米饭"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "板栗烧鸡",
+      "白萝卜丝汤",
+      "香煎豆腐",
+      "白米饭"
+     ],
+     "actual_dishes": [
+      "板栗烧鸡",
+      "白萝卜丝汤",
+      "香煎豆腐",
+      "白米饭"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    }
+   },
+   "2026-10-20": {
+    "breakfast": {
+     "plan_dishes": [
+      "红薯玉米粥",
+      "肉松包子",
+      "虾仁蒸蛋",
+      "煎饺"
+     ],
+     "actual_dishes": [
+      "红薯玉米粥",
+      "肉松包子",
+      "虾仁蒸蛋",
+      "煎饺"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "莲藕炖猪骨汤",
+      "青椒肉丝",
+      "蒜蓉炒时蔬",
+      "白米饭"
+     ],
+     "actual_dishes": [
+      "猪肉炖粉条",
+      "大碴粥",
+      "锅包肉"
+     ],
+     "actual_type": "分餐",
+     "rating": 4,
+     "locationSummary": "铁岭@单位、大妹子@学校、大胖@车上、外公@家、外婆@家、小妞@家",
+     "splitMembers": [
+      {
+       "name": "铁岭",
+       "loc": "单位",
+       "dishes": [
+        "猪肉炖粉条"
+       ],
+       "rating": 4,
+       "comment": "食堂没这个味儿"
+      },
+      {
+       "name": "大妹子",
+       "loc": "学校",
+       "dishes": [
+        "大碴粥"
+       ],
+       "rating": 3,
+       "comment": "赶时间，简单吃"
+      },
+      {
+       "name": "大胖",
+       "loc": "车上",
+       "dishes": [
+        "锅包肉"
+       ],
+       "rating": 5,
+       "comment": "孩子说比学校的好吃"
+      },
+      {
+       "name": "外公",
+       "loc": "家",
+       "dishes": [
+        "猪肉炖粉条"
+       ],
+       "rating": 0,
+       "comment": ""
+      },
+      {
+       "name": "外婆",
+       "loc": "家",
+       "dishes": [
+        "猪肉炖粉条",
+        "大碴粥"
+       ],
+       "rating": 4,
+       "comment": "干活回来就爱吃口热乎炖菜"
+      },
+      {
+       "name": "小妞",
+       "loc": "家",
+       "dishes": [
+        "大碴粥"
+       ],
+       "rating": 0,
+       "comment": ""
+      }
+     ]
+    },
+    "dinner": {
+     "plan_dishes": [
+      "酸菜白肉",
+      "地三鲜"
+     ],
+     "actual_dishes": [
+      "排骨炖土豆玉米",
+      "笨鸡炖蘑菇",
+      "贴饼子",
+      "凉拌东北大拉皮",
+      "酸菜粉"
+     ],
+     "actual_type": "外食",
+     "rating": 0,
+     "restaurant": "大铁锅炖",
+     "people": 6,
+     "total": 388,
+     "perPerson": 64.67,
+     "actual_rating": 0
+    }
+   },
+   "2026-10-21": {
+    "breakfast": {
+     "plan_dishes": [
+      "菠菜鸡蛋饼",
+      "紫薯粥",
+      "卤蛋",
+      "葱油花卷"
+     ],
+     "actual_dishes": [
+      "菠菜鸡蛋饼",
+      "紫薯粥",
+      "卤蛋",
+      "葱油花卷"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "山药炖牛肉",
+      "番茄炒蛋",
+      "清炒小白菜",
+      "白米饭"
+     ],
+     "actual_dishes": [
+      "山药炖牛肉",
+      "番茄炒蛋",
+      "清炒小白菜",
+      "白米饭"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "板栗南瓜粥",
+      "香煎豆腐",
+      "蒜蓉炒菠菜",
+      "白米饭"
+     ],
+     "actual_dishes": [
+      "板栗南瓜粥",
+      "香煎豆腐",
+      "蒜蓉炒菠菜",
+      "白米饭"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-22": {
+    "breakfast": {
+     "plan_dishes": [
+      "南瓜浓汤",
+      "煮鸡蛋",
+      "鲜肉包子",
+      "发糕"
+     ],
+     "actual_dishes": [
+      "南瓜浓汤",
+      "煮鸡蛋",
+      "鲜肉包子",
+      "发糕"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "胡萝卜玉米排骨汤",
+      "红烧带鱼",
+      "蒜蓉炒菠菜",
+      "白米饭"
+     ],
+     "actual_dishes": [
+      "胡萝卜玉米排骨汤",
+      "红烧带鱼",
+      "蒜蓉炒菠菜",
+      "白米饭"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "山药芋头汤",
+      "清炒小白菜",
+      "蒸蛋羹",
+      "白米饭"
+     ],
+     "actual_dishes": [
+      "山药芋头汤",
+      "清炒小白菜",
+      "蒸蛋羹",
+      "白米饭"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-23": {
+    "breakfast": {
+     "plan_dishes": [
+      "山药小米粥",
+      "鸡蛋灌饼",
+      "葱油拌面",
+      "蒸南瓜"
+     ],
+     "actual_dishes": [
+      "山药小米粥",
+      "鸡蛋灌饼",
+      "葱油拌面",
+      "蒸南瓜"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "肉末烧豆腐",
+      "醋溜白菜",
+      "红烧牛肉",
+      "白萝卜丝汤"
+     ],
+     "actual_dishes": [
+      "肉末烧豆腐",
+      "醋溜白菜",
+      "红烧牛肉",
+      "白萝卜丝汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "番茄炒蛋",
+      "土豆烧排骨",
+      "蒜蓉菠菜",
+      "紫菜蛋花汤"
+     ],
+     "actual_dishes": [
+      "番茄炒蛋",
+      "土豆烧排骨",
+      "蒜蓉菠菜",
+      "紫菜蛋花汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-24": {
+    "breakfast": {
+     "plan_dishes": [
+      "红豆薏米粥",
+      "韭菜盒子",
+      "现磨豆浆",
+      "蒸玉米"
+     ],
+     "actual_dishes": [
+      "红豆薏米粥",
+      "韭菜盒子",
+      "现磨豆浆",
+      "蒸玉米"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "芹菜炒香干",
+      "家常豆腐煲",
+      "酱香土豆牛肉",
+      "蒜蓉小白菜",
+      "萝卜丝鲫鱼汤"
+     ],
+     "actual_dishes": [
+      "芹菜炒香干",
+      "家常豆腐煲",
+      "酱香土豆牛肉",
+      "蒜蓉小白菜",
+      "萝卜丝鲫鱼汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "木须肉",
+      "冬瓜烩丸子",
+      "清炒藕片",
+      "苹果银耳羹"
+     ],
+     "actual_dishes": [
+      "木须肉",
+      "冬瓜烩丸子",
+      "清炒藕片",
+      "苹果银耳羹"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-25": {
+    "breakfast": {
+     "plan_dishes": [
+      "南瓜红枣粥",
+      "鲜肉小笼包",
+      "手抓饼",
+      "水煮蛋"
+     ],
+     "actual_dishes": [
+      "南瓜红枣粥",
+      "鲜肉小笼包",
+      "手抓饼",
+      "水煮蛋"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "地三鲜",
+      "麻婆豆腐",
+      "白菜炖粉条",
+      "青椒炒肉丝"
+     ],
+     "actual_dishes": [
+      "地三鲜",
+      "麻婆豆腐",
+      "白菜炖粉条",
+      "青椒炒肉丝"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "西红柿牛腩",
+      "清炒茼蒿",
+      "板栗烧鸡",
+      "萝卜排骨汤"
+     ],
+     "actual_dishes": [
+      "西红柿牛腩",
+      "清炒茼蒿",
+      "板栗烧鸡",
+      "萝卜排骨汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   }
+  }
+ },
+ "V2C8WRFR": {
+  "name": "小高之家",
+  "days": {
+   "2026-10-19": {
+    "breakfast": {
+     "plan_dishes": [
+      "蒸南瓜",
+      "山药小米粥",
+      "虾仁蒸蛋"
+     ],
+     "actual_dishes": [
+      "蒸南瓜",
+      "山药小米粥",
+      "虾仁蒸蛋"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "冬瓜薏米汤",
+      "红烧豆腐",
+      "清炒菠菜",
+      "胡萝卜丝炒肉"
+     ],
+     "actual_dishes": [
+      "冬瓜薏米汤",
+      "红烧豆腐",
+      "清炒菠菜",
+      "胡萝卜丝炒肉"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "山药排骨汤",
+      "西红柿鸡蛋汤",
+      "蒜蓉西兰花",
+      "清蒸鲈鱼"
+     ],
+     "actual_dishes": [
+      "山药排骨汤",
+      "西红柿鸡蛋汤",
+      "蒜蓉西兰花",
+      "清蒸鲈鱼"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    }
+   },
+   "2026-10-20": {
+    "breakfast": {
+     "plan_dishes": [
+      "小米南瓜粥",
+      "蒸山药",
+      "肉末蒸蛋"
+     ],
+     "actual_dishes": [
+      "小米南瓜粥",
+      "蒸山药",
+      "肉末蒸蛋"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "番茄炖牛腩",
+      "白萝卜排骨汤",
+      "清炒油麦菜",
+      "胡萝卜炒木耳"
+     ],
+     "actual_dishes": [
+      "番茄炖牛腩",
+      "白萝卜排骨汤",
+      "清炒油麦菜",
+      "胡萝卜炒木耳"
+     ],
+     "actual_type": "补录",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [],
+     "actual_dishes": [
+      "糟辣脆皮鱼",
+      "酸汤牛肉",
+      "丝娃娃"
+     ],
+     "actual_type": "外食",
+     "rating": 0,
+     "restaurant": "贵阳小十字老字号",
+     "people": 4,
+     "total": 320,
+     "perPerson": 80,
+     "actual_rating": 0
+    }
+   },
+   "2026-10-21": {
+    "breakfast": {
+     "plan_dishes": [
+      "红豆薏米粥",
+      "蒸红薯",
+      "菠菜鸡蛋饼"
+     ],
+     "actual_dishes": [
+      "红豆薏米粥",
+      "蒸红薯",
+      "菠菜鸡蛋饼"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "冬瓜薏米汤",
+      "山药炖鸡",
+      "西芹百合",
+      "冬瓜胡萝卜羹"
+     ],
+     "actual_dishes": [
+      "冬瓜薏米汤",
+      "山药炖鸡",
+      "西芹百合",
+      "冬瓜胡萝卜羹"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "山药莲子粥",
+      "清蒸鳕鱼",
+      "番茄炒蛋",
+      "清炒芥蓝"
+     ],
+     "actual_dishes": [
+      "山药莲子粥",
+      "清蒸鳕鱼",
+      "番茄炒蛋",
+      "清炒芥蓝"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-22": {
+    "breakfast": {
+     "plan_dishes": [
+      "绿豆汤",
+      "蒸芋头",
+      "凉拌菠菜豆腐丝"
+     ],
+     "actual_dishes": [
+      "绿豆汤",
+      "蒸芋头",
+      "凉拌菠菜豆腐丝"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "雪梨银耳羹",
+      "冬瓜炖鸭肉",
+      "白萝卜炖牛肉",
+      "清炒茼蒿"
+     ],
+     "actual_dishes": [
+      "雪梨银耳羹",
+      "冬瓜炖鸭肉",
+      "白萝卜炖牛肉",
+      "清炒茼蒿"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "山药莲子粥",
+      "清蒸草鱼",
+      "蒜蓉炒芥蓝",
+      "番茄金针菇汤"
+     ],
+     "actual_dishes": [
+      "山药莲子粥",
+      "清蒸草鱼",
+      "蒜蓉炒芥蓝",
+      "番茄金针菇汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-23": {
+    "breakfast": {
+     "plan_dishes": [
+      "南瓜山药糊",
+      "蒸蛋羹配葱油",
+      "百合银耳粥"
+     ],
+     "actual_dishes": [
+      "南瓜山药糊",
+      "蒸蛋羹配葱油",
+      "百合银耳粥"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "山药黑木耳炒鸭片",
+      "南瓜豆腐羹",
+      "蒜蓉菠菜",
+      "板栗烧牛肉"
+     ],
+     "actual_dishes": [
+      "山药黑木耳炒鸭片",
+      "南瓜豆腐羹",
+      "蒜蓉菠菜",
+      "板栗烧牛肉"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "白萝卜炖牛腩",
+      "百合炒芹菜",
+      "菠菜蛋花汤"
+     ],
+     "actual_dishes": [
+      "白萝卜炖牛腩",
+      "百合炒芹菜",
+      "菠菜蛋花汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-24": {
+    "breakfast": {
+     "plan_dishes": [
+      "银耳雪梨汤",
+      "芝麻糊配蒸蛋",
+      "藕粉圆子羹"
+     ],
+     "actual_dishes": [
+      "银耳雪梨汤",
+      "芝麻糊配蒸蛋",
+      "藕粉圆子羹"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "南瓜小米粥",
+      "莲藕炖排骨汤",
+      "山药炒时蔬",
+      "清蒸鲈鱼"
+     ],
+     "actual_dishes": [
+      "南瓜小米粥",
+      "莲藕炖排骨汤",
+      "山药炒时蔬",
+      "清蒸鲈鱼"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "雪梨银耳羹",
+      "香菇扒菜心",
+      "菠菜豆腐汤"
+     ],
+     "actual_dishes": [
+      "雪梨银耳羹",
+      "香菇扒菜心",
+      "菠菜豆腐汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   },
+   "2026-10-25": {
+    "breakfast": {
+     "plan_dishes": [
+      "黑芝麻糊",
+      "蒸蛋羹配苹果片",
+      "南瓜红枣粥"
+     ],
+     "actual_dishes": [
+      "黑芝麻糊",
+      "蒸蛋羹配苹果片",
+      "南瓜红枣粥"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "lunch": {
+     "plan_dishes": [
+      "莲藕排骨汤",
+      "山药炒鸭片",
+      "蒜蓉炒菠菜",
+      "板栗烧芋头"
+     ],
+     "actual_dishes": [
+      "莲藕排骨汤",
+      "山药炒鸭片",
+      "蒜蓉炒菠菜",
+      "板栗烧芋头"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    },
+    "dinner": {
+     "plan_dishes": [
+      "白萝卜炖豆腐",
+      "百合炒荷兰豆",
+      "菠菜蛋花汤"
+     ],
+     "actual_dishes": [
+      "白萝卜炖豆腐",
+      "百合炒荷兰豆",
+      "菠菜蛋花汤"
+     ],
+     "actual_type": "真实",
+     "rating": 4
+    }
+   }
+  }
+ }
+};
