@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V200-20261022';
+        var APP_VER = 'V201-20261022';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -27925,6 +27925,14 @@ function _closeDtFull() {
 var _SUBSCRIPTION_KEY = 'subscriptionStatus';
 var _SUBSCRIPTION_PLAN_TYPES = ['education', 'special_care', 'premium'];
 var _SUBSCRIPTION_PKG_MAP = { 0: 'education', 1: 'special_care', 2: 'premium' };
+// V201: 订阅面板的家庭需求选项，key 为存储值、label 为展示文案
+var _SUBSCRIPTION_NEEDS = [
+    { key: '婴儿', label: '有宝宝（0-3岁辅食）' },
+    { key: '老人', label: '有老人（慢病/软食）' },
+    { key: '增高', label: '需增高（发育期青少年）' },
+    { key: '体育生', label: '体育生（高能/增肌）' },
+    { key: '康养', label: '康养恢复（术后/血虚/孕妇）' }
+];
 function _getSubscriptionStatus() {
     try { return JSON.parse(localStorage.getItem(_SUBSCRIPTION_KEY) || 'null'); } catch (e) { return null; }
 }
@@ -27946,11 +27954,13 @@ function isSubscribed() {
     return true;
 }
 // 订阅一个月（30 天）；pkgIdx 对应弹窗里选中的套餐序号 0/1/2
-function _applySubscription(pkgIdx) {
+function _applySubscription(pkgIdx, needsArr) {
     var now = Math.floor(Date.now() / 1000);
+    var needs = Array.isArray(needsArr) ? needsArr.slice() : (_subSelectedNeeds || []).slice();
     _setSubscriptionStatus({
         isSubscribed: true,
         planType: _SUBSCRIPTION_PKG_MAP[pkgIdx] || 'premium',
+        selectedNeeds: needs,
         subscribedAt: now,
         expireAt: now + 30 * 24 * 3600
     });
@@ -27984,6 +27994,7 @@ function _openPremiumContent() {
         + '<div style="font-size:15px;font-weight:700;color:#1F2937;">' + planName + '</div>'
         + '<div style="font-size:12px;color:#92400E;margin-top:4px;">订阅剩余 ' + daysLeft + ' 天</div>'
         + '</div>'
+        + _subRenderBoundNeeds(s.selectedNeeds)
         + '<div style="margin-top:16px;font-size:13px;color:#4B5563;line-height:1.7;">✅ 已解锁功能：</div>'
         + '<ul style="margin-top:6px;padding-left:18px;font-size:13px;color:#4B5563;line-height:1.9;">'
         + '<li>营养师每周定制食谱（已同步到你的下周食养计划）</li>'
@@ -28065,6 +28076,7 @@ function _closeSubscribeGuide() {
 
 // V197: 订阅专属饮食定制服务（底部滑入弹窗）
 var _subSelectedPkg = 0; // 默认选中第一个
+var _subSelectedNeeds = []; // V201: 用户在面板里勾选的家庭需求
 function _openSubscribeModal() {
     var old = document.getElementById('subscribeOv');
     if (old) old.remove();
@@ -28088,6 +28100,23 @@ function _openSubscribeModal() {
             + '</div>'
             + '</div>';
     }).join('');
+    // V201: 家庭需求勾选区——回填上次订阅时的勾选
+    try {
+        var prev = _getSubscriptionStatus();
+        if (prev && Array.isArray(prev.selectedNeeds)) _subSelectedNeeds = prev.selectedNeeds.slice();
+    } catch (e) {}
+    if (!Array.isArray(_subSelectedNeeds)) _subSelectedNeeds = [];
+    var needsHtml = '<div style="background:#FFFBEB;border:1px solid #FEF3C7;border-radius:12px;padding:12px 14px;margin-bottom:14px;">'
+        + '<div style="font-size:13px;color:#92400E;font-weight:600;">📌 请为您家勾选核心需求，AI 将以此调整推送方向：</div>'
+        + '<div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;">'
+        + _SUBSCRIPTION_NEEDS.map(function (n) {
+            var checked = _subSelectedNeeds.indexOf(n.key) >= 0;
+            return '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:#1F2937;line-height:1.5;user-select:none;">'
+                + '<input type="checkbox" data-subneed="' + n.key + '" ' + (checked ? 'checked' : '') + ' onchange="_subToggleNeed(\'' + n.key + '\')" style="width:18px;height:18px;accent-color:#F97316;cursor:pointer;">'
+                + '<span>' + n.label + '</span>'
+                + '</label>';
+        }).join('')
+        + '</div></div>';
 
     var ov = document.createElement('div');
     ov.id = 'subscribeOv';
@@ -28105,7 +28134,7 @@ function _openSubscribeModal() {
         + '</div>'
         + '<div style="font-size:12px;color:#6B7280;margin-top:6px;line-height:1.6;">基于家庭成员的年龄、体质、健康状况与饮食偏好，由营养师每周为全家定制专属食谱与饮食方案。</div>'
         + '</div>'
-        + '<div style="flex:1;overflow-y:auto;padding:14px 18px;">' + cardsHtml + '</div>'
+        + '<div style="flex:1;overflow-y:auto;padding:14px 18px;">' + needsHtml + cardsHtml + '</div>'
         + '<div style="flex-shrink:0;padding:10px 18px calc(14px + env(safe-area-inset-bottom));border-top:1px solid #F3F4F6;background:white;">'
         + '<div style="display:flex;gap:10px;">'
         + '<button onclick="_subscribePay()" style="flex:1;height:42px;border-radius:12px;border:none;background:#F97316;color:white;font-size:15px;font-weight:600;cursor:pointer;">立即订阅</button>'
@@ -28126,6 +28155,28 @@ function _subSelect(i) {
         if (idx === i) { el.style.border = '2px solid #F97316'; el.style.background = '#FFF7ED'; }
         else { el.style.border = '1px solid #E5E7EB'; el.style.background = 'white'; }
     });
+}
+// V201: 勾选/取消家庭需求
+function _subToggleNeed(key) {
+    if (!Array.isArray(_subSelectedNeeds)) _subSelectedNeeds = [];
+    var i = _subSelectedNeeds.indexOf(key);
+    if (i >= 0) _subSelectedNeeds.splice(i, 1);
+    else _subSelectedNeeds.push(key);
+}
+// V201: 在已订阅专属方案页渲染已绑定的家庭需求胶囊（无则不显示）
+function _subRenderBoundNeeds(needsArr) {
+    if (!Array.isArray(needsArr) || !needsArr.length) return '';
+    var labelOf = function (k) {
+        var m = _SUBSCRIPTION_NEEDS.find(function (x) { return x.key === k; });
+        return m ? m.label : k;
+    };
+    var chips = needsArr.map(function (k) {
+        return '<span style="display:inline-block;font-size:11px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:2px 8px;margin-right:6px;margin-top:4px;">' + labelOf(k) + '</span>';
+    }).join('');
+    return '<div style="margin-top:12px;background:#FFFBEB;border:1px solid #FEF3C7;border-radius:12px;padding:10px 14px;">'
+        + '<div style="font-size:12px;color:#92400E;font-weight:600;">🎯 家庭需求绑定</div>'
+        + '<div style="margin-top:4px;">' + chips + '</div>'
+        + '</div>';
 }
 function _closeSubscribeModal() {
     var ov = document.getElementById('subscribeOv');
