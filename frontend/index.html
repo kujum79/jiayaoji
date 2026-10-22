@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V202.4-20261022';
+        var APP_VER = 'V202.5-20261022';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -20374,8 +20374,18 @@ function _dishAmountBlockHtml(dishName, normalizedIngs, savedIngredients, dateKe
         + '<div class="dish-detail-section-title" style="margin-top:10px;">🥬 食材清单 <span style="font-size:12px;color:#9CA3AF;font-weight:normal;">（<span id="dishPeopleServing">' + people + '</span>人份）</span></div>'
         + '<div>' + rowsHtml + '</div>'
         + '<button type="button" onclick="_addDishToShoppingList()" style="margin-top:10px;width:100%;border:none;background:#EA5800;color:#fff;border-radius:8px;padding:10px;font-size:14px;font-weight:600;cursor:pointer;">🛒 加入采购清单</button>'
-        + (isSubscribed() ? '<button type="button" onclick="_portionGuideClick()" style="margin-top:8px;width:100%;border:1px solid #F97316;background:#FFF7ED;color:#C2410C;border-radius:8px;padding:10px;font-size:14px;font-weight:600;cursor:pointer;">👑 生成全家分餐指导</button>' : '')
+        + _portionGuideBtnHtml()
         + '</div>';
+}
+// V202.5: 分餐指导按钮统一片段——已订阅直接生成，未订阅先走订阅引导
+function _portionGuideBtnHtml() {
+    var sub = false;
+    try { sub = !!isSubscribed(); } catch (e) {}
+    return '<button type="button" onclick="' + (sub ? '_portionGuideClick()' : '_portionGuideLocked()') + '" style="margin-top:8px;width:100%;border:1px solid #F97316;background:#FFF7ED;color:#C2410C;border-radius:8px;padding:10px;font-size:14px;font-weight:600;cursor:pointer;">👑 生成全家分餐指导' + (sub ? '' : ' 🔒') + '</button>';
+}
+function _portionGuideLocked() {
+    showToast && showToast('该功能为订阅专享，先了解订阅方案');
+    if (typeof _openSubscribeGuide === 'function') _openSubscribeGuide();
 }
 // 仅局部重算用量区块（AI 生成的做法步骤不受影响）
 function _dishRerenderAmountBlock() {
