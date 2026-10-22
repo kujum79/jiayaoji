@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V202-20261022';
+        var APP_VER = 'V202.1-20261022';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4560,6 +4560,8 @@ async function _submitFeedback() {
                         </div>
                     </div>
                     <!-- 餐次卡片容器 -->
+                    <!-- V202.1: 未来 N 天饮食沙盘入口（订阅 premium 显示，JS 动态填充） -->
+                    <div id="diaryDeepPlanCard" style="display:none;margin:0 7px 10px;"></div>
                     <div id="diaryMeals"></div>
                     <!-- AI回复显示区域 -->
                     <div id="diaryAiReply" style="display:none;margin:0 7px 10px;padding:12px 14px;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;font-size:14px;color:#0C4A6E;line-height:1.6;white-space:pre-wrap;word-break:break-word;"></div>
@@ -28250,6 +28252,144 @@ function _subscribePoints() {
     showToast && showToast('💎 积分兑换成功！已解锁专属饮食定制方案，营养师将在 1 个工作日内联系您');
 }
 
+// ===== V202.1: 未来 N 天饮食沙盘（订阅 premium 专属） =====
+var _deepPlanCache = {}; // 内存缓存：key = familyId|YYYY-MM-DD|tier
+var _deepPlanExpanded = false;
+function _deepPlanCacheKey() {
+    var fid = (getFamilyId && getFamilyId()) || 'default';
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var dk = today.toISOString().slice(0, 10);
+    var tier = _subTier() || 'basic';
+    return fid + '|' + dk + '|' + tier;
+}
+function _buildFamilyBrief() {
+    var brief = '';
+    try {
+        var fd = loadFamilyData && loadFamilyData();
+        if (fd && Array.isArray(fd.members) && fd.members.length) {
+            var parts = [];
+            fd.members.forEach(function (m) {
+                var seg = (m.name || m.role || '家人');
+                if (m.age) seg += (m.age + '岁');
+                else if (m.groupType) seg += m.groupType;
+                if (m.isInfant) seg += '（' + (m.infantStage || '婴儿') + '）';
+                if (m.tags && m.tags.length) seg += '（' + m.tags.join('/') + '）';
+                if (m.preference && m.preference.dislikes && m.preference.dislikes.length) {
+                    seg += '；忌口：' + m.preference.dislikes.join('、');
+                }
+                parts.push(seg);
+            });
+            brief = parts.join('；');
+        }
+    } catch (e) {}
+    return brief || '';
+}
+function _renderDiaryDeepPlanCard() {
+    var card = document.getElementById('diaryDeepPlanCard');
+    if (!card) return;
+    var tier = _subTier();
+    if (!isSubscribed() || tier !== 'premium') {
+        card.innerHTML = ''; card.style.display = 'none'; _deepPlanExpanded = false; return;
+    }
+    card.style.display = 'block';
+    var ckey = _deepPlanCacheKey();
+    var cached = _deepPlanCache[ckey];
+    if (cached && cached.dailyPrediction && cached.dailyPrediction.length) {
+        _paintDeepPlanCard(cached);
+        return;
+    }
+    card.innerHTML = '<div style="background:linear-gradient(135deg,#FFF7ED,#FEF3C7);border:1px solid #FED7AA;border-radius:12px;padding:12px 14px;font-size:13px;color:#92400E;line-height:1.6;">🔮 正在推演未来 7 天饮食沙盘…</div>';
+    _loadDeepPlan();
+}
+async function _loadDeepPlan() {
+    try {
+        var tier = _subTier() || 'basic';
+        var st = _getSubscriptionStatus() || {};
+        var needTags = st.needTags || st.selectedNeeds || [];
+        var body = {
+            familyBrief: _buildFamilyBrief(),
+            tier: tier,
+            needTags: needTags,
+            familyId: (getFamilyId && getFamilyId()) || 'default',
+            days: (tier === 'premium') ? 7 : 3
+        };
+        var resp = await fetch('/api/deep-plan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        var data = await resp.json();
+        if (data && data.dailyPrediction && data.dailyPrediction.length) {
+            _deepPlanCache[_deepPlanCacheKey()] = data;
+            _paintDeepPlanCard(data);
+        } else {
+            _paintDeepPlanCard({ dailyPrediction: [], ingredientReuse: '', _empty: true });
+        }
+    } catch (e) {
+        console.warn('[deep_plan] load failed:', e);
+        _paintDeepPlanCard({ dailyPrediction: [], ingredientReuse: '', _empty: true, _err: true });
+    }
+}
+function _paintDeepPlanCard(data) {
+    var card = document.getElementById('diaryDeepPlanCard');
+    if (!card) return;
+    if (!data || !data.dailyPrediction || !data.dailyPrediction.length) {
+        var msg = data && data._err ? 'AI 推演服务暂时 unavailable，稍后再试' : '沙盘推演暂无数据';
+        card.innerHTML = '<div style="background:#F3F4F6;border:1px solid #E5E7EB;border-radius:12px;padding:12px 14px;font-size:12px;color:#6B7280;text-align:center;">🔮 ' + msg + ' · <a href="javascript:void(0);" onclick="_loadDeepPlan()" style="color:#F97316;font-weight:600;">重试</a></div>';
+        return;
+    }
+    var tier = (data.tier === 'premium') ? '🎯 全家桶订阅' : '🌱 基础服务';
+    var days = data.dailyPrediction.length;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var todayStr = today.toISOString().slice(0, 10);
+    var weekDays = ['周日','周一','周二','周三','周四','周五','周六'];
+    var daysHtml = '';
+    if (_deepPlanExpanded) {
+        daysHtml = data.dailyPrediction.map(function (d) {
+            var dateStr = (d.date || '').slice(5);
+            var dayOfWeek = '';
+            try {
+                var dt = new Date(d.date);
+                dayOfWeek = weekDays[dt.getDay()];
+            } catch (e) {}
+            var isToday = (d.date === todayStr);
+            var highlightColor = isToday ? '#F97316' : '#374151';
+            var highlightBg = isToday ? '#FFF7ED' : '#F9FAFB';
+            var alertHtml = d.alert ? '<div style="margin-top:6px;font-size:11px;color:#047857;background:#ECFDF5;border-radius:6px;padding:4px 8px;line-height:1.5;">⚠️ ' + d.alert + '</div>' : '';
+            return '<div style="padding:8px 10px;border-radius:8px;background:' + highlightBg + ';border:1px solid ' + (isToday ? '#FED7AA' : '#E5E7EB') + ';margin-bottom:6px;">'
+                + '<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#9CA3AF;">'
+                + '<span style="color:' + (isToday ? '#F97316' : '#6B7280') + ';font-weight:600;">' + dateStr + (dayOfWeek ? ' ' + dayOfWeek : '') + (isToday ? ' · 今天' : '') + '</span>'
+                + '</div>'
+                + '<div style="margin-top:4px;font-size:13px;color:' + highlightColor + ';line-height:1.5;">' + d.highlight + '</div>'
+                + alertHtml
+                + '</div>';
+        }).join('');
+        if (data.ingredientReuse) {
+            daysHtml += '<div style="margin-top:8px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;font-size:12px;color:#92400E;line-height:1.7;">🍲 ' + data.ingredientReuse + '</div>';
+        }
+    } else {
+        var todayIdx = data.dailyPrediction.findIndex(function (d) { return d.date === todayStr; });
+        var showIdx = (todayIdx >= 0) ? todayIdx : 0;
+        var showDay = data.dailyPrediction[showIdx] || data.dailyPrediction[0];
+        var alertHtml = showDay.alert ? '<div style="margin-top:6px;font-size:11px;color:#047857;background:#ECFDF5;border-radius:6px;padding:4px 8px;line-height:1.5;">⚠️ ' + showDay.alert + '</div>' : '';
+        daysHtml = '<div style="padding:8px 10px;border-radius:8px;background:#FFF7ED;border:1px solid #FED7AA;">'
+            + '<div style="font-size:11px;color:#9CA3AF;">' + (showDay.date || '') + '</div>'
+            + '<div style="margin-top:2px;font-size:13px;color:#F97316;line-height:1.5;font-weight:600;">' + (showDay.highlight || '') + '</div>'
+            + alertHtml
+            + '</div>';
+    }
+    card.innerHTML = '<div style="background:white;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
+        + '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:linear-gradient(135deg,#FFF7ED,#FEF3C7);border-bottom:1px solid #FED7AA;">'
+        + '<span style="font-size:18px;">🔮</span>'
+        + '<span style="font-size:13px;font-weight:700;color:#92400E;">未来 ' + days + ' 天饮食沙盘</span>'
+        + '<span style="font-size:10px;color:#F97316;background:#FFF7ED;border-radius:8px;padding:1px 6px;border:1px solid #FED7AA;margin-left:auto;">' + tier + '</span>'
+        + '<button onclick="_deepPlanExpanded=!_deepPlanExpanded; _paintDeepPlanCard(_deepPlanCache[_deepPlanCacheKey()]);" style="font-size:11px;color:#92400E;background:none;border:none;cursor:pointer;padding:2px 4px;">' + (_deepPlanExpanded ? '收起 ▲' : '展开 ▼') + '</button>'
+        + '<button onclick="_loadDeepPlan()" style="font-size:11px;color:#9CA3AF;background:none;border:none;cursor:pointer;padding:2px 4px;" title="重新推演">↻</button>'
+        + '</div>'
+        + '<div style="padding:10px 12px;">' + daysHtml + '</div>'
+        + '</div>';
+}
+
 // V163: 食养堂语音播报（Web Speech API，朗读标题+正文+小贴士）
 var _dtSpeaking = false;
 function _dtSpeakTip(from) {
@@ -50940,6 +51080,8 @@ function renderDiary() {
     const calendar = getDietCalendar();
     const dayData = calendar[dateKey] || {};
     
+    // V202.1: 未来 N 天饮食沙盘（订阅 premium 专属）
+    try { _renderDiaryDeepPlanCard && _renderDiaryDeepPlanCard(); } catch (e) {}
     // === 记录提示条 ===
     updateDiaryReminder();
     // 同步刷新首页"本月已省"卡片

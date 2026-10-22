@@ -2982,6 +2982,138 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
     return result
 
 
+# ========== V202.1: 未来 7 天饮食沙盘（POST /api/deep-plan） ==========
+# 仅 premium 全家桶订阅用户可用；basic 订阅走轻量版（3 天）；免费用户不调用此接口
+_DEEP_PLAN_CACHE: Dict[str, Dict[str, Any]] = {}
+
+
+class DeepPlanRequest(BaseModel):
+    """V202.1: 未来 N 天饮食沙盘推演入参"""
+    familyBrief: str = ""  # 家庭画像文本（成员年龄/体质/饮食偏好/职业节奏等）
+    weather: str = ""      # 未来天气趋势文本（前端聚合接口已给）
+    solarTerm: str = ""    # 当前节气名
+    tier: str = "basic"    # basic 轻量 3 天 / premium 全家桶 7 天
+    needTags: Optional[List[str]] = None  # premium 下命中的家庭需求标签
+    familyId: str = "default"
+    days: int = 7          # 推演天数（premium 默认 7，basic 默认 3）
+
+
+_DEEP_PLAN_SYSTEM = """你是一位高级营养专家兼家庭饮食规划顾问。
+你需要为一个中国家庭排布未来若干天的饮食沙盘推演。
+
+你的推演必须同时满足：
+1. 跨天食材复用最大化：一次买的整鸡/萝卜/白菜等尽量拆进 2-3 天的菜品，避免食材浪费。
+2. 结合天气与家庭作息动态调整：降温日多安排汤品/炖菜，工作日午餐倾向快手/便当友好，训练日/熬夜日多安排高蛋白或滋补。
+3. 语气克制实用，避免空泛养生话术，不得使用医疗词汇（治疗/治愈/功效/改善/疾病名称等）。
+
+【输出 JSON 格式（必须严格遵守，不要输出任何额外文字）】
+{
+  "dailyPrediction": [
+    {"date": "2026-10-22", "highlight": "周三降温，推荐羊肉萝卜汤配蛋炒饭", "alert": "儿子高强度训练周，需加餐补蛋白"}
+  ],
+  "ingredientReuse": "本周二买的整鸡，周三吃肉片烧口蘑，周四龙骨熬汤；买的半颗大白菜，周三醋溜白菜，周四白菜豆腐汤。"
+}
+
+规则：
+- dailyPrediction 数组长度必须与请求的 days 一致。
+- highlight 必须紧扣当天天气或家庭作息，20-40 字。
+- alert 为当天的特殊提醒（可不出现，空字符串即可），不得提及疾病名称。
+- ingredientReuse 必须具体指出 2-3 种跨天复用的食材及其对应日期，不少于 60 字。
+"""
+
+
+@app.post("/api/deep-plan")
+async def deep_plan(req: DeepPlanRequest) -> Dict[str, Any]:
+    """V202.1: 订阅专属——未来 N 天饮食沙盘推演。
+
+    premium 全家桶走 7 天 + needTags 人群段；basic 订阅走 3 天轻量版；
+    免费用户前端不应调用此接口（降级到本地规则推演）。
+    """
+    tier = (req.tier or "basic").strip()
+    days = max(3, min(7, int(req.days or (7 if tier == "premium" else 3))))
+    family_id = (req.familyId or "default").strip()[:32]
+
+    # 缓存：TODAY + tier + days + needTags + solarTerm 组合键
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+    need_tags_norm = "|".join(sorted(set([str(t).strip() for t in (req.needTags or []) if str(t).strip()])))
+    solar_term = (req.solarTerm or "").strip()
+    cache_key = f"{family_id}|{today}|{tier}|{days}|{need_tags_norm}|{solar_term}"
+    hit = _DEEP_PLAN_CACHE.get(cache_key)
+    if hit:
+        # TTL = 18h（沙盘推演一天变一次足够）
+        if time.time() - hit.get("ts", 0) < 18 * 3600:
+            return hit["data"]
+        _DEEP_PLAN_CACHE.pop(cache_key, None)
+
+    # 构造 user prompt
+    family_brief = (req.familyBrief or "").strip()[:600]
+    weather_text = (req.weather or "").strip()[:300]
+
+    # 未来 N 天日期字符串
+    future_dates = []
+    base = _dt.date.today()
+    for i in range(days):
+        d = base + _dt.timedelta(days=i)
+        future_dates.append(d.isoformat())
+
+    user_lines = [
+        f"【推演天数】{days} 天",
+        f"【家庭画像】{family_brief or '（未提供，按普通 3-4 口之家处理）'}",
+        f"【当前节气】{solar_term or '不在节气当天'}",
+        f"【天气趋势】{weather_text or '（未提供，按季节常温处理）'}",
+        f"【订阅 tier】{tier}",
+    ]
+    if tier == "premium" and need_tags_norm:
+        tag_names = "、".join([n for n in ("婴儿", "老人", "增高", "体育生", "康养") if n in need_tags_norm])
+        user_lines.append(f"【家庭需求绑定】{tag_names}——推演必须覆盖这些人群的饮食要点")
+
+    user_lines.append(f"【推演日期范围】{future_dates[0]} ~ {future_dates[-1]}")
+    user_lines.append("请严格按上方 JSON schema 返回，不要输出任何额外文字。")
+
+    messages = [
+        {"role": "system", "content": _DEEP_PLAN_SYSTEM},
+        {"role": "user", "content": "\n".join(user_lines)},
+    ]
+
+    result: Dict[str, Any] = {"dailyPrediction": [], "ingredientReuse": ""}
+    try:
+        raw = await call_qwen(messages, json_mode=True, max_tokens=2048, task_type="deep_plan", timeout=90.0)
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            # 严格清洗 dailyPrediction
+            raw_list = parsed.get("dailyPrediction") or parsed.get("daily_prediction") or []
+            cleaned_list: List[Dict[str, str]] = []
+            for item in raw_list[:days]:
+                if not isinstance(item, dict):
+                    continue
+                d = str(item.get("date", "") or "").strip()
+                # 补全日期：模型可能漏了，按 future_dates 顺序补
+                if not d and len(cleaned_list) < len(future_dates):
+                    d = future_dates[len(cleaned_list)]
+                hl = str(item.get("highlight", "") or "").strip()
+                al = str(item.get("alert", "") or "").strip()
+                if d or hl:
+                    cleaned_list.append({"date": d, "highlight": hl, "alert": al})
+            result["dailyPrediction"] = cleaned_list
+            result["ingredientReuse"] = str(parsed.get("ingredientReuse", "") or parsed.get("ingredient_reuse", "") or "").strip()
+
+        # 至少有 1 天数据才算可用
+        if result["dailyPrediction"]:
+            _DEEP_PLAN_CACHE[cache_key] = {"ts": time.time(), "data": result}
+            if len(_DEEP_PLAN_CACHE) > 40:
+                # 淘汰最老的
+                oldest = min(_DEEP_PLAN_CACHE.items(), key=lambda kv: kv[1].get("ts", 0))[0]
+                _DEEP_PLAN_CACHE.pop(oldest, None)
+    except Exception as exc:
+        # AI 失败：返回空结果，前端会降级提示
+        print(f"[deep_plan] AI failed: {exc}")
+
+    result["tier"] = tier
+    result["days"] = days
+    return result
+
+
 # ========== V162: 我的创作 · AI 作品配图（通义万相 wanx2.1-t2i-turbo 异步文生图） ==========
 class ChefImageRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=500)
