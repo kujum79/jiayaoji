@@ -28287,8 +28287,9 @@ function _buildFamilyBrief() {
 function _renderDiaryDeepPlanCard() {
     var card = document.getElementById('diaryDeepPlanCard');
     if (!card) return;
-    var tier = _subTier();
-    if (!isSubscribed() || tier !== 'premium') {
+    // V202.1: 所有已登录用户都显示沙盘卡片；免费/basic/premium 共享同一入口，仅推演天数不同
+    var hasLogin = !!((getFamilyId && getFamilyId()) || jj_login_user || sessionStorage.getItem('jj_userId'));
+    if (!hasLogin) {
         card.innerHTML = ''; card.style.display = 'none'; _deepPlanExpanded = false; return;
     }
     card.style.display = 'block';
@@ -28298,7 +28299,9 @@ function _renderDiaryDeepPlanCard() {
         _paintDeepPlanCard(cached);
         return;
     }
-    card.innerHTML = '<div style="background:linear-gradient(135deg,#FFF7ED,#FEF3C7);border:1px solid #FED7AA;border-radius:12px;padding:12px 14px;font-size:13px;color:#92400E;line-height:1.6;">🔮 正在推演未来 7 天饮食沙盘…</div>';
+    var isFree = !isSubscribed();
+    var label = isFree ? '免费体验中（3 天轻量推演）' : ((_subTier() === 'premium') ? '全家桶订阅专属（7 天完整推演）' : '基础服务（3 天轻量推演）');
+    card.innerHTML = '<div style="background:linear-gradient(135deg,#FFF7ED,#FEF3C7);border:1px solid #FED7AA;border-radius:12px;padding:12px 14px;font-size:13px;color:#92400E;line-height:1.6;">🔮 正在推演未来饮食沙盘… <span style="font-size:11px;color:#F97316;">' + label + '</span></div>';
     _loadDeepPlan();
 }
 async function _loadDeepPlan() {
