@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V202.1-20261022';
+        var APP_VER = 'V202.2-20261022';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -20368,6 +20368,7 @@ function _dishAmountBlockHtml(dishName, normalizedIngs, savedIngredients, dateKe
         + '<div class="dish-detail-section-title" style="margin-top:10px;">🥬 食材清单 <span style="font-size:12px;color:#9CA3AF;font-weight:normal;">（<span id="dishPeopleServing">' + people + '</span>人份）</span></div>'
         + '<div>' + rowsHtml + '</div>'
         + '<button type="button" onclick="_addDishToShoppingList()" style="margin-top:10px;width:100%;border:none;background:#EA5800;color:#fff;border-radius:8px;padding:10px;font-size:14px;font-weight:600;cursor:pointer;">🛒 加入采购清单</button>'
+        + (isSubscribed() ? '<button type="button" onclick="_portionGuideClick()" style="margin-top:8px;width:100%;border:1px solid #F97316;background:#FFF7ED;color:#C2410C;border-radius:8px;padding:10px;font-size:14px;font-weight:600;cursor:pointer;">👑 生成全家分餐指导</button>' : '')
         + '</div>';
 }
 // 仅局部重算用量区块（AI 生成的做法步骤不受影响）
@@ -20420,6 +20421,106 @@ function _addDishToShoppingList() {
     var n = st.lastCtx ? st.lastCtx.count : '';
     if (added + merged > 0) showToast('🛒 已加入采购清单（' + n + '人份）：新增 ' + added + ' 种' + (merged ? '，合并 ' + merged + ' 种' : '') + '，可在「食材准备」页查看');
     else showToast('该菜暂无具体用量，未能加入');
+}
+
+// ===== V202.2: 一人一案分餐指导（订阅用户专属） =====
+async function _portionGuideClick() {
+    var st = window._dishDetailState;
+    if (!st || !st.dishName) return;
+    var tier = _subTier() || 'basic';
+    var fd = {};
+    try { fd = loadFamilyData && loadFamilyData(); } catch (e) {}
+    var members = (fd && fd.members && Array.isArray(fd.members)) ? fd.members : [];
+    if (!members.length) { showToast('请先在家庭成员页完善家人信息'); return; }
+    // 把前端 familyData.members 转换成后端 PortionGuideMember 结构
+    var fmList = members.map(function (m) {
+        var constitution = '';
+        if (m.constitution && typeof m.constitution === 'string') constitution = m.constitution;
+        else if (m.physique && typeof m.physique === 'string') constitution = m.physique;
+        var tags = (m.tags && Array.isArray(m.tags)) ? m.tags.slice() : [];
+        if (m.isInfant && tags.indexOf('婴儿') < 0) tags.push('婴儿');
+        if (m.groupType === '体育生' && tags.indexOf('体育生') < 0) tags.push('体育生');
+        return {
+            name: m.name || m.role || '家人',
+            age: m.age ? Number(m.age) : null,
+            gender: m.gender || null,
+            constitution: constitution || null,
+            tags: tags,
+            preference: m.preference || null
+        };
+    });
+    // 加载态
+    showToast && showToast('👑 正在为' + fmList.length + '位家人推演分餐指导…');
+    try {
+        var body = {
+            dishName: st.dishName,
+            dishBrief: (st.ings || []).slice(0, 10).map(function (x) { return (x && x.name) || ''; }).filter(Boolean).join('、'),
+            familyMembers: fmList,
+            tier: tier,
+            familyId: (getFamilyId && getFamilyId()) || 'default'
+        };
+        var resp = await fetch('/api/portion-guide', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        var data = await resp.json();
+        _showPortionGuideResult(st.dishName, data);
+    } catch (e) {
+        console.warn('[portion_guide] load failed:', e);
+        showToast && showToast('分餐指导生成失败，请稍后再试');
+    }
+}
+function _showPortionGuideResult(dishName, data) {
+    if (!data || !data.guide || !data.guide.length) {
+        showToast && showToast('分餐指导生成失败，请稍后再试');
+        return;
+    }
+    var old = document.getElementById('portionGuideOv');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'portionGuideOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100010;display:flex;flex-direction:column;opacity:0;transition:opacity .2s;';
+    ov.onclick = function (e) { if (e.target === ov) _closePortionGuide(); };
+    var sheet = document.createElement('div');
+    sheet.id = 'portionGuideSheet';
+    sheet.style.cssText = 'margin-top:auto;background:white;border-radius:18px 18px 0 0;transform:translateY(100%);transition:transform .25s ease;max-width:430px;width:100%;align-self:center;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;';
+    var rowsHtml = data.guide.map(function (g) {
+        var tipsHtml = g.tips ? '<div style="margin-top:4px;font-size:12px;color:#047857;background:#ECFDF5;border-radius:6px;padding:4px 8px;line-height:1.5;">💡 ' + g.tips + '</div>' : '';
+        return '<div style="padding:10px 12px;border-bottom:1px solid #F3F4F6;">'
+            + '<div style="display:flex;align-items:center;gap:8px;">'
+            + '<div style="font-size:13px;font-weight:700;color:#1F2937;min-width:52px;">' + escapeHtml(g.member || '家人') + '</div>'
+            + '<div style="font-size:14px;color:#F97316;font-weight:600;flex:1;">' + escapeHtml(g.portion || '') + '</div>'
+            + '</div>'
+            + tipsHtml
+            + '</div>';
+    }).join('');
+    sheet.innerHTML = '<div style="flex-shrink:0;padding:14px 18px 10px;border-bottom:1px solid #F3F4F6;">'
+        + '<div style="display:flex;align-items:center;gap:8px;">'
+        + '<div style="width:4px;height:18px;background:#F97316;border-radius:2px;"></div>'
+        + '<span style="font-size:16px;font-weight:700;color:#1F2937;">👑 一人一案分餐指导</span>'
+        + '<button onclick="_closePortionGuide()" style="margin-left:auto;border:none;background:none;font-size:20px;cursor:pointer;color:#9CA3AF;">✕</button>'
+        + '</div>'
+        + '<div style="font-size:12px;color:#6B7280;margin-top:4px;">' + escapeHtml(dishName) + ' · 共 ' + data.guide.length + ' 位家人专属方案</div>'
+        + '</div>'
+        + '<div style="flex:1;overflow-y:auto;">' + rowsHtml + '</div>'
+        + '<div style="flex-shrink:0;padding:10px 18px calc(14px + env(safe-area-inset-bottom));border-top:1px solid #F3F4F6;background:white;">'
+        + '<button onclick="_closePortionGuide()" style="width:100%;height:42px;border-radius:12px;border:none;background:#F97316;color:white;font-size:15px;font-weight:600;cursor:pointer;">好的</button>'
+        + '</div>';
+    ov.appendChild(sheet);
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () {
+        ov.style.opacity = '1';
+        sheet.style.transform = 'translateY(0)';
+    });
+}
+function _closePortionGuide() {
+    var ov = document.getElementById('portionGuideOv');
+    if (!ov) return;
+    var sheet = document.getElementById('portionGuideSheet');
+    if (sheet) { sheet.style.transition = 'transform .25s ease'; sheet.style.transform = 'translateY(100%)'; }
+    ov.style.transition = 'opacity .25s ease'; ov.style.opacity = '0';
+    setTimeout(function () { ov.remove(); }, 260);
 }
 
 function showDishDetail(dishName, dateKey, mealType) {

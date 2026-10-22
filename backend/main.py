@@ -3114,6 +3114,136 @@ async def deep_plan(req: DeepPlanRequest) -> Dict[str, Any]:
     return result
 
 
+# ========== V202.2: 一人一案分餐指导（POST /api/portion-guide） ==========
+# 订阅用户专属：基于家庭成员画像给同一道菜生成每人专属分餐量 + 饮食提醒
+_PORTION_GUIDE_CACHE: Dict[str, Dict[str, Any]] = {}
+
+
+class PortionGuideMember(BaseModel):
+    name: str = ""
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    constitution: Optional[str] = None       # 体质（平和/气虚/阳虚/阴虚/痰湿/湿热/血瘀/气郁/特禀）
+    tags: Optional[List[str]] = None         # 标签（婴儿/高龄/体育生/产后/体力劳动者/孕妇/外国人…）
+    preference: Optional[Dict[str, Any]] = None  # {likes/dislikes/concerns/notes}
+
+
+class PortionGuideRequest(BaseModel):
+    dishName: str = ""
+    dishBrief: str = ""                       # 可选：菜品简介/主要食材，帮助模型分餐
+    familyMembers: List[PortionGuideMember]
+    tier: str = "basic"
+    familyId: str = "default"
+
+
+_PORTION_GUIDE_SYSTEM = """你是一位高级营养专家，擅长根据家庭成员的年龄、体质、标签与饮食偏好，为同一道菜制定每人专属的分餐指导。
+
+【规则】
+1. 分餐量（portion）必须用可量化的表述，如「排骨3块，米饭1碗」「红烧肉2块，米饭小半碗」，不得用抽象词「适量/多吃/少吃」。
+2. tips 必须紧扣该成员画像——体质（气虚/阴虚/湿热/痰湿…）、标签（体育生/高龄/婴儿/体力劳动者/孕妇…）、忌口；语气克制实用，不得使用治疗/治愈/功效/改善/疾病名称等医疗词汇。
+3. 特殊人群分餐系数参考（供你在分餐量里体现，不是硬规则）：
+   - 婴儿（0-3岁）：不计入家庭主餐分餐，portion 写「不参与主餐分餐，按婴儿辅食方案准备」
+   - 70+高龄老人：主菜量 ×0.8，主食量 ×0.7
+   - 3-6岁儿童：主菜量 ×0.5，主食量 ×0.6
+   - 体育生/体力劳动者：主菜量 ×1.2~1.5（高蛋白），主食量 ×1.3
+   - 孕妇/产后：主菜量 ×1.1，主食量 ×1.1，tips 侧重清淡养血、避免寒凉
+   - 慢病（高血压/高尿酸/血糖偏高）：tips 侧重避开汤汁/腌制品/高嘌呤，不得在 portion 里出现疾病词
+4. 菜品总量 = 所有成员分餐量之和（如排骨总共 3+5+1+2=11 块）；无需你在输出里给总量，但分餐时要心里有数。
+
+【输出 JSON 格式（严格遵守，不要额外文字）】
+{
+  "guide": [
+    {"member": "成员姓名", "portion": "排骨3块，米饭1碗", "tips": "气虚质，排骨用水煮去油"}
+  ]
+}
+"""
+
+
+@app.post("/api/portion-guide")
+async def portion_guide(req: PortionGuideRequest) -> Dict[str, Any]:
+    """V202.2: 订阅专属——一人一案分餐指导。"""
+    dish_name = (req.dishName or "").strip()
+    if not dish_name:
+        return {"guide": []}
+
+    members = req.familyMembers or []
+    if not members:
+        return {"guide": []}
+
+    family_id = (req.familyId or "default").strip()[:32]
+    tier = (req.tier or "basic").strip()
+
+    # 缓存：dishName + familyMembers 签名 + tier 组合键
+    member_sig = "|".join([
+        str(m.name or "") + ":" + str(m.age or "") + ":" + ",".join(sorted(m.tags or [])) + ":" + str(m.constitution or "")
+        for m in members
+    ])
+    cache_key = f"{family_id}|{dish_name}|{member_sig}|{tier}"
+    hit = _PORTION_GUIDE_CACHE.get(cache_key)
+    if hit:
+        if time.time() - hit.get("ts", 0) < 12 * 3600:
+            return hit["data"]
+        _PORTION_GUIDE_CACHE.pop(cache_key, None)
+
+    # 构造 user prompt：每人一行画像
+    member_lines = []
+    for m in members:
+        parts = []
+        if m.name: parts.append(m.name)
+        if m.age: parts.append(f"{m.age}岁")
+        if m.gender: parts.append(m.gender)
+        if m.constitution: parts.append(f"体质={m.constitution}")
+        if m.tags: parts.append("标签=" + "、".join([str(t) for t in m.tags if t]))
+        pref = m.preference or {}
+        dislikes = pref.get("dislikes") or []
+        concerns = pref.get("concerns") or ""
+        if dislikes: parts.append("忌口=" + "、".join([str(x) for x in dislikes if x]))
+        if concerns: parts.append(f"饮食关注={concerns}")
+        member_lines.append("  - " + "；".join(parts))
+
+    user_lines = [
+        f"【菜品】{dish_name}",
+        f"【菜品简介】{(req.dishBrief or '').strip() or '（未提供）'}",
+        f"【订阅 tier】{tier}",
+        f"【家庭成员（{len(members)}人）】",
+        *member_lines,
+        "请为每位成员分别制定这道菜的分餐量 + 专属饮食提醒，严格按上方 JSON schema 返回。",
+    ]
+
+    messages = [
+        {"role": "system", "content": _PORTION_GUIDE_SYSTEM},
+        {"role": "user", "content": "\n".join(user_lines)},
+    ]
+
+    result: Dict[str, Any] = {"guide": []}
+    try:
+        raw = await call_qwen(messages, json_mode=True, max_tokens=2048, task_type="portion_guide", timeout=60.0)
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            raw_guide = parsed.get("guide") or parsed.get("portionGuide") or []
+            cleaned = []
+            for item in raw_guide[:len(members) + 2]:
+                if not isinstance(item, dict):
+                    continue
+                cleaned.append({
+                    "member": str(item.get("member") or item.get("name") or "").strip(),
+                    "portion": str(item.get("portion") or item.get("amount") or "").strip(),
+                    "tips": str(item.get("tips") or item.get("advice") or item.get("note") or "").strip(),
+                })
+            result["guide"] = cleaned
+
+        if result["guide"]:
+            _PORTION_GUIDE_CACHE[cache_key] = {"ts": time.time(), "data": result}
+            if len(_PORTION_GUIDE_CACHE) > 60:
+                oldest = min(_PORTION_GUIDE_CACHE.items(), key=lambda kv: kv[1].get("ts", 0))[0]
+                _PORTION_GUIDE_CACHE.pop(oldest, None)
+    except Exception as exc:
+        print(f"[portion_guide] AI failed: {exc}")
+
+    result["dishName"] = dish_name
+    return result
+
+
 # ========== V162: 我的创作 · AI 作品配图（通义万相 wanx2.1-t2i-turbo 异步文生图） ==========
 class ChefImageRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=500)
