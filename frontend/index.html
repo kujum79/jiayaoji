@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V202.2-20261022';
+        var APP_VER = 'V202.3-20261022';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -20459,16 +20459,21 @@ async function _portionGuideClick() {
             tier: tier,
             familyId: (getFamilyId && getFamilyId()) || 'default'
         };
+        var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 45000) : null;
         var resp = await fetch('/api/portion-guide', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
+            body: JSON.stringify(body),
+            signal: ctrl ? ctrl.signal : undefined
         });
+        if (timer) clearTimeout(timer);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
         var data = await resp.json();
         _showPortionGuideResult(st.dishName, data);
     } catch (e) {
         console.warn('[portion_guide] load failed:', e);
-        showToast && showToast('分餐指导生成失败，请稍后再试');
+        showToast && showToast(e && e.name === 'AbortError' ? 'AI 生成超时，请稍后重试' : '分餐指导生成失败，请稍后再试');
     }
 }
 function _showPortionGuideResult(dishName, data) {
@@ -20476,6 +20481,7 @@ function _showPortionGuideResult(dishName, data) {
         showToast && showToast('分餐指导生成失败，请稍后再试');
         return;
     }
+    if (data.fallback) showToast && showToast('AI 繁忙，已按家庭画像快速生成分餐方案');
     var old = document.getElementById('portionGuideOv');
     if (old) old.remove();
     var ov = document.createElement('div');

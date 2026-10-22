@@ -3159,6 +3159,70 @@ _PORTION_GUIDE_SYSTEM = """你是一位高级营养专家，擅长根据家庭�
 """
 
 
+def _portion_guide_fallback(members: List["PortionGuideMember"], dish_name: str) -> List[Dict[str, str]]:
+    """AI 不可用时的本地规则兜底：按年龄/标签/体质给出可执行的分餐量与提醒。"""
+    _constitution_tips = {
+        "气虚质": "宜温软易消化，少生冷",
+        "阳虚质": "宜温热熟食，少生冷",
+        "阴虚质": "清淡少辛辣，多喝温水",
+        "痰湿质": "少油少糖，清淡为主",
+        "湿热质": "清淡少油炸辛辣",
+        "血瘀质": "饮食温和，少过咸",
+        "气郁质": "清淡多样，规律进食",
+        "特禀质": "避开已知过敏食材",
+        "平和质": "均衡搭配即可",
+    }
+    _tag_tips = [
+        (("体育生",), "高蛋白需求，可分开两次补充"),
+        (("体力劳动者",), "主食适量增加，保证能量"),
+        (("高龄", "老人"), "食材切软煮烂，细嚼慢咽"),
+        (("孕妇", "产后"), "清淡为主，注意温热"),
+        (("外国人",), "可按口味偏好调整调味"),
+    ]
+    guide = []
+    for m in members:
+        name = (m.name or "").strip() or "家人"
+        tags = [str(t) for t in (m.tags or []) if t]
+        age = m.age or 0
+        if "婴儿" in tags or (age and age < 3):
+            guide.append({
+                "member": name,
+                "portion": "不参与主餐分餐，按婴儿辅食方案单独准备",
+                "tips": "辅食从少量泥糊状开始，观察3天无不适再加量，遵医嘱",
+            })
+            continue
+        if "体育生" in tags or "体力劳动者" in tags:
+            portion = "主菜约1.3人份，米饭约1碗半"
+            tags_hit = "体育生" if "体育生" in tags else "体力劳动者"
+        elif age >= 70:
+            portion = "主菜约0.8人份，米饭约大半碗"
+            tags_hit = "高龄"
+        elif 3 <= age <= 6:
+            portion = "主菜约半人份，米饭约小半碗"
+            tags_hit = ""
+        else:
+            portion = "主菜1人份，米饭1碗"
+            tags_hit = ""
+        tips_list = []
+        for keys, tip in _tag_tips:
+            if any(k in tags for k in keys) or (tags_hit and tags_hit in keys):
+                tips_list.append(tip)
+                break
+        cons = (m.constitution or "").strip()
+        if cons and cons in _constitution_tips:
+            tips_list.append(f"{cons}，{_constitution_tips[cons]}")
+        pref = m.preference or {}
+        dislikes = [str(x) for x in (pref.get("dislikes") or []) if x]
+        if dislikes:
+            tips_list.append("避开" + "、".join(dislikes[:3]))
+        guide.append({
+            "member": name,
+            "portion": portion,
+            "tips": "；".join(tips_list) if tips_list else "按家常口味正常食用即可",
+        })
+    return guide
+
+
 @app.post("/api/portion-guide")
 async def portion_guide(req: PortionGuideRequest) -> Dict[str, Any]:
     """V202.2: 订阅专属——一人一案分餐指导。"""
@@ -3217,7 +3281,8 @@ async def portion_guide(req: PortionGuideRequest) -> Dict[str, Any]:
 
     result: Dict[str, Any] = {"guide": []}
     try:
-        raw = await call_qwen(messages, json_mode=True, max_tokens=2048, task_type="portion_guide", timeout=60.0)
+        # 30s 内必须返回，避免 Nginx 默认 60s 读超时后返回 504 导致前端报「生成失败」
+        raw = await call_qwen(messages, json_mode=True, max_tokens=2048, task_type="portion_guide", timeout=30.0)
         parsed = json.loads(raw)
         if isinstance(parsed, dict):
             raw_guide = parsed.get("guide") or parsed.get("portionGuide") or []
@@ -3239,6 +3304,15 @@ async def portion_guide(req: PortionGuideRequest) -> Dict[str, Any]:
                 _PORTION_GUIDE_CACHE.pop(oldest, None)
     except Exception as exc:
         print(f"[portion_guide] AI failed: {exc}")
+
+    if not result["guide"]:
+        # AI 超时/限流/解析失败 → 本地规则兜底，保证前端永远能看到分餐结果
+        result["guide"] = _portion_guide_fallback(members, dish_name)
+        result["fallback"] = True
+        _PORTION_GUIDE_CACHE[cache_key] = {"ts": time.time(), "data": result}
+        if len(_PORTION_GUIDE_CACHE) > 60:
+            oldest = min(_PORTION_GUIDE_CACHE.items(), key=lambda kv: kv[1].get("ts", 0))[0]
+            _PORTION_GUIDE_CACHE.pop(oldest, None)
 
     result["dishName"] = dish_name
     return result
