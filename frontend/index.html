@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V199-20261022';
+        var APP_VER = 'V199.2-20261022';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -27679,6 +27679,13 @@ var _dtLoadedKey = ''; // 已加载的 familyId|date，避免重复请求
 var _dtServerTip = null; // V143: 服务端 22:30 自动流水线预选的当日内容
 function _dtTodayKey() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function _dtCacheKey(variant) { return 'daily_tip_' + (getFamilyId() || 'default') + '_' + _dtTodayKey() + (variant ? '_' + variant : ''); }
+// V199: 当前有效订阅套餐（无订阅返回空串），用于卡片缓存键与专属生成分支
+function _dtSubPlan() {
+    try {
+        var s = _getSubscriptionStatus();
+        return (s && isSubscribed() && s.planType) ? s.planType : '';
+    } catch (e) { return ''; }
+}
 function _dtRenderSkeleton() {
     var el = document.getElementById('homeDailyTipCard');
     if (!el) return;
@@ -27775,11 +27782,25 @@ async function _fetchDailyTip(variant) {
 async function renderHomeDailyTipCard(force) {
     var el = document.getElementById('homeDailyTipCard');
     if (!el) return;
-    var ck = (getFamilyId() || 'default') + '|' + _dtTodayKey();
+    var ck = (getFamilyId() || 'default') + '|' + _dtTodayKey() + '|' + _dtSubPlan();
     if (!force && _dtLoadedKey === ck) return; // 已加载过当天内容，不重复请求
     _dtLoadedKey = ck;
     _dtSwapCount = 0;
     _dtServerTip = null;
+    // V199: 订阅用户走 /api/daily-tip 的专属生成（带订阅 Prompt），拿不到再回落已发布文章
+    var subPlan = _dtSubPlan();
+    if (subPlan) {
+        _dtRenderSkeleton();
+        try {
+            var subTip = await _fetchDailyTip();
+            if (subTip && subTip.title && !subTip.error) {
+                _dtServerTip = subTip;
+                _dtRecordHistory(subTip);
+                _dtRenderCard(subTip);
+                return;
+            }
+        } catch (e) { console.warn('[订阅专享] 生成失败，回落已发布文章', e); }
+    }
     // V142: 首页卡片只读已发布文章，不再调 AI 生成
     try {
         var pub = _fhPublishedToday();
@@ -27932,9 +27953,8 @@ function _applySubscription(pkgIdx) {
         subscribedAt: now,
         expireAt: now + 30 * 24 * 3600
     });
-    // 重新渲染首页食养堂卡片，按钮即时切换为「已解锁」
-    try { renderHomeDailyTipCard && renderHomeDailyTipCard(); } catch (e) {}
-    try { _dtLoadedKey = ''; _fetchDailyTip(); } catch (e) {}
+    // 重新渲染首页食养堂卡片：按钮切「已解锁」，并按新套餐重新生成专享内容
+    try { _dtLoadedKey = ''; renderHomeDailyTipCard && renderHomeDailyTipCard(true); } catch (e) {}
 }
 // 已订阅用户点击「已解锁：xxx」→ 打开专属方案页（占位弹层，后续可扩展）
 function _openPremiumContent() {

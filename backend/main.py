@@ -2841,7 +2841,8 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
 
     # V143: 首屏（variant=0）优先返回前一天 22:30 流水线预选入库的内容，
     # 早高峰零 AI 延迟；换一换(variant>0)仍走实时生成
-    if req.variant == 0:
+    # V199: 订阅用户跳过预选（预选文章不感知套餐），改走专属生成；生成失败可用发布稿兜底
+    if req.variant == 0 and not sub_plan:
         pub_row = _fh_get_published_row(date_str)
         if pub_row:
             pub_result = _fh_row_to_article(pub_row)
@@ -2872,6 +2873,16 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
     ]
     if req.variant > 0:
         user_lines.append(f"【要求】这是该家庭今天看到的第 {req.variant + 1} 条，请换一个与之前完全不同的选题角度（如不同食材、烹饪技巧、节气习俗），标题和内容都不要与之前重复。")
+    def _published_fallback():
+        """V199: 订阅用户专属生成失败时，用已发布文章兜底，避免卡片空窗（不标专享，避免误导）"""
+        if req.variant != 0:
+            return None
+        row = _fh_get_published_row(date_str)
+        if not row:
+            return None
+        art = _fh_row_to_article(row)
+        return art  # 不写缓存：下次请求仍会重试专属生成
+
     try:
         content = await call_qwen(
             [
@@ -2884,15 +2895,15 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
         )
     except Exception as e:  # AI 不可用不阻塞：返回降级提示
         print(f"[daily-tip] call_qwen error: {e}")
-        return {"error": "每日一课生成失败，请稍后重试"}
+        return _published_fallback() or {"error": "每日一课生成失败，请稍后重试"}
 
     parsed = extract_json_object(content)
     if not isinstance(parsed, dict) or not parsed.get("title"):
-        return {"error": "每日一课生成失败，请稍后重试"}
+        return _published_fallback() or {"error": "每日一课生成失败，请稍后重试"}
 
     tip = _clean_daily_tip(parsed)
     if not tip["title"] or not tip["content"]:
-        return {"error": "每日一课生成失败，请稍后重试"}
+        return _published_fallback() or {"error": "每日一课生成失败，请稍后重试"}
 
     result = {"id": f"tip_{date_str.replace('-', '')}", "date": date_str, **tip}
     # V199: 订阅用户的 tip 带 subscriptionExclusive=true，前端据此渲染「订阅专享内容」徽标
