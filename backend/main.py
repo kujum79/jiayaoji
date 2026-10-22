@@ -24,6 +24,7 @@ import os
 import random
 import re
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote, urljoin
@@ -3318,6 +3319,211 @@ async def portion_guide(req: PortionGuideRequest) -> Dict[str, Any]:
     return result
 
 
+# ========== V204: 家庭画像 AI 课程定制（POST /api/custom-course） ==========
+# 基于基础课程 + 单个家庭成员画像，生成专属课程；前端落 customCourses 队列，状态 pending_review
+_CUSTOM_COURSE_CACHE: Dict[str, Dict[str, Any]] = {}
+
+_MEDICAL_TERMS = [
+    "治疗", "治愈", "根治", "疗效", "药效", "功效", "抗癌", "防癌", "降三高",
+    "降压", "降糖", "降脂", "消炎", "杀菌", "排毒", "处方", "药膳", "对症",
+]
+
+
+def _sanitize_course_medical(text: str) -> Any:
+    """医疗承诺词兜底清洗：命中词替换为中性表述，并返回命中清单。"""
+    hits: List[str] = []
+    s = str(text or "")
+    for term in _MEDICAL_TERMS:
+        if term in s:
+            hits.append(term)
+            s = s.replace(term, "日常饮食安排")
+    return s, sorted(set(hits))
+
+
+class CustomCourseMember(BaseModel):
+    """V204: 课程定制目标成员画像"""
+    name: str = ""
+    age: Optional[int] = None
+    gender: str = ""
+    profession: str = ""
+    healthTags: List[str] = Field(default_factory=list)  # 失眠 / 气郁质 / 儿童挑食 / 高血压…
+
+
+class CustomCourseRequest(BaseModel):
+    baseCourseId: str = ""
+    baseTitle: str = ""
+    baseContent: str = ""   # 前端从 eduCourses 取全文传入，避免后端重复维护课程库
+    familyMember: CustomCourseMember = Field(default_factory=CustomCourseMember)
+    familyId: str = "default"
+    tier: str = "premium"
+
+
+_CUSTOM_COURSE_SYSTEM = """你是一位专业的饮食教育专家。请基于给定的基础课程内容，为目标用户定制一份专属课程。
+
+【硬性要求】
+1. 正文控制在 500 字以内（按中文字符计），是一篇可直接朗读的完整短文，段落自然，不要大量分点罗列。
+2. 严禁出现"治疗""治愈""根治""疗效""功效""处方""药膳"等医疗承诺词汇，不得提及任何疾病名称，不得暗示课程可以替代就医或用药。
+3. 内容必须紧扣基础课程的知识点，只是在表达方式与侧重点上做个性化调整，不得凭空编造与基础内容冲突的结论。
+4. 只输出 JSON，不要输出任何额外文字。
+
+【输出 JSON 格式（严格遵守）】
+{"title": "课程标题（不超过 18 字）", "content": "课程正文"}"""
+
+
+@app.post("/api/custom-course")
+async def custom_course(req: CustomCourseRequest) -> Dict[str, Any]:
+    """V204: 基于家庭画像的 AI 课程定制。
+
+    入参只需 baseCourseId + familyMember；前端同时传入基础课程全文（baseContent），
+    后端拼装定制要求后调用多通道 AI，并做医疗词兜底清洗。
+    """
+    member = req.familyMember or CustomCourseMember()
+    tags = [str(t).strip() for t in (member.healthTags or []) if str(t).strip()]
+    age = member.age
+    base_id = (req.baseCourseId or "").strip()[:40]
+    base_title = (req.baseTitle or "").strip()[:60]
+    base_content = (req.baseContent or "").strip()[:2000]
+    family_id = (req.familyId or "default").strip()[:32]
+
+    if not base_content:
+        return {"ok": False, "error": "缺少基础课程内容", "course": None}
+
+    # 画像规则判定
+    is_child = age is not None and age < 12
+    is_elder = age is not None and age >= 65
+    has_insomnia = any(("失眠" in t) or ("气郁" in t) or ("睡" in t) for t in tags)
+    is_picky = any(("挑食" in t) or ("偏食" in t) for t in tags)
+
+    member_sig = f"{member.name}|{age}|{member.profession}|{','.join(sorted(tags))}"
+    cache_key = f"{family_id}|{base_id}|{member_sig}"
+    hit = _CUSTOM_COURSE_CACHE.get(cache_key)
+    if hit and time.time() - hit.get("ts", 0) < 24 * 3600:
+        return hit["data"]
+
+    profile_bits = []
+    if member.name:
+        profile_bits.append(member.name)
+    if age is not None:
+        profile_bits.append(f"{age}岁")
+    if member.gender:
+        profile_bits.append(member.gender)
+    if member.profession:
+        profile_bits.append(f"职业={member.profession}")
+    if tags:
+        profile_bits.append("健康/体质标签=" + "、".join(tags))
+    profile_text = "，".join(profile_bits) or "（未提供）"
+
+    rules = [
+        "1. 内容必须围绕基础课程的核心知识点展开，可调整例子、顺序与表述。",
+        "2. 字数控制在 500 字以内，结尾给出一句可以马上照做的日常建议。",
+        "3. 严禁出现治疗、治愈、根治、疗效、功效等医疗承诺词汇，不得提及疾病名称。",
+    ]
+    if has_insomnia:
+        rules.append(
+            "4. 该成员有失眠/睡眠不佳标签：重点突出富含色氨酸与镁元素的日常食材"
+            "（如香蕉、小米、燕麦、南瓜籽、豆制品），并明确提示晚餐避免辛辣、浓茶、咖啡因与酒精。"
+        )
+    if is_child:
+        rules.append(
+            "5. 该成员是儿童：全文改用童话故事口吻讲述（可用小厨师、蔬菜小精灵等角色），"
+            "穿插 2 个互动提问（用「你知道……吗？」这类句式），语言活泼、句子简短。"
+        )
+    if is_elder:
+        rules.append(
+            "6. 该成员是老人：语言通俗口语，不使用专业术语，句子短；推荐软食、少油少盐的做法；"
+            "并在正文末尾附一句建议「阅读时可放大字号，或请家人读给您听」。"
+        )
+    if is_picky:
+        rules.append(
+            "7. 该成员存在挑食情况：给出「反复轻松接触、改变形态、参与备菜」的具体做法，不强迫进食。"
+        )
+
+    user_lines = [
+        f"【基础课程】{base_title or base_id}",
+        f"【基础内容】\n{base_content}",
+        f"【用户画像】{profile_text}",
+        "【定制要求】",
+    ] + rules + ["请严格按 JSON schema 返回，不要输出任何额外文字。"]
+
+    messages = [
+        {"role": "system", "content": _CUSTOM_COURSE_SYSTEM},
+        {"role": "user", "content": "\n".join(user_lines)},
+    ]
+
+    title = ""
+    content = ""
+    fallback = False
+    try:
+        raw = await call_qwen(messages, json_mode=True, max_tokens=1400, task_type="custom_course", timeout=45.0)
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            title = str(parsed.get("title", "") or "").strip()
+            content = str(parsed.get("content", "") or "").strip()
+    except Exception as exc:
+        print(f"[custom_course] AI failed: {exc}")
+
+    if not content:
+        # AI 失败兜底：截取基础正文 + 画像提示，仍返回可用内容（标记 fallback）
+        fallback = True
+        snippet = re.sub(r"\s+", "", base_content)[:320]
+        tips = []
+        if has_insomnia:
+            tips.append("晚餐可以常备小米、香蕉、燕麦这类食材，晚饭后不喝浓茶与咖啡。")
+        if is_child:
+            tips.append("可以一边读一边问孩子：今天你想当哪个蔬菜小精灵？")
+        if is_elder:
+            tips.append("做法尽量软烂少油，阅读时可放大字号，或请家人读给您听。")
+        content = snippet + (("　" + "".join(tips)) if tips else "")
+        title = (base_title or "专属课程") + "·家庭定制版"
+
+    content, medical_hits = _sanitize_course_medical(content)
+    title, _ = _sanitize_course_medical(title)
+    # 字数上限 500：按句号/问号收尾处截断，避免半句
+    if len(content) > 500:
+        cut = content[:500]
+        for mark in ("。", "！", "？", "；"):
+            pos = cut.rfind(mark)
+            if pos >= 380:
+                cut = cut[:pos + 1]
+                break
+        content = cut
+
+    if not title:
+        title = (base_title or "专属课程") + "·家庭定制版"
+
+    course = {
+        "id": "custom_" + uuid.uuid4().hex[:10],
+        "title": title[:24],
+        "category": "custom",
+        "targetAudience": tags or ["all"],
+        "duration": max(2, min(20, round(len(content) / 220) or 3)),
+        "content": content,
+        "isPremium": True,
+        "baseCourseId": base_id,
+        "member": {
+            "name": member.name,
+            "age": age,
+            "gender": member.gender,
+            "profession": member.profession,
+            "healthTags": tags,
+        },
+        "status": "pending_review",
+        "createdAt": int(time.time() * 1000),
+    }
+    result: Dict[str, Any] = {
+        "ok": True,
+        "course": course,
+        "fallback": fallback,
+        "warnings": medical_hits,
+    }
+
+    _CUSTOM_COURSE_CACHE[cache_key] = {"ts": time.time(), "data": result}
+    if len(_CUSTOM_COURSE_CACHE) > 60:
+        oldest = min(_CUSTOM_COURSE_CACHE.items(), key=lambda kv: kv[1].get("ts", 0))[0]
+        _CUSTOM_COURSE_CACHE.pop(oldest, None)
+    return result
+
+
 # ========== V162: 我的创作 · AI 作品配图（通义万相 wanx2.1-t2i-turbo 异步文生图） ==========
 class ChefImageRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=500)
@@ -3396,6 +3602,7 @@ _FAMILY_BACKUP_KEYS = {
     "purchaseHistory", "shoppingChecked", "currentDiningGroup", "snackItems",
     "lastAutoRecommendDate", "behaviorProfile", "dismissedRecommendDishes",
     "implicitPreferences", "preferenceProfile", "diningOutPlans", "courseProgress",
+    "customCourses",
 }
 _FAMILY_BACKUP_ID_RE = re.compile(r"^[A-HJ-NP-Z2-9]{8}$")  # 与前端 generateFamilyCode 字符集一致
 _FAMILY_BACKUP_MAX_BYTES = 3 * 1024 * 1024

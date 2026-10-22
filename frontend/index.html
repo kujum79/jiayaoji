@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V203-20261022';
+        var APP_VER = 'V204-20261022';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress'];
+        'diningOutPlans','courseProgress','customCourses'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -8148,6 +8148,7 @@ function familyKey(key) {
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
         'diningOutPlans',
         'courseProgress',
+        'customCourses',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
         if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
@@ -8296,6 +8297,122 @@ function setCourseProgress(courseId, status, progress) {
     return true;
 }
 
+// ==================== V204: 家庭画像 AI 课程定制 ====================
+// customCourses：定制课程队列（家庭前缀隔离），新生成课程一律 pending_review 待审核
+var _EDU_MEDICAL_TERMS = ['治疗','治愈','根治','疗效','药效','功效','抗癌','防癌','降三高',
+    '降压','降糖','降脂','消炎','杀菌','排毒','处方','药膳','对症'];
+
+// 医疗承诺词前端兜底清洗（与后端同表，双保险）
+function _eduMedicalSanitize(text) {
+    var s = String(text == null ? '' : text);
+    for (var i = 0; i < _EDU_MEDICAL_TERMS.length; i++) {
+        if (s.indexOf(_EDU_MEDICAL_TERMS[i]) >= 0) {
+            s = s.split(_EDU_MEDICAL_TERMS[i]).join('日常饮食安排');
+        }
+    }
+    return s;
+}
+
+function getCustomCourses() {
+    try {
+        var raw = lsGet('customCourses');
+        var list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list : [];
+    } catch (e) { return []; }
+}
+
+function addCustomCourse(course) {
+    if (!course || !course.id) return null;
+    var list = getCustomCourses();
+    course.status = course.status || 'pending_review';
+    course.createdAt = course.createdAt || Date.now();
+    course.content = _eduMedicalSanitize(course.content || '');
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].id === course.id) { idx = i; break; }
+    }
+    if (idx >= 0) list[idx] = course; else list.unshift(course);
+    if (list.length > 30) list = list.slice(0, 30);
+    lsSet('customCourses', JSON.stringify(list));
+    return course;
+}
+
+function updateCustomCourseStatus(courseId, status) {
+    if (!courseId || !status) return false;
+    var list = getCustomCourses();
+    var hit = false;
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].id === courseId) {
+            list[i].status = status;
+            list[i].reviewedAt = Date.now();
+            hit = true;
+            break;
+        }
+    }
+    if (hit) lsSet('customCourses', JSON.stringify(list));
+    return hit;
+}
+
+function getPendingCustomCourses() {
+    return getCustomCourses().filter(function (c) { return c && c.status === 'pending_review'; });
+}
+
+// 从家庭成员自动构建画像（姓名/年龄/职业/健康标签：体质 + tags + 婴儿/高龄标记）
+function buildCourseMemberProfile(memberName) {
+    var list = [];
+    try { list = JSON.parse(lsGet('familyData') || '[]') || []; } catch (e) { list = []; }
+    var m = null;
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && (list[i].name === memberName || list[i].id === memberName || String(i) === String(memberName))) {
+            m = list[i]; break;
+        }
+    }
+    if (!m) return null;
+    var tags = [];
+    if (m.constitution) tags.push(m.constitution);
+    if (Array.isArray(m.tags)) tags = tags.concat(m.tags.filter(Boolean));
+    if (m.isInfant) tags.push('婴儿');
+    if (m.age && Number(m.age) >= 65 && tags.indexOf('老人') < 0) tags.push('老人');
+    return {
+        name: m.name || '',
+        age: m.age ? Number(m.age) : null,
+        gender: m.gender || '',
+        profession: m.profession || '',
+        healthTags: tags
+    };
+}
+
+// 调后端生成定制课程 → 自动落 customCourses 队列（pending_review）
+async function callCustomCourse(baseCourseId, member) {
+    var base = getEduCourse(baseCourseId);
+    if (!base) throw new Error('基础课程不存在：' + baseCourseId);
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = setTimeout(function () { try { ctrl && ctrl.abort(); } catch (e) {} }, 50000);
+    var payload = {
+        baseCourseId: baseCourseId,
+        baseTitle: base.title,
+        baseContent: base.content,
+        familyMember: member || {},
+        familyId: (typeof getFamilyId === 'function' ? (getFamilyId() || '') : ''),
+        tier: (typeof _subTier === 'function' ? _subTier() : 'basic')
+    };
+    try {
+        var resp = await fetch('/api/custom-course', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: ctrl ? ctrl.signal : undefined
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var j = await resp.json();
+        if (!j || !j.ok || !j.course) throw new Error((j && j.error) || '课程定制失败');
+        j.course.status = 'pending_review';
+        addCustomCourse(j.course);
+        return j.course;
+    } finally {
+        clearTimeout(timer);
+    }
+}
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _initEduCourses);
 } else {
