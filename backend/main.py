@@ -3763,7 +3763,7 @@ _FAMILY_BACKUP_KEYS = {
     "purchaseHistory", "shoppingChecked", "currentDiningGroup", "snackItems",
     "lastAutoRecommendDate", "behaviorProfile", "dismissedRecommendDishes",
     "implicitPreferences", "preferenceProfile", "diningOutPlans", "courseProgress",
-    "customCourses",
+    "customCourses", "subscriptionStatus",
 }
 _FAMILY_BACKUP_ID_RE = re.compile(r"^[A-HJ-NP-Z2-9]{8}$")  # 与前端 generateFamilyCode 字符集一致
 _FAMILY_BACKUP_MAX_BYTES = 3 * 1024 * 1024

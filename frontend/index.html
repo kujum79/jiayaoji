@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V205-20261023';
+        var APP_VER = 'V205.1-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -8148,7 +8148,7 @@ function familyKey(key) {
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
         'diningOutPlans',
         'courseProgress',
-        'customCourses',
+        'customCourses','subscriptionStatus',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
         if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
@@ -28557,11 +28557,23 @@ var _SUBSCRIPTION_NEEDS = [
     { key: '康养', label: '康养恢复（术后/血虚/孕妇）' }
 ];
 function _getSubscriptionStatus() {
-    try { return JSON.parse(localStorage.getItem(_SUBSCRIPTION_KEY) || 'null'); } catch (e) { return null; }
+    // V205.1: 订阅是家庭级状态，按家庭码前缀隔离（familyKey）。游客态（未登录）一律视为未订阅，
+    // 避免历史全局 subscriptionStatus 残留导致游客看到「已解锁」按钮与「订阅专享内容」徽标。
+    // 旧全局键不做迁移——其内无 familyId 归属信息，盲迁会把 A 家庭的订阅错给 B 家庭；
+    // 订阅当前为模拟流程，受影响家庭重新订阅一次即可（状态随后进云端备份，换设备可恢复）。
+    try {
+        var fid = (typeof getFamilyId === 'function') ? getFamilyId() : '';
+        if (!fid) return null;
+        return JSON.parse(localStorage.getItem(familyKey(_SUBSCRIPTION_KEY)) || 'null');
+    } catch (e) { return null; }
 }
 function _setSubscriptionStatus(status) {
-    if (!status) { try { localStorage.removeItem(_SUBSCRIPTION_KEY); } catch (e) {} return; }
-    try { localStorage.setItem(_SUBSCRIPTION_KEY, JSON.stringify(status)); } catch (e) {}
+    // V191 铁律：游客态不写业务键；登录态写家庭前缀键，并顺手清理历史全局旧键
+    var fid = (typeof getFamilyId === 'function') ? getFamilyId() : '';
+    if (!fid) return;
+    try { localStorage.removeItem(_SUBSCRIPTION_KEY); } catch (e) {}
+    if (!status) { try { localStorage.removeItem(familyKey(_SUBSCRIPTION_KEY)); } catch (e) {} return; }
+    try { localStorage.setItem(familyKey(_SUBSCRIPTION_KEY), JSON.stringify(status)); } catch (e) {}
 }
 // 订阅有效判断：isSubscribed() === true 当且仅当 isSubscribed=true 且 expireDate(或旧 expireAt) > now
 function isSubscribed() {
