@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V202.3-20261022';
+        var APP_VER = 'V202.4-20261022';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -5707,17 +5707,23 @@ async function aiChatMultiProvider(systemContent, userPrompt, opts) {
             if (proxyData && proxyData.response) return { choices: [{ message: { content: proxyData.response } }] };
         }
     } catch (e) { console.warn('后端/plan失败，回退直连阿里云:', e); }
-    var resp = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer sk-d59f96e872d54e23ba692fd7d09eee1c' },
-        body: JSON.stringify({
-            model: 'qwen-turbo',
-            messages: [ { role: 'system', content: systemContent }, { role: 'user', content: userPrompt } ],
-            temperature: temperature,
-            max_tokens: maxTokens
-        })
-    });
-    return await resp.json();
+    try {
+        var resp = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer sk-d59f96e872d54e23ba692fd7d09eee1c' },
+            body: JSON.stringify({
+                model: 'qwen-turbo',
+                messages: [ { role: 'system', content: systemContent }, { role: 'user', content: userPrompt } ],
+                temperature: temperature,
+                max_tokens: maxTokens
+            })
+        });
+        if (!resp.ok) return {};
+        return await resp.json();
+    } catch (e) {
+        console.warn('AI 直连备用通道失败:', e);
+        return {};
+    }
 }
 
 // 当前登录用户与家庭信息（缓存在 localStorage）
@@ -20792,6 +20798,78 @@ function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra
     }
 }
 
+// V202.3: AI 不可用时的本地兜底做法（避免详情页出现「生成失败」空态）
+function _renderDishRecipeFallback(dishName, ingredients, savedIngredients) {
+    var body = document.getElementById('dishDetailBody');
+    if (!body) return;
+    var ings = (ingredients && ingredients.length) ? ingredients : [];
+    var ingHtml = ings.length
+        ? ings.map(function (x) { return escapeHtml(String(x)); }).join('、')
+        : '按家常备料（主料 + 葱姜蒜 + 常用调味）';
+    var n = dishName || '这道菜';
+    var steps;
+    if (/蒸/.test(n)) {
+        steps = [
+            '主料洗净处理好，表面划刀或切块，用少许料酒和姜片腌制 10 分钟去腥。',
+            '盘底铺葱段姜片，放上主料，水开后上锅，大火蒸 8-10 分钟（按大小调整）。',
+            '蒸好后倒掉盘中腥水，铺上葱丝，淋一勺蒸鱼豉油。',
+            '烧热一勺油浇在葱丝上激香，趁热上桌。'
+        ];
+    } else if (/炒/.test(n)) {
+        steps = [
+            '主料与配菜分别洗净切好，肉类可先用少许生抽、淀粉抓匀腌 10 分钟。',
+            '热锅凉油，先下葱姜蒜爆香，再下肉类炒至变色。',
+            '加入配菜大火翻炒，沿锅边淋少许生抽调味。',
+            '出锅前尝味补盐，翻匀即可装盘。'
+        ];
+    } else if (/炖|汤|煲|煮/.test(n)) {
+        steps = [
+            '主料洗净切块，冷水下锅焯去浮沫，捞出沥干。',
+            '锅中加足量热水，放主料和姜片，大火烧开转小火。',
+            '炖 40-60 分钟至软烂，中途按需补水（加热水）。',
+            '出锅前 5 分钟加盐调味，撒葱花即可。'
+        ];
+    } else if (/拌|沙拉/.test(n)) {
+        steps = [
+            '食材洗净，需要焯水的先焯熟，捞出过凉水沥干。',
+            '按口味调酱汁：生抽、香醋、少许糖和香油拌匀。',
+            '食材放入大碗，淋上酱汁拌匀。',
+            '静置 5 分钟入味后装盘。'
+        ];
+    } else {
+        steps = [
+            '食材洗净切好，肉类可提前用少许生抽、淀粉腌制 10 分钟。',
+            '热锅凉油，葱姜蒜爆香后下主料翻炒至断生。',
+            '按口味加盐、生抽等调味，加少量水焖 3-5 分钟。',
+            '收汁后出锅装盘，撒葱花点缀。'
+        ];
+    }
+    var stepsHtml = steps.map(function (s, i) {
+        return '<div class="dish-detail-step" data-step="' + i + '"><div class="dish-step-num">' + (i + 1) + '</div><div class="dish-step-text">' + escapeHtml(s) + '</div></div>';
+    }).join('');
+    var amountHtml = '';
+    try {
+        var stdIngs = ings.map(function (x) { return normalizeIngredientName(String(x)); });
+        amountHtml = _dishAmountBlockHtml(dishName, stdIngs, savedIngredients, null, null);
+    } catch (e) {}
+    body.innerHTML = `
+        <div style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;margin-bottom:8px;line-height:1.5;">⚠️ AI 大厨暂时繁忙，以下为基础做法。稍后重新打开可获取更详细的做法。</div>
+        ${amountHtml}
+        ${_twReqHtml(dishName)}
+        <div class="dish-detail-section">
+            <div class="dish-detail-section-title">🛒 食材清单</div>
+            <div style="font-size:13px;color:#374151;line-height:1.7;">${ingHtml}</div>
+        </div>
+        <div class="dish-detail-section">
+            <div class="dish-detail-section-title">👨‍🍳 制作步骤</div>
+            <div id="helpDishSteps">${stepsHtml}</div>
+        </div>
+        <div class="dish-detail-section">
+            <div class="dish-detail-section-title">💡 烹饪要点</div>
+            <div class="dish-detail-tip">火候与调味按自家口味微调；出锅前先尝味再补盐。</div>
+        </div>`;
+}
+
 // AI生成菜品做法
 async function generateDishRecipeAI(dishName, savedIngredients) {
     const body = document.getElementById('dishDetailBody');
@@ -20817,7 +20895,7 @@ async function generateDishRecipeAI(dishName, savedIngredients) {
         const aiText = result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '';
 
         if (!aiText) {
-            body.innerHTML = '<div class="dish-detail-loading">❌ 生成失败，请稍后重试</div>';
+            _renderDishRecipeFallback(dishName, ingredients, savedIngredients);
             return;
         }
 
@@ -20906,7 +20984,8 @@ async function generateDishRecipeAI(dishName, savedIngredients) {
             gtEl.title = '点击朗读要点';
         }
     } catch (err) {
-        body.innerHTML = '<div class="dish-detail-loading">❌ 生成失败：' + escapeHtml(String(err).slice(0, 100)) + '</div>';
+        console.warn('[dish_recipe] AI 生成失败，使用本地兜底:', err);
+        _renderDishRecipeFallback(dishName, ingredients, savedIngredients);
     }
 }
 
