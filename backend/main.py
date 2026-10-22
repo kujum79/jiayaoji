@@ -2792,24 +2792,30 @@ class DailyTipRequest(BaseModel):
 
 
 # V199: 订阅专属 Prompt 段——按套餐类型追加不同的侧重指令
+# 注意：必须与 _DAILY_TIP_SYSTEM 的「禁止疾病名称/医疗词汇」条款兼容，
+# 因此慢病关怀一律用生活化表述（低盐低糖、长辈适量、不宜多吃），不得出现疾病名。
+# V199.1 提高 prompt 版本号，缓存键带上它 → 改动措辞后旧缓存自动失效
+_SUBSCRIPTION_PROMPT_VER = "v2"
 _SUBSCRIPTION_PROMPT_SEGMENTS = {
     "education": (
         "【订阅专享：饮食教育包】\n"
         "- 内容必须偏向少儿食育、食材科普、营养小知识，用生动有趣的语气，适合 6-12 岁孩子听读\n"
-        "- 每条小贴士必须包含一条「给孩子的饮食小贴士」，20字以内，口语化\n"
+        "- tips 的第 1 条必须严格以「给孩子的饮食小贴士：」开头，20字以内，口语化\n"
         "- 食材选择优先孩子常见的（鸡蛋/牛奶/胡萝卜/菠菜/燕麦/鱼虾等），避免过于生僻\n"
     ),
     "special_care": (
         "【订阅专享：特殊关怀包】\n"
-        "- 内容必须偏向慢病注意事项、低钠低糖实操、食材禁忌提醒，用严谨但不生硬的语气\n"
-        "- 必须显式列出 2-3 种该节气/天气下慢病患者应规避或谨慎食用的食材\n"
-        "- 正文中出现任何慢病风险食材时，必须标注「⚠️ 慢病慎食」\n"
+        "- 内容必须偏向低盐低糖、少油少盐的实操做法，以及需要家人适量或少吃的食材提醒，语气严谨克制\n"
+        "- 正文中必须明确列出 2-3 种「不宜多吃」的食材或调味方式（例如腌制品、蜜饯、浓汤宝、糖醋做法）\n"
+        "- 正文末尾必须单独一行以内以「⚠️ 留意：」开头，给出长辈或需要控制饮食的家人应注意的实操提醒\n"
+        "- 以上提醒一律使用生活化表述（少盐、少糖、少油、适量、少吃），"
+        "同样适用上文禁止条款：不得出现疾病名称与禁词\n"
     ),
     "premium": (
         "【订阅专享：高阶品质包】\n"
         "- 内容必须偏向卡路里计算、宏量营养素（碳水/蛋白/脂肪）配比、健身餐搭配\n"
         "- 正文中出现任何菜品或食材时，必须标注大致的每 100g 热量范围\n"
-        "- 如有相关数据，可给出一份「推荐摄入时段」（训练前 1h / 训练后 30min / 睡前 3h 等）\n"
+        "- tips 的第 1 条必须给出「推荐摄入时段」（如训练前 1h / 训练后 30min / 睡前 3h）\n"
     ),
 }
 
@@ -2825,7 +2831,7 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
     sub_plan = (req.subscriptionPlan or "").strip()
     # V199: 订阅类型必须进缓存键——否则用户先未订阅访问（缓存一条非订阅 tip），
     # 再订阅会命中旧缓存、拿不到 subscriptionExclusive=true 的内容
-    cache_key = f"{family_id}|{date_str}|{max(0, int(req.variant))}|{sub_plan}"
+    cache_key = f"{family_id}|{date_str}|{max(0, int(req.variant))}|{sub_plan}|{_SUBSCRIPTION_PROMPT_VER if sub_plan else ''}"
     hit = _DAILY_TIP_CACHE.get(cache_key)
     now_ts = time.time()
     if hit:
