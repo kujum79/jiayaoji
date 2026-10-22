@@ -2795,7 +2795,7 @@ class DailyTipRequest(BaseModel):
 # 注意：必须与 _DAILY_TIP_SYSTEM 的「禁止疾病名称/医疗词汇」条款兼容，
 # 因此慢病关怀一律用生活化表述（低盐低糖、长辈适量、不宜多吃），不得出现疾病名。
 # V199.1 提高 prompt 版本号，缓存键带上它 → 改动措辞后旧缓存自动失效
-_SUBSCRIPTION_PROMPT_VER = "v2"
+_SUBSCRIPTION_PROMPT_VER = "v3"
 _SUBSCRIPTION_PROMPT_SEGMENTS = {
     "education": (
         "【订阅专享：饮食教育包】\n"
@@ -2817,6 +2817,17 @@ _SUBSCRIPTION_PROMPT_SEGMENTS = {
         "- 正文中出现任何菜品或食材时，必须标注大致的每 100g 热量范围\n"
         "- tips 的第 1 条必须给出「推荐摄入时段」（如训练前 1h / 训练后 30min / 睡前 3h）\n"
     ),
+}
+
+# V199.3: 硬性格式要求放在 user 轮次（system 里规则过多时模型容易漏），逐条可校验
+_SUBSCRIPTION_USER_REQUIREMENTS = {
+    "education": "【输出硬要求】tips 数组第 1 条必须以「给孩子的饮食小贴士：」开头，20字以内。",
+    "special_care": (
+        "【输出硬要求】正文必须明确列出 2-3 种不宜多吃或应少用的食材/调味（如腌制品、浓汤宝、蜜饯、糖醋做法）；"
+        "正文最后一句话必须单独成段、以「⚠️ 留意：」开头，写给家里长辈或需要控制饮食的家人，"
+        "只许用少盐/少糖/少油/适量/少吃这类生活化表述，不得出现任何疾病名称。"
+    ),
+    "premium": "【输出硬要求】正文至少标注 2 处「每100g约XX千卡」；tips 第 1 条必须是「推荐摄入时段：…」。",
 }
 
 
@@ -2873,6 +2884,8 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
     ]
     if req.variant > 0:
         user_lines.append(f"【要求】这是该家庭今天看到的第 {req.variant + 1} 条，请换一个与之前完全不同的选题角度（如不同食材、烹饪技巧、节气习俗），标题和内容都不要与之前重复。")
+    if sub_plan in _SUBSCRIPTION_USER_REQUIREMENTS:
+        user_lines.append(_SUBSCRIPTION_USER_REQUIREMENTS[sub_plan])
     def _published_fallback():
         """V199: 订阅用户专属生成失败时，用已发布文章兜底，避免卡片空窗（不标专享，避免误导）"""
         if req.variant != 0:
