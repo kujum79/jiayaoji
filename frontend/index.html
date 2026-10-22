@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V202.8-20261022';
+        var APP_VER = 'V203-20261022';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans'];
+        'diningOutPlans','courseProgress'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -8147,6 +8147,7 @@ function familyKey(key) {
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
         'diningOutPlans',
+        'courseProgress',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
         if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
@@ -8167,6 +8168,138 @@ function migrateGlobalDiningOutPlans(fid) {
         if (localStorage.getItem(prefixed) === null) localStorage.setItem(prefixed, legacy);
         localStorage.removeItem('diningOutPlans');
     } catch(e) {}
+}
+
+// ==================== V203: 饮食教育课程库 ====================
+// eduCourses：公共课程库（全局键，不含隐私数据）；courseProgress：学习进度（家庭前缀隔离）
+var _EDU_COURSES_VER = 1;
+var EDU_COURSES_SEED = [
+    {
+        id: 'course_001',
+        title: '中国饮食史·宋代篇',
+        category: 'history',
+        targetAudience: 'all',
+        duration: 10,
+        isPremium: false,
+        content: '【音频脚本】\n\n各位好，今天我们聊聊宋代的餐桌。\n\n宋朝是中国饮食史上的一个高峰。北宋汴京的夜市三更才散，五更又开，街上的吃食多到《东京梦华录》里要专门列一卷。\n\n先说主食。宋代南方稻米渐成主粮，北方仍以麦为主，面食花样极多：包子、馒头、馄饨、面条、油饼，市井里统称"饼"。今天我们说"饼"是指一种烙出来的圆面食，宋代则泛指一切面制品。\n\n再说肉食。宋代猪肉地位不高，苏轼在黄州写下"黄州好猪肉，价贱如泥土"，一道慢火煨炖的做法由此流传。羊肉是贵气之物，宫廷御膳以羊为尊，寻常百姓一年吃不上几回。\n\n最有意思的是饮食方式的变化。唐代人席地而坐、一人一案，宋代人普遍用上了高桌大椅，合食制开始出现——一家人围坐一桌，共夹一盘菜。今天我们"一桌吃饭"的习惯，大致从那时候定型。\n\n还有茶。宋代点茶讲究击拂出沫，斗茶之风盛行，茶馆遍布街市，既是解渴之处，也是消息集散地。\n\n【图文要点】\n1. 宋代主食：南稻北麦，面食统称"饼"。\n2. 肉食分层：羊肉贵、猪肉贱，苏轼与东坡肉。\n3. 合食制：高桌大椅取代分餐，围桌共食成为主流。\n4. 茶事：点茶、斗茶、茶馆兴盛。\n\n下次吃饭时不妨想一想：我们这一桌，其实已经摆了一千年。'
+    },
+    {
+        id: 'course_002',
+        title: '厨房里的四季：顺时而食',
+        category: 'nutrition',
+        targetAudience: 'all',
+        duration: 8,
+        isPremium: false,
+        content: '【音频脚本】\n\n"不时不食"这句话，说的是按季节挑食材。道理并不玄：应季的蔬果成熟度足、运输距离短、价格也便宜。\n\n春天，叶子菜和芽苗最水灵。菠菜、荠菜、豌豆尖、春笋，清淡快炒就好，不必重油重盐。春天也适合把冬天吃多的腌腊收起来，多换新鲜蔬菜。\n\n夏天，瓜类当家。冬瓜、丝瓜、黄瓜、苦瓜水分足，凉拌、清炒、煮汤都合适。天气热食欲差，可以用番茄、醋、柠檬提味，比多加盐更舒服。\n\n秋天，根茎和果实类丰收。莲藕、山药、南瓜、板栗，适合炖煮。秋天空气干，汤水可以多一点，比如莲藕排骨汤、山药鸡汤。\n\n冬天，白菜、萝卜、土豆耐存放，炖菜、砂锅、火锅都合适。肉类可以适当多一点，搭配萝卜、白菜解腻。\n\n【怎么用在自家的餐桌上】\n1. 每周买菜前看一眼当季有哪些菜，先挑三样。\n2. 一餐里至少一道应季蔬菜，做法尽量简单。\n3. 反季节蔬果不是不能吃，只是不必作为主力。\n\n【小提醒】应季不等于人人都适合。家里有特殊饮食需要的成员，仍以个体情况为准。'
+    },
+    {
+        id: 'course_003',
+        title: '一餐怎么搭：餐盘比例入门',
+        category: 'nutrition',
+        targetAudience: 'all',
+        duration: 6,
+        isPremium: false,
+        content: '【音频脚本】\n\n很多人做饭的困惑不是"会不会做"，而是"这一顿搭得对不对"。今天我们讲一个最简单的判断方法：看盘子。\n\n把一餐想成一个圆盘，大致分三块：\n\n第一块，蔬菜，占一半。绿叶菜、瓜茄类、菌菇都算。半盘蔬菜是多数成年人的合理起点。\n\n第二块，主食，占四分之一。米饭、面条、馒头、杂粮都算。喜欢粗粮的可以把一部分换成糙米、玉米、红薯。\n\n第三块，蛋白质，占四分之一。鱼、虾、瘦肉、蛋、豆腐、豆制品，掌心里一块大小就够。\n\n按这个比例装盘，日常一餐的结构大致就成立了。\n\n【三个常见偏差】\n1. 菜少饭多：一碗饭配两筷子菜，吃完容易饿，下午又想找零食。\n2. 肉多菜少：蛋白质够了，膳食纤维和维生素偏少，饭后容易觉得腻。\n3. 只有主食：面条、馒头、粥配咸菜，短期吃饱，长期结构单一。\n\n【给家里的实操建议】\n- 先盛菜，再盛饭，最后放肉，视觉上更容易守住比例。\n- 家里有孩子，蔬菜可以先上一道他愿意吃的。\n- 老人牙口不好，蔬菜切小、煮软，比例不必打折。\n\n记住这一句：半盘菜、一拳饭、一掌肉。'
+    },
+    {
+        id: 'course_004',
+        title: '睡前一餐怎么吃：改善睡眠的饮食调理',
+        category: 'nutrition',
+        targetAudience: ['失眠', '气郁质'],
+        duration: 5,
+        isPremium: true,
+        content: '【音频脚本】\n\n这一课针对的是"躺下很久睡不着、容易醒、睡不踏实"的家庭成员。我们不谈药，只谈餐桌上能调整的部分。\n\n第一件事：晚饭时间。尽量安排在睡前 3 小时以上，让胃里有足够时间排空。吃得太晚、太饱，躺下后容易反酸、腹胀，人也更难放松。\n\n第二件事：晚饭的量。七八分饱即可。主食不必完全不吃，一小碗米饭或半碗杂粮饭，比完全断碳水更稳妥。\n\n第三件事：少刺激。晚饭后尽量不喝浓茶、咖啡、可乐，也不建议用酒精"助眠"——酒精会让人更快入睡，但后半夜更容易醒。\n\n第四件事：可以常备的温和食材。小米粥、温牛奶、百合、莲子、桂圆、山药，这些是家常食材，做法简单，适合作为晚餐或睡前小点。例如小米山药粥、百合莲子羹。\n\n【气郁质成员的额外提醒】\n情绪紧绷往往和睡眠互相影响。晚饭后一起散步 15 分钟，或者睡前把当天的事写两行，比多吃一样东西更有用。\n\n【一周可以这样安排】\n周一、周三、周五：小米山药粥 + 一份清炒绿叶菜。\n周二、周四：清蒸鱼或豆腐 + 半碗米饭 + 百合莲子羹。\n周末：和家人一起吃，别吃太晚。\n\n【重要提示】如果失眠持续数周、明显影响白天状态，或伴随心慌、情绪低落，请及时就医，由专业医生评估。本课程仅为日常饮食参考，不替代医疗建议。'
+    },
+    {
+        id: 'course_005',
+        title: '让孩子愿意吃菜：儿童挑食应对',
+        category: 'nutrition',
+        targetAudience: ['儿童挑食', '3-6岁'],
+        duration: 6,
+        isPremium: true,
+        content: '【音频脚本】\n\n孩子不吃菜，是很多家庭餐桌上的难题。先给一个结论：强迫进食通常会让情况更糟，反复、轻松地接触同一种食物，才更有效。\n\n第一，接受"尝很多次才会喜欢"。研究发现，一种新蔬菜可能需要接触 8 到 15 次，孩子才慢慢接受。今天不吃，不代表永远不吃。\n\n第二，把蔬菜做成孩子熟悉的样子。整根芥蓝可能被拒绝，切成小段和鸡蛋一起炒，接受度会高很多。做成蔬菜饼、蔬菜粥、菜肉小馄饨，也是常见的过渡做法。\n\n第三，让孩子参与。一起去买菜，让他挑一样没吃过的菜；一起洗菜、撕菜叶。参与过的食物，孩子更愿意尝一口。\n\n第四，大人先吃。孩子看大人吃得香，比听十遍"这个有营养"有用。\n\n第五，不在餐桌上谈条件。"吃完菜才能吃零食"会把蔬菜变成任务。更稳妥的做法是：零食时间和正餐分开，正餐桌上只放当餐的食物。\n\n【一周实操小计划】\n第 1 天：饭桌上出现一道颜色鲜艳的蔬菜，不要求吃。\n第 2-3 天：让孩子帮忙洗、撕，允许他先摸一摸。\n第 4 天：把这道菜切小，和熟悉的食材一起炒。\n第 5-7 天：每餐放一小份在盘边，吃不吃都行，不评价。\n\n【提醒】3-6 岁孩子的食量波动很大，一天吃得多、一天吃得少都常见。判断生长情况看身高体重的长期曲线，比看单餐更有意义。如果孩子长期只吃极少数几种食物、体重增长明显落后，建议咨询儿科或营养门诊。'
+    }
+];
+
+function _eduCourseCopy(list) {
+    try { return JSON.parse(JSON.stringify(list)); } catch (e) { return list.slice(); }
+}
+
+// 初始化课程库：仅在已登录（或演示模式）时写入全局 eduCourses，避免游客态写全局业务键
+function _initEduCourses() {
+    try {
+        if (window.__demoMode) return;
+        if (typeof getFamilyId === 'function' && !getFamilyId()) return;
+        var ver = localStorage.getItem('eduCoursesVer');
+        var raw = localStorage.getItem('eduCourses');
+        var cur = null;
+        try { cur = raw ? JSON.parse(raw) : null; } catch (e) { cur = null; }
+        if (ver === String(_EDU_COURSES_VER) && Array.isArray(cur) && cur.length) return;
+        localStorage.setItem('eduCourses', JSON.stringify(EDU_COURSES_SEED));
+        localStorage.setItem('eduCoursesVer', String(_EDU_COURSES_VER));
+    } catch (e) { console.warn('[eduCourses] 初始化失败:', e); }
+}
+
+function getEduCourses() {
+    try {
+        var raw = localStorage.getItem('eduCourses');
+        var list = raw ? JSON.parse(raw) : null;
+        if (Array.isArray(list) && list.length) return list;
+    } catch (e) {}
+    return _eduCourseCopy(EDU_COURSES_SEED);
+}
+
+function getEduCourse(courseId) {
+    var list = getEduCourses();
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].id === courseId) return list[i];
+    }
+    return null;
+}
+
+// 学习进度：按家庭前缀隔离（courseProgress → 家庭码_courseProgress）
+function getCourseProgress() {
+    try {
+        var raw = lsGet('courseProgress');
+        var list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list : [];
+    } catch (e) { return []; }
+}
+
+function getCourseProgressOf(courseId) {
+    var list = getCourseProgress();
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].courseId === courseId) return list[i];
+    }
+    return null;
+}
+
+// status: unread / learning / completed；progress: 0-100
+function setCourseProgress(courseId, status, progress) {
+    if (!courseId) return false;
+    var list = getCourseProgress();
+    var pct = Math.max(0, Math.min(100, Math.round(Number(progress) || 0)));
+    var st = status || (pct >= 100 ? 'completed' : (pct > 0 ? 'learning' : 'unread'));
+    if (st === 'completed') pct = 100;
+    var found = false;
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].courseId === courseId) {
+            list[i].status = st;
+            list[i].progress = pct;
+            list[i].updatedAt = Date.now();
+            found = true;
+            break;
+        }
+    }
+    if (!found) list.push({ courseId: courseId, status: st, progress: pct, updatedAt: Date.now() });
+    lsSet('courseProgress', JSON.stringify(list));
+    return true;
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _initEduCourses);
+} else {
+    setTimeout(_initEduCourses, 0);
 }
 
 // ============ 模块定制系统 ============
