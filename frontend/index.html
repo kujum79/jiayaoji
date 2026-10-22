@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V197-20261022';
+        var APP_VER = 'V198-20261022';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -27699,12 +27699,20 @@ function _dtRenderCard(tip) {
             + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:6px;" onclick="event.stopPropagation(); _fhReviewAuto(\'' + (tip.date || '') + '\',\'confirm\')">保留</button>'
             + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:8px;color:#B91C1C;" onclick="event.stopPropagation(); _fhReviewAuto(\'' + (tip.date || '') + '\',\'withdraw\')">换篇</button>';
     }
+    // V198: 订阅状态区分按钮——已订阅显示「已解锁专属方案」，未订阅显示「订阅」
+    var subBtnHtml;
+    if (isSubscribed()) {
+        var planLabel = { education: '饮食教育', special_care: '特殊关怀', premium: '高阶品质' }[(_getSubscriptionStatus() || {}).planType] || '专属方案';
+        subBtnHtml = '<button class="dt-btn dt-btn-primary" style="background:#F97316;border-color:#F97316;" onclick="event.stopPropagation(); _openPremiumContent()">✨ 已解锁：' + planLabel + '</button>';
+    } else {
+        subBtnHtml = '<button class="dt-btn" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;" onclick="event.stopPropagation(); _openSubscribeModal()">订阅</button>';
+    }
     // V197: 移除「收藏」按钮，替换为「订阅」入口；标题+摘要整块可点开详情
     el.innerHTML = '<div class="dt-head"><span>📚 食养堂 · 今日一课</span>'
         + '<span class="dt-head-btns" onclick="event.stopPropagation()">'
         + adminCtl
         + '<button id="dtCardSpeakBtn" onclick="event.stopPropagation(); _dtSpeakTip(\'card\')" style="border:none;background:none;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;color:#6B7280;" title="语音播报">🔊</button>'
-        + '<button class="dt-btn" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;" onclick="event.stopPropagation(); _openSubscribeModal()">订阅</button>'
+        + subBtnHtml
         + '</span></div>'
         + '<div onclick="_openDailyTipFull()" style="cursor:pointer;">'
         + '<div class="dt-title">' + emoji + ' ' + (tip.title || '') + '</div>'
@@ -27877,6 +27885,98 @@ function _closeDtFull() {
     setTimeout(function () { ov.remove(); }, 260);
 }
 
+// V198: 订阅状态数据管理与判断
+var _SUBSCRIPTION_KEY = 'subscriptionStatus';
+var _SUBSCRIPTION_PLAN_TYPES = ['education', 'special_care', 'premium'];
+var _SUBSCRIPTION_PKG_MAP = { 0: 'education', 1: 'special_care', 2: 'premium' };
+function _getSubscriptionStatus() {
+    try { return JSON.parse(localStorage.getItem(_SUBSCRIPTION_KEY) || 'null'); } catch (e) { return null; }
+}
+function _setSubscriptionStatus(status) {
+    if (!status) { try { localStorage.removeItem(_SUBSCRIPTION_KEY); } catch (e) {} return; }
+    try { localStorage.setItem(_SUBSCRIPTION_KEY, JSON.stringify(status)); } catch (e) {}
+}
+// 订阅有效判断：isSubscribed() === true 当且仅当 isSubscribed=true 且 expireAt > now
+function isSubscribed() {
+    var s = _getSubscriptionStatus();
+    if (!s || !s.isSubscribed || !s.expireAt) return false;
+    var now = Math.floor(Date.now() / 1000);
+    if (now >= s.expireAt) {
+        // 已过期：自动清理为未订阅状态，但保留原套餐标识方便续费回显
+        s.isSubscribed = false;
+        _setSubscriptionStatus(s);
+        return false;
+    }
+    return true;
+}
+// 订阅一个月（30 天）；pkgIdx 对应弹窗里选中的套餐序号 0/1/2
+function _applySubscription(pkgIdx) {
+    var now = Math.floor(Date.now() / 1000);
+    _setSubscriptionStatus({
+        isSubscribed: true,
+        planType: _SUBSCRIPTION_PKG_MAP[pkgIdx] || 'premium',
+        subscribedAt: now,
+        expireAt: now + 30 * 24 * 3600
+    });
+    // 重新渲染首页食养堂卡片，按钮即时切换为「已解锁」
+    try { renderHomeDailyTipCard && renderHomeDailyTipCard(); } catch (e) {}
+    try { _dtLoadedKey = ''; _fetchDailyTip(); } catch (e) {}
+}
+// 已订阅用户点击「已解锁：xxx」→ 打开专属方案页（占位弹层，后续可扩展）
+function _openPremiumContent() {
+    var old = document.getElementById('premiumContentOv');
+    if (old) old.remove();
+    var s = _getSubscriptionStatus() || {};
+    var daysLeft = s.expireAt ? Math.max(0, Math.floor((s.expireAt - Math.floor(Date.now() / 1000)) / (24 * 3600))) : 0;
+    var planNames = { education: '🎓 饮食教育包', special_care: '🏥 特殊关怀包', premium: '💪 高阶品质包' };
+    var planName = planNames[s.planType] || '专属方案';
+    var ov = document.createElement('div');
+    ov.id = 'premiumContentOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100008;display:flex;flex-direction:column;opacity:0;transition:opacity .25s ease;';
+    ov.onclick = function (e) { if (e.target === ov) _closePremiumContent(); };
+    var sheet = document.createElement('div');
+    sheet.id = 'premiumContentSheet';
+    sheet.style.cssText = 'margin-top:auto;background:white;border-radius:18px 18px 0 0;transform:translateY(100%);transition:transform .25s ease;max-width:430px;width:100%;align-self:center;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;';
+    sheet.innerHTML = '<div style="flex-shrink:0;padding:14px 18px 10px;border-bottom:1px solid #F3F4F6;">'
+        + '<div style="display:flex;align-items:center;gap:8px;">'
+        + '<div style="width:4px;height:18px;background:#F97316;border-radius:2px;"></div>'
+        + '<span style="font-size:17px;font-weight:700;color:#1F2937;">我的专属方案</span>'
+        + '<button onclick="_closePremiumContent()" style="margin-left:auto;border:none;background:none;font-size:20px;cursor:pointer;color:#9CA3AF;">✕</button>'
+        + '</div>'
+        + '</div>'
+        + '<div style="flex:1;overflow-y:auto;padding:16px 18px;">'
+        + '<div style="background:linear-gradient(135deg,#FFF7ED,#FEF3C7);border-radius:12px;padding:16px;border:1px solid #FED7AA;">'
+        + '<div style="font-size:15px;font-weight:700;color:#1F2937;">' + planName + '</div>'
+        + '<div style="font-size:12px;color:#92400E;margin-top:4px;">订阅剩余 ' + daysLeft + ' 天</div>'
+        + '</div>'
+        + '<div style="margin-top:16px;font-size:13px;color:#4B5563;line-height:1.7;">✅ 已解锁功能：</div>'
+        + '<ul style="margin-top:6px;padding-left:18px;font-size:13px;color:#4B5563;line-height:1.9;">'
+        + '<li>营养师每周定制食谱（已同步到你的下周食养计划）</li>'
+        + '<li>专项饮食建议（体质/慢病/育儿）</li>'
+        + '<li>家庭成员饮食档案与偏好画像</li>'
+        + '<li>优先客服通道与 AI 推荐增强</li>'
+        + '</ul>'
+        + '<div style="margin-top:18px;font-size:11px;color:#9CA3AF;">订阅到期后自动回退免费版，已收藏的食养堂内容保留。</div>'
+        + '</div>'
+        + '<div style="flex-shrink:0;padding:10px 18px calc(14px + env(safe-area-inset-bottom));border-top:1px solid #F3F4F6;background:white;">'
+        + '<button onclick="_closePremiumContent()" style="width:100%;height:42px;border-radius:12px;border:none;background:#F3F4F6;color:#4B5563;font-size:15px;font-weight:600;cursor:pointer;">关闭</button>'
+        + '</div>';
+    ov.appendChild(sheet);
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () {
+        ov.style.opacity = '1';
+        sheet.style.transform = 'translateY(0)';
+    });
+}
+function _closePremiumContent() {
+    var ov = document.getElementById('premiumContentOv');
+    if (!ov) return;
+    var sheet = document.getElementById('premiumContentSheet');
+    if (sheet) { sheet.style.transition = 'transform .25s ease'; sheet.style.transform = 'translateY(100%)'; }
+    ov.style.transition = 'opacity .25s ease'; ov.style.opacity = '0';
+    setTimeout(function () { ov.remove(); }, 260);
+}
+
 // V197: 订阅专属饮食定制服务（底部滑入弹窗）
 var _subSelectedPkg = 0; // 默认选中第一个
 function _openSubscribeModal() {
@@ -27950,12 +28050,16 @@ function _closeSubscribeModal() {
     setTimeout(function () { ov.remove(); }, 260);
 }
 function _subscribePay() {
+    _applySubscription(_subSelectedPkg);
     _closeSubscribeModal();
-    showToast && showToast('✅ 订阅成功！营养师将在 1 个工作日内联系您完善家庭档案。');
+    var days = 30;
+    var planNames = { 0: '🎓 饮食教育包', 1: '🏥 特殊关怀包', 2: '💪 高阶品质包' };
+    showToast && showToast('✅ 订阅成功！已为您解锁【' + (planNames[_subSelectedPkg] || '专属方案') + '】，有效期 ' + days + ' 天');
 }
 function _subscribePoints() {
+    _applySubscription(_subSelectedPkg);
     _closeSubscribeModal();
-    showToast && showToast('💎 已使用积分兑换订阅服务，家庭专属饮食方案即将生成…');
+    showToast && showToast('💎 积分兑换成功！已解锁专属饮食定制方案，营养师将在 1 个工作日内联系您');
 }
 
 // V163: 食养堂语音播报（Web Speech API，朗读标题+正文+小贴士）
