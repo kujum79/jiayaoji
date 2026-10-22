@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V195-20261021';
+        var APP_VER = 'V196-20261022';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -27696,18 +27696,20 @@ function _dtRenderCard(tip) {
     }
     if (tip.autoPublished && _fhAdmin && tip.reviewStatus !== 'confirmed') {
         adminCtl = '<span style="font-size:10px;color:#B45309;background:#FEF3C7;border-radius:4px;padding:2px 6px;margin-right:6px;align-self:center;">AI预选·待复核</span>'
-            + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:6px;" onclick="_fhReviewAuto(\'' + (tip.date || '') + '\',\'confirm\')">保留</button>'
-            + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:8px;color:#B91C1C;" onclick="_fhReviewAuto(\'' + (tip.date || '') + '\',\'withdraw\')">换篇</button>';
+            + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:6px;" onclick="event.stopPropagation(); _fhReviewAuto(\'' + (tip.date || '') + '\',\'confirm\')">保留</button>'
+            + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:8px;color:#B91C1C;" onclick="event.stopPropagation(); _fhReviewAuto(\'' + (tip.date || '') + '\',\'withdraw\')">换篇</button>';
     }
+    // V196: 移除「读完整」按钮；标题+摘要整块可点开详情，减少视觉噪音
     el.innerHTML = '<div class="dt-head"><span>📚 食养堂 · 今日一课</span>'
-        + '<span class="dt-head-btns">'
+        + '<span class="dt-head-btns" onclick="event.stopPropagation()">'
         + adminCtl
-        + '<button class="dt-btn dt-btn-primary" onclick="_openDailyTipFull()">读完整</button>'
-        + '<button id="dtCardSpeakBtn" onclick="_dtSpeakTip(\'card\')" style="border:none;background:none;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;color:#6B7280;" title="语音播报">🔊</button>'
-        + '<button class="dt-btn" onclick="_collectDailyTip()">收藏</button>'
+        + '<button id="dtCardSpeakBtn" onclick="event.stopPropagation(); _dtSpeakTip(\'card\')" style="border:none;background:none;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;color:#6B7280;" title="语音播报">🔊</button>'
+        + '<button class="dt-btn" onclick="event.stopPropagation(); _collectDailyTip()">收藏</button>'
         + '</span></div>'
+        + '<div onclick="_openDailyTipFull()" style="cursor:pointer;">'
         + '<div class="dt-title">' + emoji + ' ' + (tip.title || '') + '</div>'
-        + '<div class="dt-summary">' + (tip.summary || '') + '</div>';
+        + '<div class="dt-summary">' + (tip.summary || '') + '</div>'
+        + '</div>';
 }
 function _dtRenderDegraded() {
     var el = document.getElementById('homeDailyTipCard');
