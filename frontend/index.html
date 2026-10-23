@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V208-20261023';
+        var APP_VER = 'V209-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -8470,11 +8470,30 @@ async function callCustomCourse(baseCourseId, member) {
         clearTimeout(timer);
     }
 }
-// ==================== V205: 定制课程审核（超管后台） ====================
-var _courseReviewCache = [];
+// ==================== V209: 超管「课程汇总」库（courseLibrary） ====================
+// 全局课程库：超管手工录入/维护，不按家庭前缀隔离
+var _COURSE_LIB_KEY = 'courseLibrary';
 
-function _closeCourseReview() {
-    var ov = document.getElementById('courseReviewOverlay');
+function getCourseLibrary() {
+    try {
+        var raw = localStorage.getItem(_COURSE_LIB_KEY);
+        var list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list : [];
+    } catch (e) { return []; }
+}
+
+function saveCourseLibrary(list) {
+    try {
+        localStorage.setItem(_COURSE_LIB_KEY, JSON.stringify(list || []));
+        return true;
+    } catch (e) {
+        showToast('保存失败：' + (e.message || e));
+        return false;
+    }
+}
+
+function _closeCourseLibrary() {
+    var ov = document.getElementById('courseLibraryOverlay');
     if (ov) ov.remove();
     document.body.style.overflow = '';
 }
@@ -8501,87 +8520,62 @@ function _ccConfirm(msg, onOk) {
     };
 }
 
-async function _openCourseReviewPanel() {
+function _openCourseLibraryPanel() {
     if (typeof isSuperAdmin === 'function' && !isSuperAdmin()) {
-        showToast('仅超管可访问课程审核');
+        showToast('仅超管可访问课程汇总');
         return;
     }
-    _closeCourseReview();
+    _closeCourseLibrary();
     var ov = document.createElement('div');
-    ov.id = 'courseReviewOverlay';
+    ov.id = 'courseLibraryOverlay';
     ov.style.cssText = 'position:fixed;inset:0;background:#f0f0f0;z-index:9999;overflow-y:auto;';
     ov.innerHTML =
         '<div style="max-width:430px;margin:0 auto;min-height:100%;background:#F7F5F2;box-shadow:0 0 30px rgba(0,0,0,0.12);">' +
         '<div style="position:sticky;top:0;z-index:2;background:#fff;border-bottom:1px solid #EDE9E3;display:flex;align-items:center;padding:12px 16px;gap:10px;">' +
-        '<button type="button" onclick="_closeCourseReview()" style="border:none;background:none;font-size:15px;color:#6B7280;cursor:pointer;padding:4px 8px;">← 返回</button>' +
-        '<div style="flex:1;text-align:center;font-size:16px;font-weight:700;color:#1F2937;">🎓 定制课程审核</div>' +
-        '<button type="button" onclick="_loadCourseReviewList()" style="border:1px solid #E5E7EB;background:#fff;border-radius:8px;font-size:12px;color:#6B7280;padding:4px 10px;cursor:pointer;">↻ 刷新</button>' +
+        '<button type="button" onclick="_closeCourseLibrary()" style="border:none;background:none;font-size:15px;color:#6B7280;cursor:pointer;padding:4px 8px;">← 返回</button>' +
+        '<div style="flex:1;text-align:center;font-size:16px;font-weight:700;color:#1F2937;">📚 课程汇总</div>' +
+        '<button type="button" onclick="_openCourseLibraryForm()" style="border:none;background:#16A34A;border-radius:8px;font-size:12px;font-weight:600;color:#fff;padding:6px 12px;cursor:pointer;">+ 新增</button>' +
         '</div>' +
-        '<div id="courseReviewList" style="padding:14px 14px 40px;"><div style="text-align:center;color:#9CA3AF;padding:40px 0;font-size:14px;">加载中…</div></div>' +
+        '<div id="courseLibraryList" style="padding:14px 14px 40px;"></div>' +
         '</div>';
     document.body.appendChild(ov);
     document.body.style.overflow = 'hidden';
-    await _loadCourseReviewList();
+    _renderCourseLibraryList();
 }
 
-async function _loadCourseReviewList() {
-    var box = document.getElementById('courseReviewList');
+function _renderCourseLibraryList() {
+    var box = document.getElementById('courseLibraryList');
     if (!box) return;
-    box.innerHTML = '<div style="text-align:center;color:#9CA3AF;padding:40px 0;font-size:14px;">加载中…</div>';
-    try {
-        var resp = await fetch('/api/admin/custom-courses', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'pending_review' })
-        });
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        var j = await resp.json();
-        _courseReviewCache = (j && j.courses) || [];
-    } catch (e) {
-        box.innerHTML = '<div style="text-align:center;color:#DC2626;padding:40px 0;font-size:14px;">加载失败：' + escapeHtml(String(e.message || e)) + '</div>';
+    var list = getCourseLibrary();
+    if (!list.length) {
+        box.innerHTML = '<div style="text-align:center;padding:60px 20px;color:#9CA3AF;"><div style="font-size:40px;margin-bottom:10px;">📚</div><div style="font-size:14px;">课程库还是空的，点右上角「+ 新增」录入第一篇</div></div>';
         return;
     }
-    if (!_courseReviewCache.length) {
-        box.innerHTML = '<div style="text-align:center;padding:60px 20px;color:#9CA3AF;"><div style="font-size:40px;margin-bottom:10px;">✅</div><div style="font-size:14px;">暂无待审核的定制课程</div></div>';
-        return;
-    }
-    var html = '';
-    _courseReviewCache.forEach(function (rec, idx) {
+    var html = '<div style="font-size:12px;color:#9CA3AF;margin:0 0 10px 2px;">共 ' + list.length + ' 篇课程</div>';
+    list.forEach(function (c) {
         try {
-        var c = rec.course || {};
-        var m = rec.member || {};
-        var hasContent = !!(c.content && c.content.trim());
-        var when = rec.createdAt ? new Date(rec.createdAt) : null;
-        var timeStr = when ? (when.getMonth() + 1) + '月' + when.getDate() + '日 ' + ('0' + when.getHours()).slice(-2) + ':' + ('0' + when.getMinutes()).slice(-2) : '';
-        var suggestionTitle = rec.suggestionTitle || c.title || '未命名建议';
-        var memberDisplay = (m && m.name) ? String(m.name) : '未指定';
-        var ageNum = m && m.age;
-        if (typeof ageNum === 'number' && ageNum > 0) memberDisplay += '（' + ageNum + '岁）';
-
-        html +=
-            '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
-            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
-            '<span style="font-size:14px;font-weight:700;color:#1F2937;">' + escapeHtml(suggestionTitle) + '</span>' +
-            (hasContent
-                ? '<span style="font-size:11px;background:#DCFCE7;color:#166534;border-radius:999px;padding:2px 8px;">已生成正文</span>'
-                : '<span style="font-size:11px;background:#FEF3C7;color:#92400E;border-radius:999px;padding:2px 8px;">待AI生成</span>') +
-            '</div>' +
-            '<div style="font-size:12px;color:#6B7280;line-height:1.7;">' +
-            '🏠 家庭：' + escapeHtml(rec.familyName || rec.familyId || '未知') +
-            '　👤 目标成员：' + escapeHtml(memberDisplay) + '<br>' +
-            '📖 基础课程：' + escapeHtml(rec.baseTitle || rec.baseCourseId || '') +
-            (timeStr ? '<br>🕐 ' + timeStr : '') +
-            '</div>' +
-            '<div style="display:flex;gap:8px;margin-top:10px;">' +
-            '<button type="button" id="btnGen_' + idx + '" onclick="_adminGenerateCourse(' + idx + ')" style="flex:1;padding:8px;border:1px solid #FDBA74;background:#FFF7ED;border-radius:10px;font-size:12px;color:#C2410C;cursor:pointer;">' +
-                (hasContent ? '🔁 重新生成' : '🤖 AI生成内容') + '</button>' +
-            '<button type="button" onclick="_previewCustomCourse(' + idx + ')" ' +
-                (hasContent ? '' : 'disabled style="opacity:0.4;cursor:not-allowed;"') +
-                ' style="flex:1;padding:8px;border:1px solid #D1D5DB;background:#fff;border-radius:10px;font-size:12px;color:#374151;cursor:pointer;">👁 预览编辑</button>' +
-            '<button type="button" onclick="_reviewCustomCourseAction(' + idx + ',\'approve\')" ' +
-                (hasContent ? '' : 'disabled style="opacity:0.4;cursor:not-allowed;"') +
-                ' style="flex:1;padding:8px;border:none;background:#16A34A;border-radius:10px;font-size:12px;color:#fff;font-weight:600;cursor:pointer;">✓ 通过推送</button>' +
-            '</div></div>';
+            var isPremium = !!c.isPremium;
+            var tags = Array.isArray(c.targetTags) ? c.targetTags.filter(Boolean) : [];
+            var body = String(c.content || '');
+            html +=
+                '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
+                '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">' +
+                '<span style="font-size:14px;font-weight:700;color:#1F2937;">' + escapeHtml(c.title || '未命名课程') + '</span>' +
+                (c.type === 'audio'
+                    ? '<span style="font-size:11px;background:#DBEAFE;color:#1D4ED8;border-radius:999px;padding:2px 8px;">🎧 音频</span>'
+                    : '<span style="font-size:11px;background:#EDE9FE;color:#6D28D9;border-radius:999px;padding:2px 8px;">📄 图文</span>') +
+                (isPremium
+                    ? '<span style="font-size:11px;background:#FEF3C7;color:#92400E;border-radius:999px;padding:2px 8px;">💰 ¥' + (Number(c.price) || 0).toFixed(2) + '</span>'
+                    : '<span style="font-size:11px;background:#F3F4F6;color:#6B7280;border-radius:999px;padding:2px 8px;">免费</span>') +
+                '</div>' +
+                '<div style="font-size:12px;color:#6B7280;line-height:1.7;">' +
+                (tags.length ? '🏷 ' + escapeHtml(tags.join(' / ')) + '<br>' : '') +
+                escapeHtml(body.slice(0, 60)) + (body.length > 60 ? '…' : '') +
+                '</div>' +
+                '<div style="display:flex;gap:8px;margin-top:10px;">' +
+                '<button type="button" onclick="_openCourseLibraryForm(\'' + escapeAttr(c.id) + '\')" style="flex:1;padding:8px;border:1px solid #D1D5DB;background:#fff;border-radius:10px;font-size:12px;color:#374151;cursor:pointer;">✏️ 修改</button>' +
+                '<button type="button" onclick="_deleteCourseLibraryItem(\'' + escapeAttr(c.id) + '\')" style="flex:1;padding:8px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:10px;font-size:12px;color:#B91C1C;cursor:pointer;">🗑 删除</button>' +
+                '</div></div>';
         } catch (e) {
             html += '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:10px;margin-bottom:10px;color:#b91c1c;font-size:12px;">渲染异常：' + escapeHtml(String(e.message || e)) + '</div>';
         }
@@ -8589,112 +8583,131 @@ async function _loadCourseReviewList() {
     box.innerHTML = html;
 }
 
-// 超管手动触发 AI 生成正文
-async function _adminGenerateCourse(idx) {
-    var rec = _courseReviewCache[idx];
-    if (!rec) return;
-    var btn = document.getElementById('btnGen_' + idx);
-    if (btn) { btn.disabled = true; btn.textContent = 'AI 生成中…'; btn.style.opacity = '0.6'; }
-    try {
-        var resp = await fetch('/api/admin/custom-course/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: rec.id, force: !!rec.course && !!rec.course.content })
-        });
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        var j = await resp.json();
-        if (!j.ok) throw new Error(j.error || '生成失败');
-        if (j.course) { rec.course = j.course; _courseReviewCache[idx] = rec; }
-        showToast(j.skipped ? '已存在正文' : 'AI 生成完成，请预览检查');
-    } catch (e) {
-        showToast('生成失败：' + (e.message || e));
-    } finally {
-        await _loadCourseReviewList();
-    }
+// ==================== 课程汇总：新增/修改表单 ====================
+function _toggleCourseLibraryPrice() {
+    var cb = document.getElementById('clPremium');
+    var priceEl = document.getElementById('clPrice');
+    if (!priceEl) return;
+    var on = !!(cb && cb.checked);
+    priceEl.disabled = !on;
+    priceEl.style.opacity = on ? '1' : '0.45';
 }
 
-// 预览编辑：可修改标题和正文，保存后回写后端
-function _previewCustomCourse(idx) {
-    var rec = _courseReviewCache[idx];
-    if (!rec) return;
-    var c = rec.course || {};
-    var title = c.title || rec.suggestionTitle || '';
-    var content = c.content || '';
-    var old = document.getElementById('coursePreviewOverlay');
-    if (old) old.remove();
-    var pv = document.createElement('div');
-    pv.id = 'coursePreviewOverlay';
-    pv.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:flex-end;justify-content:center;';
-    pv.innerHTML =
-        '<div style="background:#fff;width:100%;max-width:430px;max-height:88vh;border-radius:18px 18px 0 0;display:flex;flex-direction:column;overflow:hidden;">' +
-        '<div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #F3F4F6;gap:8px;">' +
-        '<div style="flex:1;font-size:14px;font-weight:700;color:#1F2937;">预览编辑</div>' +
-        '<button type="button" onclick="_saveCustomCourseEdit(' + idx + ')" style="padding:6px 14px;border:none;background:#F97316;border-radius:8px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;">保存</button>' +
-        '<button type="button" onclick="document.getElementById(\'coursePreviewOverlay\').remove()" style="border:none;background:#F3F4F6;border-radius:50%;width:30px;height:30px;font-size:14px;color:#6B7280;cursor:pointer;">✕</button>' +
-        '</div>' +
-        '<div style="flex:1;overflow-y:auto;padding:12px 14px;">' +
-        '<div style="margin-bottom:10px;font-size:12px;color:#6B7280;">课程标题</div>' +
-        '<input id="peTitle_' + idx + '" type="text" value="' + escapeAttr(title) + '" maxlength="24" style="width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#1F2937;box-sizing:border-box;margin-bottom:10px;">' +
-        '<div style="margin-bottom:10px;font-size:12px;color:#6B7280;">课程正文（医疗违规词会自动清洗）</div>' +
-        '<textarea id="peContent_' + idx + '" rows="12" maxlength="2000" style="width:100%;padding:10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;line-height:1.9;color:#374151;box-sizing:border-box;resize:vertical;">' + escapeHtml(content) + '</textarea>' +
-        '</div>' +
-        '</div>';
-    document.body.appendChild(pv);
-    pv.addEventListener('click', function (e) { if (e.target === pv) pv.remove(); });
-}
-
-async function _saveCustomCourseEdit(idx) {
-    var rec = _courseReviewCache[idx];
-    if (!rec) return;
-    var title = (document.getElementById('peTitle_' + idx) || {}).value || '';
-    var content = (document.getElementById('peContent_' + idx) || {}).value || '';
-    if (!content.trim()) { showToast('正文不能为空'); return; }
-    try {
-        var resp = await fetch('/api/admin/custom-course/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: rec.id, title: title, content: content })
-        });
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        var j = await resp.json();
-        if (!j.ok) throw new Error(j.error || '保存失败');
-        if (j.course) { rec.course = j.course; _courseReviewCache[idx] = rec; }
-        showToast('保存成功');
-        document.getElementById('coursePreviewOverlay').remove();
-    } catch (e) {
-        showToast('保存失败：' + (e.message || e));
-    }
-}
-
-async function _reviewCustomCourseAction(idx, action) {
-    var rec = _courseReviewCache[idx];
-    if (!rec) return;
-    var tip = (action === 'reject')
-        ? '驳回后 AI 将重新生成一篇，确认驳回？'
-        : '通过后课程将推送到「' + (rec.familyName || rec.familyId || '该家庭') + '」的「我的专属课堂」，确认通过？';
-    _ccConfirm(tip, function () { _doReviewCustomCourse(rec.id, action, rec); });
-}
-
-async function _doReviewCustomCourse(id, action, rec) {
-    var btns = document.querySelectorAll('#courseReviewList button');
-    btns.forEach(function (b) { b.disabled = true; b.style.opacity = '0.5'; });
-    try {
-        var resp = await fetch('/api/admin/custom-course/review', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: id, action: action })
-        });
-        var j = await resp.json();
-        if (!resp.ok || !j || !j.ok) throw new Error((j && (j.error || j.detail)) || ('HTTP ' + resp.status));
-        if (action === 'approve') {
-            showToast('已通过并推送到「' + (rec.familyName || rec.familyId) + '」的专属课堂');
-        } else {
-            showToast(j.regenerated ? '已驳回，AI 已重新生成一篇待审核' : '已驳回（AI 重新生成失败，标记为已驳回）');
+function _openCourseLibraryForm(id) {
+    var list = getCourseLibrary();
+    var item = null;
+    if (id) {
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] && list[i].id === id) { item = list[i]; break; }
         }
-    } catch (e) {
-        showToast('操作失败：' + (e.message || e));
+        if (!item) { showToast('课程不存在'); return; }
     }
-    await _loadCourseReviewList();
+    var old = document.getElementById('courseLibraryFormOverlay');
+    if (old) old.remove();
+    var c = item || { title: '', targetTags: [], type: 'article', content: '', isPremium: false, price: 0 };
+    var tagStr = Array.isArray(c.targetTags) ? c.targetTags.join('，') : '';
+    var premium = !!c.isPremium;
+    var ov = document.createElement('div');
+    ov.id = 'courseLibraryFormOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:flex-end;justify-content:center;';
+    ov.innerHTML =
+        '<div style="background:#fff;width:100%;max-width:430px;max-height:90vh;border-radius:18px 18px 0 0;display:flex;flex-direction:column;overflow:hidden;">' +
+        '<div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #F3F4F6;gap:8px;">' +
+        '<div style="flex:1;font-size:14px;font-weight:700;color:#1F2937;">' + (item ? '修改课程' : '新增课程') + '</div>' +
+        '<button type="button" onclick="_saveCourseLibraryForm(\'' + escapeAttr(id || '') + '\')" style="padding:6px 14px;border:none;background:#16A34A;border-radius:8px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;">保存</button>' +
+        '<button type="button" onclick="document.getElementById(\'courseLibraryFormOverlay\').remove()" style="border:none;background:#F3F4F6;border-radius:50%;width:30px;height:30px;font-size:14px;color:#6B7280;cursor:pointer;">✕</button>' +
+        '</div>' +
+        '<div style="flex:1;overflow-y:auto;padding:12px 14px 24px;">' +
+        '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">课程标题</div>' +
+        '<input id="clTitle" type="text" value="' + escapeAttr(c.title || '') + '" maxlength="40" placeholder="如：失眠人群的晚餐禁区" style="width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#1F2937;box-sizing:border-box;margin-bottom:12px;">' +
+        '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">课程类型</div>' +
+        '<select id="clType" style="width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#1F2937;box-sizing:border-box;margin-bottom:12px;background:#fff;">' +
+        '<option value="article"' + (c.type === 'audio' ? '' : ' selected') + '>📄 图文</option>' +
+        '<option value="audio"' + (c.type === 'audio' ? ' selected' : '') + '>🎧 音频</option>' +
+        '</select>' +
+        '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">适用人群标签（用逗号分隔）</div>' +
+        '<input id="clTags" type="text" value="' + escapeAttr(tagStr) + '" placeholder="如：失眠，气郁质" style="width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#1F2937;box-sizing:border-box;margin-bottom:12px;">' +
+        '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">课程内容</div>' +
+        '<textarea id="clContent" rows="10" maxlength="5000" placeholder="这里填写课程正文…" style="width:100%;padding:10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;line-height:1.9;color:#374151;box-sizing:border-box;resize:vertical;margin-bottom:12px;">' + escapeHtml(c.content || '') + '</textarea>' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
+        '<input id="clPremium" type="checkbox" onchange="_toggleCourseLibraryPrice()"' + (premium ? ' checked' : '') + ' style="width:16px;height:16px;cursor:pointer;">' +
+        '<label for="clPremium" style="font-size:13px;color:#374151;cursor:pointer;">单独收费</label>' +
+        '</div>' +
+        '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">价格（元）</div>' +
+        '<input id="clPrice" type="number" min="0" step="0.01" value="' + (Number(c.price) || 0) + '" style="width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#1F2937;box-sizing:border-box;">' +
+        '</div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+    _toggleCourseLibraryPrice();
+}
+
+function _saveCourseLibraryForm(id) {
+    var title = (document.getElementById('clTitle') || {}).value || '';
+    title = title.trim();
+    var content = (document.getElementById('clContent') || {}).value || '';
+    if (!title) { showToast('请填写课程标题'); return; }
+    if (!content.trim()) { showToast('请填写课程内容'); return; }
+    var typeEl = document.getElementById('clType');
+    var type = (typeEl && typeEl.value === 'audio') ? 'audio' : 'article';
+    var tagsRaw = (document.getElementById('clTags') || {}).value || '';
+    var tags = tagsRaw.split(/[,，、\s]+/).map(function (t) { return t.trim(); }).filter(Boolean);
+    var premiumEl = document.getElementById('clPremium');
+    var isPremium = !!(premiumEl && premiumEl.checked);
+    var price = 0;
+    if (isPremium) {
+        price = Number((document.getElementById('clPrice') || {}).value || 0);
+        if (!(price > 0)) { showToast('收费课程请填写有效价格'); return; }
+        price = Math.round(price * 100) / 100;
+    }
+    var list = getCourseLibrary();
+    if (id) {
+        var found = false;
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] && list[i].id === id) {
+                list[i].title = title;
+                list[i].targetTags = tags;
+                list[i].type = type;
+                list[i].content = content;
+                list[i].isPremium = isPremium;
+                list[i].price = price;
+                found = true;
+                break;
+            }
+        }
+        if (!found) { showToast('课程不存在'); return; }
+    } else {
+        list.push({
+            id: 'course_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+            title: title,
+            targetTags: tags,
+            type: type,
+            content: content,
+            isPremium: isPremium,
+            price: price,
+            createdAt: Date.now()
+        });
+    }
+    if (!saveCourseLibrary(list)) return;
+    var f = document.getElementById('courseLibraryFormOverlay');
+    if (f) f.remove();
+    showToast(id ? '修改已保存' : '课程已存入课程库');
+    _renderCourseLibraryList();
+}
+
+function _deleteCourseLibraryItem(id) {
+    var list = getCourseLibrary();
+    var item = null;
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].id === id) { item = list[i]; break; }
+    }
+    if (!item) { showToast('课程不存在'); return; }
+    _ccConfirm('确认删除「' + (item.title || '该课程') + '」？删除后不可恢复。', function () {
+        var next = getCourseLibrary().filter(function (c) { return !c || c.id !== id; });
+        if (saveCourseLibrary(next)) {
+            showToast('已删除');
+            _renderCourseLibraryList();
+        }
+    });
 }
 
 // 家庭端：登录后静默拉取已发布的专属课程，合并进本地 customCourses 队列
@@ -33573,7 +33586,7 @@ function renderFamily() {
                     <button type="button" onclick="_openFoodHallMgr()" style="${_sBtn}">食养管理</button>
                     <button type="button" id="superLibMgrBtn" style="${_sBtn}">文库管理</button>
                     <button type="button" onclick="openAiUsagePanel()" style="${_sBtn}">AI 用量</button>
-                    <button type="button" onclick="_openCourseReviewPanel()" style="${_sBtn}">课程审核</button>
+                    <button type="button" onclick="_openCourseLibraryPanel()" style="${_sBtn}">课程汇总</button>
                 </div>
             `);
             var _libBtn = document.getElementById('superLibMgrBtn');
