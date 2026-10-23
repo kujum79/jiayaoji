@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V207-20261023';
+        var APP_VER = 'V207.1-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -8753,25 +8753,51 @@ function _renderClassroomBody() {
     var classes = getEduCourses();
     var html = '';
 
+    // V207.1: 顶部「获取专属课程建议」入口
+    html += '<button type="button" onclick="_openCourseSuggestModal()" style="width:100%;padding:12px;margin-bottom:16px;border:1px solid #FDBA74;background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border-radius:14px;font-size:14px;font-weight:700;color:#C2410C;cursor:pointer;">🎯 获取专属课程建议</button>';
+
+    // 审核中的课程/申请（🔒 待审核 水印卡片）
+    var _pendingCustoms = [];
+    try { _pendingCustoms = getCustomCourses().filter(function (c) { return c && c.status === 'pending_review'; }); } catch (e) {}
+    var _pendingOrders = [];
+    try {
+        _pendingOrders = getCustomCourseOrders().filter(function (o) { return o && o.status === 'pending_review' && o.suggestion; });
+    } catch (e) {}
+    var _pendCards = [];
+    _pendingCustoms.forEach(function (c) {
+        _pendCards.push({ id: c.id, title: c.title, duration: c.duration, targetAudience: c.targetAudience, targetMember: (c.member && c.member.name) || '' });
+    });
+    _pendingOrders.forEach(function (o) {
+        var s = o.suggestion || {};
+        var dup = _pendCards.some(function (p) { return p.title === s.title; });
+        if (!dup && s.title) _pendCards.push({ id: o.orderId, title: s.title, duration: 5, targetAudience: [], targetMember: s.targetMember || '' });
+    });
+
     html += '<div style="display:flex;align-items:baseline;gap:8px;margin:2px 2px 10px;">' +
         '<span style="font-size:15px;font-weight:700;color:#1F2937;">专属定制</span>' +
         '<span style="font-size:12px;color:#9CA3AF;">根据家庭需求 AI 生成</span></div>';
+
+    // 🔒 待审核水印卡片（不可点击学习）
+    _pendCards.forEach(function (p) {
+        var meta = '⏱ ' + (Number(p.duration) || 5) + ' 分钟' + (p.targetMember ? ' · 为 ' + p.targetMember + ' 定制' : '');
+        html += '<div style="position:relative;background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:14px;margin-bottom:12px;overflow:hidden;">' +
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">' +
+            '<div style="flex:1;font-size:15px;font-weight:700;color:#9CA3AF;line-height:1.4;">' + escapeHtml(p.title || '定制课程') + '</div>' +
+            '<span style="flex-shrink:0;font-size:11px;background:#F3F4F6;color:#6B7280;border-radius:999px;padding:3px 10px;">🔒 待审核</span>' +
+            '</div>' +
+            '<div style="font-size:12px;color:#9CA3AF;">' + escapeHtml(meta) + '</div>' +
+            '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">' +
+            '<span style="font-size:26px;font-weight:800;color:rgba(107,114,128,0.14);transform:rotate(-12deg);white-space:nowrap;">🔒 待审核</span>' +
+            '</div>' +
+            '</div>';
+    });
+
     if (customs.length) {
         customs.forEach(function (c) { html += _classroomCard(c, 'custom'); });
-        // 已发布的定制课之外，把审核中的数量也告知家长，避免「提交后没有下文」
-        var _pendN = 0;
-        try { _pendN = getCustomCourses().filter(function (c) { return c && c.status === 'pending_review'; }).length; } catch (e) {}
-        if (_pendN > 0) {
-            html += '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400E;line-height:1.6;">⏳ 另有 ' + _pendN + ' 篇正在超管审核中，通过后会出现在这里。</div>';
-        }
-    } else {
-        var _pendN2 = 0;
-        try { _pendN2 = getCustomCourses().filter(function (c) { return c && c.status === 'pending_review'; }).length; } catch (e) {}
+    } else if (!_pendCards.length) {
         html += '<div style="background:#fff;border:1px dashed #FDBA74;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;">' +
             '<div style="font-size:13px;color:#9A3412;line-height:1.7;margin-bottom:10px;">' +
-            (_pendN2 > 0
-                ? '已提交 ' + _pendN2 + ' 篇定制课程，正在超管审核中<br>审核通过后会自动推送到这里'
-                : '还没有专属定制课程<br>可根据家人的体质与需求生成，超管审核通过后推送到这里') +
+            '还没有专属定制课程<br>可点击上方「获取专属课程建议」，由 AI 按家人情况推荐' +
             '</div>' +
             '<button type="button" onclick="_classroomGenerateCustom(this)" style="padding:9px 18px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">为家人定制课程</button>' +
             '</div>';
@@ -8785,6 +8811,117 @@ function _renderClassroomBody() {
     html += '<div style="text-align:center;font-size:11px;color:#B0AAA2;line-height:1.7;padding:8px 12px;">课程内容为日常饮食参考，不替代医疗建议。如有持续不适请及时就医。</div>';
     box.innerHTML = html;
 }
+
+// ====== V207.1: 获取专属课程建议（弹窗交互） ======
+var _SUGGEST_CACHE = {};
+
+// AI 建议的基础课 id → 种子课 id 映射
+var _SUGGEST_BASE_MAP = {
+    course_nutrition_01: 'course_003',
+    course_sleep_01: 'course_004',
+    course_child_01: 'course_005',
+    course_elder_01: 'course_003',
+    course_history_01: 'course_001'
+};
+
+function _closeCourseSuggest() {
+    var ov = document.getElementById('courseSuggestOverlay');
+    if (ov) ov.remove();
+}
+
+async function _openCourseSuggestModal() {
+    _closeCourseSuggest();
+    var ov = document.createElement('div');
+    ov.id = 'courseSuggestOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:10002;display:flex;align-items:flex-end;justify-content:center;';
+    ov.innerHTML =
+        '<div style="background:#fff;width:100%;max-width:430px;max-height:86vh;border-radius:18px 18px 0 0;display:flex;flex-direction:column;overflow:hidden;">' +
+        '<div style="flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #EDE9E3;">' +
+        '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;">专属课程建议</div>' +
+        '<button type="button" onclick="_closeCourseSuggest()" style="border:none;background:none;font-size:18px;color:#9CA3AF;cursor:pointer;padding:4px;">✕</button>' +
+        '</div>' +
+        '<div id="courseSuggestBody" style="flex:1;overflow-y:auto;padding:16px 16px 12px;text-align:center;color:#9CA3AF;font-size:13px;">AI 正在分析家庭档案…</div>' +
+        '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) _closeCourseSuggest(); });
+    document.body.appendChild(ov);
+
+    var members = [];
+    try { members = JSON.parse(lsGet('familyData') || '[]') || []; } catch (e) { members = []; }
+    var payload = members.map(function (m) {
+        return {
+            name: m.name || '', age: m.age ? Number(m.age) : null,
+            profession: m.profession || m.occupation || '',
+            healthTags: (Array.isArray(m.tags) ? m.tags : []).concat(m.constitution ? [m.constitution] : [])
+        };
+    });
+    var suggestions = await fetchCourseSuggestions(payload);
+    var box = document.getElementById('courseSuggestBody');
+    if (!box) return;
+    if (!suggestions.length) {
+        box.innerHTML = '<div style="padding:20px 0;color:#6B7280;">暂时没分析出合适的建议，稍后再试试吧</div>';
+        return;
+    }
+    _SUGGEST_CACHE = {};
+    var html = '';
+    suggestions.forEach(function (s) {
+        if (!s || !s.id) return;
+        _SUGGEST_CACHE[s.id] = s;
+        html += '<label style="display:flex;gap:10px;text-align:left;background:#F9FAFB;border:1px solid #EDE9E3;border-radius:12px;padding:12px;margin-bottom:10px;cursor:pointer;">' +
+            '<input type="checkbox" data-sug="' + escapeAttr(s.id) + '" checked style="flex-shrink:0;width:18px;height:18px;margin-top:2px;accent-color:#F97316;">' +
+            '<div style="flex:1;">' +
+            '<div style="font-size:14px;font-weight:700;color:#1F2937;margin-bottom:3px;">' + escapeHtml(s.title || '') + '</div>' +
+            '<div style="font-size:12px;color:#6B7280;line-height:1.6;">适用：' + escapeHtml(s.targetMember || '全家') + '<br>' + escapeHtml(s.reason || '') + '</div>' +
+            '</div>' +
+            '</label>';
+    });
+    html += '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:10px 12px;margin:4px 0 12px;font-size:12px;color:#92400E;line-height:1.6;text-align:left;">💡 AI定制课程需经系统专业审核，预计24小时内推送。</div>';
+    html += '<button type="button" onclick="_confirmCourseSuggestions()" style="width:100%;padding:12px;border:none;background:#F97316;border-radius:12px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">确认并定制</button>';
+    box.style.textAlign = '';
+    box.innerHTML = html;
+}
+
+function _confirmCourseSuggestions() {
+    var checks = document.querySelectorAll('#courseSuggestOverlay input[data-sug]:checked');
+    if (!checks.length) { showToast('请至少选择一门课程'); return; }
+    var members = [];
+    try { members = JSON.parse(lsGet('familyData') || '[]') || []; } catch (e) { members = []; }
+    checks.forEach(function (cb) {
+        var s = _SUGGEST_CACHE[cb.getAttribute('data-sug')];
+        if (!s) return;
+        var orderId = 'ord_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+        addCustomCourseOrder({
+            orderId: orderId, suggestId: s.id, status: 'pending_review',
+            createdAt: Date.now(), suggestion: s
+        });
+        _generateForSuggestion(s, members); // 异步生成，进入超管审核队列
+    });
+    _closeCourseSuggest();
+    showToast('定制申请已提交，请留意审核进度。');
+    _renderClassroomBody();
+}
+
+// 异步触发生成（不阻塞弹窗关闭）：成功则入超管审核队列，失败静默
+async function _generateForSuggestion(s, members) {
+    try {
+        var baseId = _SUGGEST_BASE_MAP[s.baseCourseId] || 'course_003';
+        if (!getEduCourse(baseId)) baseId = 'course_003';
+        var target = null;
+        (members || []).forEach(function (m) {
+            if (!target && s.targetMember && String(m.name || '') === String(s.targetMember)) target = m;
+        });
+        target = target || (members || [])[0] || {};
+        var profile = (typeof buildCourseMemberProfile === 'function' && target.name)
+            ? (buildCourseMemberProfile(target.name) || {})
+            : {};
+        profile.name = profile.name || target.name || '';
+        if (profile.age == null && target.age != null) profile.age = Number(target.age);
+        await callCustomCourse(baseId, profile);
+        _renderClassroomBody();
+    } catch (e) {
+        console.warn('[课程建议] 生成失败（已保留申请记录）', e);
+    }
+}
+
 
 // 为家人定制：优先挑有健康标签/体质的成员，按其情况选基础课程
 async function _classroomGenerateCustom(btn) {
