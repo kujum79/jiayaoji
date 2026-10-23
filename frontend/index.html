@@ -8525,14 +8525,16 @@ async function _loadCourseReviewList() {
     }
     var html = '';
     _courseReviewCache.forEach(function (rec, idx) {
+        try {
         var c = rec.course || {};
         var m = rec.member || {};
         var hasContent = !!(c.content && c.content.trim());
         var when = rec.createdAt ? new Date(rec.createdAt) : null;
         var timeStr = when ? (when.getMonth() + 1) + '月' + when.getDate() + '日 ' + ('0' + when.getHours()).slice(-2) + ':' + ('0' + when.getMinutes()).slice(-2) : '';
         var suggestionTitle = rec.suggestionTitle || c.title || '未命名建议';
-        var memberDisplay = m.name || '未指定';
-        if (m.age) memberDisplay += '（' + m.age + '岁）';
+        var memberDisplay = (m && m.name) ? String(m.name) : '未指定';
+        var ageNum = m && m.age;
+        if (typeof ageNum === 'number' && ageNum > 0) memberDisplay += '（' + ageNum + '岁）';
 
         html +=
             '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
@@ -8558,6 +8560,9 @@ async function _loadCourseReviewList() {
                 (hasContent ? '' : 'disabled style="opacity:0.4;cursor:not-allowed;"') +
                 ' style="flex:1;padding:8px;border:none;background:#16A34A;border-radius:10px;font-size:12px;color:#fff;font-weight:600;cursor:pointer;">✓ 通过推送</button>' +
             '</div></div>';
+        } catch (e) {
+            html += '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:10px;margin-bottom:10px;color:#b91c1c;font-size:12px;">渲染异常：' + escapeHtml(String(e.message || e)) + '</div>';
+        }
     });
     box.innerHTML = html;
 }
