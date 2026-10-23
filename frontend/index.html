@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V207.3-20261023';
+        var APP_VER = 'V208-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -8527,56 +8527,116 @@ async function _loadCourseReviewList() {
     _courseReviewCache.forEach(function (rec, idx) {
         var c = rec.course || {};
         var m = rec.member || {};
+        var hasContent = !!(c.content && c.content.trim());
         var when = rec.createdAt ? new Date(rec.createdAt) : null;
         var timeStr = when ? (when.getMonth() + 1) + '月' + when.getDate() + '日 ' + ('0' + when.getHours()).slice(-2) + ':' + ('0' + when.getMinutes()).slice(-2) : '';
+        var suggestionTitle = rec.suggestionTitle || c.title || '未命名建议';
+        var memberDisplay = m.name || '未指定';
+        if (m.age) memberDisplay += '（' + m.age + '岁）';
+
         html +=
             '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
             '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
-            '<span style="font-size:14px;font-weight:700;color:#1F2937;">' + escapeHtml(c.title || rec.baseTitle || '未命名课程') + '</span>' +
-            '<span style="font-size:11px;background:#FEF3C7;color:#92400E;border-radius:999px;padding:2px 8px;">待审核</span>' +
+            '<span style="font-size:14px;font-weight:700;color:#1F2937;">' + escapeHtml(suggestionTitle) + '</span>' +
+            (hasContent
+                ? '<span style="font-size:11px;background:#DCFCE7;color:#166534;border-radius:999px;padding:2px 8px;">已生成正文</span>'
+                : '<span style="font-size:11px;background:#FEF3C7;color:#92400E;border-radius:999px;padding:2px 8px;">待AI生成</span>') +
             '</div>' +
             '<div style="font-size:12px;color:#6B7280;line-height:1.7;">' +
             '🏠 家庭：' + escapeHtml(rec.familyName || rec.familyId || '未知') +
-            '　👤 成员：' + escapeHtml(m.name || '未指定') + (m.age ? '（' + m.age + '岁）' : '') + '<br>' +
-            '📖 基础课程：' + escapeHtml(rec.baseTitle || rec.baseCourseId || '') + '<br>' +
-            '🎯 定制原因：' + escapeHtml(rec.reason || '家庭通用定制') +
-            (rec.rejectCount ? '　<span style="color:#DC2626;">（已驳回 ' + rec.rejectCount + ' 次后重生成）</span>' : '') +
+            '　👤 目标成员：' + escapeHtml(memberDisplay) + '<br>' +
+            '📖 基础课程：' + escapeHtml(rec.baseTitle || rec.baseCourseId || '') +
             (timeStr ? '<br>🕐 ' + timeStr : '') +
             '</div>' +
             '<div style="display:flex;gap:8px;margin-top:10px;">' +
-            '<button type="button" onclick="_previewCustomCourse(' + idx + ')" style="flex:1;padding:8px;border:1px solid #D1D5DB;background:#fff;border-radius:10px;font-size:13px;color:#374151;cursor:pointer;">👁 预览</button>' +
-            '<button type="button" onclick="_reviewCustomCourseAction(' + idx + ',\'approve\')" style="flex:1;padding:8px;border:none;background:#16A34A;border-radius:10px;font-size:13px;color:#fff;font-weight:600;cursor:pointer;">✓ 通过并推送</button>' +
-            '<button type="button" onclick="_reviewCustomCourseAction(' + idx + ',\'reject\')" style="flex:1;padding:8px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:10px;font-size:13px;color:#DC2626;cursor:pointer;">✗ 驳回</button>' +
+            '<button type="button" id="btnGen_' + idx + '" onclick="_adminGenerateCourse(' + idx + ')" style="flex:1;padding:8px;border:1px solid #FDBA74;background:#FFF7ED;border-radius:10px;font-size:12px;color:#C2410C;cursor:pointer;">' +
+                (hasContent ? '🔁 重新生成' : '🤖 AI生成内容') + '</button>' +
+            '<button type="button" onclick="_previewCustomCourse(' + idx + ')" ' +
+                (hasContent ? '' : 'disabled style="opacity:0.4;cursor:not-allowed;"') +
+                ' style="flex:1;padding:8px;border:1px solid #D1D5DB;background:#fff;border-radius:10px;font-size:12px;color:#374151;cursor:pointer;">👁 预览编辑</button>' +
+            '<button type="button" onclick="_reviewCustomCourseAction(' + idx + ',\'approve\')" ' +
+                (hasContent ? '' : 'disabled style="opacity:0.4;cursor:not-allowed;"') +
+                ' style="flex:1;padding:8px;border:none;background:#16A34A;border-radius:10px;font-size:12px;color:#fff;font-weight:600;cursor:pointer;">✓ 通过推送</button>' +
             '</div></div>';
     });
     box.innerHTML = html;
 }
 
-// 预览：全文 + 医疗词本地扫描提示
+// 超管手动触发 AI 生成正文
+async function _adminGenerateCourse(idx) {
+    var rec = _courseReviewCache[idx];
+    if (!rec) return;
+    var btn = document.getElementById('btnGen_' + idx);
+    if (btn) { btn.disabled = true; btn.textContent = 'AI 生成中…'; btn.style.opacity = '0.6'; }
+    try {
+        var resp = await fetch('/api/admin/custom-course/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: rec.id, force: !!rec.course && !!rec.course.content })
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var j = await resp.json();
+        if (!j.ok) throw new Error(j.error || '生成失败');
+        if (j.course) { rec.course = j.course; _courseReviewCache[idx] = rec; }
+        showToast(j.skipped ? '已存在正文' : 'AI 生成完成，请预览检查');
+    } catch (e) {
+        showToast('生成失败：' + (e.message || e));
+    } finally {
+        await _loadCourseReviewList();
+    }
+}
+
+// 预览编辑：可修改标题和正文，保存后回写后端
 function _previewCustomCourse(idx) {
     var rec = _courseReviewCache[idx];
     if (!rec) return;
     var c = rec.course || {};
+    var title = c.title || rec.suggestionTitle || '';
     var content = c.content || '';
-    var hits = _EDU_MEDICAL_TERMS.filter(function (w) { return content.indexOf(w) >= 0; });
     var old = document.getElementById('coursePreviewOverlay');
     if (old) old.remove();
     var pv = document.createElement('div');
     pv.id = 'coursePreviewOverlay';
-    pv.style.cssText = 'position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:flex-end;justify-content:center;';
+    pv.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:flex-end;justify-content:center;';
     pv.innerHTML =
-        '<div style="background:#fff;width:100%;max-width:430px;max-height:86vh;border-radius:18px 18px 0 0;display:flex;flex-direction:column;overflow:hidden;">' +
-        '<div style="display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid #F3F4F6;">' +
-        '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;">' + escapeHtml(c.title || '') + '</div>' +
+        '<div style="background:#fff;width:100%;max-width:430px;max-height:88vh;border-radius:18px 18px 0 0;display:flex;flex-direction:column;overflow:hidden;">' +
+        '<div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #F3F4F6;gap:8px;">' +
+        '<div style="flex:1;font-size:14px;font-weight:700;color:#1F2937;">预览编辑</div>' +
+        '<button type="button" onclick="_saveCustomCourseEdit(' + idx + ')" style="padding:6px 14px;border:none;background:#F97316;border-radius:8px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;">保存</button>' +
         '<button type="button" onclick="document.getElementById(\'coursePreviewOverlay\').remove()" style="border:none;background:#F3F4F6;border-radius:50%;width:30px;height:30px;font-size:14px;color:#6B7280;cursor:pointer;">✕</button>' +
         '</div>' +
-        (hits.length
-            ? '<div style="margin:10px 16px 0;padding:10px 12px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:10px;font-size:12px;color:#DC2626;">⚠️ 检测到疑似医疗违规词：' + hits.map(escapeHtml).join('、') + '，建议驳回重生成</div>'
-            : '<div style="margin:10px 16px 0;padding:10px 12px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;font-size:12px;color:#065F46;">✓ 本地医疗词扫描通过（' + _EDU_MEDICAL_TERMS.length + ' 词表）</div>') +
-        '<div style="flex:1;overflow-y:auto;padding:14px 16px 24px;font-size:14px;line-height:1.9;color:#374151;white-space:pre-wrap;">' + escapeHtml(content) + '</div>' +
+        '<div style="flex:1;overflow-y:auto;padding:12px 14px;">' +
+        '<div style="margin-bottom:10px;font-size:12px;color:#6B7280;">课程标题</div>' +
+        '<input id="peTitle_' + idx + '" type="text" value="' + escapeAttr(title) + '" maxlength="24" style="width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#1F2937;box-sizing:border-box;margin-bottom:10px;">' +
+        '<div style="margin-bottom:10px;font-size:12px;color:#6B7280;">课程正文（医疗违规词会自动清洗）</div>' +
+        '<textarea id="peContent_' + idx + '" rows="12" maxlength="2000" style="width:100%;padding:10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;line-height:1.9;color:#374151;box-sizing:border-box;resize:vertical;">' + escapeHtml(content) + '</textarea>' +
+        '</div>' +
         '</div>';
     document.body.appendChild(pv);
     pv.addEventListener('click', function (e) { if (e.target === pv) pv.remove(); });
+}
+
+async function _saveCustomCourseEdit(idx) {
+    var rec = _courseReviewCache[idx];
+    if (!rec) return;
+    var title = (document.getElementById('peTitle_' + idx) || {}).value || '';
+    var content = (document.getElementById('peContent_' + idx) || {}).value || '';
+    if (!content.trim()) { showToast('正文不能为空'); return; }
+    try {
+        var resp = await fetch('/api/admin/custom-course/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: rec.id, title: title, content: content })
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var j = await resp.json();
+        if (!j.ok) throw new Error(j.error || '保存失败');
+        if (j.course) { rec.course = j.course; _courseReviewCache[idx] = rec; }
+        showToast('保存成功');
+        document.getElementById('coursePreviewOverlay').remove();
+    } catch (e) {
+        showToast('保存失败：' + (e.message || e));
+    }
 }
 
 async function _reviewCustomCourseAction(idx, action) {
@@ -8885,19 +8945,70 @@ function _confirmCourseSuggestions() {
     if (!checks.length) { showToast('请至少选择一门课程'); return; }
     var members = [];
     try { members = JSON.parse(lsGet('familyData') || '[]') || []; } catch (e) { members = []; }
+    var familyFid = ''; var familyName = '';
+    try {
+        familyFid = String(getFamilyId() || '');
+        var _f = getLoginFamily();
+        familyName = (_f && _f.name) ? _f.name : '';
+    } catch (e) {}
+    var baseCourses = getEduCourses();
+
+    var submitted = 0, skipped = 0;
     checks.forEach(function (cb) {
         var s = _SUGGEST_CACHE[cb.getAttribute('data-sug')];
         if (!s) return;
+
+        // 前端幂等：本地已有 pending_review → 跳过，避免后端重复
+        var dupLocal = getCustomCourseOrders().some(function (o) {
+            return o && o.status === 'pending_review' && o.suggestion &&
+                String(o.suggestion.baseCourseId || '') === String(s.baseCourseId || '') &&
+                String(o.suggestion.targetMember || '') === String(s.targetMember || '');
+        });
+        var dupCourses = getCustomCourses().some(function (c) {
+            return c && c.status === 'pending_review' && String(((c.member && c.member.name) || '')) === String(s.targetMember || '');
+        });
+        if (dupLocal || dupCourses) { skipped++; return; }
+
+        // 匹配目标成员
+        var target = null;
+        (members || []).forEach(function (m) {
+            if (!target && s.targetMember && String(m.name || '') === String(s.targetMember)) target = m;
+        });
+        target = target || (members || [])[0] || {};
+        var baseId = _SUGGEST_BASE_MAP[s.baseCourseId] || 'course_003';
+        var baseCourse = baseCourses.find(function (c) { return c.id === baseId; }) || {};
+
+        // 前端先落一份本地订单（待审核态），同时请求后端 submit-order 入库
         var orderId = 'ord_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
         addCustomCourseOrder({
             orderId: orderId, suggestId: s.id, status: 'pending_review',
             createdAt: Date.now(), suggestion: s
         });
-        _generateForSuggestion(s, members); // 异步生成，进入超管审核队列
+        // 异步请求后端（不阻塞弹窗关闭）：失败静默 → 前端订单仍保留
+        fetch('/api/admin/custom-course/submit-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                familyId: familyFid, familyName: familyName,
+                baseCourseId: baseId, baseCourseTitle: baseCourse.title || '',
+                baseCourseContent: baseCourse.content || '',
+                member: {
+                    name: target.name || '', age: target.age != null ? Number(target.age) : null,
+                    profession: target.profession || target.occupation || '',
+                    healthTags: (Array.isArray(target.tags) ? target.tags : []).concat(target.constitution ? [target.constitution] : [])
+                },
+                suggestionTitle: s.title || '', suggestionBaseId: s.baseCourseId || ''
+            })
+        }).catch(function (e) { console.warn('[课程建议] submit-order 失败（已保留本地订单）', e); });
+        submitted++;
     });
     _closeCourseSuggest();
-    showToast('定制申请已提交，请留意审核进度。');
-    _renderClassroomBody();
+    if (submitted === 0 && skipped > 0) {
+        showToast('这些课程已在超管审核中，无需重复提交');
+    } else if (submitted > 0) {
+        showToast('定制申请已提交，请留意审核进度。');
+        _renderClassroomBody();
+    }
 }
 
 // 异步触发生成（不阻塞弹窗关闭）：成功则入超管审核队列，失败静默

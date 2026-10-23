@@ -3410,20 +3410,29 @@ def _ccq_store(req, family_id: str, base_id: str, base_title: str, base_content:
     _ccq_save(queue)
 
 
+def _member_age(member) -> Any:
+    return member.get("age") if isinstance(member, dict) else getattr(member, "age", None)
+
+def _member_health_tags(member) -> list:
+    v = member.get("healthTags") if isinstance(member, dict) else getattr(member, "healthTags", [])
+    return list(v or [])
+
 def _ccq_reason(member, is_child: bool, is_elder: bool,
                 has_insomnia: bool, is_picky: bool) -> str:
-    """生成"定制原因"摘要，超管列表直接展示。"""
+    """生成"定制原因"摘要，超管列表直接展示。member 可以是 Pydantic Model 或 dict。"""
     parts: List[str] = []
+    age = _member_age(member)
+    tags = _member_health_tags(member)
     if has_insomnia:
         parts.append("该家庭成员有失眠/睡眠不佳")
-    if is_child:
-        parts.append(f"为 {member.age} 岁孩子定制（童话口吻）")
-    if is_elder:
-        parts.append(f"为 {member.age} 岁老人定制（通俗软食版）")
+    if is_child and age is not None:
+        parts.append(f"为 {age} 岁孩子定制（童话口吻）")
+    if is_elder and age is not None:
+        parts.append(f"为 {age} 岁老人定制（通俗软食版）")
     if is_picky:
         parts.append("该家庭成员存在挑食情况")
-    if not parts and member.healthTags:
-        parts.append("健康标签：" + "、".join(member.healthTags))
+    if not parts and tags:
+        parts.append("健康标签：" + "、".join(tags))
     if not parts:
         parts.append("家庭通用定制")
     return "；".join(parts)
@@ -3629,14 +3638,157 @@ async def custom_course(req: CustomCourseRequest) -> Dict[str, Any]:
     return result
 
 
-# ========== V205: 定制课程审核（超管后台） ==========
+# ========== V205/V208: 定制课程审核（超管后台） ==========
 class AdminCourseReviewRequest(BaseModel):
     id: str
-    action: str = ""  # approve 通过并推送 / reject 驳回并重新生成
+    action: str = ""  # approve 通过并推送 / reject 驳回
 
 
 class AdminCourseListRequest(BaseModel):
     status: str = "pending_review"
+
+
+class AdminCourseGenerateRequest(BaseModel):
+    id: str = Field(..., min_length=1)
+    force: bool = False
+
+
+class AdminCourseUpdateRequest(BaseModel):
+    id: str = Field(..., min_length=1)
+    title: str = ""
+    content: str = ""
+
+
+class SubmitCourseOrderRequest(BaseModel):
+    """家庭端确认课程建议后提交到超管队列（仅元数据，超管手动触发 AI 生成正文）。"""
+    familyId: str = Field("default", max_length=32)
+    familyName: str = Field("", max_length=40)
+    baseCourseId: str = Field("", max_length=40)
+    baseCourseTitle: str = Field("", max_length=60)
+    baseCourseContent: str = Field("", max_length=2000)
+    member: Dict[str, Any] = Field(default_factory=dict)
+    suggestionTitle: str = Field("", max_length=40)
+    suggestionBaseId: str = Field("", max_length=40)
+
+
+# 家庭端提交建议订单入后端审核队列（status=pending_review，course.content 为空 → 超管手动触发 AI）
+@app.post("/api/admin/custom-course/submit-order", include_in_schema=False)
+async def admin_submit_course_order(req: SubmitCourseOrderRequest) -> Dict[str, Any]:
+    """V208: 家庭端确认课程建议时直接入库审核队列，不再自动调 AI 生成正文。"""
+    fid = (req.familyId or "default").strip()[:32]
+    if not fid or not req.baseCourseId:
+        return {"ok": False, "error": "缺少家庭码或基础课"}
+    queue = _ccq_load()
+
+    # 幂等：同 familyId+baseCourseId+member.name 已有 pending_review 不重复入队
+    member_name = str((req.member or {}).get("name") or "").strip()
+    composite = f"{fid}|{req.baseCourseId}|{member_name}"
+    for rec in queue.values():
+        if rec.get("status") != "pending_review":
+            continue
+        key2 = f"{rec.get('familyId','')}|{rec.get('baseCourseId','')}|{(rec.get('member') or {}).get('name','')}"
+        if key2 == composite:
+            return {"ok": True, "id": rec.get("id"), "deduped": True}
+
+    new_id = "ord_" + uuid.uuid4().hex[:8]
+    member = req.member or {}
+    tags = [str(t).strip() for t in (member.get("healthTags") or []) if str(t).strip()]
+    age = member.get("age")
+    is_child = age is not None and age < 12
+    is_elder = age is not None and age >= 65
+    has_insomnia = any(("失眠" in t) or ("气郁" in t) or ("睡" in t) for t in tags)
+    is_picky = any(("挑食" in t) or ("偏食" in t) for t in tags)
+
+    queue[new_id] = {
+        "id": new_id,
+        "familyId": fid,
+        "familyName": (req.familyName or "").strip()[:40],
+        "baseCourseId": req.baseCourseId.strip()[:40],
+        "baseTitle": req.baseCourseTitle.strip()[:60],
+        "baseContent": req.baseCourseContent.strip()[:2000],
+        "member": member,
+        "suggestionTitle": req.suggestionTitle.strip()[:40],
+        "suggestionBaseId": req.suggestionBaseId.strip()[:40],
+        "reason": _ccq_reason(member, is_child, is_elder, has_insomnia, is_picky),
+        "course": {
+            "id": new_id,
+            "title": req.suggestionTitle.strip()[:24] or "待生成定制课程",
+            "content": "",
+            "status": "pending_review",
+            "category": "custom",
+            "duration": 5,
+            "targetAudience": [t[:10] for t in tags[:3]],
+            "member": member,
+            "baseCourseId": req.baseCourseId,
+            "createdAt": int(time.time() * 1000),
+        },
+        "status": "pending_review",
+        "rejectCount": 0,
+        "createdAt": int(time.time() * 1000),
+    }
+    _ccq_save(queue)
+    return {"ok": True, "id": new_id}
+
+
+# 超管触发 AI 生成正文（只有在 course.content 为空或 force=True 时才调用 AI）
+@app.post("/api/admin/custom-course/generate", include_in_schema=False)
+async def admin_generate_course(req: AdminCourseGenerateRequest) -> Dict[str, Any]:
+    """V208: 超管手动触发 AI 为待生成建议订单生成完整课程正文。"""
+    queue = _ccq_load()
+    rec = queue.get(req.id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    course = rec.get("course") or {}
+    if course.get("content") and not req.force:
+        return {"ok": True, "id": req.id, "skipped": True, "course": course}
+
+    try:
+        result = await custom_course(CustomCourseRequest(
+            baseCourseId=rec.get("baseCourseId", ""),
+            baseTitle=rec.get("baseTitle", ""),
+            baseContent=rec.get("baseContent", ""),
+            familyMember=CustomCourseMember(**(rec.get("member") or {})),
+            familyId=rec.get("familyId", "default"),
+            familyName=rec.get("familyName", ""),
+            force=True,
+            skipStore=True,
+        ))
+        if result.get("ok") and result.get("course"):
+            nc = result["course"]
+            nc["id"] = rec.get("id")
+            nc["status"] = "pending_review"
+            rec["course"] = nc
+            rec["generatedAt"] = int(time.time() * 1000)
+            _ccq_save(queue)
+            return {"ok": True, "id": req.id, "course": nc, "generated": True}
+        return {"ok": False, "error": "AI 未返回有效课程"}
+    except Exception as exc:
+        print(f"[admin_generate] AI 失败: {exc}")
+        raise HTTPException(status_code=500, detail=f"AI 生成失败: {exc}")
+
+
+# 超管编辑保存（预览编辑页保存标题和正文）
+@app.post("/api/admin/custom-course/update", include_in_schema=False)
+async def admin_update_course(req: AdminCourseUpdateRequest) -> Dict[str, Any]:
+    """V208: 超管预览编辑课程后保存。"""
+    queue = _ccq_load()
+    rec = queue.get(req.id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    now = int(time.time() * 1000)
+    if req.title or req.content:
+        course = rec.get("course") or {}
+        if req.title:
+            new_title, _ = _sanitize_course_medical(req.title.strip())
+            course["title"] = new_title[:24]
+        if req.content:
+            new_content, hits = _sanitize_course_medical(req.content.strip())
+            course["content"] = new_content[:2000]
+            rec["sanitizeHits"] = hits
+        rec["course"] = course
+        rec["editedAt"] = now
+        _ccq_save(queue)
+    return {"ok": True, "id": req.id, "course": rec.get("course")}
 
 
 # 读取用 POST 而非 GET——先注册的 GET catch-all（/{path:path} 静态回退）会吞掉后注册的 GET 路由
