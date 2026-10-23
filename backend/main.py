@@ -3326,6 +3326,7 @@ _CUSTOM_COURSE_CACHE: Dict[str, Dict[str, Any]] = {}
 _MEDICAL_TERMS = [
     "治疗", "治愈", "根治", "疗效", "药效", "功效", "抗癌", "防癌", "降三高",
     "降压", "降糖", "降脂", "消炎", "杀菌", "排毒", "处方", "药膳", "对症",
+    "改善", "降低", "预防", "缓解", "调理", "养生",
 ]
 
 
@@ -3709,6 +3710,67 @@ async def custom_course_mine(req: CustomCourseMineRequest) -> Dict[str, Any]:
     return {"ok": True, "courses": items}
 
 
+# ========== V207: AI 课程建议接口 ==========
+class SuggestCoursesRequest(BaseModel):
+    familyMembers: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+_SUGGEST_COURSES_SYSTEM = """你是一位专业的饮食教育专家。请分析以下家庭档案，挑选最符合他们需求的 2-3 门课程建议。
+
+【硬性要求】
+1. 指出每门课程的适用成员（用家庭成员的真实姓名）。
+2. 说明推荐理由。
+3. 不涉及医疗治疗承诺，不得出现治疗、治愈、根治、疗效、功效等词汇，不得提及疾病名称。
+4. 只返回严格 JSON 格式，不要输出任何额外文字。
+
+【输出 JSON 格式（严格遵守）】
+{"suggestions":[{"title":"课程标题","targetMember":"适用成员姓名","reason":"推荐理由","baseCourseId":"course_nutrition_01"}]}
+
+baseCourseId 可选值：course_nutrition_01（基础营养学）、course_sleep_01（睡眠饮食）、course_child_01（儿童饮食）、course_elder_01（老人饮食）、course_history_01（中国饮食史）。"""
+
+
+@app.post("/api/suggest-courses")
+async def suggest_courses(req: SuggestCoursesRequest) -> Dict[str, Any]:
+    """V207: 基于家庭档案的 AI 课程建议。返回 2-3 条课程建议列表。"""
+    members = req.familyMembers or []
+    member_text = json.dumps(members, ensure_ascii=False)[:2000] if members else "（未提供家庭成员信息）"
+
+    messages = [
+        {"role": "system", "content": _SUGGEST_COURSES_SYSTEM},
+        {"role": "user", "content": f"【家庭档案】{member_text}\n请给出课程建议。"},
+    ]
+
+    suggestions: List[Dict[str, Any]] = []
+    try:
+        raw = await call_qwen(messages, json_mode=True, max_tokens=800, task_type="suggest_courses", timeout=45.0)
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            arr = parsed.get("suggestions")
+            if isinstance(arr, list):
+                for item in arr:
+                    if not isinstance(item, dict):
+                        continue
+                    title = str(item.get("title", "") or "").strip()
+                    target = str(item.get("targetMember", "") or "").strip()
+                    reason = str(item.get("reason", "") or "").strip()
+                    base_id = str(item.get("baseCourseId", "") or "").strip()
+                    if not title or not base_id:
+                        continue
+                    title, _ = _sanitize_course_medical(title)
+                    reason, _ = _sanitize_course_medical(reason)
+                    suggestions.append({
+                        "id": "sug_" + uuid.uuid4().hex[:8],
+                        "title": title[:24],
+                        "targetMember": target[:20],
+                        "reason": reason[:200],
+                        "baseCourseId": base_id[:40],
+                    })
+    except Exception as exc:
+        print(f"[suggest_courses] AI failed: {exc}")
+
+    return {"ok": True, "suggestions": suggestions}
+
+
 # ========== V162: 我的创作 · AI 作品配图（通义万相 wanx2.1-t2i-turbo 异步文生图） ==========
 class ChefImageRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=500)
@@ -3787,7 +3849,7 @@ _FAMILY_BACKUP_KEYS = {
     "purchaseHistory", "shoppingChecked", "currentDiningGroup", "snackItems",
     "lastAutoRecommendDate", "behaviorProfile", "dismissedRecommendDishes",
     "implicitPreferences", "preferenceProfile", "diningOutPlans", "courseProgress",
-    "customCourses", "subscriptionStatus",
+    "customCourses", "subscriptionStatus", "customCourseOrders",
 }
 _FAMILY_BACKUP_ID_RE = re.compile(r"^[A-HJ-NP-Z2-9]{8}$")  # 与前端 generateFamilyCode 字符集一致
 _FAMILY_BACKUP_MAX_BYTES = 3 * 1024 * 1024

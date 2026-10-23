@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V206.9-20261023';
+        var APP_VER = 'V207-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -8148,7 +8148,7 @@ function familyKey(key) {
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
         'diningOutPlans',
         'courseProgress',
-        'customCourses','subscriptionStatus',
+        'customCourses','subscriptionStatus','customCourseOrders',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
         if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
@@ -8351,6 +8351,61 @@ function updateCustomCourseStatus(courseId, status) {
     }
     if (hit) lsSet('customCourses', JSON.stringify(list));
     return hit;
+}
+
+// ====== V207: AI 课程建议订单队列（customCourseOrders） ======
+// 结构：{ orderId, suggestId, status: 'pending_review'|'generating'|'published', createdAt, suggestion }
+function getCustomCourseOrders() {
+    try {
+        var raw = lsGet('customCourseOrders');
+        var list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list : [];
+    } catch (e) { return []; }
+}
+
+function addCustomCourseOrder(order) {
+    if (!order || !order.orderId) return null;
+    var list = getCustomCourseOrders();
+    order.status = order.status || 'pending_review';
+    order.createdAt = order.createdAt || Date.now();
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].orderId === order.orderId) { idx = i; break; }
+    }
+    if (idx >= 0) list[idx] = order; else list.unshift(order);
+    if (list.length > 50) list = list.slice(0, 50);
+    lsSet('customCourseOrders', JSON.stringify(list));
+    return order;
+}
+
+function updateCustomCourseOrderStatus(orderId, status) {
+    if (!orderId || !status) return false;
+    var list = getCustomCourseOrders();
+    var hit = false;
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].orderId === orderId) {
+            list[i].status = status;
+            list[i].updatedAt = Date.now();
+            hit = true;
+            break;
+        }
+    }
+    if (hit) lsSet('customCourseOrders', JSON.stringify(list));
+    return hit;
+}
+
+// 调后端 /api/suggest-courses，返回建议数组；失败返回 []
+async function fetchCourseSuggestions(familyMembers) {
+    try {
+        var resp = await fetch('/api/suggest-courses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ familyMembers: familyMembers || [] })
+        });
+        var data = await resp.json();
+        if (data && data.ok && Array.isArray(data.suggestions)) return data.suggestions;
+    } catch (e) { console.warn('[课程建议] 获取失败', e); }
+    return [];
 }
 
 function getPendingCustomCourses() {
