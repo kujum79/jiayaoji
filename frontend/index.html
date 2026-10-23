@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V207.1-20261023';
+        var APP_VER = 'V207.2-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -8910,6 +8910,26 @@ async function _generateForSuggestion(s, members) {
             if (!target && s.targetMember && String(m.name || '') === String(s.targetMember)) target = m;
         });
         target = target || (members || [])[0] || {};
+        var targetName = (target && target.name) || '';
+
+        // ===== 前端幂等：本地已有待审核的同一条 → 跳过调用后端 =====
+        var _familyFid = '';
+        try { _familyFid = String(getFamilyId() || ''); } catch (e) {}
+        var pendingCourses = getCustomCourses().filter(function (c) {
+            return c && c.status === 'pending_review' &&
+                String(c.baseCourseId || '') === String(baseId || '') &&
+                String(((c.member && c.member.name) || '')) === targetName;
+        });
+        var pendingOrders = getCustomCourseOrders().filter(function (o) {
+            return o && o.status === 'pending_review' && o.suggestion &&
+                String(o.suggestion.baseCourseId || '') === String(s.baseCourseId || '') &&
+                String(o.suggestion.targetMember || '') === targetName;
+        });
+        if (pendingCourses.length || pendingOrders.length) {
+            console.info('[课程建议] 同一条已在审核中，跳过生成: base=' + baseId + ', member=' + targetName);
+            return;
+        }
+
         var profile = (typeof buildCourseMemberProfile === 'function' && target.name)
             ? (buildCourseMemberProfile(target.name) || {})
             : {};
@@ -8945,6 +8965,15 @@ async function _classroomGenerateCustom(btn) {
     var baseId = 'course_003';
     if (/失眠|气郁|睡眠/.test(tagsTxt)) baseId = 'course_004';
     else if ((profile.age && profile.age < 12) || /挑食|儿童/.test(tagsTxt)) baseId = 'course_005';
+
+    // 前端幂等：同成员 + 同基础课 已经在审核 → 不重复提交
+    var targetName = target.name || '';
+    var dup = getCustomCourses().some(function (c) {
+        return c && c.status === 'pending_review' && String(c.baseCourseId || '') === String(baseId) &&
+            String(((c.member && c.member.name) || '')) === targetName;
+    });
+    if (dup) { showToast('这条定制已在超管审核中，无需重复提交'); return; }
+
     if (btn) { btn.disabled = true; btn.textContent = 'AI 定制中…'; btn.style.opacity = '0.7'; }
     try {
         await callCustomCourse(baseId, profile);

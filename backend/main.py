@@ -3370,15 +3370,29 @@ def _ccq_store(req, family_id: str, base_id: str, base_title: str, base_content:
                has_insomnia: bool, is_picky: bool) -> None:
     """把定制课程写入服务端审核队列（超管后台的唯一事实源）。
 
-    前端只用 localStorage 做家庭侧镜像，因此这里必须保证每次「提交定制」
-    都能落库，无论本次内容是 AI 新生成还是命中 24 小时缓存。
+    幂等规则：
+    1. 同一 course id（custom_xxx）不再重复入队；
+    2. 同一 familyId + baseCourseId + member.name 若已有 pending_review → 跳过
+       （避免用户反复点「确认并定制」、同画像多次提交导致队列膨胀）。
     """
     cid = (course or {}).get("id") or ""
-    if not cid:
+    if not cid or not family_id or not base_id:
         return
     queue = _ccq_load()
     if cid in queue:
         return
+
+    # 复合键幂等：同家庭 + 同基础课 + 同成员名，pending_review 只留一条
+    member_name = str(course.get("member", {}).get("name") or member.name or "").strip()
+    composite = f"{family_id}|{base_id}|{member_name}"
+    for rec in queue.values():
+        if rec.get("status") != "pending_review":
+            continue
+        key2 = f"{rec.get('familyId','')}|{rec.get('baseCourseId','')}|{(rec.get('member') or {}).get('name','')}"
+        if key2 == composite:
+            # 已经有待审核的同一条 → 直接丢弃本次
+            return
+
     queue[cid] = {
         "id": cid,
         "familyId": family_id,
