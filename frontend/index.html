@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V206-20261023';
+        var APP_VER = 'V206.1-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -33173,22 +33173,24 @@ function renderFamily() {
                 ${card('👨‍🍳', '我的创作', worksCnt ? worksCnt + ' 个作品' : '记录你的私房创作', 'openMyWorksPage()')}
             </div>
         `);
-        // V206: 订阅用户专属课堂入口（仅登录且订阅有效时显示）
-        if (typeof isSubscribed === 'function' && isSubscribed()) {
-            var _myPubCnt = 0;
-            try { _myPubCnt = getCustomCourses().filter(function(c){ return c && c.status === 'published'; }).length; } catch(e) {}
-            var _myClsCnt = 0;
-            try { _myClsCnt = getEduCourses().length; } catch(e) {}
-            familyList.insertAdjacentHTML('beforeend', `
-                <div onclick="_openMyClassroom()" style="background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 100%);border:1px solid #FED7AA;border-radius:16px;padding:12px 14px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;gap:10px;">
-                    <div style="flex:1 1 auto;min-width:0;">
-                        <div style="font-size:15px;font-weight:700;color:#9A3412;">我的专属课堂</div>
-                        <div style="font-size:12px;color:#C2410C;margin-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">专属定制 ${_myPubCnt} 篇 · 经典通识 ${_myClsCnt} 篇</div>
-                    </div>
-                    <span style="color:#F97316;font-size:18px;flex:0 0 auto;">›</span>
+        // V206: 我的专属课堂入口（登录用户均可见；未订阅时点击进入订阅引导）
+        var _myPubCnt = 0;
+        try { _myPubCnt = getCustomCourses().filter(function(c){ return c && c.status === 'published'; }).length; } catch(e) {}
+        var _myClsCnt = 0;
+        try { _myClsCnt = getEduCourses().length; } catch(e) {}
+        var _mySubbed = (typeof isSubscribed === 'function') && isSubscribed();
+        var _mySub = _mySubbed
+            ? ('专属定制 ' + _myPubCnt + ' 篇 · 经典通识 ' + _myClsCnt + ' 篇')
+            : ('订阅后开启 · 专属定制 ' + _myPubCnt + ' 篇 · 经典通识 ' + _myClsCnt + ' 篇');
+        familyList.insertAdjacentHTML('beforeend', `
+            <div onclick="_openMyClassroom()" style="background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 100%);border:1px solid #FED7AA;border-radius:16px;padding:12px 14px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;gap:10px;">
+                <div style="flex:1 1 auto;min-width:0;">
+                    <div style="font-size:15px;font-weight:700;color:#9A3412;">我的专属课堂</div>
+                    <div style="font-size:12px;color:#C2410C;margin-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${_mySub}</div>
                 </div>
-            `);
-        }
+                <span style="color:#F97316;font-size:18px;flex:0 0 auto;">›</span>
+            </div>
+        `);
         // V163: 超管专属快捷条（仅超管可见）—— 食养堂管理/文库管理/AI 用量，一级直达
         if (typeof isSuperAdmin === 'function' && isSuperAdmin()) {
             var _sBtn = 'flex:1 1 0;min-width:0;padding:9px 6px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:13px;font-weight:600;color:#9A3412;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;line-height:1.3;';
