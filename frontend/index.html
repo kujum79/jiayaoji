@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V205.1-20261023';
+        var APP_VER = 'V205.2-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -32871,10 +32871,10 @@ function renderFamily() {
             var _sBtn = 'flex:1 1 0;min-width:0;padding:9px 6px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:13px;font-weight:600;color:#9A3412;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;line-height:1.3;';
             familyList.insertAdjacentHTML('beforeend', `
                 <div style="display:flex;gap:8px;margin-bottom:12px;">
-                    <button type="button" onclick="_openFoodHallMgr()" style="${_sBtn}">🍂 食养堂管理</button>
-                    <button type="button" id="superLibMgrBtn" style="${_sBtn}">📚 文库管理</button>
-                    <button type="button" onclick="openAiUsagePanel()" style="${_sBtn}">📊 AI 用量</button>
-                    <button type="button" onclick="_openCourseReviewPanel()" style="${_sBtn}">🎓 课程审核</button>
+                    <button type="button" onclick="_openFoodHallMgr()" style="${_sBtn}">食养管理</button>
+                    <button type="button" id="superLibMgrBtn" style="${_sBtn}">文库管理</button>
+                    <button type="button" onclick="openAiUsagePanel()" style="${_sBtn}">AI 用量</button>
+                    <button type="button" onclick="_openCourseReviewPanel()" style="${_sBtn}">课程审核</button>
                 </div>
             `);
             var _libBtn = document.getElementById('superLibMgrBtn');
