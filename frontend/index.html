@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V206.8-20261023';
+        var APP_VER = 'V206.9-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -8658,9 +8658,9 @@ function _openMyClassroom() {
     _closeMyClassroom();
     var ov = document.createElement('div');
     ov.id = 'myClassroomOverlay';
-    ov.style.cssText = 'position:fixed;inset:0;background:#F7F5F2;z-index:9999;overflow-y:auto;';
+    ov.style.cssText = 'position:fixed;inset:0;background:#f0f0f0;z-index:9999;overflow-y:auto;';
     ov.innerHTML =
-        '<div style="max-width:480px;margin:0 auto;min-height:100%;">' +
+        '<div style="max-width:430px;margin:0 auto;min-height:100%;background:#F7F5F2;box-shadow:0 0 30px rgba(0,0,0,0.12);">' +
         '<div style="position:sticky;top:0;z-index:2;background:#fff;border-bottom:1px solid #EDE9E3;display:flex;align-items:center;padding:12px 16px;gap:10px;">' +
         '<button type="button" onclick="_closeMyClassroom()" style="border:none;background:none;font-size:15px;color:#6B7280;cursor:pointer;padding:4px 8px;">← 返回</button>' +
         '<div style="flex:1;text-align:center;font-size:16px;font-weight:700;color:#1F2937;">我的专属饮食课</div>' +
@@ -8785,19 +8785,21 @@ function _openClassroomCourse(id, kind) {
     var quiz = _CLASSROOM_QUIZ_BANK[id] || null;
     var ov = document.createElement('div');
     ov.id = 'classroomCourseOverlay';
-    ov.style.cssText = 'position:fixed;inset:0;background:#F7F5F2;z-index:10001;display:flex;flex-direction:column;';
+    ov.style.cssText = 'position:fixed;inset:0;background:#f0f0f0;z-index:10001;display:flex;flex-direction:column;align-items:center;';
     ov.innerHTML =
+        '<div style="width:100%;max-width:430px;flex:1;display:flex;flex-direction:column;background:#F7F5F2;box-shadow:0 0 30px rgba(0,0,0,0.12);min-height:0;">' +
         '<div style="flex:0 0 auto;background:#fff;border-bottom:1px solid #EDE9E3;display:flex;align-items:center;padding:10px 14px;gap:8px;">' +
         '<button type="button" onclick="_closeClassroomCourse()" style="border:none;background:none;font-size:15px;color:#6B7280;cursor:pointer;padding:4px 6px;">← 返回</button>' +
         '<div style="flex:1;min-width:0;font-size:15px;font-weight:700;color:#1F2937;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + escapeHtml(c.title || '') + '</div>' +
         (canSpeak ? '<button type="button" id="classroomSpeakBtn" onclick="_classroomSpeak()" style="flex:0 0 auto;border:none;background:none;font-size:16px;color:#F97316;cursor:pointer;padding:4px 6px;" title="边看边听">🔊</button>' : '') +
         '</div>' +
-        '<div style="flex:1;overflow-y:auto;background:#F7F5F2;">' +
-        '<div style="max-width:480px;margin:0 auto;padding:16px 18px 110px;font-size:14px;line-height:1.9;color:#374151;white-space:pre-wrap;">' + escapeHtml(content) + '</div>' +
+        '<div style="flex:1;overflow-y:auto;">' +
+        '<div style="padding:16px 18px 110px;font-size:14px;line-height:1.9;color:#374151;white-space:pre-wrap;">' + escapeHtml(content) + '</div>' +
         '</div>' +
         '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #EDE9E3;padding:10px 14px;display:flex;gap:8px;">' +
         (quiz ? '<button type="button" onclick="_openClassroomQuiz(\'' + escapeAttr(id) + '\')" style="flex:1;padding:11px;border:1px solid #FDBA74;background:#FFF7ED;border-radius:12px;font-size:13px;font-weight:600;color:#C2410C;cursor:pointer;">课后小测</button>' : '') +
         '<button type="button" onclick="_classroomAddToPlan(\'' + escapeAttr(id) + '\')" style="flex:1;padding:11px;border:none;background:#16A34A;border-radius:12px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">加入我的饮食计划</button>' +
+        '</div>' +
         '</div>';
     document.body.appendChild(ov);
     document.body.style.overflow = 'hidden';
@@ -8848,7 +8850,7 @@ function _openClassroomQuiz(courseId) {
         qHtml += '</div>';
     });
     ov.innerHTML =
-        '<div style="background:#fff;width:100%;max-width:480px;max-height:88vh;border-radius:18px 18px 0 0;display:flex;flex-direction:column;overflow:hidden;">' +
+        '<div style="background:#fff;width:100%;max-width:430px;max-height:88vh;border-radius:18px 18px 0 0;display:flex;flex-direction:column;overflow:hidden;">' +
         '<div style="display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid #F3F4F6;">' +
         '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;">课后小测</div>' +
         '<button type="button" onclick="document.getElementById(\'quizOverlay\').remove()" style="border:none;background:#F3F4F6;border-radius:50%;width:30px;height:30px;font-size:14px;color:#6B7280;cursor:pointer;">✕</button>' +
