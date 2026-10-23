@@ -3364,6 +3364,37 @@ def _ccq_save(data: Dict[str, Any]) -> None:
         print(f"[custom_course] 队列写入失败: {exc}")
 
 
+def _ccq_store(req, family_id: str, base_id: str, base_title: str, base_content: str,
+               course: Dict[str, Any], member, is_child: bool, is_elder: bool,
+               has_insomnia: bool, is_picky: bool) -> None:
+    """把定制课程写入服务端审核队列（超管后台的唯一事实源）。
+
+    前端只用 localStorage 做家庭侧镜像，因此这里必须保证每次「提交定制」
+    都能落库，无论本次内容是 AI 新生成还是命中 24 小时缓存。
+    """
+    cid = (course or {}).get("id") or ""
+    if not cid:
+        return
+    queue = _ccq_load()
+    if cid in queue:
+        return
+    queue[cid] = {
+        "id": cid,
+        "familyId": family_id,
+        "familyName": (req.familyName or "").strip()[:40],
+        "baseCourseId": base_id,
+        "baseTitle": base_title,
+        "baseContent": base_content,
+        "member": course.get("member") or {},
+        "reason": _ccq_reason(member, is_child, is_elder, has_insomnia, is_picky),
+        "course": course,
+        "status": course.get("status") or "pending_review",
+        "rejectCount": 0,
+        "createdAt": course.get("createdAt") or int(time.time() * 1000),
+    }
+    _ccq_save(queue)
+
+
 def _ccq_reason(member, is_child: bool, is_elder: bool,
                 has_insomnia: bool, is_picky: bool) -> str:
     """生成"定制原因"摘要，超管列表直接展示。"""
@@ -3445,7 +3476,14 @@ async def custom_course(req: CustomCourseRequest) -> Dict[str, Any]:
     if not req.force:
         hit = _CUSTOM_COURSE_CACHE.get(cache_key)
         if hit and time.time() - hit.get("ts", 0) < 24 * 3600:
-            return hit["data"]
+            cached = hit.get("data") or {}
+            # 缓存命中同样要入审核队列：否则同一画像 24 小时内再次点击「为家人定制课程」
+            # 时前端提示已提交，超管后台却查不到记录
+            if not req.skipStore:
+                _ccq_store(req, family_id, base_id, base_title, base_content,
+                           cached.get("course") or {}, member,
+                           is_child, is_elder, has_insomnia, is_picky)
+            return cached
 
     profile_bits = []
     if member.name:
@@ -3571,22 +3609,8 @@ async def custom_course(req: CustomCourseRequest) -> Dict[str, Any]:
 
     # 入服务端审核队列（超管审核的唯一事实源；前端 localStorage 仅为家庭侧镜像）
     if not req.skipStore:
-        queue = _ccq_load()
-        queue[course["id"]] = {
-            "id": course["id"],
-            "familyId": family_id,
-            "familyName": (req.familyName or "").strip()[:40],
-            "baseCourseId": base_id,
-            "baseTitle": base_title,
-            "baseContent": base_content,
-            "member": course["member"],
-            "reason": _ccq_reason(member, is_child, is_elder, has_insomnia, is_picky),
-            "course": course,
-            "status": "pending_review",
-            "rejectCount": 0,
-            "createdAt": course["createdAt"],
-        }
-        _ccq_save(queue)
+        _ccq_store(req, family_id, base_id, base_title, base_content,
+                   course, member, is_child, is_elder, has_insomnia, is_picky)
     return result
 
 

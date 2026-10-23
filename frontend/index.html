@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V206.2-20261023';
+        var APP_VER = 'V206.3-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -8474,7 +8474,7 @@ async function _loadCourseReviewList() {
         var m = rec.member || {};
         var when = rec.createdAt ? new Date(rec.createdAt) : null;
         var timeStr = when ? (when.getMonth() + 1) + '月' + when.getDate() + '日 ' + ('0' + when.getHours()).slice(-2) + ':' + ('0' + when.getMinutes()).slice(-2) : '';
-        box.innerHTML +=
+        html +=
             '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
             '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
             '<span style="font-size:14px;font-weight:700;color:#1F2937;">' + escapeHtml(c.title || rec.baseTitle || '未命名课程') + '</span>' +
@@ -8696,9 +8696,21 @@ function _renderClassroomBody() {
         '<span style="font-size:12px;color:#9CA3AF;">根据家庭需求 AI 生成</span></div>';
     if (customs.length) {
         customs.forEach(function (c) { html += _classroomCard(c, 'custom'); });
+        // 已发布的定制课之外，把审核中的数量也告知家长，避免「提交后没有下文」
+        var _pendN = 0;
+        try { _pendN = getCustomCourses().filter(function (c) { return c && c.status === 'pending_review'; }).length; } catch (e) {}
+        if (_pendN > 0) {
+            html += '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400E;line-height:1.6;">⏳ 另有 ' + _pendN + ' 篇正在超管审核中，通过后会出现在这里。</div>';
+        }
     } else {
+        var _pendN2 = 0;
+        try { _pendN2 = getCustomCourses().filter(function (c) { return c && c.status === 'pending_review'; }).length; } catch (e) {}
         html += '<div style="background:#fff;border:1px dashed #FDBA74;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;">' +
-            '<div style="font-size:13px;color:#9A3412;line-height:1.7;margin-bottom:10px;">还没有专属定制课程<br>可根据家人的体质与需求生成，超管审核通过后推送到这里</div>' +
+            '<div style="font-size:13px;color:#9A3412;line-height:1.7;margin-bottom:10px;">' +
+            (_pendN2 > 0
+                ? '已提交 ' + _pendN2 + ' 篇定制课程，正在超管审核中<br>审核通过后会自动推送到这里'
+                : '还没有专属定制课程<br>可根据家人的体质与需求生成，超管审核通过后推送到这里') +
+            '</div>' +
             '<button type="button" onclick="_classroomGenerateCustom(this)" style="padding:9px 18px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">为家人定制课程</button>' +
             '</div>';
     }
