@@ -8479,9 +8479,31 @@ function _closeCourseReview() {
     document.body.style.overflow = '';
 }
 
+// 自定义确认弹层：替代原生 confirm（原生对话框在嵌入式 WebView/浏览器中会阻塞页面导致黑屏）
+function _ccConfirm(msg, onOk) {
+    var old = document.getElementById('ccConfirmOverlay');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'ccConfirmOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100010;display:flex;align-items:center;justify-content:center;padding:24px;';
+    ov.innerHTML =
+        '<div style="background:#fff;border-radius:16px;width:100%;max-width:320px;padding:20px;">' +
+        '<div style="font-size:14px;line-height:1.8;color:#1F2937;margin-bottom:18px;">' + escapeHtml(msg) + '</div>' +
+        '<div style="display:flex;gap:10px;">' +
+        '<button type="button" id="ccConfirmNo" style="flex:1;padding:10px;border:1px solid #E5E7EB;background:#fff;border-radius:10px;font-size:13px;color:#6B7280;cursor:pointer;">取消</button>' +
+        '<button type="button" id="ccConfirmYes" style="flex:1;padding:10px;border:none;background:#16A34A;border-radius:10px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">确认</button>' +
+        '</div></div>';
+    document.body.appendChild(ov);
+    ov.querySelector('#ccConfirmNo').onclick = function () { ov.remove(); };
+    ov.querySelector('#ccConfirmYes').onclick = function () {
+        ov.remove();
+        try { onOk(); } catch (e) { showToast('操作失败：' + (e.message || e)); }
+    };
+}
+
 async function _openCourseReviewPanel() {
     if (typeof isSuperAdmin === 'function' && !isSuperAdmin()) {
-        alert('仅超管可访问课程审核');
+        showToast('仅超管可访问课程审核');
         return;
     }
     _closeCourseReview();
@@ -8647,25 +8669,30 @@ async function _saveCustomCourseEdit(idx) {
 async function _reviewCustomCourseAction(idx, action) {
     var rec = _courseReviewCache[idx];
     if (!rec) return;
-    if (action === 'reject' && !confirm('驳回后 AI 将重新生成一篇，确认驳回？')) return;
-    if (action === 'approve' && !confirm('通过后课程将推送到该家庭的「我的专属课堂」，确认通过？')) return;
+    var tip = (action === 'reject')
+        ? '驳回后 AI 将重新生成一篇，确认驳回？'
+        : '通过后课程将推送到「' + (rec.familyName || rec.familyId || '该家庭') + '」的「我的专属课堂」，确认通过？';
+    _ccConfirm(tip, function () { _doReviewCustomCourse(rec.id, action, rec); });
+}
+
+async function _doReviewCustomCourse(id, action, rec) {
     var btns = document.querySelectorAll('#courseReviewList button');
     btns.forEach(function (b) { b.disabled = true; b.style.opacity = '0.5'; });
     try {
         var resp = await fetch('/api/admin/custom-course/review', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: rec.id, action: action })
+            body: JSON.stringify({ id: id, action: action })
         });
         var j = await resp.json();
         if (!resp.ok || !j || !j.ok) throw new Error((j && (j.error || j.detail)) || ('HTTP ' + resp.status));
         if (action === 'approve') {
-            alert('已通过并推送到「' + (rec.familyName || rec.familyId) + '」的专属课堂');
+            showToast('已通过并推送到「' + (rec.familyName || rec.familyId) + '」的专属课堂');
         } else {
-            alert(j.regenerated ? '已驳回，AI 已重新生成一篇待审核' : '已驳回（AI 重新生成失败，标记为已驳回）');
+            showToast(j.regenerated ? '已驳回，AI 已重新生成一篇待审核' : '已驳回（AI 重新生成失败，标记为已驳回）');
         }
     } catch (e) {
-        alert('操作失败：' + (e.message || e));
+        showToast('操作失败：' + (e.message || e));
     }
     await _loadCourseReviewList();
 }
