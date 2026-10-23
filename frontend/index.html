@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V206.5-20261023';
+        var APP_VER = 'V206.6-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -52872,6 +52872,8 @@ function _psmRerenderMealSelects() {
 window._psmState = { list: [], touched: {}, prevDefault: 1 };
 
 function openPrepServingsModal() {
+    // V206.6: 游客态点击「调整人数」先弹登录界面
+    if (typeof isLogined === 'function' && !isLogined()) { showLoginPage(); return; }
     const today = new Date();
     const confirmedInfo = countConfirmedPlanDays(today);
     const prep = window._prep || {};
@@ -64522,6 +64524,12 @@ document.addEventListener('click', function(e) {
 });
 
 clearBtn.addEventListener('click', function() {
+    // V206.6: 游客态点击「饮食问答 / 三餐计划、记录 / 我家」右上角 ➕ 先弹登录界面
+    if ((currentTab === 'knowledge' || currentTab === 'diary' || currentTab === 'family')
+        && typeof isLogined === 'function' && !isLogined()) {
+        showLoginPage();
+        return;
+    }
     if (currentTab === 'knowledge') {
         // 食知页面：打开添加知识模态框
         openAddKnowledgeModal();
