@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V209-20261023';
+        var APP_VER = 'V210-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -8149,6 +8149,7 @@ function familyKey(key) {
         'diningOutPlans',
         'courseProgress',
         'customCourses','subscriptionStatus','customCourseOrders',
+        'courseLibraryPurchases',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
         if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
@@ -8851,6 +8852,225 @@ function _classroomCard(c, kind) {
         '</div>';
 }
 
+// ====== V210: 课程库推荐（本地标签匹配，秒出不等待 AI） ======
+// 结果缓存：null=未点过「获取推荐」；{list,noLib,famCount}=已推荐
+var _CLASSROOM_RECO = null;
+
+// 标签归一：去空白、小写、去「质/症」后缀（气郁质 → 气郁）
+function _tagNorm(x) {
+    return String(x || '').trim().toLowerCase().replace(/[质症]$/, '');
+}
+function _isAgeTag(s) { return /^\d+岁$/.test(String(s || '')); }
+
+// 收集家庭档案标签池：[{raw, norm, member, age}]
+function _familyTagPool() {
+    var members = [];
+    try { members = getFamilyMembers() || []; } catch (e) { members = []; }
+    var out = [];
+    members.forEach(function (m) {
+        if (!m) return;
+        var name = String(m.name || '家人');
+        var tags = [];
+        if (Array.isArray(m.tags)) tags = tags.concat(m.tags);
+        if (Array.isArray(m.healthTags)) tags = tags.concat(m.healthTags);
+        if (m.constitution) tags.push(m.constitution);
+        if (Array.isArray(m.conditions)) tags = tags.concat(m.conditions);
+        if (Array.isArray(m.diseases)) tags = tags.concat(m.diseases);
+        var age = Number(m.age);
+        if (age > 0) {
+            tags.push(age + '岁');
+            if (age <= 3) tags = tags.concat(['幼儿', '宝宝']);
+            else if (age <= 12) tags = tags.concat(['儿童', '孩子']);
+            else if (age <= 17) tags = tags.concat(['青少年']);
+            if (age >= 60) tags = tags.concat(['老人', '老年']);
+        }
+        var seen = {};
+        tags.forEach(function (t) {
+            var raw = String(t || '').trim();
+            var norm = _tagNorm(raw);
+            if (!norm || seen[norm]) return;
+            seen[norm] = true;
+            out.push({ raw: raw, norm: norm, member: name, age: age > 0 ? age : 0 });
+        });
+    });
+    return out;
+}
+
+// 单标签匹配：完全相等优先；否则双向包含（年龄标签必须精确，避免 3岁 命中 13岁）
+function _matchCourseTag(courseTag, pool) {
+    var cn = _tagNorm(courseTag);
+    if (!cn) return null;
+    for (var i = 0; i < pool.length; i++) {
+        if (pool[i].norm === cn) return pool[i];
+    }
+    if (_isAgeTag(cn)) return null;
+    for (var j = 0; j < pool.length; j++) {
+        var ft = pool[j];
+        if (_isAgeTag(ft.norm) || ft.norm.length < 2) continue;
+        if (ft.norm.indexOf(cn) > -1 || cn.indexOf(ft.norm) > -1) return ft;
+    }
+    return null;
+}
+
+function _buildCourseRecommendations() {
+    var lib = [];
+    try { lib = getCourseLibrary() || []; } catch (e) { lib = []; }
+    var pool = _familyTagPool();
+    if (!lib.length) return { list: [], noLib: true, famCount: pool.length };
+    var list = [];
+    lib.forEach(function (c) {
+        if (!c) return;
+        var tags = Array.isArray(c.targetTags) ? c.targetTags : [];
+        var hits = [];
+        var hitKeys = {};
+        tags.forEach(function (t) {
+            var ft = _matchCourseTag(t, pool);
+            if (!ft) return;
+            var k = ft.member + '|' + ft.norm;
+            if (hitKeys[k]) return;
+            hitKeys[k] = true;
+            hits.push({ tag: ft.raw, member: ft.member });
+        });
+        if (!hits.length) return;
+        // 按成员归并推荐原因：单人单标签用「爸爸有高血压」，多人/多标签用「儿子适合体育生、青少年」
+        var byMember = {}, order = [];
+        hits.forEach(function (h) {
+            if (!byMember[h.member]) { byMember[h.member] = []; order.push(h.member); }
+            byMember[h.member].push(h.tag);
+        });
+        var reasons = order.map(function (name) {
+            var ts = byMember[name];
+            if (ts.length === 1) return _isAgeTag(ts[0]) ? (name + ' ' + ts[0]) : (name + '有' + ts[0]);
+            return name + '适合' + ts.join('、');
+        });
+        list.push({ course: c, score: hits.length, reason: '适合您家：' + reasons.join('、') });
+    });
+    list.sort(function (a, b) {
+        if (b.score !== a.score) return b.score - a.score;
+        var pa = a.course.isPremium ? 1 : 0, pb = b.course.isPremium ? 1 : 0;
+        if (pa !== pb) return pa - pb;
+        return (Number(b.course.createdAt) || 0) - (Number(a.course.createdAt) || 0);
+    });
+    return { list: list, noLib: false, famCount: pool.length };
+}
+
+function _coursePurchased(id) {
+    try {
+        var arr = JSON.parse(lsGet('courseLibraryPurchases') || '[]');
+        return Array.isArray(arr) && arr.indexOf(id) > -1;
+    } catch (e) { return false; }
+}
+function _markCoursePurchased(id) {
+    try {
+        var arr = JSON.parse(lsGet('courseLibraryPurchases') || '[]');
+        if (!Array.isArray(arr)) arr = [];
+        if (arr.indexOf(id) < 0) arr.push(id);
+        lsSet('courseLibraryPurchases', JSON.stringify(arr));
+    } catch (e) {}
+}
+
+function _classroomGetRecommendations() {
+    _CLASSROOM_RECO = _buildCourseRecommendations();
+    _renderClassroomReco(true);
+}
+
+function _classroomRecoCard(item, idx) {
+    var c = item.course || {};
+    var premium = !!c.isPremium;
+    var owned = premium && _coursePurchased(c.id);
+    var price = Number(c.price) || 0;
+    var tagHtml = premium
+        ? (owned
+            ? '<span style="flex-shrink:0;font-size:11px;background:#ECFDF5;color:#065F46;border-radius:999px;padding:3px 10px;">✅ 已解锁</span>'
+            : '<span style="flex-shrink:0;font-size:11px;background:#FEF3C7;color:#92400E;border-radius:999px;padding:3px 10px;">💰 ¥' + price.toFixed(2) + '</span>')
+        : '<span style="flex-shrink:0;font-size:11px;background:#F3F4F6;color:#6B7280;border-radius:999px;padding:3px 10px;">免费</span>';
+    var needPay = premium && !owned;
+    return '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
+        '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;line-height:1.4;">' + escapeHtml(c.title || '未命名课程') + '</div>' +
+        tagHtml +
+        '</div>' +
+        '<div style="font-size:12px;color:#6B7280;line-height:1.7;margin-bottom:10px;">💡 ' + escapeHtml(item.reason || '') +
+        (Array.isArray(c.targetTags) && c.targetTags.length ? '　🏷 ' + escapeHtml(c.targetTags.join(' / ')) : '') +
+        (c.type === 'audio' ? '　🎧 音频' : '') +
+        '</div>' +
+        '<button type="button" onclick="_classroomOpenReco(' + idx + ')" style="width:100%;padding:9px;border:none;background:' + (needPay ? '#F59E0B' : '#F97316') + ';border-radius:10px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">' +
+        (needPay ? ('解锁 ¥' + price.toFixed(2)) : '开始学习') + '</button>' +
+        '</div>';
+}
+
+function _renderClassroomReco(isNew) {
+    var box = document.getElementById('classroomRecoBox');
+    if (!box) return;
+    if (_CLASSROOM_RECO === null) { box.innerHTML = ''; return; }
+    var r = _CLASSROOM_RECO;
+    var html = '<div style="display:flex;align-items:baseline;gap:8px;margin:2px 2px 10px;">' +
+        '<span style="font-size:15px;font-weight:700;color:#1F2937;">为您推荐</span>' +
+        '<span style="font-size:12px;color:#9CA3AF;">按家庭档案标签匹配课程库</span></div>';
+    if (r.noLib) {
+        html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">课程库还没有内容<br>请联系管理员在「课程汇总」录入课程</div>';
+    } else if (!r.list.length) {
+        html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">' +
+            (r.famCount ? '暂未匹配到合适的课程<br>可在「我家」补充成员健康标签后再试' : '家庭档案里还没有成员标签<br>请先在「我家」完善成员信息') +
+            '</div>';
+    } else {
+        r.list.forEach(function (item, idx) {
+            _CLASSROOM_CACHE[item.course.id] = { course: item.course, kind: 'library' };
+            html += _classroomRecoCard(item, idx);
+        });
+    }
+    box.innerHTML = html;
+    if (isNew) {
+        showToast(r.list && r.list.length ? ('已为你匹配 ' + r.list.length + ' 门课程') : '暂未匹配到合适课程');
+    }
+}
+
+function _classroomOpenReco(idx) {
+    var item = _CLASSROOM_RECO && _CLASSROOM_RECO.list && _CLASSROOM_RECO.list[idx];
+    if (!item || !item.course) { showToast('课程不存在'); return; }
+    var c = item.course;
+    if (c.isPremium && !_coursePurchased(c.id)) {
+        _classroomPayCourse(c, function () {
+            _markCoursePurchased(c.id);
+            _renderClassroomReco(false);
+            _openClassroomCourse(c.id, 'library');
+        });
+        return;
+    }
+    _openClassroomCourse(c.id, 'library');
+}
+
+// 模拟支付弹层（不用原生 confirm，避免嵌入式浏览器阻塞黑屏）
+function _classroomPayCourse(c, onPaid) {
+    var old = document.getElementById('classroomPayOverlay');
+    if (old) old.remove();
+    var price = (Number(c.price) || 0).toFixed(2);
+    var ov = document.createElement('div');
+    ov.id = 'classroomPayOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100050;display:flex;align-items:center;justify-content:center;padding:24px;';
+    ov.innerHTML =
+        '<div style="background:#fff;border-radius:16px;width:100%;max-width:320px;padding:20px;">' +
+        '<div style="text-align:center;font-size:15px;font-weight:700;color:#1F2937;margin-bottom:6px;">课程解锁</div>' +
+        '<div style="text-align:center;font-size:13px;color:#6B7280;line-height:1.7;margin-bottom:14px;">' + escapeHtml(c.title || '') + '</div>' +
+        '<div style="text-align:center;font-size:26px;font-weight:800;color:#EA580C;margin-bottom:16px;">¥' + price + '</div>' +
+        '<button type="button" id="cpPay" style="width:100%;padding:11px;border:none;background:#F97316;border-radius:10px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:8px;">模拟支付</button>' +
+        '<button type="button" id="cpCancel" style="width:100%;padding:10px;border:1px solid #E5E7EB;background:#fff;border-radius:10px;font-size:13px;color:#6B7280;cursor:pointer;">取消</button>' +
+        '<div style="text-align:center;font-size:11px;color:#B0AAA2;margin-top:10px;">演示环境，不产生真实扣款</div>' +
+        '</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+    ov.querySelector('#cpCancel').onclick = function () { ov.remove(); };
+    ov.querySelector('#cpPay').onclick = function () {
+        var btn = ov.querySelector('#cpPay');
+        btn.disabled = true; btn.textContent = '支付中…'; btn.style.opacity = '0.7';
+        setTimeout(function () {
+            ov.remove();
+            showToast('✅ 已解锁「' + (c.title || '课程') + '」');
+            try { onPaid(); } catch (err) { showToast('打开课程失败：' + (err.message || err)); }
+        }, 600);
+    };
+}
+
 function _renderClassroomBody() {
     var box = document.getElementById('classroomBody');
     if (!box) return;
@@ -8858,8 +9078,9 @@ function _renderClassroomBody() {
     var classes = getEduCourses();
     var html = '';
 
-    // V207.1: 顶部「获取专属课程建议」入口
-    html += '<button type="button" onclick="_openCourseSuggestModal()" style="width:100%;padding:12px;margin-bottom:16px;border:1px solid #FDBA74;background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border-radius:14px;font-size:14px;font-weight:700;color:#C2410C;cursor:pointer;">🎯 获取专属课程建议</button>';
+    // V210: 顶部「获取推荐」入口——本地匹配课程库，秒出
+    html += '<button type="button" onclick="_classroomGetRecommendations()" style="width:100%;padding:12px;margin-bottom:16px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);border-radius:14px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">🔍 获取推荐</button>' +
+        '<div id="classroomRecoBox"></div>';
 
     // 审核中的课程/申请（🔒 待审核 水印卡片）
     var _pendingCustoms = [];
@@ -8902,9 +9123,9 @@ function _renderClassroomBody() {
     } else if (!_pendCards.length) {
         html += '<div style="background:#fff;border:1px dashed #FDBA74;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;">' +
             '<div style="font-size:13px;color:#9A3412;line-height:1.7;margin-bottom:10px;">' +
-            '还没有专属定制课程<br>可点击上方「获取专属课程建议」，由 AI 按家人情况推荐' +
+            '还没有专属定制课程<br>可点击上方「获取推荐」，按家人情况从课程库匹配' +
             '</div>' +
-            '<button type="button" onclick="_classroomGenerateCustom(this)" style="padding:9px 18px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">为家人定制课程</button>' +
+            '<button type="button" onclick="_classroomGetRecommendations()" style="padding:9px 18px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">获取推荐</button>' +
             '</div>';
     }
 
@@ -8915,6 +9136,7 @@ function _renderClassroomBody() {
 
     html += '<div style="text-align:center;font-size:11px;color:#B0AAA2;line-height:1.7;padding:8px 12px;">课程内容为日常饮食参考，不替代医疗建议。如有持续不适请及时就医。</div>';
     box.innerHTML = html;
+    _renderClassroomReco(false);
 }
 
 // ====== V207.1: 获取专属课程建议（弹窗交互） ======
