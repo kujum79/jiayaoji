@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V206.3-20261023';
+        var APP_VER = 'V206.4-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -28643,19 +28643,16 @@ function _dtRenderCard(tip) {
             + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:6px;" onclick="event.stopPropagation(); _fhReviewAuto(\'' + (tip.date || '') + '\',\'confirm\')">保留</button>'
             + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:8px;color:#B91C1C;" onclick="event.stopPropagation(); _fhReviewAuto(\'' + (tip.date || '') + '\',\'withdraw\')">换篇</button>';
     }
-    // V198: 订阅状态区分按钮——已订阅显示「已解锁专属方案」，未订阅显示「订阅」
+    // V198: 订阅状态区分按钮——已订阅显示「已订阅」，未订阅显示「订阅」
     var subBtnHtml;
     if (isSubscribed()) {
-        var _tierLabel = { basic: '基础服务', premium: '全家桶' }[_subTier()] || '专属方案';
-        subBtnHtml = '<button class="dt-btn dt-btn-primary" style="background:#F97316;border-color:#F97316;" onclick="event.stopPropagation(); _openPremiumContent()">✨ 已解锁：' + _tierLabel + '</button>';
+        subBtnHtml = '<button class="dt-btn dt-btn-primary" style="background:#F97316;border-color:#F97316;" onclick="event.stopPropagation(); _openPremiumContent()">已订阅</button>';
     } else {
         // V200: 先引导价值，再由引导弹窗进入套餐面板
         subBtnHtml = '<button class="dt-btn" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;" onclick="event.stopPropagation(); _openSubscribeGuide()">订阅</button>';
     }
-    // V199: 订阅专享徽标——后端返回 tip.subscriptionExclusive=true 时渲染在标题旁
-    var exclusiveBadge = (tip && tip.subscriptionExclusive)
-        ? '<span style="font-size:10px;color:white;background:linear-gradient(90deg,#F97316,#B45309);border-radius:6px;padding:1px 6px;margin-left:6px;align-self:center;font-weight:600;">订阅专享内容</span>'
-        : '';
+    // V206.4: 移除「订阅专享内容」徽标（订阅状态已由按钮表达，不再重复标注）
+    var exclusiveBadge = '';
     // V197: 移除「收藏」按钮，替换为「订阅」入口；标题+摘要整块可点开详情
     el.innerHTML = '<div class="dt-head"><span>📚 食养堂 · 今日一课' + exclusiveBadge + '</span>'
         + '<span class="dt-head-btns" onclick="event.stopPropagation()">'
