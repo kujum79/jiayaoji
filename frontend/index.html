@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V206.6-20261023';
+        var APP_VER = 'V206.7-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -8625,15 +8625,19 @@ function _classroomPublishedCustom() {
 function _classroomTagLabels(c) {
     var t = c && c.targetAudience;
     var arr = Array.isArray(t) ? t : (t && t !== 'all' ? [t] : []);
-    return arr.map(function (x) {
+    var out = [];
+    arr.forEach(function (x) {
         var s = String(x || '');
-        if (/失眠|气郁|睡眠/.test(s)) return '针对失眠';
-        if (/儿童|挑食|3-6|幼儿/.test(s)) return '针对儿童';
-        if (/老人|高龄/.test(s)) return '针对老人';
-        if (/婴儿/.test(s)) return '针对婴儿';
-        if (/体育生|增高|青少年/.test(s)) return '针对青少年';
-        return '针对' + s;
-    }).filter(Boolean);
+        var label;
+        if (/失眠|气郁|睡眠/.test(s)) label = '针对失眠';
+        else if (/儿童|挑食|3-6|幼儿/.test(s)) label = '针对儿童';
+        else if (/老人|高龄/.test(s)) label = '针对老人';
+        else if (/婴儿/.test(s)) label = '针对婴儿';
+        else if (/体育生|增高|青少年/.test(s)) label = '针对青少年';
+        else label = '针对' + s;
+        if (label && out.indexOf(label) < 0) out.push(label);
+    });
+    return out;
 }
 
 function _classroomMeta(c) {
@@ -8660,7 +8664,7 @@ function _openMyClassroom() {
         '<div style="position:sticky;top:0;z-index:2;background:#fff;border-bottom:1px solid #EDE9E3;display:flex;align-items:center;padding:12px 16px;gap:10px;">' +
         '<button type="button" onclick="_closeMyClassroom()" style="border:none;background:none;font-size:15px;color:#6B7280;cursor:pointer;padding:4px 8px;">← 返回</button>' +
         '<div style="flex:1;text-align:center;font-size:16px;font-weight:700;color:#1F2937;">我的专属饮食课</div>' +
-        '<button type="button" onclick="_renderClassroomBody()" style="border:1px solid #E5E7EB;background:#fff;border-radius:8px;font-size:12px;color:#6B7280;padding:4px 10px;cursor:pointer;">↻ 刷新</button>' +
+        '<span style="width:44px;"></span>' +
         '</div>' +
         '<div id="classroomBody" style="padding:14px 14px 40px;"></div>' +
         '</div>';
@@ -8672,15 +8676,18 @@ function _openMyClassroom() {
 function _classroomCard(c, kind) {
     _CLASSROOM_CACHE[c.id] = { course: c, kind: kind };
     var prog = getCourseProgressOf(c.id);
+    // V206.7: 「开始学习」移到标题行最右；「学习中/已学完」移到时间行最右
     var badge = '';
     if (prog && prog.status === 'completed') badge = '<span style="font-size:11px;background:#ECFDF5;color:#065F46;border-radius:999px;padding:2px 8px;">已学完</span>';
     else if (prog && prog.status === 'learning') badge = '<span style="font-size:11px;background:#EFF6FF;color:#1D4ED8;border-radius:999px;padding:2px 8px;">学习中</span>';
     return '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
-        '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;">' +
-        '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;line-height:1.4;">' + escapeHtml(c.title || '未命名课程') + '</div>' + badge +
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">' +
+        '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;line-height:1.4;">' + escapeHtml(c.title || '未命名课程') + '</div>' +
+        '<button type="button" onclick="_openClassroomCourse(\'' + escapeAttr(c.id) + '\',\'' + kind + '\')" style="flex-shrink:0;padding:6px 14px;border:none;background:#F97316;border-radius:8px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">开始学习</button>' +
         '</div>' +
-        '<div style="font-size:12px;color:#6B7280;margin-bottom:10px;">' + escapeHtml(_classroomMeta(c)) + '</div>' +
-        '<button type="button" onclick="_openClassroomCourse(\'' + escapeAttr(c.id) + '\',\'' + kind + '\')" style="width:100%;padding:9px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">开始学习</button>' +
+        '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#6B7280;">' +
+        '<span style="flex:1;">' + escapeHtml(_classroomMeta(c)) + '</span>' + badge +
+        '</div>' +
         '</div>';
 }
 
