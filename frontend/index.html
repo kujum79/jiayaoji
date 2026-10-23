@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V206.1-20261023';
+        var APP_VER = 'V206.2-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -33163,32 +33163,22 @@ function renderFamily() {
                 + '<div style="font-size:12px;color:#9CA3AF;line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + sub + '</div>'
                 + '</div>';
         }
+        // V206.2: 我的专属课堂移入四宫格（原「我的复刻」位置），复刻入口保留在「我的食记」组内
+        var _myPubCnt = 0;
+        try { _myPubCnt = getCustomCourses().filter(function(c){ return c && c.status === 'published'; }).length; } catch(e) {}
+        var _myClsCnt = 0;
+        try { _myClsCnt = getEduCourses().length; } catch(e) {}
+        var _mySub = isSubscribed()
+            ? ('定制 ' + _myPubCnt + ' 篇 · 通识 ' + _myClsCnt + ' 篇')
+            : '订阅后开启';
         familyList.insertAdjacentHTML('beforeend', `
             <div style="display:flex;gap:10px;margin-bottom:10px;">
                 ${card('📔', '膳食日记', '本周已记 ' + weekCnt + ' 篇', 'openDiaryTimeline()')}
                 ${card('🍽️', '我的外食', outCnt ? outCnt + ' 次外食记录' : '记录外出就餐', '_openDiningOutListModal()')}
             </div>
             <div style="display:flex;gap:10px;margin-bottom:12px;">
-                ${card('🔁', '我的复刻', '想复刻' + pendingCnt + ' · 已完成' + doneCnt, '_openCloneListModal(\'pending\')')}
+                ${card('🎓', '我的专属课堂', _mySub, '_openMyClassroom()')}
                 ${card('👨‍🍳', '我的创作', worksCnt ? worksCnt + ' 个作品' : '记录你的私房创作', 'openMyWorksPage()')}
-            </div>
-        `);
-        // V206: 我的专属课堂入口（登录用户均可见；未订阅时点击进入订阅引导）
-        var _myPubCnt = 0;
-        try { _myPubCnt = getCustomCourses().filter(function(c){ return c && c.status === 'published'; }).length; } catch(e) {}
-        var _myClsCnt = 0;
-        try { _myClsCnt = getEduCourses().length; } catch(e) {}
-        var _mySubbed = (typeof isSubscribed === 'function') && isSubscribed();
-        var _mySub = _mySubbed
-            ? ('专属定制 ' + _myPubCnt + ' 篇 · 经典通识 ' + _myClsCnt + ' 篇')
-            : ('订阅后开启 · 专属定制 ' + _myPubCnt + ' 篇 · 经典通识 ' + _myClsCnt + ' 篇');
-        familyList.insertAdjacentHTML('beforeend', `
-            <div onclick="_openMyClassroom()" style="background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 100%);border:1px solid #FED7AA;border-radius:16px;padding:12px 14px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;gap:10px;">
-                <div style="flex:1 1 auto;min-width:0;">
-                    <div style="font-size:15px;font-weight:700;color:#9A3412;">我的专属课堂</div>
-                    <div style="font-size:12px;color:#C2410C;margin-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${_mySub}</div>
-                </div>
-                <span style="color:#F97316;font-size:18px;flex:0 0 auto;">›</span>
             </div>
         `);
         // V163: 超管专属快捷条（仅超管可见）—— 食养堂管理/文库管理/AI 用量，一级直达
