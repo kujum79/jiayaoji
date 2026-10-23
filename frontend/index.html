@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V206.4-20261023';
+        var APP_VER = 'V206.5-20261023';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -29000,6 +29000,8 @@ function _closePremiumContent() {
 
 // V200: 订阅价值引导弹窗（先讲清楚「为什么订阅」，再由用户主动进入套餐面板）
 function _openSubscribeGuide() {
+    // V206.5: 游客态点击「订阅」先弹登录界面，登录后再进入订阅引导
+    if (typeof isLogined === 'function' && !isLogined()) { showLoginPage(); return; }
     var old = document.getElementById('subscribeGuideOv');
     if (old) old.remove();
     var ov = document.createElement('div');
