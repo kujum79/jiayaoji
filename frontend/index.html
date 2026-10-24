@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V213-20261024';
+        var APP_VER = 'V214-20261024';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -3874,7 +3874,32 @@
         .mp-up-dd-options > div { padding: 4px 6px; font-size: 12px; cursor: pointer; color: #374151; }
         .mp-up-dd-options > div:hover { background: #FFF3E0; }
         .mp-up-dd-options > div.selected { background: #FFE4C4; font-weight: 600; }
+        /* ====== V214: 课程 Markdown 正文排版 ====== */
+        .md-body { font-size: 15px; line-height: 1.95; color: #374151; word-break: break-word; }
+        .md-body h1 { font-size: 24px; font-weight: 800; color: #1F2937; margin: 0 0 14px; line-height: 1.45; }
+        .md-body h2 { font-size: 19px; font-weight: 800; color: #1F2937; margin: 22px 0 10px; line-height: 1.5; }
+        .md-body h3 { font-size: 17px; font-weight: 700; color: #1F2937; margin: 18px 0 8px; }
+        .md-body h4 { font-size: 15px; font-weight: 700; color: #374151; margin: 14px 0 6px; }
+        .md-body p { margin: 0 0 14px; }
+        .md-body strong { font-weight: 800; color: #C2410C; }
+        .md-body em { font-style: italic; color: #6B7280; }
+        .md-body ul, .md-body ol { margin: 0 0 14px; padding-left: 22px; }
+        .md-body li { margin-bottom: 6px; }
+        .md-body blockquote { margin: 0 0 14px; padding: 10px 14px; background: #FFF7ED; border-left: 4px solid #F97316; border-radius: 8px; color: #9A3412; }
+        .md-body hr { border: none; border-top: 1px dashed #E5E7EB; margin: 18px 0; }
+        .md-body img { max-width: 100%; border-radius: 10px; display: block; margin: 10px auto; }
+        .md-body code { background: #F3F4F6; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+        .md-body pre { background: #F9FAFB; padding: 12px; border-radius: 10px; overflow-x: auto; }
+        .md-body pre code { background: none; padding: 0; }
+        .md-body a { color: #EA580C; text-decoration: underline; }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        /* V214: CDN 不可达（内网/WebView 拦截）时改用本地副本兜底，保证 Markdown 正常渲染 */
+        if (!window.marked) {
+            document.write('<script src="/marked.min.js"><\/script>');
+        }
+    </script>
 </head>
 <body>
 <!-- ====== V195: 演示模式水印（?demo=xxx 时显示，退出即清空演示数据） ====== -->
@@ -8524,6 +8549,36 @@ function _getCourseFolder(folderId) {
     return null;
 }
 
+// Markdown 渲染：marked.js（CDN）渲染为 HTML，失败时退化为安全的纯文本
+function _renderMarkdown(src) {
+    var text = String(src || '');
+    try {
+        if (window.marked && typeof window.marked.parse === 'function') {
+            var html = window.marked.parse(text);
+            // 基础安全清洗：去掉脚本/内联事件，避免上传文件注入
+            return String(html)
+                .replace(/<script[\s\S]*?<\/script>/gi, '')
+                .replace(/<style[\s\S]*?<\/style>/gi, '')
+                .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+                .replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, '')
+                .replace(/\son[a-z]+\s*=\s*'[^']*'/gi, '');
+        }
+    } catch (e) { /* 落到纯文本兜底 */ }
+    return '<div style="white-space:pre-wrap;">' + escapeHtml(text) + '</div>';
+}
+
+// 从 Markdown 第一行提取「# 标题」，取不到返回空字符串
+function _extractMdTitle(text) {
+    var lines = String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/);
+    for (var i = 0; i < Math.min(lines.length, 6); i++) {
+        var line = String(lines[i] || '');
+        if (!line.trim()) continue;
+        var m = /^\s*#\s+(.+?)\s*#*\s*$/.exec(line);
+        return m ? String(m[1]).trim() : '';
+    }
+    return '';
+}
+
 // 旧扁平 courseLibrary → 文件夹+文章（一次性迁移：按 targetTags 分组，迁移完清理旧键）
 function _migrateCourseLibraryV212() {
     var legacyRaw = null;
@@ -8640,8 +8695,9 @@ function _ccConfirm(msg, onOk) {
 
 // 课程汇总当前浏览层级：folderId 为空表示系列列表，否则为该系列下的文章列表
 var _COURSE_LIB_VIEW = { folderId: null };
-// 上传文章时暂存的待导入文件（.md/.txt，可多选）
+// 上传文章时暂存的待导入文件（.md/.txt，可多选）与解析结果 {file, name, text, title}
 var _COURSE_UPLOAD_FILES = [];
+var _COURSE_UPLOAD_ITEMS = [];
 
 function _openCourseLibraryPanel() {
     if (typeof isSuperAdmin === 'function' && !isSuperAdmin()) {
@@ -8768,6 +8824,7 @@ function _courseLibArticleListHtml(folder) {
                 escapeHtml(body.slice(0, 60)) + (body.length > 60 ? '…' : '') +
                 '</div>' +
                 '<div style="display:flex;gap:8px;margin-top:10px;">' +
+                '<button type="button" onclick="_previewCourseArticle(\'' + escapeAttr(a.articleId) + '\')" style="flex:1;padding:8px;border:none;background:#16A34A;border-radius:10px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;">👁 预览</button>' +
                 '<button type="button" onclick="_openCourseArticleForm(\'' + escapeAttr(a.articleId) + '\')" style="flex:1;padding:8px;border:1px solid #D1D5DB;background:#fff;border-radius:10px;font-size:12px;color:#374151;cursor:pointer;">✏️ 修改</button>' +
                 '<button type="button" onclick="_deleteCourseArticle(\'' + escapeAttr(a.articleId) + '\')" style="flex:1;padding:8px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:10px;font-size:12px;color:#B91C1C;cursor:pointer;">🗑 删除</button>' +
                 '</div></div>';
@@ -8895,7 +8952,7 @@ function _courseUploadDrop(e) {
 function _courseUploadChange(input) {
     _courseUploadFiles(input && input.files);
 }
-function _courseUploadFiles(fl) {
+async function _courseUploadFiles(fl) {
     var arr = [];
     for (var i = 0; i < (fl ? fl.length : 0); i++) {
         var f = fl[i];
@@ -8904,13 +8961,30 @@ function _courseUploadFiles(fl) {
     }
     if (!arr.length) { showToast('请选择 .md 或 .txt 文件'); return; }
     _COURSE_UPLOAD_FILES = arr;
+    _COURSE_UPLOAD_ITEMS = [];
     var box = document.getElementById('clUploadList');
-    if (box) {
-        box.innerHTML = '✅ 已选择 ' + arr.length + ' 个文件：' + escapeHtml(arr.map(function (f) { return f.name; }).join('、'));
+    if (box) box.innerHTML = '⏳ 正在读取 ' + arr.length + ' 个文件…';
+    var items = [];
+    for (var j = 0; j < arr.length; j++) {
+        var text = await _readCourseFileText(arr[j]);
+        items.push({ file: arr[j], name: String(arr[j].name || ''), text: text, title: _extractMdTitle(text) });
     }
-    if (arr.length === 1) {
+    _COURSE_UPLOAD_ITEMS = items;
+    var missing = items.filter(function (it) { return !it.title; }).length;
+    if (box) {
+        box.innerHTML = items.map(function (it) {
+            return (it.title ? '✅ ' : '⚠️ ') + escapeHtml(it.name) +
+                (it.title ? ' → 「' + escapeHtml(it.title) + '」' : '（未找到 # 标题，请手动填写）');
+        }).join('<br>');
+    }
+    if (items.length === 1) {
         var t = document.getElementById('clTitle');
-        if (t && !String(t.value || '').trim()) t.value = String(arr[0].name || '').replace(/\.[^.]+$/, '').slice(0, 40);
+        if (t && !String(t.value || '').trim()) {
+            t.value = items[0].title || items[0].name.replace(/\.[^.]+$/, '').slice(0, 40);
+        }
+        showToast(items[0].title ? ('已识别标题：' + items[0].title) : '未识别到 Markdown 标题，请手动填写文章标题');
+    } else if (missing) {
+        showToast('有 ' + missing + ' 个文件未找到 # 标题，将使用文件名作为标题');
     }
 }
 // 读取文本：优先 UTF-8，解码失败则按 GBK（兼容 Windows 记事本保存的中文 txt）
@@ -8951,6 +9025,7 @@ function _openCourseArticleForm(articleId) {
     var c = a || { title: '', content: '', duration: 5, isPremium: false, price: 0 };
     var premium = !!c.isPremium;
     _COURSE_UPLOAD_FILES = [];
+    _COURSE_UPLOAD_ITEMS = [];
     var uploadHtml = '';
     if (!a) {
         uploadHtml =
@@ -9005,20 +9080,28 @@ async function _saveCourseArticleForm(articleId, folderId) {
     }
     var articles = getCourseArticles();
 
-    // 批量上传：每个文件生成一篇文章（标题默认取文件名）
+    // 批量上传：每个文件生成一篇文章（标题优先取文件内「# 标题」，其次手填，最后文件名）
     var files = (!articleId && Array.isArray(_COURSE_UPLOAD_FILES)) ? _COURSE_UPLOAD_FILES.slice() : [];
     if (files.length) {
+        var items = (_COURSE_UPLOAD_ITEMS || []).slice();
+        if (items.length !== files.length) {
+            items = [];
+            for (var fi2 = 0; fi2 < files.length; fi2++) {
+                var t2 = await _readCourseFileText(files[fi2]);
+                items.push({ file: files[fi2], name: String(files[fi2].name || ''), text: t2, title: _extractMdTitle(t2) });
+            }
+        }
         var added = 0, skipped = 0, stamp = Date.now();
-        for (var fi = 0; fi < files.length; fi++) {
-            var f = files[fi];
-            var text = await _readCourseFileText(f);
-            if (!String(text || '').trim()) { skipped++; continue; }
-            var ft = (files.length === 1 && title) ? title : String(f.name || '').replace(/\.[^.]+$/, '').slice(0, 40);
+        for (var fi = 0; fi < items.length; fi++) {
+            var it = items[fi];
+            var text = String(it.text || '');
+            if (!text.trim()) { skipped++; continue; }
+            var ft = it.title || ((items.length === 1 && title) ? title : '') || String(it.name || '').replace(/\.[^.]+$/, '').slice(0, 40);
             articles.push({
                 articleId: _newCourseId('a_'),
                 folderId: folderId,
                 title: ft || '未命名文章',
-                content: String(text),
+                content: text,
                 duration: duration,
                 isPremium: isPremium,
                 price: price,
@@ -9029,6 +9112,7 @@ async function _saveCourseArticleForm(articleId, folderId) {
         if (!added) { showToast('所选文件内容为空，未导入'); return; }
         if (!saveCourseArticles(articles)) return;
         _COURSE_UPLOAD_FILES = [];
+        _COURSE_UPLOAD_ITEMS = [];
         var fo = document.getElementById('courseLibraryFormOverlay');
         if (fo) fo.remove();
         showToast('已上传 ' + added + ' 篇文章' + (skipped ? '（跳过 ' + skipped + ' 个空文件）' : ''));
@@ -9069,6 +9153,40 @@ async function _saveCourseArticleForm(articleId, folderId) {
     if (f) f.remove();
     showToast(articleId ? '文章已更新' : '文章已存入系列');
     _renderCourseLibraryList();
+}
+
+// 超管预览：用 marked.js 渲染 Markdown 正文
+function _previewCourseArticle(articleId) {
+    var item = null;
+    var list = getCourseArticles();
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].articleId === articleId) { item = list[i]; break; }
+    }
+    if (!item) { showToast('文章不存在'); return; }
+    var folder = _getCourseFolder(item.folderId) || {};
+    var old = document.getElementById('courseArticlePreviewOverlay');
+    if (old) old.remove();
+    var bodyHtml = _renderMarkdown(item.content);
+    if (!_extractMdTitle(item.content)) {
+        bodyHtml = '<h1>' + escapeHtml(item.title || '未命名文章') + '</h1>' + bodyHtml;
+    }
+    var ov = document.createElement('div');
+    ov.id = 'courseArticlePreviewOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:#f0f0f0;z-index:10002;overflow-y:auto;';
+    ov.innerHTML =
+        '<div style="max-width:430px;margin:0 auto;min-height:100%;background:#F7F5F2;box-shadow:0 0 30px rgba(0,0,0,0.12);">' +
+        '<div style="position:sticky;top:0;z-index:2;background:#fff;border-bottom:1px solid #EDE9E3;display:flex;align-items:center;padding:12px 14px;gap:8px;">' +
+        '<button type="button" onclick="document.getElementById(\'courseArticlePreviewOverlay\').remove()" style="border:none;background:none;font-size:14px;color:#6B7280;cursor:pointer;padding:4px 8px;">← 返回</button>' +
+        '<div style="flex:1;text-align:center;font-size:15px;font-weight:700;color:#1F2937;">预览</div>' +
+        '<span style="width:52px;flex-shrink:0;"></span>' +
+        '</div>' +
+        '<div style="background:#fff;padding:18px 18px 40px;min-height:calc(100vh - 52px);">' +
+        '<div style="font-size:12px;color:#9CA3AF;line-height:1.8;margin-bottom:12px;">📁 ' + escapeHtml(folder.folderName || '未分类系列') +
+        '　⏱ ' + (Number(item.duration) || 5) + ' 分钟　' +
+        (item.isPremium ? ('💰 ¥' + (Number(item.price) || 0).toFixed(2)) : '免费') + '</div>' +
+        '<div id="article-body" class="md-body">' + bodyHtml + '</div>' +
+        '</div></div>';
+    document.body.appendChild(ov);
 }
 
 function _deleteCourseArticle(articleId) {
@@ -9936,7 +10054,7 @@ function _openClassroomCourse(id, kind) {
         (canSpeak ? '<button type="button" id="classroomSpeakBtn" onclick="_classroomSpeak()" style="flex:0 0 auto;border:none;background:none;font-size:16px;color:#F97316;cursor:pointer;padding:4px 6px;" title="边看边听">🔊</button>' : '') +
         '</div>' +
         '<div style="flex:1;overflow-y:auto;">' +
-        '<div style="padding:16px 18px 110px;font-size:14px;line-height:1.9;color:#374151;white-space:pre-wrap;">' + escapeHtml(content) + '</div>' +
+        '<div id="article-body" class="md-body" style="padding:16px 18px 110px;">' + _renderMarkdown(content) + '</div>' +
         '</div>' +
         '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #EDE9E3;padding:10px 14px;display:flex;gap:8px;">' +
         (quiz ? '<button type="button" onclick="_openClassroomQuiz(\'' + escapeAttr(id) + '\')" style="flex:1;padding:11px;border:1px solid #FDBA74;background:#FFF7ED;border-radius:12px;font-size:13px;font-weight:600;color:#C2410C;cursor:pointer;">课后小测</button>' : '') +
@@ -9959,7 +10077,7 @@ function _classroomSpeak() {
     }
     var ov = document.getElementById('classroomCourseOverlay');
     if (!ov) return;
-    var textEl = ov.querySelector('div[style*="white-space:pre-wrap"]');
+    var textEl = ov.querySelector('#article-body');
     var text = textEl ? textEl.textContent : '';
     text = text.replace(/【音频脚本】/g, '').replace(/【图文要点】/g, '。图文要点。').trim();
     if (!text) { showToast('暂无内容可朗读'); return; }
