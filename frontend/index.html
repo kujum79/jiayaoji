@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V211-20261023';
+        var APP_VER = 'V212-20261024';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -8472,26 +8472,142 @@ async function callCustomCourse(baseCourseId, member) {
         clearTimeout(timer);
     }
 }
-// ==================== V209: 超管「课程汇总」库（courseLibrary） ====================
+// ==================== V212: 课程库「系列文件夹 + 文章」两级结构 ====================
 // 全局课程库：超管手工录入/维护，不按家庭前缀隔离
-var _COURSE_LIB_KEY = 'courseLibrary';
+var _COURSE_FOLDERS_KEY = 'courseFolders';
+var _COURSE_ARTICLES_KEY = 'courseArticles';
+var _COURSE_LIB_LEGACY_KEY = 'courseLibrary';
 
-function getCourseLibrary() {
+function getCourseFolders() {
     try {
-        var raw = localStorage.getItem(_COURSE_LIB_KEY);
-        var list = raw ? JSON.parse(raw) : [];
+        var list = JSON.parse(localStorage.getItem(_COURSE_FOLDERS_KEY) || '[]');
         return Array.isArray(list) ? list : [];
     } catch (e) { return []; }
 }
 
-function saveCourseLibrary(list) {
+function saveCourseFolders(list) {
     try {
-        localStorage.setItem(_COURSE_LIB_KEY, JSON.stringify(list || []));
+        localStorage.setItem(_COURSE_FOLDERS_KEY, JSON.stringify(list || []));
         return true;
     } catch (e) {
         showToast('保存失败：' + (e.message || e));
         return false;
     }
+}
+
+function getCourseArticles() {
+    try {
+        var list = JSON.parse(localStorage.getItem(_COURSE_ARTICLES_KEY) || '[]');
+        return Array.isArray(list) ? list : [];
+    } catch (e) { return []; }
+}
+
+function saveCourseArticles(list) {
+    try {
+        localStorage.setItem(_COURSE_ARTICLES_KEY, JSON.stringify(list || []));
+        return true;
+    } catch (e) {
+        showToast('保存失败：' + (e.message || e));
+        return false;
+    }
+}
+
+function _newCourseId(prefix) {
+    return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+}
+
+function _getCourseFolder(folderId) {
+    var folders = getCourseFolders();
+    for (var i = 0; i < folders.length; i++) {
+        if (folders[i] && folders[i].folderId === folderId) return folders[i];
+    }
+    return null;
+}
+
+// 旧扁平 courseLibrary → 文件夹+文章（一次性迁移：按 targetTags 分组，迁移完清理旧键）
+function _migrateCourseLibraryV212() {
+    var legacyRaw = null;
+    try { legacyRaw = localStorage.getItem(_COURSE_LIB_LEGACY_KEY); } catch (e) { return; }
+    if (legacyRaw === null) return;
+    try {
+        var legacy = JSON.parse(legacyRaw);
+        if (!Array.isArray(legacy)) legacy = [];
+        var folders = getCourseFolders();
+        var articles = getCourseArticles();
+        // 已有新结构数据：旧键直接丢弃，避免重复导入
+        if (folders.length || articles.length || !legacy.length) {
+            localStorage.removeItem(_COURSE_LIB_LEGACY_KEY);
+            return;
+        }
+        var groupMap = {}, order = [];
+        legacy.forEach(function (c) {
+            if (!c) return;
+            var tags = Array.isArray(c.targetTags) ? c.targetTags.filter(Boolean) : [];
+            var sig = tags.slice().sort().join('|');
+            if (!groupMap[sig]) {
+                groupMap[sig] = {
+                    folderId: _newCourseId('f_'),
+                    folderName: tags.length ? tags.join('·') + '系列' : '未分类系列',
+                    targetTags: tags,
+                    description: '由旧版课程库自动迁移',
+                    createdAt: Number(c.createdAt) || Date.now(),
+                    _items: []
+                };
+                order.push(sig);
+            }
+            groupMap[sig]._items.push(c);
+        });
+        order.forEach(function (sig) {
+            var f = groupMap[sig];
+            f._items.forEach(function (c) {
+                articles.push({
+                    articleId: _newCourseId('a_'),
+                    folderId: f.folderId,
+                    title: String(c.title || '未命名课程'),
+                    content: String(c.content || ''),
+                    duration: Number(c.duration) || 5,
+                    isPremium: !!c.isPremium,
+                    price: Number(c.price) || 0,
+                    type: c.type === 'audio' ? 'audio' : 'article',
+                    createdAt: Number(c.createdAt) || Date.now()
+                });
+            });
+            delete f._items;
+            folders.push(f);
+        });
+        saveCourseFolders(folders);
+        saveCourseArticles(articles);
+        localStorage.removeItem(_COURSE_LIB_LEGACY_KEY);
+    } catch (e) {
+        try { localStorage.removeItem(_COURSE_LIB_LEGACY_KEY); } catch (e2) {}
+    }
+}
+
+// 兼容视图：把「系列+文章」拍平为扁平课程结构（推荐算法 / 阅读器统一消费）
+function getCourseLibrary() {
+    _migrateCourseLibraryV212();
+    var folderById = {};
+    getCourseFolders().forEach(function (f) {
+        if (f && f.folderId) folderById[f.folderId] = f;
+    });
+    return getCourseArticles().map(function (a) {
+        if (!a || !a.articleId) return null;
+        var f = folderById[a.folderId] || {};
+        return {
+            id: a.articleId,
+            articleId: a.articleId,
+            folderId: a.folderId || '',
+            folderName: f.folderName || '未分类系列',
+            title: a.title || '',
+            content: a.content || '',
+            duration: Number(a.duration) || 5,
+            targetTags: Array.isArray(f.targetTags) ? f.targetTags : [],
+            type: a.type === 'audio' ? 'audio' : 'article',
+            isPremium: !!a.isPremium,
+            price: Number(a.price) || 0,
+            createdAt: Number(a.createdAt) || 0
+        };
+    }).filter(Boolean);
 }
 
 function _closeCourseLibrary() {
@@ -8522,21 +8638,26 @@ function _ccConfirm(msg, onOk) {
     };
 }
 
+// 课程汇总当前浏览层级：folderId 为空表示系列列表，否则为该系列下的文章列表
+var _COURSE_LIB_VIEW = { folderId: null };
+
 function _openCourseLibraryPanel() {
     if (typeof isSuperAdmin === 'function' && !isSuperAdmin()) {
         showToast('仅超管可访问课程汇总');
         return;
     }
     _closeCourseLibrary();
+    _migrateCourseLibraryV212();
+    _COURSE_LIB_VIEW.folderId = null;
     var ov = document.createElement('div');
     ov.id = 'courseLibraryOverlay';
     ov.style.cssText = 'position:fixed;inset:0;background:#f0f0f0;z-index:9999;overflow-y:auto;';
     ov.innerHTML =
         '<div style="max-width:430px;margin:0 auto;min-height:100%;background:#F7F5F2;box-shadow:0 0 30px rgba(0,0,0,0.12);">' +
         '<div style="position:sticky;top:0;z-index:2;background:#fff;border-bottom:1px solid #EDE9E3;display:flex;align-items:center;padding:12px 16px;gap:10px;">' +
-        '<button type="button" onclick="_closeCourseLibrary()" style="border:none;background:none;font-size:15px;color:#6B7280;cursor:pointer;padding:4px 8px;">← 返回</button>' +
-        '<div style="flex:1;text-align:center;font-size:16px;font-weight:700;color:#1F2937;">📚 课程汇总</div>' +
-        '<button type="button" onclick="_openCourseLibraryForm()" style="border:none;background:#16A34A;border-radius:8px;font-size:12px;font-weight:600;color:#fff;padding:6px 12px;cursor:pointer;">+ 新增</button>' +
+        '<button type="button" onclick="_courseLibBack()" style="border:none;background:none;font-size:15px;color:#6B7280;cursor:pointer;padding:4px 8px;">← 返回</button>' +
+        '<div id="courseLibTitle" style="flex:1;text-align:center;font-size:16px;font-weight:700;color:#1F2937;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">📚 课程汇总</div>' +
+        '<button type="button" id="courseLibAddBtn" onclick="_courseLibAdd()" style="border:none;background:#16A34A;border-radius:8px;font-size:12px;font-weight:600;color:#fff;padding:6px 12px;cursor:pointer;">+ 系列</button>' +
         '</div>' +
         '<div id="courseLibraryList" style="padding:14px 14px 40px;"></div>' +
         '</div>';
@@ -8545,47 +8666,111 @@ function _openCourseLibraryPanel() {
     _renderCourseLibraryList();
 }
 
+function _courseLibBack() {
+    if (_COURSE_LIB_VIEW.folderId) {
+        _COURSE_LIB_VIEW.folderId = null;
+        _renderCourseLibraryList();
+    } else {
+        _closeCourseLibrary();
+    }
+}
+
+function _courseLibAdd() {
+    if (_COURSE_LIB_VIEW.folderId) _openCourseArticleForm();
+    else _openCourseFolderForm();
+}
+
+function _courseLibOpenFolder(folderId) {
+    _COURSE_LIB_VIEW.folderId = folderId;
+    _renderCourseLibraryList();
+}
+
 function _renderCourseLibraryList() {
     var box = document.getElementById('courseLibraryList');
     if (!box) return;
-    var list = getCourseLibrary();
-    if (!list.length) {
-        box.innerHTML = '<div style="text-align:center;padding:60px 20px;color:#9CA3AF;"><div style="font-size:40px;margin-bottom:10px;">📚</div><div style="font-size:14px;">课程库还是空的，点右上角「+ 新增」录入第一篇</div></div>';
-        return;
+    var inFolder = !!_COURSE_LIB_VIEW.folderId;
+    var folder = inFolder ? _getCourseFolder(_COURSE_LIB_VIEW.folderId) : null;
+    if (inFolder && !folder) _COURSE_LIB_VIEW.folderId = null, inFolder = false;
+
+    var titleEl = document.getElementById('courseLibTitle');
+    if (titleEl) titleEl.textContent = inFolder ? ('📖 ' + String(folder.folderName || '系列')) : '📚 课程汇总';
+    var addEl = document.getElementById('courseLibAddBtn');
+    if (addEl) addEl.textContent = inFolder ? '+ 文章' : '+ 系列';
+
+    if (inFolder) { box.innerHTML = _courseLibArticleListHtml(folder); return; }
+    box.innerHTML = _courseLibFolderListHtml();
+}
+
+function _courseLibFolderListHtml() {
+    var folders = getCourseFolders();
+    var articles = getCourseArticles();
+    if (!folders.length) {
+        return '<div style="text-align:center;padding:60px 20px;color:#9CA3AF;"><div style="font-size:40px;margin-bottom:10px;">📚</div><div style="font-size:14px;line-height:1.8;">课程库还是空的<br>点右上角「+ 系列」创建第一个系列课</div></div>';
     }
-    var html = '<div style="font-size:12px;color:#9CA3AF;margin:0 0 10px 2px;">共 ' + list.length + ' 篇课程</div>';
-    list.forEach(function (c) {
+    var html = '<div style="font-size:12px;color:#9CA3AF;margin:0 0 10px 2px;">共 ' + folders.length + ' 个系列 · ' + articles.length + ' 篇文章</div>';
+    folders.forEach(function (f) {
         try {
-            var isPremium = !!c.isPremium;
-            var tags = Array.isArray(c.targetTags) ? c.targetTags.filter(Boolean) : [];
-            var body = String(c.content || '');
+            var tags = Array.isArray(f.targetTags) ? f.targetTags.filter(Boolean) : [];
+            var count = articles.filter(function (a) { return a && a.folderId === f.folderId; }).length;
             html +=
                 '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
-                '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">' +
-                '<span style="font-size:14px;font-weight:700;color:#1F2937;">' + escapeHtml(c.title || '未命名课程') + '</span>' +
-                (c.type === 'audio'
-                    ? '<span style="font-size:11px;background:#DBEAFE;color:#1D4ED8;border-radius:999px;padding:2px 8px;">🎧 音频</span>'
-                    : '<span style="font-size:11px;background:#EDE9FE;color:#6D28D9;border-radius:999px;padding:2px 8px;">📄 图文</span>') +
-                (isPremium
-                    ? '<span style="font-size:11px;background:#FEF3C7;color:#92400E;border-radius:999px;padding:2px 8px;">💰 ¥' + (Number(c.price) || 0).toFixed(2) + '</span>'
-                    : '<span style="font-size:11px;background:#F3F4F6;color:#6B7280;border-radius:999px;padding:2px 8px;">免费</span>') +
+                '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
+                '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;line-height:1.4;">' + escapeHtml(f.folderName || '未命名系列') + '</div>' +
+                '<span style="flex-shrink:0;font-size:11px;background:#EDE9FE;color:#6D28D9;border-radius:999px;padding:2px 8px;">' + count + ' 篇</span>' +
                 '</div>' +
                 '<div style="font-size:12px;color:#6B7280;line-height:1.7;">' +
                 (tags.length ? '🏷 ' + escapeHtml(tags.join(' / ')) + '<br>' : '') +
-                escapeHtml(body.slice(0, 60)) + (body.length > 60 ? '…' : '') +
+                (f.description ? escapeHtml(String(f.description).slice(0, 60)) + (String(f.description).length > 60 ? '…' : '') : '') +
                 '</div>' +
                 '<div style="display:flex;gap:8px;margin-top:10px;">' +
-                '<button type="button" onclick="_openCourseLibraryForm(\'' + escapeAttr(c.id) + '\')" style="flex:1;padding:8px;border:1px solid #D1D5DB;background:#fff;border-radius:10px;font-size:12px;color:#374151;cursor:pointer;">✏️ 修改</button>' +
-                '<button type="button" onclick="_deleteCourseLibraryItem(\'' + escapeAttr(c.id) + '\')" style="flex:1;padding:8px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:10px;font-size:12px;color:#B91C1C;cursor:pointer;">🗑 删除</button>' +
+                '<button type="button" onclick="_courseLibOpenFolder(\'' + escapeAttr(f.folderId) + '\')" style="flex:1.2;padding:8px;border:none;background:#16A34A;border-radius:10px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;">📖 查看文章</button>' +
+                '<button type="button" onclick="_openCourseFolderForm(\'' + escapeAttr(f.folderId) + '\')" style="flex:1;padding:8px;border:1px solid #D1D5DB;background:#fff;border-radius:10px;font-size:12px;color:#374151;cursor:pointer;">✏️ 修改</button>' +
+                '<button type="button" onclick="_deleteCourseFolder(\'' + escapeAttr(f.folderId) + '\')" style="flex:1;padding:8px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:10px;font-size:12px;color:#B91C1C;cursor:pointer;">🗑 删除</button>' +
                 '</div></div>';
         } catch (e) {
             html += '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:10px;margin-bottom:10px;color:#b91c1c;font-size:12px;">渲染异常：' + escapeHtml(String(e.message || e)) + '</div>';
         }
     });
-    box.innerHTML = html;
+    return html;
 }
 
-// ==================== 课程汇总：新增/修改表单 ====================
+function _courseLibArticleListHtml(folder) {
+    var tags = Array.isArray(folder.targetTags) ? folder.targetTags.filter(Boolean) : [];
+    var list = getCourseArticles().filter(function (a) { return a && a.folderId === folder.folderId; });
+    var html = '<div style="font-size:12px;color:#9CA3AF;margin:0 0 10px 2px;line-height:1.7;">' +
+        (tags.length ? '🏷 ' + escapeHtml(tags.join(' / ')) + '　' : '') +
+        '共 ' + list.length + ' 篇文章</div>';
+    if (!list.length) {
+        return html + '<div style="text-align:center;padding:50px 20px;color:#9CA3AF;"><div style="font-size:36px;margin-bottom:10px;">📄</div><div style="font-size:14px;line-height:1.8;">这个系列还没有文章<br>点右上角「+ 文章」录入第一篇</div></div>';
+    }
+    list.forEach(function (a) {
+        try {
+            var body = String(a.content || '');
+            var isPremium = !!a.isPremium;
+            html +=
+                '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
+                '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">' +
+                '<span style="flex:1;font-size:14px;font-weight:700;color:#1F2937;line-height:1.4;">' + escapeHtml(a.title || '未命名文章') + '</span>' +
+                '<span style="font-size:11px;background:#F3F4F6;color:#6B7280;border-radius:999px;padding:2px 8px;">⏱ ' + (Number(a.duration) || 5) + ' 分钟</span>' +
+                (isPremium
+                    ? '<span style="font-size:11px;background:#FEF3C7;color:#92400E;border-radius:999px;padding:2px 8px;">💰 ¥' + (Number(a.price) || 0).toFixed(2) + '</span>'
+                    : '<span style="font-size:11px;background:#F3F4F6;color:#6B7280;border-radius:999px;padding:2px 8px;">免费</span>') +
+                '</div>' +
+                '<div style="font-size:12px;color:#6B7280;line-height:1.7;">' +
+                escapeHtml(body.slice(0, 60)) + (body.length > 60 ? '…' : '') +
+                '</div>' +
+                '<div style="display:flex;gap:8px;margin-top:10px;">' +
+                '<button type="button" onclick="_openCourseArticleForm(\'' + escapeAttr(a.articleId) + '\')" style="flex:1;padding:8px;border:1px solid #D1D5DB;background:#fff;border-radius:10px;font-size:12px;color:#374151;cursor:pointer;">✏️ 修改</button>' +
+                '<button type="button" onclick="_deleteCourseArticle(\'' + escapeAttr(a.articleId) + '\')" style="flex:1;padding:8px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:10px;font-size:12px;color:#B91C1C;cursor:pointer;">🗑 删除</button>' +
+                '</div></div>';
+        } catch (e) {
+            html += '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:10px;margin-bottom:10px;color:#b91c1c;font-size:12px;">渲染异常：' + escapeHtml(String(e.message || e)) + '</div>';
+        }
+    });
+    return html;
+}
+
+// ==================== 课程汇总：系列 / 文章 表单 ====================
 function _toggleCourseLibraryPrice() {
     var cb = document.getElementById('clPremium');
     var priceEl = document.getElementById('clPrice');
@@ -8595,117 +8780,193 @@ function _toggleCourseLibraryPrice() {
     priceEl.style.opacity = on ? '1' : '0.45';
 }
 
-function _openCourseLibraryForm(id) {
-    var list = getCourseLibrary();
-    var item = null;
-    if (id) {
-        for (var i = 0; i < list.length; i++) {
-            if (list[i] && list[i].id === id) { item = list[i]; break; }
-        }
-        if (!item) { showToast('课程不存在'); return; }
-    }
+function _courseLibOverlayOpen(html) {
     var old = document.getElementById('courseLibraryFormOverlay');
     if (old) old.remove();
-    var c = item || { title: '', targetTags: [], type: 'article', content: '', isPremium: false, price: 0 };
-    var tagStr = Array.isArray(c.targetTags) ? c.targetTags.join('，') : '';
-    var premium = !!c.isPremium;
     var ov = document.createElement('div');
     ov.id = 'courseLibraryFormOverlay';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:flex-end;justify-content:center;';
-    ov.innerHTML =
+    ov.innerHTML = html;
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+}
+
+// ---- 系列文件夹表单 ----
+function _openCourseFolderForm(folderId) {
+    var item = null;
+    if (folderId) {
+        item = _getCourseFolder(folderId);
+        if (!item) { showToast('系列不存在'); return; }
+    }
+    var c = item || { folderName: '', targetTags: [], description: '' };
+    var tagStr = Array.isArray(c.targetTags) ? c.targetTags.join('，') : '';
+    _courseLibOverlayOpen(
         '<div style="background:#fff;width:100%;max-width:430px;max-height:90vh;border-radius:18px 18px 0 0;display:flex;flex-direction:column;overflow:hidden;">' +
         '<div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #F3F4F6;gap:8px;">' +
-        '<div style="flex:1;font-size:14px;font-weight:700;color:#1F2937;">' + (item ? '修改课程' : '新增课程') + '</div>' +
-        '<button type="button" onclick="_saveCourseLibraryForm(\'' + escapeAttr(id || '') + '\')" style="padding:6px 14px;border:none;background:#16A34A;border-radius:8px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;">保存</button>' +
+        '<div style="flex:1;font-size:14px;font-weight:700;color:#1F2937;">' + (item ? '修改系列' : '新增系列') + '</div>' +
+        '<button type="button" onclick="_saveCourseFolderForm(\'' + escapeAttr(folderId || '') + '\')" style="padding:6px 14px;border:none;background:#16A34A;border-radius:8px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;">保存</button>' +
         '<button type="button" onclick="document.getElementById(\'courseLibraryFormOverlay\').remove()" style="border:none;background:#F3F4F6;border-radius:50%;width:30px;height:30px;font-size:14px;color:#6B7280;cursor:pointer;">✕</button>' +
         '</div>' +
         '<div style="flex:1;overflow-y:auto;padding:12px 14px 24px;">' +
-        '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">课程标题</div>' +
-        '<input id="clTitle" type="text" value="' + escapeAttr(c.title || '') + '" maxlength="40" placeholder="如：失眠人群的晚餐禁区" style="width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#1F2937;box-sizing:border-box;margin-bottom:12px;">' +
-        '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">课程类型</div>' +
-        '<select id="clType" style="width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#1F2937;box-sizing:border-box;margin-bottom:12px;background:#fff;">' +
-        '<option value="article"' + (c.type === 'audio' ? '' : ' selected') + '>📄 图文</option>' +
-        '<option value="audio"' + (c.type === 'audio' ? ' selected' : '') + '>🎧 音频</option>' +
-        '</select>' +
+        '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">系列名称</div>' +
+        '<input id="clFolderName" type="text" value="' + escapeAttr(c.folderName || '') + '" maxlength="30" placeholder="如：二十四节气饮食课" style="width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#1F2937;box-sizing:border-box;margin-bottom:12px;">' +
         '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">适用人群标签（用逗号分隔）</div>' +
-        '<input id="clTags" type="text" value="' + escapeAttr(tagStr) + '" placeholder="如：失眠，气郁质" style="width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#1F2937;box-sizing:border-box;margin-bottom:12px;">' +
-        '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">课程内容</div>' +
-        '<textarea id="clContent" rows="10" maxlength="5000" placeholder="这里填写课程正文…" style="width:100%;padding:10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;line-height:1.9;color:#374151;box-sizing:border-box;resize:vertical;margin-bottom:12px;">' + escapeHtml(c.content || '') + '</textarea>' +
+        '<input id="clTags" type="text" value="' + escapeAttr(tagStr) + '" placeholder="如：全家，婴儿，儿童" style="width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#1F2937;box-sizing:border-box;margin-bottom:12px;">' +
+        '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">系列简介</div>' +
+        '<textarea id="clDesc" rows="3" maxlength="200" placeholder="这个系列讲什么…" style="width:100%;padding:10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;line-height:1.8;color:#374151;box-sizing:border-box;resize:vertical;">' + escapeHtml(c.description || '') + '</textarea>' +
+        '</div></div>'
+    );
+}
+
+function _saveCourseFolderForm(folderId) {
+    var name = String((document.getElementById('clFolderName') || {}).value || '').trim();
+    if (!name) { showToast('请填写系列名称'); return; }
+    var tagsRaw = (document.getElementById('clTags') || {}).value || '';
+    var tags = tagsRaw.split(/[,，、\s]+/).map(function (t) { return t.trim(); }).filter(Boolean);
+    var desc = String((document.getElementById('clDesc') || {}).value || '').trim();
+    var folders = getCourseFolders();
+    if (folderId) {
+        var found = null;
+        for (var i = 0; i < folders.length; i++) {
+            if (folders[i] && folders[i].folderId === folderId) { found = folders[i]; break; }
+        }
+        if (!found) { showToast('系列不存在'); return; }
+        found.folderName = name;
+        found.targetTags = tags;
+        found.description = desc;
+    } else {
+        folders.push({
+            folderId: _newCourseId('f_'),
+            folderName: name,
+            targetTags: tags,
+            description: desc,
+            createdAt: Date.now()
+        });
+    }
+    if (!saveCourseFolders(folders)) return;
+    var f = document.getElementById('courseLibraryFormOverlay');
+    if (f) f.remove();
+    showToast(folderId ? '系列已更新' : '系列已创建');
+    _renderCourseLibraryList();
+}
+
+function _deleteCourseFolder(folderId) {
+    var f = _getCourseFolder(folderId);
+    if (!f) { showToast('系列不存在'); return; }
+    var count = getCourseArticles().filter(function (a) { return a && a.folderId === folderId; }).length;
+    _ccConfirm('确认删除系列「' + (f.folderName || '') + '」？' + (count ? '其下 ' + count + ' 篇文章将一并删除。' : '') + '删除后不可恢复。', function () {
+        var next = getCourseFolders().filter(function (x) { return !x || x.folderId !== folderId; });
+        var arts = getCourseArticles().filter(function (a) { return !a || a.folderId !== folderId; });
+        if (saveCourseFolders(next) && saveCourseArticles(arts)) {
+            if (_COURSE_LIB_VIEW.folderId === folderId) _COURSE_LIB_VIEW.folderId = null;
+            showToast('系列已删除');
+            _renderCourseLibraryList();
+        }
+    });
+}
+
+// ---- 课程文章表单 ----
+function _openCourseArticleForm(articleId) {
+    var a = null;
+    if (articleId) {
+        var list = getCourseArticles();
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] && list[i].articleId === articleId) { a = list[i]; break; }
+        }
+        if (!a) { showToast('文章不存在'); return; }
+    }
+    var folderId = a ? a.folderId : _COURSE_LIB_VIEW.folderId;
+    if (!folderId) { showToast('请先进入一个系列再新增文章'); return; }
+    var folder = _getCourseFolder(folderId);
+    if (!folder) { showToast('系列不存在'); return; }
+    var c = a || { title: '', content: '', duration: 5, isPremium: false, price: 0 };
+    var premium = !!c.isPremium;
+    _courseLibOverlayOpen(
+        '<div style="background:#fff;width:100%;max-width:430px;max-height:90vh;border-radius:18px 18px 0 0;display:flex;flex-direction:column;overflow:hidden;">' +
+        '<div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #F3F4F6;gap:8px;">' +
+        '<div style="flex:1;font-size:14px;font-weight:700;color:#1F2937;">' + (a ? '修改文章' : '新增文章') + '</div>' +
+        '<button type="button" onclick="_saveCourseArticleForm(\'' + escapeAttr(articleId || '') + '\',\'' + escapeAttr(folderId) + '\')" style="padding:6px 14px;border:none;background:#16A34A;border-radius:8px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;">保存</button>' +
+        '<button type="button" onclick="document.getElementById(\'courseLibraryFormOverlay\').remove()" style="border:none;background:#F3F4F6;border-radius:50%;width:30px;height:30px;font-size:14px;color:#6B7280;cursor:pointer;">✕</button>' +
+        '</div>' +
+        '<div style="flex:1;overflow-y:auto;padding:12px 14px 24px;">' +
+        '<div style="font-size:12px;color:#6B7280;margin-bottom:12px;">所属系列：📖 ' + escapeHtml(folder.folderName || '') + '</div>' +
+        '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">文章标题</div>' +
+        '<input id="clTitle" type="text" value="' + escapeAttr(c.title || '') + '" maxlength="40" placeholder="如：霜降：秋天的最后一站" style="width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#1F2937;box-sizing:border-box;margin-bottom:12px;">' +
+        '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">正文内容</div>' +
+        '<textarea id="clContent" rows="10" maxlength="5000" placeholder="【节气特点】…" style="width:100%;padding:10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;line-height:1.9;color:#374151;box-sizing:border-box;resize:vertical;margin-bottom:12px;">' + escapeHtml(c.content || '') + '</textarea>' +
+        '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">阅读时长（分钟）</div>' +
+        '<input id="clDuration" type="number" min="1" max="99" step="1" value="' + (Number(c.duration) || 5) + '" style="width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#1F2937;box-sizing:border-box;margin-bottom:12px;">' +
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
         '<input id="clPremium" type="checkbox" onchange="_toggleCourseLibraryPrice()"' + (premium ? ' checked' : '') + ' style="width:16px;height:16px;cursor:pointer;">' +
         '<label for="clPremium" style="font-size:13px;color:#374151;cursor:pointer;">单独收费</label>' +
         '</div>' +
         '<div style="margin-bottom:6px;font-size:12px;color:#6B7280;">价格（元）</div>' +
         '<input id="clPrice" type="number" min="0" step="0.01" value="' + (Number(c.price) || 0) + '" style="width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#1F2937;box-sizing:border-box;">' +
-        '</div></div>';
-    document.body.appendChild(ov);
-    ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+        '</div></div>'
+    );
     _toggleCourseLibraryPrice();
 }
 
-function _saveCourseLibraryForm(id) {
-    var title = (document.getElementById('clTitle') || {}).value || '';
-    title = title.trim();
-    var content = (document.getElementById('clContent') || {}).value || '';
-    if (!title) { showToast('请填写课程标题'); return; }
-    if (!content.trim()) { showToast('请填写课程内容'); return; }
-    var typeEl = document.getElementById('clType');
-    var type = (typeEl && typeEl.value === 'audio') ? 'audio' : 'article';
-    var tagsRaw = (document.getElementById('clTags') || {}).value || '';
-    var tags = tagsRaw.split(/[,，、\s]+/).map(function (t) { return t.trim(); }).filter(Boolean);
+function _saveCourseArticleForm(articleId, folderId) {
+    var title = String((document.getElementById('clTitle') || {}).value || '').trim();
+    var content = String((document.getElementById('clContent') || {}).value || '');
+    if (!title) { showToast('请填写文章标题'); return; }
+    if (!content.trim()) { showToast('请填写文章内容'); return; }
+    var duration = Math.round(Number((document.getElementById('clDuration') || {}).value || 5));
+    if (!(duration > 0)) duration = 5;
+    if (duration > 99) duration = 99;
     var premiumEl = document.getElementById('clPremium');
     var isPremium = !!(premiumEl && premiumEl.checked);
     var price = 0;
     if (isPremium) {
         price = Number((document.getElementById('clPrice') || {}).value || 0);
-        if (!(price > 0)) { showToast('收费课程请填写有效价格'); return; }
+        if (!(price > 0)) { showToast('收费文章请填写有效价格'); return; }
         price = Math.round(price * 100) / 100;
     }
-    var list = getCourseLibrary();
-    if (id) {
+    var articles = getCourseArticles();
+    if (articleId) {
         var found = false;
-        for (var i = 0; i < list.length; i++) {
-            if (list[i] && list[i].id === id) {
-                list[i].title = title;
-                list[i].targetTags = tags;
-                list[i].type = type;
-                list[i].content = content;
-                list[i].isPremium = isPremium;
-                list[i].price = price;
+        for (var i = 0; i < articles.length; i++) {
+            if (articles[i] && articles[i].articleId === articleId) {
+                articles[i].title = title;
+                articles[i].content = content;
+                articles[i].duration = duration;
+                articles[i].isPremium = isPremium;
+                articles[i].price = price;
                 found = true;
                 break;
             }
         }
-        if (!found) { showToast('课程不存在'); return; }
+        if (!found) { showToast('文章不存在'); return; }
     } else {
-        list.push({
-            id: 'course_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+        articles.push({
+            articleId: _newCourseId('a_'),
+            folderId: folderId,
             title: title,
-            targetTags: tags,
-            type: type,
             content: content,
+            duration: duration,
             isPremium: isPremium,
             price: price,
             createdAt: Date.now()
         });
     }
-    if (!saveCourseLibrary(list)) return;
+    if (!saveCourseArticles(articles)) return;
     var f = document.getElementById('courseLibraryFormOverlay');
     if (f) f.remove();
-    showToast(id ? '修改已保存' : '课程已存入课程库');
+    showToast(articleId ? '文章已更新' : '文章已存入系列');
     _renderCourseLibraryList();
 }
 
-function _deleteCourseLibraryItem(id) {
-    var list = getCourseLibrary();
+function _deleteCourseArticle(articleId) {
+    var list = getCourseArticles();
     var item = null;
     for (var i = 0; i < list.length; i++) {
-        if (list[i] && list[i].id === id) { item = list[i]; break; }
+        if (list[i] && list[i].articleId === articleId) { item = list[i]; break; }
     }
-    if (!item) { showToast('课程不存在'); return; }
-    _ccConfirm('确认删除「' + (item.title || '该课程') + '」？删除后不可恢复。', function () {
-        var next = getCourseLibrary().filter(function (c) { return !c || c.id !== id; });
-        if (saveCourseLibrary(next)) {
+    if (!item) { showToast('文章不存在'); return; }
+    _ccConfirm('确认删除「' + (item.title || '该文章') + '」？删除后不可恢复。', function () {
+        var next = getCourseArticles().filter(function (a) { return !a || a.articleId !== articleId; });
+        if (saveCourseArticles(next)) {
             showToast('已删除');
             _renderCourseLibraryList();
         }
@@ -8991,6 +9252,7 @@ function _classroomRecoCard(item, idx) {
         '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;line-height:1.4;">' + escapeHtml(c.title || '未命名课程') + '</div>' +
         tagHtml +
         '</div>' +
+        (c.folderName ? '<div style="font-size:12px;color:#9CA3AF;line-height:1.7;margin-bottom:4px;">📖 ' + escapeHtml(c.folderName) + '</div>' : '') +
         '<div style="font-size:12px;color:#6B7280;line-height:1.7;margin-bottom:10px;">💡 ' + escapeHtml(item.reason || '') +
         (Array.isArray(c.targetTags) && c.targetTags.length ? '　🏷 ' + escapeHtml(c.targetTags.join(' / ')) : '') +
         (c.type === 'audio' ? '　🎧 音频' : '') +
@@ -9009,7 +9271,7 @@ function _renderClassroomReco(isNew) {
         '<span style="font-size:15px;font-weight:700;color:#1F2937;">为您推荐</span>' +
         '<span style="font-size:12px;color:#9CA3AF;">按家庭档案标签匹配课程库</span></div>';
     if (r.noLib) {
-        html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">课程库还没有内容<br>请联系管理员在「课程汇总」录入课程</div>';
+        html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">课程库还没有系列课程<br>请联系管理员在「课程汇总」中新建系列并录入文章</div>';
     } else if (!r.list.length) {
         html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">' +
             (r.famCount ? '暂未匹配到合适的课程<br>可在「我家」补充成员健康标签后再试' : '家庭档案里还没有成员标签<br>请先在「我家」完善成员信息') +
