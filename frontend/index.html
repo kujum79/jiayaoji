@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V222-20261025';
+        var APP_VER = 'V223-20261025';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -29917,11 +29917,21 @@ function _dtRenderCard(tip) {
         + '<div class="dt-summary">' + (tip.summary || '') + '</div>'
         + '</div>';
 }
-function _dtRenderDegraded() {
+function _dtRenderDegraded(latestDate) {
     var el = document.getElementById('homeDailyTipCard');
     if (!el) return;
-    el.innerHTML = '<div class="dt-head">📚 食养堂 · 今日一课</div>'
-        + '<div class="dt-degraded">今日食养内容暂未更新</div>';
+    var sub = '今日食养内容暂未更新';
+    if (latestDate) {
+        var d = String(latestDate).slice(5).replace('-', ' 月 ') + ' 日';
+        sub = '今日内容暂未更新 · 最近更新 ' + d;
+    }
+    el.innerHTML = '<div class="dt-head"><span>📚 食养堂</span>'
+        + '<span class="dt-head-btns" onclick="event.stopPropagation()">'
+        + '<button class="dt-btn" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;" onclick="event.stopPropagation(); _openDailyTipArchive()">往期精选 ›</button>'
+        + '</span></div>'
+        + '<div onclick="_openDailyTipArchive()" style="cursor:pointer;">'
+        + '<div class="dt-degraded">' + sub + '</div>'
+        + '</div>';
 }
 function _dtFamilyBrief() {
     try {
@@ -30014,24 +30024,21 @@ async function renderHomeDailyTipCard(force) {
             return;
         }
     } catch (e) {}
-    // V221: 兜底——今日/昨日都没有已发布文章时，取归档里最近一篇，避免免费家庭食养堂空窗
+    // V223: 今日/昨日都没有 confirmed 文章时，不再把归档旧文冒充「今日一课」（旧文可能含其它城市的天气语境），
+    // 仅提示暂未更新，并给出「查看往期精选」入口
+    var _latestDate = '';
     try {
         var resp3 = await fetch('/api/food-hall/published-list?days=120', { cache: 'no-store' });
         var out3 = await resp3.json();
-        if (out3 && out3.ok && Array.isArray(out3.articles) && out3.articles.length) {
+        if (out3 && Array.isArray(out3.articles) && out3.articles.length) {
             var latest = null;
             for (var li = 0; li < out3.articles.length; li++) {
                 if (out3.articles[li] && out3.articles[li].title) { latest = out3.articles[li]; break; }
             }
-            if (latest) {
-                _dtServerTip = latest;
-                _dtRecordHistory(latest);
-                _dtRenderCard(latest);
-                return;
-            }
+            if (latest) _latestDate = String(latest.date || latest.publishDate || latest.publish_date || '');
         }
     } catch (e) {}
-    _dtRenderDegraded();
+    _dtRenderDegraded(_latestDate);
 }
 // V143: 超管复核 AI 预选篇（confirm 保留 / withdraw 撤回换篇）
 async function _fhReviewAuto(date, action) {
