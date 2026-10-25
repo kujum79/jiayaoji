@@ -4220,6 +4220,96 @@ async def review_risk(req: ReviewRiskRequest) -> Dict[str, Any]:
     return data
 
 
+# ========== V225: AI 专家营养师评估（POST /api/expert-assess） ==========
+class ExpertAssessRequest(BaseModel):
+    familyId: str = ""
+    familyBrief: str = ""
+    imageBase64: str = ""   # 可带 data:image/...;base64, 前缀
+    userPrompt: str = ""
+    mode: str = "ai"        # ai（默认）；human 为未来真人营养师接入预留
+
+
+_EXPERT_DISCLAIMER = "本评估由 AI 营养模型生成，仅供日常膳食参考，不能替代医生临床诊断。慢病及用药调整请务必遵医嘱。"
+
+_EXPERT_SYSTEM = """你是高级临床营养师。请分析用户上传的体检报告并给出膳食建议。
+
+【红线要求】
+1. 严禁做疾病诊断！
+2. 严禁说“吃什么药”！
+3. 严禁使用“治疗/治愈”词汇！
+4. 不得承诺疗效，不得推荐药品、保健品或替代治疗方案。
+5. 只从膳食结构、烹饪方式、食材选择、作息与运动等生活方式角度给建议。
+6. 涉及指标异常时，用“提示关注”“建议复查”“遵医嘱”等表述。
+
+【输出要求】
+输出结构清晰的中文报告，依次包含：
+一、报告要点解读（只描述指标与饮食的关联，不下结论）
+二、饮食原则
+三、一日三餐搭配建议
+四、需要留意的提醒
+全文控制在 700 字以内，不使用 Markdown 表格。"""
+
+_EXPERT_BAD_WORDS = ["治疗", "治愈", "导致疾病", "远离疾病", "包治", "药到病除", "吃药", "处方药", "停药"]
+
+
+@app.post("/api/expert-assess")
+async def expert_assess(req: ExpertAssessRequest) -> Dict[str, Any]:
+    """V225: 体检单 + 问题描述 → AI 专家营养师膳食评估（带合规免责声明）。"""
+    prompt = (req.userPrompt or "").strip()[:600]
+    brief = (req.familyBrief or "").strip()[:300]
+    img = (req.imageBase64 or "").strip()
+    if not prompt and not img:
+        return {"ok": False, "error": "请上传体检单或描述需要关注的问题"}
+
+    if img and not img.startswith("data:"):
+        img = "data:image/jpeg;base64," + img
+    if img and len(img) > 11 * 1024 * 1024:
+        return {"ok": False, "error": "图片过大（超过 8MB），请压缩后重试"}
+
+    user_lines = [
+        "【家庭情况】" + (brief or "未提供"),
+        "【用户关注】" + (prompt or "请根据体检单给出日常膳食建议"),
+        "请按输出要求生成膳食评估报告。",
+    ]
+    messages: List[Dict[str, Any]] = [{"role": "system", "content": _EXPERT_SYSTEM}]
+    if img:
+        messages.append({
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": img}},
+                {"type": "text", "text": "\n".join(user_lines)},
+            ],
+        })
+    else:
+        messages.append({"role": "user", "content": "\n".join(user_lines)})
+
+    result = ""
+    used_vision = False
+    try:
+        if img:
+            result, _p = await route_vision(messages, max_tokens=2000, timeout=120.0, task_type="expert_assess")
+            used_vision = True
+        else:
+            result = await call_qwen(messages, max_tokens=2000, task_type="expert_assess")
+    except Exception as e:
+        print(f"[expert-assess] AI 调用失败：{e}")
+        return {"ok": False, "error": "AI 评估服务暂时不可用，请稍后重试"}
+
+    text = str(result or "").strip()
+    if not text:
+        return {"ok": False, "error": "AI 未能生成评估内容，请补充问题描述后重试"}
+    for w in _EXPERT_BAD_WORDS:
+        if w in text:
+            text = text.replace(w, "")
+    text = text.replace("**", "").strip()
+    if not text.startswith(_EXPERT_DISCLAIMER):
+        text = _EXPERT_DISCLAIMER + "\n\n" + text
+    if not text.endswith(_EXPERT_DISCLAIMER):
+        text = text + "\n\n" + _EXPERT_DISCLAIMER
+
+    return {"ok": True, "result": text, "usedVision": used_vision, "mode": "ai"}
+
+
 # V157: 文件末尾补跑别名注册——覆盖定义在本块之后的 /api/daily-tip、/api/weather、
 # /api/migration 等 POST 路由（catch-all 仅 GET，POST 别名无被吞风险；已注册路径自动去重）
 _register_api_prefix_aliases()

@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V224-20261025';
+        var APP_VER = 'V225-20261025';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -8178,6 +8178,7 @@ function familyKey(key) {
         'dailyLessons',
         'customCaseOrders',
         'reviewRiskAI',
+        'expertAssessments',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
         if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
@@ -30252,7 +30253,7 @@ function _openPremiumContent() {
         + '<li>👑 APP 全部核心功能（无限规划/食材闭环）</li>'
         + '<li>🎓 我的专属饮食课堂（全库免费学）</li>'
         + '<li>📊 深度健康复盘与治未病预警（每周/每月）</li>'
-        + '<li>👨‍⚕️ 真人营养师个案定制（配餐复核/体检解读）</li>'
+        + '<li>👨‍⚕️ AI 专家营养师深度定制（每月 1 次）</li>'
         + '</ul>'
         + '<div style="margin-top:14px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:11px 12px;font-size:12px;color:#9A3412;line-height:1.8;">订阅后，您的【复盘】将升级为【家庭健康深度体检】，帮您科学饮食，降低健康风险。</div>'
         + '<div style="margin-top:18px;font-size:11px;color:#9CA3AF;">订阅到期后自动回退免费版，已收藏的食养堂内容保留。</div>'
@@ -61084,7 +61085,7 @@ function _reviewRiskCardHtml(st, level, ai) {
     }
     html += '<div style="font-size:12px;color:' + color + ';line-height:1.75;">' + escapeHtml(advice) + '</div>';
     if (expert) {
-        html += '<div style="margin-top:8px;font-size:11px;color:#92400E;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:6px 8px;line-height:1.6;">建议呼叫真人营养师做 1V1 评估，针对性调整配餐。</div>';
+        html += '<div style="margin-top:8px;font-size:11px;color:#92400E;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:6px 8px;line-height:1.6;">建议呼叫 AI 专家营养师做 1 对 1 评估，针对性调整配餐。</div>';
     }
     html += '<div style="display:flex;gap:12px;margin-top:8px;font-size:11px;color:#6B7280;">' +
         '<span>高油菜品 ' + st.oilCount + ' 道</span><span>高盐 ' + st.saltCount + ' 道</span>' +
@@ -61133,84 +61134,161 @@ function _renderReviewExpertModule() {
             '</div>';
         return;
     }
+    var remain = _expertRemaining();
+    var btn = remain > 0
+        ? '<button type="button" onclick="_openExpertAssessPanel()" style="width:100%;padding:11px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">👨‍⚕️ 呼叫 AI 专家营养师（本月剩余 ' + remain + ' 次）</button>'
+        : '<button type="button" disabled style="width:100%;padding:11px;border:none;border-radius:10px;background:#E5E7EB;color:#9CA3AF;font-size:14px;font-weight:700;cursor:not-allowed;">本月次数已用完，下月重置</button>'
+          + '<div style="margin-top:6px;font-size:11px;color:#9CA3AF;text-align:center;line-height:1.7;">如需加急，可消耗积分兑换（即将开放）</div>';
     slot.innerHTML =
         '<div style="border-top:1px solid #E5E7EB;background:#fff;padding:12px 20px calc(12px + env(safe-area-inset-bottom));">' +
         '<div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:#1F2937;margin-bottom:6px;">👨‍⚕️ 深度定制与纠偏</div>' +
-        '<div style="font-size:12px;color:#6B7280;line-height:1.75;margin-bottom:10px;">AI 预警只能防患于未然。如您家有慢病老人，或需要针对体检指标（如高尿酸、脂肪肝）进行严格配餐，请呼叫真人营养师 1V1 定制。</div>' +
-        '<button type="button" onclick="_openCaseOrderPanel()" style="width:100%;padding:11px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">📎 上传体检报告/病历单</button>' +
+        '<div style="font-size:12px;color:#6B7280;line-height:1.75;margin-bottom:10px;">AI 预警只能防患于未然。如您家有慢病老人，或需要针对体检指标（如高尿酸、脂肪肝）进行严格配餐，请呼叫 AI 专家营养师 1 对 1 评估。</div>' +
+        btn +
+        '<div style="margin-top:8px;font-size:11px;color:#9CA3AF;line-height:1.6;">* 专业注册营养师团队正在入驻中，当前由高级 AI 营养模型为您服务。</div>' +
         '</div>';
 }
 
-function _getCaseOrders() {
-    try { var v = lsGetJSON('customCaseOrders', []); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+// ====== V225: AI 专家评估（每月 1 次；数据模型为未来接入真人预留 channel 字段） ======
+var _EXPERT_MONTHLY_FREE = 1;
+
+function _expertMonthKey() {
+    var d = new Date();
+    return d.getFullYear() + '-' + (String(d.getMonth() + 1).length < 2 ? '0' : '') + (d.getMonth() + 1);
 }
 
-// 个案定制工单面板
-function _openCaseOrderPanel() {
-    var old = document.getElementById('caseOrderOverlay');
+function _getExpertAssessments() {
+    try { var v = lsGetJSON('expertAssessments', []); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+}
+
+function _saveExpertAssessments(list) {
+    try { lsSetJSON('expertAssessments', list); } catch (e) { showToast('保存失败：' + (e.message || e)); }
+}
+
+function _expertUsedThisMonth() {
+    var mk = _expertMonthKey();
+    var list = _getExpertAssessments();
+    var used = 0;
+    for (var i = 0; i < list.length; i++) {
+        var it = list[i];
+        if (!it) continue;
+        var d = new Date(Number(it.createdAt) || 0);
+        var k = d.getFullYear() + '-' + (String(d.getMonth() + 1).length < 2 ? '0' : '') + (d.getMonth() + 1);
+        if (k === mk && String(it.status || 'completed') !== 'failed') used++;
+    }
+    return used;
+}
+
+function _expertRemaining() {
+    return Math.max(0, _EXPERT_MONTHLY_FREE - _expertUsedThisMonth());
+}
+
+var _EXPERT_PANEL = { imageBase64: '', fileName: '' };
+
+function _openExpertAssessPanel() {
+    var old = document.getElementById('expertAssessOverlay');
     if (old) old.remove();
+    var remain = _expertRemaining();
+    if (remain <= 0) {
+        showToast('本月 AI 专家评估次数已用完，下月重置');
+        return;
+    }
+    _EXPERT_PANEL = { imageBase64: '', fileName: '' };
     var ov = document.createElement('div');
-    ov.id = 'caseOrderOverlay';
+    ov.id = 'expertAssessOverlay';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100060;display:flex;align-items:flex-end;justify-content:center;';
     ov.innerHTML =
-        '<div style="background:#fff;border-radius:18px 18px 0 0;width:100%;max-width:430px;padding:16px 18px calc(18px + env(safe-area-inset-bottom));">' +
+        '<div style="background:#fff;border-radius:18px 18px 0 0;width:100%;max-width:430px;max-height:88vh;overflow-y:auto;padding:16px 18px calc(18px + env(safe-area-inset-bottom));box-sizing:border-box;">' +
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
-        '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;">个案定制工单</div>' +
-        '<button type="button" onclick="document.getElementById(\'caseOrderOverlay\').remove()" style="border:none;background:#F3F4F6;border-radius:50%;width:30px;height:30px;font-size:14px;color:#6B7280;cursor:pointer;">✕</button>' +
+        '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;">👨‍⚕️ AI 专家营养师评估</div>' +
+        '<button type="button" onclick="document.getElementById(\'expertAssessOverlay\').remove()" style="border:none;background:#F3F4F6;border-radius:50%;width:30px;height:30px;font-size:14px;color:#6B7280;cursor:pointer;">✕</button>' +
         '</div>' +
-        '<div style="font-size:12px;color:#6B7280;line-height:1.75;margin-bottom:12px;">上传体检报告或病历单，我们的真人营养师会在 1 个工作日内联系你，按指标做严格配餐。</div>' +
+        '<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:10px 12px;font-size:12px;color:#9A3412;line-height:1.8;margin-bottom:12px;">本月剩余 AI 专家评估次数：<b>' + remain + ' 次</b>。请上传体检单并描述问题。</div>' +
         '<label style="display:block;border:2px dashed #D1D5DB;border-radius:12px;padding:14px;text-align:center;background:#FAFAF9;cursor:pointer;margin-bottom:12px;">' +
         '<div style="font-size:22px;margin-bottom:4px;">📄</div>' +
-        '<div style="font-size:13px;font-weight:600;color:#374151;">点击上传报告（图片 / PDF）</div>' +
-        '<div id="caseOrderFileTip" style="font-size:11px;color:#9CA3AF;margin-top:4px;">支持 jpg / png / pdf，可多选</div>' +
-        '<input type="file" id="caseOrderFileInput" accept="image/*,.pdf" multiple style="display:none;" onchange="_caseOrderPickFiles(this)">' +
+        '<div style="font-size:13px;font-weight:600;color:#374151;">上传体检报告照片（选填）</div>' +
+        '<div id="expertFileTip" style="font-size:11px;color:#9CA3AF;margin-top:4px;">支持 jpg / png，单张不超过 8MB</div>' +
+        '<input type="file" id="expertFileInput" accept="image/*" style="display:none;" onchange="_expertPickImage(this)">' +
         '</label>' +
-        '<div style="font-size:12px;color:#6B7280;margin-bottom:6px;">需重点关注（选填）</div>' +
-        '<textarea id="caseOrderNote" rows="3" placeholder="如：奶奶高尿酸、爸爸脂肪肝，希望控制嘌呤与油脂" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #E5E7EB;border-radius:10px;font-size:13px;line-height:1.6;resize:none;outline:none;"></textarea>' +
-        '<button type="button" onclick="_submitCaseOrder()" style="width:100%;margin-top:12px;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">提交工单并呼叫营养师</button>' +
+        '<div style="font-size:12px;color:#6B7280;margin-bottom:6px;">您关注的问题</div>' +
+        '<textarea id="expertPrompt" rows="3" placeholder="如：老人尿酸偏高，日常三餐怎么搭配？" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #E5E7EB;border-radius:10px;font-size:13px;line-height:1.6;resize:none;outline:none;margin-bottom:12px;"></textarea>' +
+        '<button type="button" id="expertSubmitBtn" onclick="_submitExpertAssess()" style="width:100%;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">提交并生成评估报告</button>' +
+        '<div style="margin-top:8px;font-size:11px;color:#9CA3AF;line-height:1.6;">* 专业注册营养师团队正在入驻中，当前由高级 AI 营养模型为您服务。</div>' +
+        '<div id="expertResultBox" style="display:none;margin-top:14px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:12px;padding:12px;font-size:13px;color:#374151;line-height:1.85;white-space:pre-wrap;word-break:break-word;"></div>' +
         '</div>';
     document.body.appendChild(ov);
     ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
 }
 
-var _CASE_ORDER_FILES = [];
-function _caseOrderPickFiles(input) {
-    _CASE_ORDER_FILES = [];
-    var tip = document.getElementById('caseOrderFileTip');
-    var names = [];
-    for (var i = 0; i < (input && input.files ? input.files.length : 0); i++) {
-        var f = input.files[i];
-        if (!f) continue;
-        _CASE_ORDER_FILES.push({ name: String(f.name || ''), size: Number(f.size) || 0 });
-        names.push(String(f.name || ''));
+function _expertPickImage(input) {
+    var tip = document.getElementById('expertFileTip');
+    var f = input && input.files && input.files[0];
+    if (!f) return;
+    if (f.size > 8 * 1024 * 1024) {
+        if (tip) { tip.textContent = '文件超过 8MB，请换一张更小的图片'; tip.style.color = '#DC2626'; }
+        _EXPERT_PANEL = { imageBase64: '', fileName: '' };
+        return;
     }
-    if (tip) {
-        tip.textContent = _CASE_ORDER_FILES.length
-            ? ('已选择 ' + _CASE_ORDER_FILES.length + ' 个文件：' + names.join('、'))
-            : '支持 jpg / png / pdf，可多选';
-        tip.style.color = _CASE_ORDER_FILES.length ? '#16A34A' : '#9CA3AF';
-    }
+    var reader = new FileReader();
+    reader.onload = function () {
+        _EXPERT_PANEL.imageBase64 = String(reader.result || '');
+        _EXPERT_PANEL.fileName = String(f.name || '');
+        if (tip) { tip.textContent = '已选择：' + _EXPERT_PANEL.fileName; tip.style.color = '#16A34A'; }
+    };
+    reader.onerror = function () {
+        if (tip) { tip.textContent = '读取失败，请重试'; tip.style.color = '#DC2626'; }
+    };
+    reader.readAsDataURL(f);
 }
 
-function _submitCaseOrder() {
-    if (!_CASE_ORDER_FILES.length) { showToast('请先上传体检报告或病历单'); return; }
-    var note = String((document.getElementById('caseOrderNote') || {}).value || '').trim();
-    var orders = _getCaseOrders();
-    var order = {
-        orderId: 'case_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
-        createdAt: Date.now(),
+async function _submitExpertAssess() {
+    if (_expertRemaining() <= 0) { showToast('本月次数已用完，下月重置'); return; }
+    var prompt = String((document.getElementById('expertPrompt') || {}).value || '').trim();
+    if (!prompt && !_EXPERT_PANEL.imageBase64) { showToast('请上传体检单或描述需要关注的问题'); return; }
+    var btn = document.getElementById('expertSubmitBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'AI 正在分析…'; btn.style.opacity = '0.7'; }
+    var out = null;
+    try {
+        var res = await fetch('/api/expert-assess', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                familyId: (typeof getFamilyId === 'function' ? getFamilyId() : null) || '',
+                familyBrief: (typeof _dtFamilyBrief === 'function' ? _dtFamilyBrief() : ''),
+                imageBase64: _EXPERT_PANEL.imageBase64,
+                userPrompt: prompt,
+                mode: 'ai'
+            })
+        });
+        out = await res.json();
+    } catch (e) {
+        out = { ok: false, error: '网络异常，请稍后重试' };
+    }
+    if (!out || !out.ok || !out.result) {
+        if (btn) { btn.disabled = false; btn.textContent = '提交并生成评估报告'; btn.style.opacity = '1'; }
+        showToast((out && out.error) || '评估失败，请稍后重试');
+        return;
+    }
+    var list = _getExpertAssessments();
+    list.push({
+        id: 'assess_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
         familyId: (typeof getFamilyId === 'function' ? getFamilyId() : null) || '',
-        familyName: (typeof _currentFamilyName === 'function' ? _currentFamilyName() : '我家'),
-        files: _CASE_ORDER_FILES.slice(),
-        note: note,
-        status: 'pending'
-    };
-    orders.push(order);
-    try { lsSetJSON('customCaseOrders', orders); } catch (e) { showToast('工单提交失败：' + (e.message || e)); return; }
-    _CASE_ORDER_FILES = [];
-    var ov = document.getElementById('caseOrderOverlay');
-    if (ov) ov.remove();
-    showToast('✅ 已提交个案定制工单，营养师将尽快联系你');
+        imageBase64: _EXPERT_PANEL.imageBase64,
+        userPrompt: prompt,
+        aiResult: String(out.result),
+        createdAt: Date.now(),
+        status: 'completed',
+        channel: 'ai'
+    });
+    _saveExpertAssessments(list);
+    var box = document.getElementById('expertResultBox');
+    if (box) { box.style.display = 'block'; box.textContent = String(out.result); }
+    if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
+        btn.textContent = _expertRemaining() > 0 ? '本月仍有剩余次数' : '本月次数已用完，下月重置';
+    }
+    showToast('✅ AI 专家评估已生成');
+    _renderReviewExpertModule();
 }
 
 // ==================== 复盘Tab切换与下拉菜单 ====================
