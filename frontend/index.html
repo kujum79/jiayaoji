@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V214-20261024';
+        var APP_VER = 'V215-20261025';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -9347,105 +9347,97 @@ function _classroomCard(c, kind) {
 }
 
 // ====== V210: 课程库推荐（本地标签匹配，秒出不等待 AI） ======
-// 结果缓存：null=未点过「获取推荐」；{list,noLib,famCount}=已推荐
+// 结果缓存：null=未点过「获取推荐」；否则为 getRecommendedCourses() 的返回值
 var _CLASSROOM_RECO = null;
 
-// 标签归一：去空白、小写、去「质/症」后缀（气郁质 → 气郁）
-function _tagNorm(x) {
-    return String(x || '').trim().toLowerCase().replace(/[质症]$/, '');
-}
-function _isAgeTag(s) { return /^\d+岁$/.test(String(s || '')); }
+// 标签归一：去空白、小写、去「质/症」后缀，并把同义标签归到同一组（老年/老年人 → 老人，婴幼儿/宝宝 → 婴儿）
+var _TAG_ALIAS = {
+    '全家': '全家', '全家人': '全家', '家庭': '全家',
+    '老人': '老人', '老年': '老人', '老年人': '老人', '长辈': '老人', '长者': '老人',
+    '婴儿': '婴儿', '婴幼儿': '婴儿', '宝宝': '婴儿', '幼儿': '婴儿',
+    '儿童': '儿童', '孩子': '儿童', '小朋友': '儿童',
+    '青少年': '青少年', '青春期': '青少年'
+};
+// 特殊标签：命中后在界面上打「专属推荐」标
+var _SPECIAL_TAG_KEYS = { '婴儿': '婴儿', '儿童': '儿童', '青少年': '青少年', '老人': '老人' };
 
-// 收集家庭档案标签池：[{raw, norm, member, age}]
-function _familyTagPool() {
-    var members = [];
-    try { members = getFamilyMembers() || []; } catch (e) { members = []; }
-    var out = [];
+function _tagNorm(x) {
+    var s = String(x || '').trim().toLowerCase().replace(/[质症]$/, '');
+    if (!s) return '';
+    return _TAG_ALIAS[s] || s;
+}
+
+// 家庭标签集合：成员档案标签 + 年龄派生标签 + 通用「全家」
+function getFamilyTags(familyMembers) {
+    var members = Array.isArray(familyMembers) ? familyMembers : [];
+    if (!Array.isArray(familyMembers)) {
+        try { members = getFamilyMembers() || []; } catch (e) { members = []; }
+    }
+    var out = ['全家'];
+    var seen = { '全家': true };
+    function push(raw) {
+        var k = _tagNorm(raw);
+        if (!k || seen[k]) return;
+        seen[k] = true;
+        out.push(String(raw).trim());
+    }
     members.forEach(function (m) {
         if (!m) return;
-        var name = String(m.name || '家人');
-        var tags = [];
-        if (Array.isArray(m.tags)) tags = tags.concat(m.tags);
-        if (Array.isArray(m.healthTags)) tags = tags.concat(m.healthTags);
-        if (m.constitution) tags.push(m.constitution);
-        if (Array.isArray(m.conditions)) tags = tags.concat(m.conditions);
-        if (Array.isArray(m.diseases)) tags = tags.concat(m.diseases);
+        if (Array.isArray(m.tags)) m.tags.forEach(push);
+        if (Array.isArray(m.healthTags)) m.healthTags.forEach(push);
+        if (m.constitution) push(m.constitution);
+        if (Array.isArray(m.conditions)) m.conditions.forEach(push);
+        if (Array.isArray(m.diseases)) m.diseases.forEach(push);
         var age = Number(m.age);
         if (age > 0) {
-            tags.push(age + '岁');
-            if (age <= 3) tags = tags.concat(['幼儿', '宝宝']);
-            else if (age <= 12) tags = tags.concat(['儿童', '孩子']);
-            else if (age <= 17) tags = tags.concat(['青少年']);
-            if (age >= 60) tags = tags.concat(['老人', '老年']);
+            out.push(age + '岁');
+            if (age <= 3) { push('婴儿'); }
+            else if (age <= 12) { push('儿童'); }
+            else if (age <= 17) { push('青少年'); }
+            if (age >= 60) { push('老人'); }
         }
-        var seen = {};
-        tags.forEach(function (t) {
-            var raw = String(t || '').trim();
-            var norm = _tagNorm(raw);
-            if (!norm || seen[norm]) return;
-            seen[norm] = true;
-            out.push({ raw: raw, norm: norm, member: name, age: age > 0 ? age : 0 });
-        });
     });
     return out;
 }
 
-// 单标签匹配：完全相等优先；否则双向包含（年龄标签必须精确，避免 3岁 命中 13岁）
-function _matchCourseTag(courseTag, pool) {
-    var cn = _tagNorm(courseTag);
-    if (!cn) return null;
-    for (var i = 0; i < pool.length; i++) {
-        if (pool[i].norm === cn) return pool[i];
-    }
-    if (_isAgeTag(cn)) return null;
-    for (var j = 0; j < pool.length; j++) {
-        var ft = pool[j];
-        if (_isAgeTag(ft.norm) || ft.norm.length < 2) continue;
-        if (ft.norm.indexOf(cn) > -1 || cn.indexOf(ft.norm) > -1) return ft;
-    }
-    return null;
-}
-
-function _buildCourseRecommendations() {
-    var lib = [];
-    try { lib = getCourseLibrary() || []; } catch (e) { lib = []; }
-    var pool = _familyTagPool();
-    if (!lib.length) return { list: [], noLib: true, famCount: pool.length };
+// 课程匹配推荐：系列为单位，folder.targetTags 与 familyTags 有交集即命中
+function getRecommendedCourses(familyMembers) {
+    var familyTags = getFamilyTags(familyMembers);
+    var tagSet = {};
+    familyTags.forEach(function (t) { tagSet[_tagNorm(t)] = true; });
+    var folders = [], articles = [];
+    try { folders = getCourseFolders() || []; } catch (e) { folders = []; }
+    try { articles = getCourseArticles() || []; } catch (e) { articles = []; }
     var list = [];
-    lib.forEach(function (c) {
-        if (!c) return;
-        var tags = Array.isArray(c.targetTags) ? c.targetTags : [];
-        var hits = [];
-        var hitKeys = {};
+    folders.forEach(function (f) {
+        if (!f) return;
+        var tags = Array.isArray(f.targetTags) ? f.targetTags : [];
+        var matchedTags = [], specialTags = [];
         tags.forEach(function (t) {
-            var ft = _matchCourseTag(t, pool);
-            if (!ft) return;
-            var k = ft.member + '|' + ft.norm;
-            if (hitKeys[k]) return;
-            hitKeys[k] = true;
-            hits.push({ tag: ft.raw, member: ft.member });
+            var k = _tagNorm(t);
+            if (!k || !tagSet[k]) return;
+            matchedTags.push(String(t).trim());
+            var sp = _SPECIAL_TAG_KEYS[k];
+            if (sp && specialTags.indexOf(sp) < 0) specialTags.push(sp);
         });
-        if (!hits.length) return;
-        // 按成员归并推荐原因：单人单标签用「爸爸有高血压」，多人/多标签用「儿子适合体育生、青少年」
-        var byMember = {}, order = [];
-        hits.forEach(function (h) {
-            if (!byMember[h.member]) { byMember[h.member] = []; order.push(h.member); }
-            byMember[h.member].push(h.tag);
+        if (!matchedTags.length) return;
+        var arts = articles.filter(function (a) { return a && a.folderId === f.folderId; });
+        if (!arts.length) return;
+        list.push({
+            folder: f,
+            articles: arts,
+            matchedTags: matchedTags,
+            specialTags: specialTags,
+            isSpecial: specialTags.length > 0,
+            badge: specialTags.length ? '专属推荐' : ''
         });
-        var reasons = order.map(function (name) {
-            var ts = byMember[name];
-            if (ts.length === 1) return _isAgeTag(ts[0]) ? (name + ' ' + ts[0]) : (name + '有' + ts[0]);
-            return name + '适合' + ts.join('、');
-        });
-        list.push({ course: c, score: hits.length, reason: '适合您家：' + reasons.join('、') });
     });
-    list.sort(function (a, b) {
-        if (b.score !== a.score) return b.score - a.score;
-        var pa = a.course.isPremium ? 1 : 0, pb = b.course.isPremium ? 1 : 0;
-        if (pa !== pb) return pa - pb;
-        return (Number(b.course.createdAt) || 0) - (Number(a.course.createdAt) || 0);
-    });
-    return { list: list, noLib: false, famCount: pool.length };
+    return {
+        familyTags: familyTags,
+        list: list,
+        folderCount: folders.length,
+        articleCount: articles.length
+    };
 }
 
 function _coursePurchased(id) {
@@ -9464,34 +9456,59 @@ function _markCoursePurchased(id) {
 }
 
 function _classroomGetRecommendations() {
-    _CLASSROOM_RECO = _buildCourseRecommendations();
+    _CLASSROOM_RECO = getRecommendedCourses(getFamilyMembers());
     _renderClassroomReco(true);
 }
 
-function _classroomRecoCard(item, idx) {
-    var c = item.course || {};
-    var premium = !!c.isPremium;
-    var owned = premium && _coursePurchased(c.id);
-    var price = Number(c.price) || 0;
-    var tagHtml = premium
-        ? (owned
-            ? '<span style="flex-shrink:0;font-size:11px;background:#ECFDF5;color:#065F46;border-radius:999px;padding:3px 10px;">✅ 已解锁</span>'
-            : '<span style="flex-shrink:0;font-size:11px;background:#FEF3C7;color:#92400E;border-radius:999px;padding:3px 10px;">💰 ¥' + price.toFixed(2) + '</span>')
-        : '<span style="flex-shrink:0;font-size:11px;background:#F3F4F6;color:#6B7280;border-radius:999px;padding:3px 10px;">免费</span>';
-    var needPay = premium && !owned;
-    return '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
+// 系列卡片：标题 + 篇数 + （特殊人群）专属推荐标 + 命中标签 + 文章行
+function _classroomFolderCard(group, gi) {
+    var f = group.folder || {};
+    var html =
+        '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
-        '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;line-height:1.4;">' + escapeHtml(c.title || '未命名课程') + '</div>' +
-        tagHtml +
+        '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;line-height:1.4;">📁 ' + escapeHtml(f.folderName || '未命名系列') + '</div>' +
+        (group.isSpecial
+            ? '<span style="flex-shrink:0;font-size:11px;background:#FEE2E2;color:#B91C1C;border-radius:999px;padding:3px 10px;">⭐ 专属推荐</span>'
+            : '<span style="flex-shrink:0;font-size:11px;background:#EDE9FE;color:#6D28D9;border-radius:999px;padding:3px 10px;">' + group.articles.length + ' 篇</span>') +
         '</div>' +
-        (c.folderName ? '<div style="font-size:12px;color:#9CA3AF;line-height:1.7;margin-bottom:4px;">📖 ' + escapeHtml(c.folderName) + '</div>' : '') +
-        '<div style="font-size:12px;color:#6B7280;line-height:1.7;margin-bottom:10px;">💡 ' + escapeHtml(item.reason || '') +
-        (Array.isArray(c.targetTags) && c.targetTags.length ? '　🏷 ' + escapeHtml(c.targetTags.join(' / ')) : '') +
-        (c.type === 'audio' ? '　🎧 音频' : '') +
+        '<div style="font-size:12px;color:#6B7280;line-height:1.7;margin-bottom:8px;">' +
+        (group.matchedTags.length ? '🏷 适合：' + escapeHtml(group.matchedTags.join(' / ')) : '') +
+        (f.description ? '　·　' + escapeHtml(String(f.description).slice(0, 40)) : '') +
         '</div>' +
-        '<button type="button" onclick="_classroomOpenReco(' + idx + ')" style="width:100%;padding:9px;border:none;background:' + (needPay ? '#F59E0B' : '#F97316') + ';border-radius:10px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">' +
-        (needPay ? ('解锁 ¥' + price.toFixed(2)) : '开始学习') + '</button>' +
-        '</div>';
+        '<div style="border-top:1px dashed #E5E7EB;padding-top:8px;">';
+    group.articles.forEach(function (a) {
+        try {
+            var flat = {
+                id: a.articleId,
+                articleId: a.articleId,
+                folderId: f.folderId,
+                folderName: f.folderName || '',
+                title: a.title,
+                content: a.content,
+                duration: a.duration,
+                targetTags: Array.isArray(f.targetTags) ? f.targetTags : [],
+                type: a.type || 'article',
+                isPremium: !!a.isPremium,
+                price: Number(a.price) || 0,
+                createdAt: a.createdAt
+            };
+            _CLASSROOM_CACHE[a.articleId] = { course: flat, kind: 'library' };
+            var owned = flat.isPremium && _coursePurchased(flat.id);
+            var payText = !flat.isPremium ? '免费' : (owned ? '✅ 已解锁' : '💰 ¥' + flat.price.toFixed(2));
+            html +=
+                '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;">' +
+                '<div style="flex:1;min-width:0;">' +
+                '<div style="font-size:13px;font-weight:600;color:#374151;line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(a.title || '未命名文章') + '</div>' +
+                '<div style="font-size:11px;color:#9CA3AF;">⏱ ' + (Number(a.duration) || 5) + ' 分钟 · ' + payText + '</div>' +
+                '</div>' +
+                '<button type="button" onclick="_classroomOpenArticle(\'' + escapeAttr(a.articleId) + '\')" style="flex-shrink:0;padding:6px 12px;border:none;background:' + ((flat.isPremium && !owned) ? '#F59E0B' : '#F97316') + ';border-radius:8px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;">' +
+                ((flat.isPremium && !owned) ? '解锁' : '阅读') + '</button>' +
+                '</div>';
+        } catch (e) {
+            html += '<div style="padding:6px 0;font-size:12px;color:#B91C1C;">文章渲染异常</div>';
+        }
+    });
+    return html + '</div></div>';
 }
 
 function _renderClassroomReco(isNew) {
@@ -9501,29 +9518,27 @@ function _renderClassroomReco(isNew) {
     var r = _CLASSROOM_RECO;
     var html = '<div style="display:flex;align-items:baseline;gap:8px;margin:2px 2px 10px;">' +
         '<span style="font-size:15px;font-weight:700;color:#1F2937;">为您推荐</span>' +
-        '<span style="font-size:12px;color:#9CA3AF;">按家庭档案标签匹配课程库</span></div>';
-    if (r.noLib) {
+        '<span style="font-size:12px;color:#9CA3AF;">按家庭标签匹配课程系列</span></div>';
+    if (!r.folderCount) {
         html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">课程库还没有系列课程<br>请联系管理员在「课程汇总」中新建系列并录入文章</div>';
     } else if (!r.list.length) {
-        html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">' +
-            (r.famCount ? '暂未匹配到合适的课程<br>可在「我家」补充成员健康标签后再试' : '家庭档案里还没有成员标签<br>请先在「我家」完善成员信息') +
-            '</div>';
+        html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">暂未匹配到合适的课程系列<br>可在「我家」补充成员健康标签后再试</div>';
     } else {
-        r.list.forEach(function (item, idx) {
-            _CLASSROOM_CACHE[item.course.id] = { course: item.course, kind: 'library' };
-            html += _classroomRecoCard(item, idx);
+        r.list.forEach(function (g, gi) {
+            try { html += _classroomFolderCard(g, gi); }
+            catch (e) { html += '<div style="padding:10px;font-size:12px;color:#B91C1C;">系列渲染异常</div>'; }
         });
     }
     box.innerHTML = html;
     if (isNew) {
-        showToast(r.list && r.list.length ? ('已为你匹配 ' + r.list.length + ' 门课程') : '暂未匹配到合适课程');
+        showToast(r.list && r.list.length ? ('已为你匹配 ' + r.list.length + ' 个课程系列') : '暂未匹配到合适课程');
     }
 }
 
-function _classroomOpenReco(idx) {
-    var item = _CLASSROOM_RECO && _CLASSROOM_RECO.list && _CLASSROOM_RECO.list[idx];
-    if (!item || !item.course) { showToast('课程不存在'); return; }
-    var c = item.course;
+function _classroomOpenArticle(articleId) {
+    var entry = _CLASSROOM_CACHE[articleId];
+    if (!entry || !entry.course) { showToast('课程不存在'); return; }
+    var c = entry.course;
     if (c.isPremium && !_coursePurchased(c.id)) {
         _classroomPayCourse(c, function () {
             _markCoursePurchased(c.id);
