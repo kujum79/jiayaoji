@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V220-20261025';
+        var APP_VER = 'V221-20261025';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -29993,6 +29993,23 @@ async function renderHomeDailyTipCard(force) {
             _dtServerTip = out2.article;
             _dtRenderCard(_dtServerTip);
             return;
+        }
+    } catch (e) {}
+    // V221: 兜底——今日/昨日都没有已发布文章时，取归档里最近一篇，避免免费家庭食养堂空窗
+    try {
+        var resp3 = await fetch('/api/food-hall/published-list?days=120', { cache: 'no-store' });
+        var out3 = await resp3.json();
+        if (out3 && out3.ok && Array.isArray(out3.articles) && out3.articles.length) {
+            var latest = null;
+            for (var li = 0; li < out3.articles.length; li++) {
+                if (out3.articles[li] && out3.articles[li].title) { latest = out3.articles[li]; break; }
+            }
+            if (latest) {
+                _dtServerTip = latest;
+                _dtRecordHistory(latest);
+                _dtRenderCard(latest);
+                return;
+            }
         }
     } catch (e) {}
     _dtRenderDegraded();
