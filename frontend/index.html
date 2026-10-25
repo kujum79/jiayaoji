@@ -11004,7 +11004,10 @@ function _monitorBodyHtml(d) {
         stat('今日报错总数', (d && d.todayErrorCount) || 0, '#DC2626') +
         stat('活跃付费客户', (d && d.activePaidCount) || 0, '#16A34A') +
         '</div>' +
-        '<button type="button" onclick="_openAnnounceSheet()" style="width:100%;border:none;border-radius:12px;background:#DC2626;color:#fff;font-size:13px;font-weight:700;padding:10px;cursor:pointer;margin-bottom:14px;box-shadow:0 2px 8px rgba(220,38,38,0.25);">📢 发送全局安抚公告</button>' +
+        '<div style="display:flex;gap:8px;margin-bottom:14px;">' +
+        '<button type="button" onclick="_openAnnounceSheet()" style="flex:1;border:none;border-radius:12px;background:#DC2626;color:#fff;font-size:12px;font-weight:700;padding:10px 6px;cursor:pointer;box-shadow:0 2px 8px rgba(220,38,38,0.25);">📢 全局安抚公告</button>' +
+        '<button type="button" onclick="openAiUsagePanel()" style="flex:1;border:1px solid #FED7AA;border-radius:12px;background:#FFF7ED;color:#9A3412;font-size:12px;font-weight:700;padding:10px 6px;cursor:pointer;">🤖 AI 用量</button>' +
+        '</div>' +
         '<div style="display:flex;align-items:center;margin-bottom:8px;">' +
         '<div style="font-size:13px;font-weight:700;color:#1F2937;">🚨 未处理报警</div>' +
         '<span style="margin-left:8px;font-size:11px;color:#9CA3AF;">按时间倒序 · 共 ' + list.length + ' 条</span>' +
@@ -35167,7 +35170,6 @@ function renderFamily() {
                 <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
                     <button type="button" onclick="_openFoodHallMgr()" style="${_sBtn}flex:1 1 28%;">食养管理</button>
                     <button type="button" id="superLibMgrBtn" style="${_sBtn}flex:1 1 28%;">文库管理</button>
-                    <button type="button" onclick="openAiUsagePanel()" style="${_sBtn}flex:1 1 28%;">AI 用量</button>
                     <button type="button" onclick="_openCourseLibraryPanel()" style="${_sBtn}flex:1 1 28%;">课程汇总</button>
                     <button type="button" onclick="_openSystemMonitor()" style="${_sBtn}flex:1 1 28%;position:relative;">
                         系统监控<span id="monitorBadge" style="display:none;position:absolute;top:-6px;right:-4px;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;background:#DC2626;color:#fff;border-radius:9px;font-size:11px;font-weight:700;line-height:18px;text-align:center;">0</span>
@@ -69076,6 +69078,7 @@ setTimeout(function () { try { _maybeGenerateDailyLesson(); } catch (e) {} }, 80
         </div>
     </div>
 </div>
+
 
 
 </body>
