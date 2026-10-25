@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V219-20261025';
+        var APP_VER = 'V220-20261025';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -61661,9 +61661,9 @@ function _openWeeklyKpiReport() {
     var overlay = document.createElement('div');
     overlay.id = 'weeklyKpiOverlay';
     // V202.8: 改为全屏报告页（不再半透明遮罩+底部弹窗），彻底消除"界面溢出/被截断"观感
-    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;background:#F7F5F2;z-index:99999;display:block;overflow:hidden;';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;background:#f0f0f0;z-index:99999;display:block;overflow:hidden;';
     overlay.onclick = null;
-    overlay.innerHTML = '<div style="background:#F7F5F2;width:100%;max-width:720px;margin:0 auto;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box;padding:0 14px calc(24px + env(safe-area-inset-bottom,0px));">'
+    overlay.innerHTML = '<div style="background:#F7F5F2;width:100%;max-width:430px;margin:0 auto;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box;padding:0 14px calc(24px + env(safe-area-inset-bottom,0px));box-shadow:0 0 30px rgba(0,0,0,0.12);">'
         + '<div style="position:sticky;top:0;background:#fff;z-index:3;margin:0 -14px 8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid #EFE9E3;">'
         + '<button type="button" onclick="_closeWeeklyKpiReport()" style="border:none;background:#F3F4F6;color:#374151;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;flex:0 0 auto;">← 返回</button>'
         + '<div style="font-size:15px;font-weight:700;color:#1F2937;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📈 健康 KPI 深度归因</div>'
