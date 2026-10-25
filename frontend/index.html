@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V218-20261025';
+        var APP_VER = 'V219-20261025';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -8176,6 +8176,7 @@ function familyKey(key) {
         'customCourses','subscriptionStatus','customCourseOrders',
         'courseLibraryPurchases',
         'dailyLessons',
+        'customCaseOrders',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
         if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
@@ -60858,7 +60859,9 @@ function showDiaryTodaySummary() {
             <button id="reviewTabRecords" onclick="switchReviewTab('records')" style="flex:1;padding:10px 0;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;color:#9CA3AF;border-bottom:2px solid transparent;white-space:nowrap;">📋 实际记录</button>
         </div>
         <div id="reviewDropdownArea" style="padding:10px 20px;flex-shrink:0;background:#F9FAFB;border-bottom:1px solid #F3F4F6;"></div>
+        <div id="reviewRiskSlot" style="flex-shrink:0;"></div>
         <div id="reviewContentArea" style="flex:1;overflow-y:auto;padding:16px 20px;"></div>
+        <div id="reviewExpertSlot" style="flex-shrink:0;"></div>
     `;
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
@@ -60866,6 +60869,207 @@ function showDiaryTodaySummary() {
     // 初始渲染下拉菜单和加载本日总结
     renderReviewDropdown();
     loadDailyReview();
+    _renderReviewRiskModule();
+    _renderReviewExpertModule();
+}
+
+// ==================== V219: 复盘页「治未病风险预警」与「专家兜底」 ====================
+// 关键词估算：高油/高盐/高糖菜品占比 + 蔬菜（纤维）摄入次数
+var _RISK_OIL_KW = ['红烧','回锅','糖醋','炸','油','干锅','香酥','肥','五花','扣肉','干煸','小炒','爆炒','烤','酥','焖','酱爆','煎'];
+var _RISK_SALT_KW = ['腌','咸','酱','卤','酸菜','榨菜','火腿','腊','味噌','咸菜','腐乳','豆瓣','泡菜'];
+var _RISK_SUGAR_KW = ['糖醋','糖','蜜','甜','可乐','冰糖','拔丝','糕点','奶茶','蛋糕','蜂蜜'];
+var _RISK_VEG_KW = ['青菜','西兰花','菠菜','白菜','萝卜','黄瓜','豆角','茄子','番茄','西红柿','菇','菌','海带','紫菜','豆腐','豆芽','芹菜','南瓜','冬瓜','丝瓜','笋','沙拉','菜心','青椒','木耳','莲藕','山药','玉米','燕麦','杂粮','糙米'];
+
+function _riskHit(name, kws) {
+    var s = String(name || '');
+    for (var i = 0; i < kws.length; i++) { if (s.indexOf(kws[i]) > -1) return true; }
+    return false;
+}
+
+// 遍历最近 7 天（含今天）的实际记录，估算盐糖脂肪与膳食纤维
+function _reviewWeekIntake() {
+    var cal = {};
+    try { cal = getDietCalendar() || {}; } catch (e) { cal = {}; }
+    var dishes = [], days = 0, meals = 0;
+    var base = new Date();
+    for (var i = 0; i < 7; i++) {
+        var d = new Date(base.getFullYear(), base.getMonth(), base.getDate() - i);
+        var day = cal[dateToKey(d)] || null;
+        if (!day) continue;
+        var dayHas = false;
+        ['breakfast', 'lunch', 'dinner'].forEach(function (k) {
+            var actual = day[k] && day[k].actual;
+            if (!actual || !Array.isArray(actual.dishes) || !actual.dishes.length) return;
+            dayHas = true; meals++;
+            actual.dishes.forEach(function (dish) {
+                var n = String((dish && dish.name) || '');
+                if (n) dishes.push(n);
+            });
+        });
+        if (dayHas) days++;
+    }
+    var oil = 0, salt = 0, sugar = 0, veg = 0, fatSum = 0;
+    dishes.forEach(function (n) {
+        if (_riskHit(n, _RISK_OIL_KW)) oil++;
+        else fatSum += 8;
+        if (_riskHit(n, _RISK_SALT_KW)) salt++;
+        if (_riskHit(n, _RISK_SUGAR_KW)) sugar++;
+        if (_riskHit(n, _RISK_VEG_KW)) veg++;
+    });
+    var total = dishes.length;
+    return {
+        days: days,
+        meals: meals,
+        total: total,
+        oilCount: oil,
+        saltCount: salt,
+        sugarCount: sugar,
+        vegCount: veg,
+        oilRatio: total ? oil / total : 0,
+        saltRatio: total ? salt / total : 0,
+        sugarRatio: total ? sugar / total : 0,
+        fatEst: total ? Math.round((fatSum + oil * 22) / Math.max(days, 1)) : 0
+    };
+}
+
+function _reviewRiskLevel(st) {
+    // 红：高油高盐占比 ≥40% 或高糖 ≥3 道；黄：占比 ≥20% 或蔬菜不足；绿：正常
+    if (st.oilRatio >= 0.4 || st.saltRatio >= 0.4 || st.sugarCount >= 3) return 'red';
+    if (st.oilRatio >= 0.2 || st.saltRatio >= 0.2 || st.sugarCount >= 1 || st.vegCount < Math.max(3, st.days * 3)) return 'yellow';
+    return 'ok';
+}
+
+function _renderReviewRiskModule() {
+    var slot = document.getElementById('reviewRiskSlot');
+    if (!slot) return;
+    var premium = (typeof _subTier === 'function') && _subTier() === 'premium';
+    if (!premium) { slot.innerHTML = ''; return; }
+    var st = _reviewWeekIntake();
+    var box = 'margin:10px 20px 0;border-radius:12px;padding:12px 14px;';
+    if (!st.days || !st.total) {
+        slot.innerHTML = '<div style="' + box + 'background:#F9FAFB;border:1px dashed #E5E7EB;font-size:12px;color:#6B7280;line-height:1.8;">📊 治未病风险预警：本周还没有实际饮食记录，先记录三餐才能生成周度风险分析。</div>';
+        return;
+    }
+    var level = _reviewRiskLevel(st);
+    var pct = Math.round(st.oilRatio * 100), saltPct = Math.round(st.saltRatio * 100);
+    var title = '治未病风险预警';
+    var desc = '';
+    if (level === 'red') {
+        desc = '⚠️ 风险预警：本周高油高盐菜品占比偏高（高油 ' + pct + '%、高盐 ' + saltPct + '%）。' +
+            '长期此类饮食易增加慢病风险，建议下周多用蒸煮，少用红烧。';
+    } else if (level === 'yellow') {
+        desc = '⚠️ 风险预警：本周饮食结构存在偏移（高油 ' + pct + '%、高盐 ' + saltPct + '%、蔬菜 ' + st.vegCount + ' 次）。' +
+            '建议下周增加绿叶菜，多用蒸煮，少用红烧。';
+    } else {
+        desc = '✅ 本周饮食结构较均衡：高油 ' + pct + '%、高盐 ' + saltPct + '%、蔬菜 ' + st.vegCount + ' 次。继续保持，注意规律作息。';
+    }
+    var color, bg, bd;
+    if (level === 'red') { color = '#991B1B'; bg = '#FEF2F2'; bd = '#FCA5A5'; }
+    else if (level === 'yellow') { color = '#92400E'; bg = '#FFFBEB'; bd = '#FCD34D'; }
+    else { color = '#065F46'; bg = '#ECFDF5'; bd = '#6EE7B7'; }
+    slot.innerHTML =
+        '<div style="' + box + 'background:' + bg + ';border:1px solid ' + bd + ';">' +
+        '<div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:' + color + ';margin-bottom:5px;">' +
+        (level === 'ok' ? '✅ ' : '⚠️ ') + title +
+        '<span style="margin-left:auto;font-size:11px;font-weight:600;background:#fff;border-radius:999px;padding:2px 8px;">本周 ' + st.days + ' 天 · ' + st.total + ' 道</span>' +
+        '</div>' +
+        '<div style="font-size:12px;color:' + color + ';line-height:1.75;">' + escapeHtml(desc) + '</div>' +
+        '<div style="display:flex;gap:12px;margin-top:8px;font-size:11px;color:#6B7280;">' +
+        '<span>高油菜品 ' + st.oilCount + ' 道</span><span>高盐 ' + st.saltCount + ' 道</span>' +
+        '<span>高糖 ' + st.sugarCount + ' 道</span><span>蔬菜 ' + st.vegCount + ' 道</span>' +
+        '</div></div>';
+}
+
+function _renderReviewExpertModule() {
+    var slot = document.getElementById('reviewExpertSlot');
+    if (!slot) return;
+    var premium = (typeof _subTier === 'function') && _subTier() === 'premium';
+    if (!premium) {
+        slot.innerHTML =
+            '<div style="border-top:1px solid #E5E7EB;background:#F3F4F6;padding:12px 20px calc(12px + env(safe-area-inset-bottom));">' +
+            '<div style="font-size:12px;color:#6B7280;line-height:1.8;margin-bottom:10px;">🔒 解锁【深度健康复盘】和【专家个案定制】功能，请订阅全家桶服务。</div>' +
+            '<button type="button" onclick="_openSubscribeGuide()" style="width:100%;padding:11px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">立即订阅</button>' +
+            '</div>';
+        return;
+    }
+    slot.innerHTML =
+        '<div style="border-top:1px solid #E5E7EB;background:#fff;padding:12px 20px calc(12px + env(safe-area-inset-bottom));">' +
+        '<div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:#1F2937;margin-bottom:6px;">👨‍⚕️ 深度定制与纠偏</div>' +
+        '<div style="font-size:12px;color:#6B7280;line-height:1.75;margin-bottom:10px;">AI 预警只能防患于未然。如您家有慢病老人，或需要针对体检指标（如高尿酸、脂肪肝）进行严格配餐，请呼叫真人营养师 1V1 定制。</div>' +
+        '<button type="button" onclick="_openCaseOrderPanel()" style="width:100%;padding:11px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">📎 上传体检报告/病历单</button>' +
+        '</div>';
+}
+
+function _getCaseOrders() {
+    try { var v = lsGetJSON('customCaseOrders', []); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+}
+
+// 个案定制工单面板
+function _openCaseOrderPanel() {
+    var old = document.getElementById('caseOrderOverlay');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'caseOrderOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100060;display:flex;align-items:flex-end;justify-content:center;';
+    ov.innerHTML =
+        '<div style="background:#fff;border-radius:18px 18px 0 0;width:100%;max-width:430px;padding:16px 18px calc(18px + env(safe-area-inset-bottom));">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
+        '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;">个案定制工单</div>' +
+        '<button type="button" onclick="document.getElementById(\'caseOrderOverlay\').remove()" style="border:none;background:#F3F4F6;border-radius:50%;width:30px;height:30px;font-size:14px;color:#6B7280;cursor:pointer;">✕</button>' +
+        '</div>' +
+        '<div style="font-size:12px;color:#6B7280;line-height:1.75;margin-bottom:12px;">上传体检报告或病历单，我们的真人营养师会在 1 个工作日内联系你，按指标做严格配餐。</div>' +
+        '<label style="display:block;border:2px dashed #D1D5DB;border-radius:12px;padding:14px;text-align:center;background:#FAFAF9;cursor:pointer;margin-bottom:12px;">' +
+        '<div style="font-size:22px;margin-bottom:4px;">📄</div>' +
+        '<div style="font-size:13px;font-weight:600;color:#374151;">点击上传报告（图片 / PDF）</div>' +
+        '<div id="caseOrderFileTip" style="font-size:11px;color:#9CA3AF;margin-top:4px;">支持 jpg / png / pdf，可多选</div>' +
+        '<input type="file" id="caseOrderFileInput" accept="image/*,.pdf" multiple style="display:none;" onchange="_caseOrderPickFiles(this)">' +
+        '</label>' +
+        '<div style="font-size:12px;color:#6B7280;margin-bottom:6px;">需重点关注（选填）</div>' +
+        '<textarea id="caseOrderNote" rows="3" placeholder="如：奶奶高尿酸、爸爸脂肪肝，希望控制嘌呤与油脂" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #E5E7EB;border-radius:10px;font-size:13px;line-height:1.6;resize:none;outline:none;"></textarea>' +
+        '<button type="button" onclick="_submitCaseOrder()" style="width:100%;margin-top:12px;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">提交工单并呼叫营养师</button>' +
+        '</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+}
+
+var _CASE_ORDER_FILES = [];
+function _caseOrderPickFiles(input) {
+    _CASE_ORDER_FILES = [];
+    var tip = document.getElementById('caseOrderFileTip');
+    var names = [];
+    for (var i = 0; i < (input && input.files ? input.files.length : 0); i++) {
+        var f = input.files[i];
+        if (!f) continue;
+        _CASE_ORDER_FILES.push({ name: String(f.name || ''), size: Number(f.size) || 0 });
+        names.push(String(f.name || ''));
+    }
+    if (tip) {
+        tip.textContent = _CASE_ORDER_FILES.length
+            ? ('已选择 ' + _CASE_ORDER_FILES.length + ' 个文件：' + names.join('、'))
+            : '支持 jpg / png / pdf，可多选';
+        tip.style.color = _CASE_ORDER_FILES.length ? '#16A34A' : '#9CA3AF';
+    }
+}
+
+function _submitCaseOrder() {
+    if (!_CASE_ORDER_FILES.length) { showToast('请先上传体检报告或病历单'); return; }
+    var note = String((document.getElementById('caseOrderNote') || {}).value || '').trim();
+    var orders = _getCaseOrders();
+    var order = {
+        orderId: 'case_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+        createdAt: Date.now(),
+        familyId: (typeof getFamilyId === 'function' ? getFamilyId() : null) || '',
+        familyName: (typeof _currentFamilyName === 'function' ? _currentFamilyName() : '我家'),
+        files: _CASE_ORDER_FILES.slice(),
+        note: note,
+        status: 'pending'
+    };
+    orders.push(order);
+    try { lsSetJSON('customCaseOrders', orders); } catch (e) { showToast('工单提交失败：' + (e.message || e)); return; }
+    _CASE_ORDER_FILES = [];
+    var ov = document.getElementById('caseOrderOverlay');
+    if (ov) ov.remove();
+    showToast('✅ 已提交个案定制工单，营养师将尽快联系你');
 }
 
 // ==================== 复盘Tab切换与下拉菜单 ====================
