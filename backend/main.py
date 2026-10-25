@@ -34,7 +34,7 @@ import requests
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -4308,6 +4308,119 @@ async def expert_assess(req: ExpertAssessRequest) -> Dict[str, Any]:
         text = text + "\n\n" + _EXPERT_DISCLAIMER
 
     return {"ok": True, "result": text, "usedVision": used_vision, "mode": "ai"}
+
+
+# ========== V226: 全局错误日志（后端异常拦截 + 前端错误上报） ==========
+import traceback as _tb
+import logging
+import logging.handlers
+
+_ERR_LOG_DIR = Path(__file__).parent / "data"
+_ERR_LOG_FILE = _ERR_LOG_DIR / "system_error.log"
+_ERR_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+_err_logger = logging.getLogger("jiayaoji.error")
+if not _err_logger.handlers:
+    _err_logger.setLevel(logging.ERROR)
+    try:
+        _err_handler = logging.handlers.RotatingFileHandler(
+            str(_ERR_LOG_FILE), maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8"
+        )
+        _err_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        _err_logger.addHandler(_err_handler)
+    except Exception as _e:  # 只读文件系统等场景降级为仅控制台
+        print(f"[error-log] 日志文件不可写，降级为控制台输出：{_e}")
+    _err_logger.propagate = False
+
+_ERR_TYPES = {"api_timeout", "ai_error", "frontend_crash", "payment_error"}
+
+
+def _err_new_id() -> str:
+    return "err_" + time.strftime("%Y%m%d%H%M%S") + "_" + _secrets.token_hex(3)
+
+
+def _err_write_line(payload: Dict[str, Any]) -> str:
+    """追加一条 JSON 行到 system_error.log（同时写 logger），返回 errorId。"""
+    error_id = str(payload.get("errorId") or _err_new_id())
+    payload["errorId"] = error_id
+    line = json.dumps(payload, ensure_ascii=False)
+    try:
+        _err_logger.error(line)
+    except Exception:
+        print("[error-log] " + line)
+
+
+class SystemErrorReport(BaseModel):
+    id: str = ""
+    type: str = "api_timeout"
+    message: str = ""
+    familyId: str = ""
+    familyName: str = ""
+    createdAt: int = 0
+    url: str = ""
+    detail: str = ""
+
+
+@app.post("/api/system-error")
+async def report_system_error(req: SystemErrorReport, request: Request) -> Dict[str, Any]:
+    """V226: 接收前端错误上报，落盘到 data/system_error.log（不落客户端 localStorage）。"""
+    etype = (req.type or "").strip()
+    if etype not in _ERR_TYPES:
+        etype = "api_timeout"
+    payload = {
+        "source": "frontend",
+        "type": etype,
+        "message": (req.message or "").strip()[:500],
+        "familyId": (req.familyId or "").strip()[:64],
+        "familyName": (req.familyName or "").strip()[:64],
+        "clientCreatedAt": int(req.createdAt or 0),
+        "url": (req.url or "").strip()[:300],
+        "detail": (req.detail or "").strip()[:1000],
+        "ip": (request.client.host if request.client else ""),
+        "ua": (request.headers.get("user-agent") or "")[:200],
+    }
+    _err_write_line(payload)
+    return {"ok": True, "errorId": payload["errorId"]}
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    """V226: 未捕获异常统一拦截——记录 traceback，返回带 errorId 的 500。"""
+    payload = {
+        "source": "backend",
+        "type": "api_timeout" if isinstance(exc, (TimeoutError,)) else "ai_error" if "ai" in request.url.path else "frontend_crash",
+        "message": f"{type(exc).__name__}: {exc}"[:500],
+        "path": request.url.path,
+        "method": request.method,
+        "detail": _tb.format_exc()[:3000],
+    }
+    _err_write_line(payload)
+    return JSONResponse(
+        status_code=500,
+        content={"ok": False, "error": "服务异常，请稍后重试", "errorId": payload["errorId"]},
+    )
+
+
+@app.middleware("http")
+async def _error_status_middleware(request: Request, call_next):
+    """V226: 记录 5xx 与 429（限流）响应；异常本身由上面的 exception_handler 兜底。"""
+    started = time.time()
+    try:
+        response = await call_next(request)
+    except Exception:
+        # 交给 exception_handler（此处不吞异常，重新抛出）
+        raise
+    if response.status_code >= 500 or response.status_code == 429:
+        _err_write_line({
+            "source": "backend",
+            "type": "ai_error" if "ai" in request.url.path else "api_timeout",
+            "message": f"HTTP {response.status_code} {request.method} {request.url.path}",
+            "path": request.url.path,
+            "method": request.method,
+            "status": response.status_code,
+            "elapsedMs": int((time.time() - started) * 1000),
+        })
+    return response
 
 
 # V157: 文件末尾补跑别名注册——覆盖定义在本块之后的 /api/daily-tip、/api/weather、

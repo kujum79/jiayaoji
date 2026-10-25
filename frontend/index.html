@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V225-20261025';
+        var APP_VER = 'V226-20261025';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -8179,6 +8179,7 @@ function familyKey(key) {
         'customCaseOrders',
         'reviewRiskAI',
         'expertAssessments',
+        'systemErrorLogs',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
         if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
@@ -10942,6 +10943,163 @@ function lsSetJSON(key, val) {
     }
     localStorage.setItem(familyKey(key), JSON.stringify(val));
 }
+
+// ========== V226: 全局错误日志（systemErrorLogs）+ 后端上报 ==========
+var _ERR_LOG_KEY = 'systemErrorLogs';
+var _ERR_LOG_MAX = 200;
+var _ERR_LOG_DEDUP_MS = 60000;
+var _ERR_LOG_LAST = {};
+var _ERR_UPLOAD_TIMES = [];
+
+function _errFamilyName() {
+    try {
+        return (typeof _currentFamilyName === 'function' && _currentFamilyName()) || '我家';
+    } catch (e) { return '我家'; }
+}
+
+function _errReadLogs() {
+    try {
+        var v = lsGetJSON(_ERR_LOG_KEY, []);
+        return Array.isArray(v) ? v : [];
+    } catch (e) { return []; }
+}
+
+function _errUploadToServer(entry) {
+    // 频控：每分钟最多上报 20 条，避免错误风暴打爆后端
+    var now = Date.now();
+    _ERR_UPLOAD_TIMES = _ERR_UPLOAD_TIMES.filter(function (t) { return now - t < 60000; });
+    if (_ERR_UPLOAD_TIMES.length >= 20) return;
+    _ERR_UPLOAD_TIMES.push(now);
+    try {
+        var f = window.__nativeFetch || window.fetch;
+        if (!f) return;
+        f('/api/system-error', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            __noLog: true,
+            body: JSON.stringify({
+                id: entry.id,
+                type: entry.type,
+                message: entry.message,
+                familyId: entry.familyId,
+                familyName: entry.familyName,
+                createdAt: entry.createdAt,
+                url: entry.url || '',
+                detail: entry.detail || ''
+            })
+        }).catch(function () {});
+    } catch (e) {}
+}
+
+function logError(type, message, extra) {
+    try {
+        var t = String(type || 'api_timeout');
+        if (['api_timeout', 'ai_error', 'frontend_crash', 'payment_error'].indexOf(t) < 0) t = 'api_timeout';
+        var msg = String(message || '').slice(0, 300);
+        if (!msg) return null;
+        var sig = t + '|' + msg.slice(0, 120);
+        var lastAt = _ERR_LOG_LAST[sig] || 0;
+        if (Date.now() - lastAt < _ERR_LOG_DEDUP_MS) return null;
+        _ERR_LOG_LAST[sig] = Date.now();
+
+        var ex = extra || {};
+        var entry = {
+            id: 'err_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+            type: t,
+            message: msg,
+            familyId: (typeof getFamilyId === 'function' ? (getFamilyId() || '') : ''),
+            familyName: _errFamilyName(),
+            createdAt: Date.now(),
+            resolved: false,
+            url: String(ex.url || '').slice(0, 300),
+            detail: String(ex.detail || (ex.status ? ('HTTP ' + ex.status) : '')).slice(0, 1000)
+        };
+        var list = _errReadLogs();
+        list.push(entry);
+        if (list.length > _ERR_LOG_MAX) list = list.slice(list.length - _ERR_LOG_MAX);
+        try { lsSetJSON(_ERR_LOG_KEY, list); } catch (e) {}
+        _errUploadToServer(entry);
+        return entry;
+    } catch (e) {
+        return null;
+    }
+}
+
+function _errClassify(url) {
+    var u = String(url || '');
+    if (/pay|payment|checkout|wxpay|alipay/i.test(u)) return 'payment_error';
+    if (/\/ai\/|daily-tip|review-risk|expert-assess|custom-course|generate|vision|recognize/i.test(u)) return 'ai_error';
+    return 'api_timeout';
+}
+
+(function installGlobalErrorHooks() {
+    // 1) 运行期未捕获异常
+    window.addEventListener('error', function (ev) {
+        try {
+            if (!ev) return;
+            if (ev.target && ev.target.tagName) {
+                // 静态资源加载失败（img/script/link）：只记录脚本与接口，避免噪音
+                if (String(ev.target.tagName).toLowerCase() === 'script') {
+                    logError('frontend_crash', '脚本加载失败：' + (ev.target.src || ''), { url: ev.target.src || '' });
+                }
+                return;
+            }
+            var where = String(ev.filename || '').split('/').pop();
+            logError('frontend_crash', (ev.message || '未知错误') + ' @' + where + ':' + (ev.lineno || '?'), {
+                url: String(ev.filename || ''),
+                detail: ev.error && ev.error.stack ? String(ev.error.stack).slice(0, 1000) : ''
+            });
+        } catch (e) {}
+    });
+    // 2) Promise 未处理拒绝
+    window.addEventListener('unhandledrejection', function (ev) {
+        try {
+            var r = ev && ev.reason;
+            var msg = (r && (r.message || r.msg)) || String(r || '未知拒绝');
+            var isAbort = r && r.name === 'AbortError';
+            logError(isAbort ? 'api_timeout' : 'ai_error', (isAbort ? '请求超时/取消：' : '未处理的异步异常：') + msg, {
+                detail: r && r.stack ? String(r.stack).slice(0, 1000) : ''
+            });
+        } catch (e) {}
+    });
+    // 3) fetch 统一拦截：非 2xx / 网络失败 / 超时
+    if (window.fetch && !window.__errFetchPatched) {
+        window.__errFetchPatched = true;
+        window.__nativeFetch = window.fetch.bind(window);
+        window.fetch = function (input, init) {
+            var opts = init;
+            var noLog = false;
+            if (init && init.__noLog) {
+                noLog = true;
+                opts = {};
+                for (var k in init) { if (k !== '__noLog') opts[k] = init[k]; }
+            }
+            var url = typeof input === 'string' ? input : ((input && input.url) || '');
+            var started = Date.now();
+            return window.__nativeFetch(input, opts).then(function (res) {
+                try {
+                    if (!noLog && res && res.status >= 400) {
+                        logError(_errClassify(url), 'HTTP ' + res.status + ' ' + url, {
+                            url: url, status: res.status, detail: 'status=' + res.status + ' elapsed=' + (Date.now() - started) + 'ms'
+                        });
+                    }
+                } catch (e) {}
+                return res;
+            }, function (err) {
+                try {
+                    if (!noLog) {
+                        var nm = (err && err.name) || '';
+                        var isTimeout = nm === 'AbortError' || nm === 'TimeoutError';
+                        logError(isTimeout ? 'api_timeout' : _errClassify(url),
+                            (isTimeout ? '请求超时/取消：' : '请求失败：') + url + ' ' + ((err && err.message) || ''),
+                            { url: url, detail: nm + ' elapsed=' + (Date.now() - started) + 'ms' });
+                    }
+                } catch (e) {}
+                throw err;
+            });
+        };
+    }
+})();
 
 // ========== V187: 家庭数据云端自动备份（防 localStorage 丢失） ==========
 // 推送：lsSet 写入家庭键时触发，8s 防抖后把全量快照 POST 到 /api/family-backup（服务器按家庭码存一份最新快照）
