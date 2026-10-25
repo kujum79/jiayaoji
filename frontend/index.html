@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V223-20261025';
+        var APP_VER = 'V224-20261025';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -8177,6 +8177,7 @@ function familyKey(key) {
         'courseLibraryPurchases',
         'dailyLessons',
         'customCaseOrders',
+        'reviewRiskAI',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
         if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
@@ -60965,6 +60966,7 @@ function _reviewWeekIntake() {
         days: days,
         meals: meals,
         total: total,
+        dishes: dishes.slice(0, 30),
         oilCount: oil,
         saltCount: salt,
         sugarCount: sugar,
@@ -60983,6 +60985,114 @@ function _reviewRiskLevel(st) {
     return 'ok';
 }
 
+// ====== V224: 复盘风险归因 AI（Prompt 由后端持有，输出 JSON） ======
+var _REVIEW_RISK_AI = { key: '', data: null, busy: false, reqKey: '' };
+
+function _reviewRiskStatKey(st) {
+    return [st.days, st.total, st.oilCount, st.saltCount, st.sugarCount, st.vegCount].join('|');
+}
+
+function _reviewRiskAiCached(key) {
+    try {
+        var c = lsGetJSON('reviewRiskAI', null);
+        if (c && c.key === key && c.data && c.data.scientificAdvice) return c.data;
+    } catch (e) {}
+    return null;
+}
+
+function _reviewRiskAiStore(key, data) {
+    try { lsSetJSON('reviewRiskAI', { key: key, data: data, savedAt: Date.now() }); } catch (e) {}
+}
+
+async function _reviewRiskFetchAI(st, key) {
+    _REVIEW_RISK_AI.busy = true;
+    _REVIEW_RISK_AI.reqKey = key;
+    try {
+        var res = await fetch('/api/review-risk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                date: _dtTodayKey(),
+                familyId: getFamilyId() || 'default',
+                familyBrief: _dtFamilyBrief(),
+                weekStats: {
+                    days: st.days, total: st.total,
+                    oilCount: st.oilCount, saltCount: st.saltCount,
+                    sugarCount: st.sugarCount, vegCount: st.vegCount,
+                    oilRatio: st.oilRatio, saltRatio: st.saltRatio, sugarRatio: st.sugarRatio
+                },
+                dishes: st.dishes || []
+            })
+        });
+        var out = await res.json();
+        if (out && out.ok && out.scientificAdvice && out.issue) {
+            var data = {
+                riskLevel: out.riskLevel || 'warning',
+                issue: String(out.issue),
+                scientificAdvice: String(out.scientificAdvice),
+                callExpertSuggest: !!out.callExpertSuggest
+            };
+            _reviewRiskAiStore(key, data);
+            return data;
+        }
+    } catch (e) { console.warn('[review-risk] AI 归因失败，使用本地规则', e); }
+    finally { _REVIEW_RISK_AI.busy = false; }
+    return null;
+}
+
+var _REVIEW_RISK_BAD_WORDS_FE = ['治疗', '治愈', '导致疾病', '远离疾病', '包治', '药到病除'];
+
+function _reviewRiskSanitize(text) {
+    var s = String(text || '');
+    _REVIEW_RISK_BAD_WORDS_FE.forEach(function (w) { s = s.split(w).join(''); });
+    return s;
+}
+
+function _reviewRiskCardHtml(st, level, ai) {
+    var box = 'margin:10px 20px 0;border-radius:12px;padding:12px 14px;';
+    var pct = Math.round(st.oilRatio * 100), saltPct = Math.round(st.saltRatio * 100);
+    var lv = level;
+    var issue = '', advice = '', expert = false;
+    if (ai) {
+        lv = ai.riskLevel === 'danger' ? 'red' : (ai.riskLevel === 'ok' ? 'ok' : 'yellow');
+        issue = _reviewRiskSanitize(ai.issue);
+        advice = _reviewRiskSanitize(ai.scientificAdvice);
+        expert = !!ai.callExpertSuggest;
+    } else if (lv === 'red') {
+        issue = '高油高盐占比偏高';
+        advice = '本周高油 ' + pct + '%、高盐 ' + saltPct + '%。长期此类饮食结构容易增加慢病风险，建议下周多用蒸煮，少用红烧。';
+    } else if (lv === 'yellow') {
+        issue = '饮食结构存在偏移';
+        advice = '本周高油 ' + pct + '%、高盐 ' + saltPct + '%、蔬菜 ' + st.vegCount + ' 道。不利于指标稳定，建议下周增加绿叶菜，多用蒸煮，少用红烧。';
+    } else {
+        issue = '本周结构较均衡';
+        advice = '本周高油 ' + pct + '%、高盐 ' + saltPct + '%、蔬菜 ' + st.vegCount + ' 道，继续保持，注意规律作息与饮水。';
+    }
+    var color, bg, bd;
+    if (lv === 'red') { color = '#991B1B'; bg = '#FEF2F2'; bd = '#FCA5A5'; }
+    else if (lv === 'yellow') { color = '#92400E'; bg = '#FFFBEB'; bd = '#FCD34D'; }
+    else { color = '#065F46'; bg = '#ECFDF5'; bd = '#6EE7B7'; }
+    var icon = lv === 'ok' ? '✅ ' : '⚠️ ';
+    var html =
+        '<div style="' + box + 'background:' + bg + ';border:1px solid ' + bd + ';">' +
+        '<div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:' + color + ';margin-bottom:5px;">' +
+        icon + '治未病风险预警' +
+        '<span style="margin-left:auto;font-size:11px;font-weight:600;background:#fff;border-radius:999px;padding:2px 8px;">本周 ' + st.days + ' 天 · ' + st.total + ' 道</span>' +
+        '</div>';
+    if (issue) {
+        html += '<div style="font-size:12px;font-weight:700;color:' + color + ';margin-bottom:3px;">' + escapeHtml(issue) + '</div>';
+    }
+    html += '<div style="font-size:12px;color:' + color + ';line-height:1.75;">' + escapeHtml(advice) + '</div>';
+    if (expert) {
+        html += '<div style="margin-top:8px;font-size:11px;color:#92400E;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:6px 8px;line-height:1.6;">建议呼叫真人营养师做 1V1 评估，针对性调整配餐。</div>';
+    }
+    html += '<div style="display:flex;gap:12px;margin-top:8px;font-size:11px;color:#6B7280;">' +
+        '<span>高油菜品 ' + st.oilCount + ' 道</span><span>高盐 ' + st.saltCount + ' 道</span>' +
+        '<span>高糖 ' + st.sugarCount + ' 道</span><span>蔬菜 ' + st.vegCount + ' 道</span>' +
+        '</div></div>';
+    return html;
+}
+
 function _renderReviewRiskModule() {
     var slot = document.getElementById('reviewRiskSlot');
     if (!slot) return;
@@ -60995,33 +61105,20 @@ function _renderReviewRiskModule() {
         return;
     }
     var level = _reviewRiskLevel(st);
-    var pct = Math.round(st.oilRatio * 100), saltPct = Math.round(st.saltRatio * 100);
-    var title = '治未病风险预警';
-    var desc = '';
-    if (level === 'red') {
-        desc = '⚠️ 风险预警：本周高油高盐菜品占比偏高（高油 ' + pct + '%、高盐 ' + saltPct + '%）。' +
-            '长期此类饮食易增加慢病风险，建议下周多用蒸煮，少用红烧。';
-    } else if (level === 'yellow') {
-        desc = '⚠️ 风险预警：本周饮食结构存在偏移（高油 ' + pct + '%、高盐 ' + saltPct + '%、蔬菜 ' + st.vegCount + ' 次）。' +
-            '建议下周增加绿叶菜，多用蒸煮，少用红烧。';
-    } else {
-        desc = '✅ 本周饮食结构较均衡：高油 ' + pct + '%、高盐 ' + saltPct + '%、蔬菜 ' + st.vegCount + ' 次。继续保持，注意规律作息。';
-    }
-    var color, bg, bd;
-    if (level === 'red') { color = '#991B1B'; bg = '#FEF2F2'; bd = '#FCA5A5'; }
-    else if (level === 'yellow') { color = '#92400E'; bg = '#FFFBEB'; bd = '#FCD34D'; }
-    else { color = '#065F46'; bg = '#ECFDF5'; bd = '#6EE7B7'; }
-    slot.innerHTML =
-        '<div style="' + box + 'background:' + bg + ';border:1px solid ' + bd + ';">' +
-        '<div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:' + color + ';margin-bottom:5px;">' +
-        (level === 'ok' ? '✅ ' : '⚠️ ') + title +
-        '<span style="margin-left:auto;font-size:11px;font-weight:600;background:#fff;border-radius:999px;padding:2px 8px;">本周 ' + st.days + ' 天 · ' + st.total + ' 道</span>' +
-        '</div>' +
-        '<div style="font-size:12px;color:' + color + ';line-height:1.75;">' + escapeHtml(desc) + '</div>' +
-        '<div style="display:flex;gap:12px;margin-top:8px;font-size:11px;color:#6B7280;">' +
-        '<span>高油菜品 ' + st.oilCount + ' 道</span><span>高盐 ' + st.saltCount + ' 道</span>' +
-        '<span>高糖 ' + st.sugarCount + ' 道</span><span>蔬菜 ' + st.vegCount + ' 道</span>' +
-        '</div></div>';
+    var key = (getFamilyId() || 'default') + '|' + _dtTodayKey() + '|' + _reviewRiskStatKey(st);
+    var ai = _reviewRiskAiCached(key);
+    if (!ai && _REVIEW_RISK_AI.key === key && _REVIEW_RISK_AI.data) ai = _REVIEW_RISK_AI.data;
+    slot.innerHTML = _reviewRiskCardHtml(st, level, ai);
+    if (ai) { _REVIEW_RISK_AI.key = key; _REVIEW_RISK_AI.data = ai; return; }
+    if (_REVIEW_RISK_AI.busy && _REVIEW_RISK_AI.reqKey === key) return;
+    _reviewRiskFetchAI(st, key).then(function (data) {
+        if (!data) return;
+        _REVIEW_RISK_AI.key = key;
+        _REVIEW_RISK_AI.data = data;
+        var el = document.getElementById('reviewRiskSlot');
+        if (!el) return;
+        el.innerHTML = _reviewRiskCardHtml(st, level, data);
+    });
 }
 
 function _renderReviewExpertModule() {

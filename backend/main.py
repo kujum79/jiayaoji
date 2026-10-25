@@ -4112,6 +4112,114 @@ async def save_feedback(req: FeedbackRequest) -> Dict[str, Any]:
     return {"ok": True}
 
 
+# ========== V224: 复盘「治未病风险预警」AI 归因（POST /api/review-risk） ==========
+class ReviewRiskRequest(BaseModel):
+    date: str = ""
+    familyId: str = "default"
+    familyBrief: str = ""
+    weekStats: Dict[str, Any] = {}
+    dishes: List[str] = []
+
+
+_REVIEW_RISK_SYSTEM = """你是一名预防医学营养师。你的任务是找出用户饮食中的风险点，并用科学预防的角度提示。
+
+【强制约束】
+1. 禁止使用“治疗”“治愈”“导致疾病”“远离疾病”等词汇。
+2. 必须使用“增加风险”“不利于指标稳定”“负担加重”等预防性科普词汇。
+3. 例如：不能写“吃多了会得高血压”，必须写“长期高盐摄入容易增加心血管压力，建议控盐”。
+4. 只做饮食结构分析与生活方式建议，不做诊断，不推荐药物或保健品。
+
+【输出要求】只返回一个 JSON 对象，不要代码块，不要任何多余说明：
+{"riskLevel":"warning","issue":"钠摄入偏高","scientificAdvice":"长期高钠不利于血压稳定，建议下周尝试用香料代替盐","callExpertSuggest":true}
+riskLevel 只能取 ok / warning / danger；issue 不超过 12 个字；scientificAdvice 控制在 40-80 字；callExpertSuggest 为布尔值。"""
+
+_REVIEW_RISK_BAD_WORDS = ["治疗", "治愈", "导致疾病", "远离疾病", "包治", "药到病除", "诊断", "处方"]
+_REVIEW_RISK_CACHE: Dict[str, Any] = {}
+
+
+def _clean_review_risk(parsed: Dict[str, Any]) -> Dict[str, Any]:
+    level = str(parsed.get("riskLevel") or "warning").strip().lower()
+    if level not in ("ok", "warning", "danger"):
+        level = "warning"
+    issue = str(parsed.get("issue") or "").strip()[:20]
+    advice = str(parsed.get("scientificAdvice") or "").strip()[:200]
+    for w in _REVIEW_RISK_BAD_WORDS:
+        if w in advice:
+            advice = advice.replace(w, "")
+    for w in _REVIEW_RISK_BAD_WORDS[:2]:
+        if w in issue:
+            issue = issue.replace(w, "")
+    expert = parsed.get("callExpertSuggest")
+    if isinstance(expert, str):
+        expert = expert.strip().lower() in ("true", "1", "yes", "是")
+    return {
+        "riskLevel": level,
+        "issue": issue,
+        "scientificAdvice": advice,
+        "callExpertSuggest": bool(expert),
+    }
+
+
+@app.post("/api/review-risk")
+async def review_risk(req: ReviewRiskRequest) -> Dict[str, Any]:
+    """V224: 依本周饮食统计做风险归因，返回预防医学口径的 JSON。"""
+    date_str = (req.date or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
+        date_str = _date_cls.today().strftime("%Y-%m-%d")
+    family_id = (req.familyId or "default").strip()[:32]
+    st = req.weekStats or {}
+    sig = "|".join(str(st.get(k, "")) for k in ("days", "total", "oilCount", "saltCount", "sugarCount", "vegCount"))
+    cache_key = f"{family_id}|{date_str}|{sig}"
+    hit = _REVIEW_RISK_CACHE.get(cache_key)
+    if hit and time.time() <= hit.get("expire", 0):
+        return hit["data"]
+
+    dishes = [str(d).strip() for d in (req.dishes or []) if str(d).strip()][:30]
+    user_lines = [
+        f"【统计周期】最近 7 天，有记录 {st.get('days', 0)} 天，共 {st.get('total', 0)} 道菜",
+        f"【高油菜品】{st.get('oilCount', 0)} 道（占比 {round(float(st.get('oilRatio', 0) or 0) * 100)}%）",
+        f"【高盐菜品】{st.get('saltCount', 0)} 道（占比 {round(float(st.get('saltRatio', 0) or 0) * 100)}%）",
+        f"【高糖菜品】{st.get('sugarCount', 0)} 道（占比 {round(float(st.get('sugarRatio', 0) or 0) * 100)}%）",
+        f"【蔬菜类】{st.get('vegCount', 0)} 道",
+        f"【家庭情况】{(req.familyBrief or '').strip()[:200] or '普通家庭'}",
+        f"【本周菜品】{'、'.join(dishes) if dishes else '未记录'}",
+    ]
+    result = None
+    for attempt in range(2):
+        try:
+            content = await call_qwen(
+                [
+                    {"role": "system", "content": _REVIEW_RISK_SYSTEM},
+                    {"role": "user", "content": "\n".join(user_lines)},
+                ],
+                json_mode=True,
+                max_tokens=400,
+                task_type="review_risk",
+            )
+        except Exception as e:
+            print(f"[review-risk] call_qwen error (attempt {attempt + 1}): {e}")
+            continue
+        try:
+            parsed = extract_json_object(content)
+        except Exception as e:
+            print(f"[review-risk] json parse error (attempt {attempt + 1}): {e}")
+            continue
+        if not isinstance(parsed, dict) or not parsed.get("issue"):
+            continue
+        cand = _clean_review_risk(parsed)
+        if not cand["scientificAdvice"]:
+            continue
+        result = cand
+        break
+
+    if result is None:
+        return {"ok": False, "error": "风险归因生成失败"}
+
+    data = {"ok": True, **result}
+    _REVIEW_RISK_CACHE[cache_key] = {"expire": time.time() + 6 * 3600, "data": data}
+    return data
+
+
 # V157: 文件末尾补跑别名注册——覆盖定义在本块之后的 /api/daily-tip、/api/weather、
 # /api/migration 等 POST 路由（catch-all 仅 GET，POST 别名无被吞风险；已注册路径自动去重）
 _register_api_prefix_aliases()
