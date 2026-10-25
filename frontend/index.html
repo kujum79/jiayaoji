@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V215-20261025';
+        var APP_VER = 'V216-20261025';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -9270,12 +9270,6 @@ var _CLASSROOM_QUIZ_BANK = {
 var _CLASSROOM_CACHE = {};
 var _classroomSpeaking = false;
 
-function _classroomPublishedCustom() {
-    try {
-        return getCustomCourses().filter(function (c) { return c && c.status === 'published'; });
-    } catch (e) { return []; }
-}
-
 // 标签可读化：目标人群数组 → 「针对失眠」这类展示文案
 function _classroomTagLabels(c) {
     var t = c && c.targetAudience;
@@ -9293,12 +9287,6 @@ function _classroomTagLabels(c) {
         if (label && out.indexOf(label) < 0) out.push(label);
     });
     return out;
-}
-
-function _classroomMeta(c) {
-    var dur = Number(c && c.duration) || 5;
-    var tags = _classroomTagLabels(c);
-    return '⏱ ' + dur + ' 分钟' + (tags.length ? ' · ' + tags.join(' · ') : '');
 }
 
 function _closeMyClassroom() {
@@ -9326,24 +9314,6 @@ function _openMyClassroom() {
     document.body.appendChild(ov);
     document.body.style.overflow = 'hidden';
     _renderClassroomBody();
-}
-
-function _classroomCard(c, kind) {
-    _CLASSROOM_CACHE[c.id] = { course: c, kind: kind };
-    var prog = getCourseProgressOf(c.id);
-    // V206.7: 「开始学习」移到标题行最右；「学习中/已学完」移到时间行最右
-    var badge = '';
-    if (prog && prog.status === 'completed') badge = '<span style="font-size:11px;background:#ECFDF5;color:#065F46;border-radius:999px;padding:2px 8px;">已学完</span>';
-    else if (prog && prog.status === 'learning') badge = '<span style="font-size:11px;background:#EFF6FF;color:#1D4ED8;border-radius:999px;padding:2px 8px;">学习中</span>';
-    return '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
-        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">' +
-        '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;line-height:1.4;">' + escapeHtml(c.title || '未命名课程') + '</div>' +
-        '<button type="button" onclick="_openClassroomCourse(\'' + escapeAttr(c.id) + '\',\'' + kind + '\')" style="flex-shrink:0;padding:6px 14px;border:none;background:#F97316;border-radius:8px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">开始学习</button>' +
-        '</div>' +
-        '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#6B7280;">' +
-        '<span style="flex:1;">' + escapeHtml(_classroomMeta(c)) + '</span>' + badge +
-        '</div>' +
-        '</div>';
 }
 
 // ====== V210: 课程库推荐（本地标签匹配，秒出不等待 AI） ======
@@ -9745,8 +9715,6 @@ async function _maybeGenerateDailyLesson() {
 function _renderClassroomBody() {
     var box = document.getElementById('classroomBody');
     if (!box) return;
-    var customs = _classroomPublishedCustom();
-    var classes = getEduCourses();
     var html = '';
 
     // V211: 全家桶每日专属微课（置顶，仅 premium 展示）
@@ -9755,58 +9723,6 @@ function _renderClassroomBody() {
     // V210: 顶部「获取推荐」入口——本地匹配课程库，秒出
     html += '<button type="button" onclick="_classroomGetRecommendations()" style="width:100%;padding:12px;margin-bottom:16px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);border-radius:14px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">🔍 获取推荐</button>' +
         '<div id="classroomRecoBox"></div>';
-
-    // 审核中的课程/申请（🔒 待审核 水印卡片）
-    var _pendingCustoms = [];
-    try { _pendingCustoms = getCustomCourses().filter(function (c) { return c && c.status === 'pending_review'; }); } catch (e) {}
-    var _pendingOrders = [];
-    try {
-        _pendingOrders = getCustomCourseOrders().filter(function (o) { return o && o.status === 'pending_review' && o.suggestion; });
-    } catch (e) {}
-    var _pendCards = [];
-    _pendingCustoms.forEach(function (c) {
-        _pendCards.push({ id: c.id, title: c.title, duration: c.duration, targetAudience: c.targetAudience, targetMember: (c.member && c.member.name) || '' });
-    });
-    _pendingOrders.forEach(function (o) {
-        var s = o.suggestion || {};
-        var dup = _pendCards.some(function (p) { return p.title === s.title; });
-        if (!dup && s.title) _pendCards.push({ id: o.orderId, title: s.title, duration: 5, targetAudience: [], targetMember: s.targetMember || '' });
-    });
-
-    html += '<div style="display:flex;align-items:baseline;gap:8px;margin:2px 2px 10px;">' +
-        '<span style="font-size:15px;font-weight:700;color:#1F2937;">专属定制</span>' +
-        '<span style="font-size:12px;color:#9CA3AF;">根据家庭需求 AI 生成</span></div>';
-
-    // 🔒 待审核水印卡片（不可点击学习）
-    _pendCards.forEach(function (p) {
-        var meta = '⏱ ' + (Number(p.duration) || 5) + ' 分钟' + (p.targetMember ? ' · 为 ' + p.targetMember + ' 定制' : '');
-        html += '<div style="position:relative;background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:14px;margin-bottom:12px;overflow:hidden;">' +
-            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">' +
-            '<div style="flex:1;font-size:15px;font-weight:700;color:#9CA3AF;line-height:1.4;">' + escapeHtml(p.title || '定制课程') + '</div>' +
-            '<span style="flex-shrink:0;font-size:11px;background:#F3F4F6;color:#6B7280;border-radius:999px;padding:3px 10px;">🔒 待审核</span>' +
-            '</div>' +
-            '<div style="font-size:12px;color:#9CA3AF;">' + escapeHtml(meta) + '</div>' +
-            '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">' +
-            '<span style="font-size:26px;font-weight:800;color:rgba(107,114,128,0.14);transform:rotate(-12deg);white-space:nowrap;">🔒 待审核</span>' +
-            '</div>' +
-            '</div>';
-    });
-
-    if (customs.length) {
-        customs.forEach(function (c) { html += _classroomCard(c, 'custom'); });
-    } else if (!_pendCards.length) {
-        html += '<div style="background:#fff;border:1px dashed #FDBA74;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;">' +
-            '<div style="font-size:13px;color:#9A3412;line-height:1.7;margin-bottom:10px;">' +
-            '还没有专属定制课程<br>可点击上方「获取推荐」，按家人情况从课程库匹配' +
-            '</div>' +
-            '<button type="button" onclick="_classroomGetRecommendations()" style="padding:9px 18px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">获取推荐</button>' +
-            '</div>';
-    }
-
-    html += '<div style="display:flex;align-items:baseline;gap:8px;margin:16px 2px 10px;">' +
-        '<span style="font-size:15px;font-weight:700;color:#1F2937;">经典通识</span>' +
-        '<span style="font-size:12px;color:#9CA3AF;">中国饮食史、基础营养学，全家共享</span></div>';
-    classes.forEach(function (c) { html += _classroomCard(c, 'classic'); });
 
     html += '<div style="text-align:center;font-size:11px;color:#B0AAA2;line-height:1.7;padding:8px 12px;">课程内容为日常饮食参考，不替代医疗建议。如有持续不适请及时就医。</div>';
     box.innerHTML = html;
