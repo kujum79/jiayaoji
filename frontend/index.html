@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V221-20261025';
+        var APP_VER = 'V222-20261025';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -9506,6 +9506,25 @@ function _myClassroomArticleRow(folder, a, subscribed) {
 function _renderMyClassroom() {
     var body = document.getElementById('classroomBody');
     if (!body) return;
+    var _clsSubscribed = (typeof isSubscribed === 'function') ? !!isSubscribed() : false;
+    // V222: 未订阅 → 整页降级为订阅引导，不展示任何系列/文章内容
+    if (!_clsSubscribed) {
+        var _subEl0 = document.getElementById('myClassroomSub');
+        if (_subEl0) _subEl0.textContent = '当前家庭：' + _currentFamilyName();
+        var _backEl0 = document.getElementById('myClassroomBackBtn');
+        if (_backEl0) _backEl0.textContent = '← 返回';
+        var _cnt0 = 0;
+        try { _cnt0 = Number((getRecommendedCourses(getFamilyMembers()) || {}).folderCount) || 0; } catch (e) { _cnt0 = 0; }
+        body.innerHTML =
+            '<div style="margin-top:24px;background:#fff;border-radius:16px;padding:26px 20px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,0.05);">' +
+            '<div style="font-size:40px;line-height:1;margin-bottom:12px;">🔒</div>' +
+            '<div style="font-size:16px;font-weight:700;color:#1F2937;margin-bottom:8px;">我的专属课堂为全家桶专享</div>' +
+            '<div style="font-size:13px;color:#6B7280;line-height:1.8;">订阅后可解锁全部系列课程，按家庭成员的体质与标签智能匹配' + (_cnt0 ? '（共 ' + _cnt0 + ' 个系列）' : '') + '。</div>' +
+            '<button type="button" onclick="_closeMyClassroom();_openSubscribeGuide();" style="width:100%;margin-top:18px;height:46px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:700;cursor:pointer;">立即订阅</button>' +
+            '<div style="font-size:11px;color:#9CA3AF;margin-top:12px;line-height:1.7;">课程内容为日常饮食参考，不替代医疗建议。</div>' +
+            '</div>';
+        return;
+    }
     if (_MY_CLASSROOM_RECO === null) {
         _MY_CLASSROOM_RECO = getRecommendedCourses(getFamilyMembers()) || { list: [], folderCount: 0 };
     }
@@ -34430,8 +34449,9 @@ function renderFamily() {
         }
         // V217: 「我的专属课堂」入口（我家页），副标题显示已匹配的课程系列数
         var _myClsCnt = 0;
-        try { _myClsCnt = (getRecommendedCourses(getFamilyMembers()).list || []).length; } catch(e) {}
-        var _mySub = _myClsCnt ? ('已匹配 ' + _myClsCnt + ' 个课程系列') : '按家庭档案匹配课程';
+        var _myClsSub = (typeof isSubscribed === 'function') ? !!isSubscribed() : false;
+        try { if (_myClsSub) _myClsCnt = (getRecommendedCourses(getFamilyMembers()).list || []).length; } catch(e) {}
+        var _mySub = !_myClsSub ? '订阅后解锁全部课程' : (_myClsCnt ? ('已匹配 ' + _myClsCnt + ' 个课程系列') : '按家庭档案匹配课程');
         familyList.insertAdjacentHTML('beforeend', `
             <div style="display:flex;gap:10px;margin-bottom:10px;">
                 ${card('📔', '膳食日记', '本周已记 ' + weekCnt + ' 篇', 'openDiaryTimeline()')}
