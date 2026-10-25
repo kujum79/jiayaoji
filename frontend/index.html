@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V216-20261025';
+        var APP_VER = 'V217-20261025';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -9297,28 +9297,33 @@ function _closeMyClassroom() {
 
 function _openMyClassroom() {
     if (typeof isLogined === 'function' && !isLogined()) { showLoginPage(); return; }
-    if (typeof isSubscribed === 'function' && !isSubscribed()) { _openSubscribeGuide(); return; }
     _closeMyClassroom();
+    _MY_CLASSROOM_VIEW.folderId = null;
+    _MY_CLASSROOM_RECO = null;
     var ov = document.createElement('div');
     ov.id = 'myClassroomOverlay';
     ov.style.cssText = 'position:fixed;inset:0;background:#f0f0f0;z-index:9999;overflow-y:auto;';
     ov.innerHTML =
         '<div style="max-width:430px;margin:0 auto;min-height:100%;background:#F7F5F2;box-shadow:0 0 30px rgba(0,0,0,0.12);">' +
-        '<div style="position:sticky;top:0;z-index:2;background:#fff;border-bottom:1px solid #EDE9E3;display:flex;align-items:center;padding:12px 16px;gap:10px;">' +
-        '<button type="button" onclick="_closeMyClassroom()" style="border:none;background:none;font-size:15px;color:#6B7280;cursor:pointer;padding:4px 8px;">← 返回</button>' +
-        '<div style="flex:1;text-align:center;font-size:16px;font-weight:700;color:#1F2937;">我的专属饮食课</div>' +
-        '<span style="width:44px;"></span>' +
+        '<div style="position:sticky;top:0;z-index:2;background:#fff;border-bottom:1px solid #EDE9E3;padding:10px 16px 8px;">' +
+        '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<button type="button" id="myClassroomBackBtn" onclick="_myClassroomBack()" style="border:none;background:none;font-size:15px;color:#6B7280;cursor:pointer;padding:4px 8px;white-space:nowrap;">← 返回</button>' +
+        '<div id="myClassroomTitle" style="flex:1;text-align:center;font-size:16px;font-weight:700;color:#1F2937;">我的专属课堂</div>' +
+        '<span style="width:52px;flex-shrink:0;"></span>' +
+        '</div>' +
+        '<div id="myClassroomSub" style="text-align:center;font-size:12px;color:#9CA3AF;margin-top:2px;"></div>' +
         '</div>' +
         '<div id="classroomBody" style="padding:14px 14px 40px;"></div>' +
         '</div>';
     document.body.appendChild(ov);
     document.body.style.overflow = 'hidden';
-    _renderClassroomBody();
+    _renderMyClassroom();
 }
 
-// ====== V210: 课程库推荐（本地标签匹配，秒出不等待 AI） ======
-// 结果缓存：null=未点过「获取推荐」；否则为 getRecommendedCourses() 的返回值
-var _CLASSROOM_RECO = null;
+// ====== V217: 我的专属课堂（推荐系列 → 文章列表 → 阅读） ======
+// 浏览层级：folderId 为空表示推荐系列列表，否则为该系列的文章列表
+var _MY_CLASSROOM_VIEW = { folderId: null };
+var _MY_CLASSROOM_RECO = null;
 
 // 标签归一：去空白、小写、去「质/症」后缀，并把同义标签归到同一组（老年/老年人 → 老人，婴幼儿/宝宝 → 婴儿）
 var _TAG_ALIAS = {
@@ -9425,130 +9430,176 @@ function _markCoursePurchased(id) {
     } catch (e) {}
 }
 
-function _classroomGetRecommendations() {
-    _CLASSROOM_RECO = getRecommendedCourses(getFamilyMembers());
-    _renderClassroomReco(true);
+// 当前家庭名称（口径与首页右上角一致）
+function _currentFamilyName() {
+    try {
+        if (window.__demoMode && window.__demoName) return window.__demoName;
+        var u = (typeof getLoginUser === 'function') ? getLoginUser() : null;
+        var fam = (typeof getLoginFamily === 'function') ? getLoginFamily() : null;
+        var name = (fam && fam.name) || (u && (u.familyName || u.family_name || u.name || u.nickname)) || '';
+        if (/^1\d{10}$/.test(name)) name = '我家';
+        return String(name || '我家');
+    } catch (e) { return '我家'; }
 }
 
-// 系列卡片：标题 + 篇数 + （特殊人群）专属推荐标 + 命中标签 + 文章行
-function _classroomFolderCard(group, gi) {
+// 推荐理由：命中「全家」→ 适合全家共同学习；否则列出命中标签
+function _myClassroomReason(group) {
+    var tags = (group && group.matchedTags) || [];
+    for (var i = 0; i < tags.length; i++) {
+        if (_tagNorm(tags[i]) === '全家') return '适合全家共同学习';
+    }
+    if (tags.length) return '适合' + tags.join('、') + '一起学';
+    return '按家庭档案匹配';
+}
+
+function _myClassroomBack() {
+    if (_MY_CLASSROOM_VIEW.folderId) {
+        _MY_CLASSROOM_VIEW.folderId = null;
+        _renderMyClassroom();
+        return;
+    }
+    _closeMyClassroom();
+}
+
+function _myClassroomOpenFolder(folderId) {
+    _MY_CLASSROOM_VIEW.folderId = folderId;
+    _renderMyClassroom();
+}
+
+// 系列卡片（列表层）
+function _myClassroomFolderCard(group) {
     var f = group.folder || {};
-    var html =
-        '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
+    var n = (group.articles || []).length;
+    var tags = Array.isArray(f.targetTags) ? f.targetTags.filter(Boolean) : [];
+    return '<div onclick="_myClassroomOpenFolder(\'' + escapeAttr(f.folderId) + '\')" style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;cursor:pointer;">' +
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
         '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;line-height:1.4;">📁 ' + escapeHtml(f.folderName || '未命名系列') + '</div>' +
         (group.isSpecial
             ? '<span style="flex-shrink:0;font-size:11px;background:#FEE2E2;color:#B91C1C;border-radius:999px;padding:3px 10px;">⭐ 专属推荐</span>'
-            : '<span style="flex-shrink:0;font-size:11px;background:#EDE9FE;color:#6D28D9;border-radius:999px;padding:3px 10px;">' + group.articles.length + ' 篇</span>') +
+            : '<span style="flex-shrink:0;font-size:11px;background:#EDE9FE;color:#6D28D9;border-radius:999px;padding:3px 10px;">' + n + ' 篇</span>') +
         '</div>' +
-        '<div style="font-size:12px;color:#6B7280;line-height:1.7;margin-bottom:8px;">' +
-        (group.matchedTags.length ? '🏷 适合：' + escapeHtml(group.matchedTags.join(' / ')) : '') +
-        (f.description ? '　·　' + escapeHtml(String(f.description).slice(0, 40)) : '') +
+        '<div style="font-size:12px;color:#EA580C;line-height:1.7;margin-bottom:4px;">推荐理由：' + escapeHtml(_myClassroomReason(group)) + '</div>' +
+        '<div style="font-size:12px;color:#9CA3AF;line-height:1.7;">' +
+        (tags.length ? '🏷 ' + escapeHtml(tags.join(' / ')) : '') +
+        (f.description ? (tags.length ? '　·　' : '') + escapeHtml(String(f.description).slice(0, 34)) : '') +
         '</div>' +
-        '<div style="border-top:1px dashed #E5E7EB;padding-top:8px;">';
-    group.articles.forEach(function (a) {
-        try {
-            var flat = {
-                id: a.articleId,
-                articleId: a.articleId,
-                folderId: f.folderId,
-                folderName: f.folderName || '',
-                title: a.title,
-                content: a.content,
-                duration: a.duration,
-                targetTags: Array.isArray(f.targetTags) ? f.targetTags : [],
-                type: a.type || 'article',
-                isPremium: !!a.isPremium,
-                price: Number(a.price) || 0,
-                createdAt: a.createdAt
-            };
-            _CLASSROOM_CACHE[a.articleId] = { course: flat, kind: 'library' };
-            var owned = flat.isPremium && _coursePurchased(flat.id);
-            var payText = !flat.isPremium ? '免费' : (owned ? '✅ 已解锁' : '💰 ¥' + flat.price.toFixed(2));
-            html +=
-                '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;">' +
-                '<div style="flex:1;min-width:0;">' +
-                '<div style="font-size:13px;font-weight:600;color:#374151;line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(a.title || '未命名文章') + '</div>' +
-                '<div style="font-size:11px;color:#9CA3AF;">⏱ ' + (Number(a.duration) || 5) + ' 分钟 · ' + payText + '</div>' +
-                '</div>' +
-                '<button type="button" onclick="_classroomOpenArticle(\'' + escapeAttr(a.articleId) + '\')" style="flex-shrink:0;padding:6px 12px;border:none;background:' + ((flat.isPremium && !owned) ? '#F59E0B' : '#F97316') + ';border-radius:8px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;">' +
-                ((flat.isPremium && !owned) ? '解锁' : '阅读') + '</button>' +
-                '</div>';
-        } catch (e) {
-            html += '<div style="padding:6px 0;font-size:12px;color:#B91C1C;">文章渲染异常</div>';
-        }
-    });
-    return html + '</div></div>';
-}
-
-function _renderClassroomReco(isNew) {
-    var box = document.getElementById('classroomRecoBox');
-    if (!box) return;
-    if (_CLASSROOM_RECO === null) { box.innerHTML = ''; return; }
-    var r = _CLASSROOM_RECO;
-    var html = '<div style="display:flex;align-items:baseline;gap:8px;margin:2px 2px 10px;">' +
-        '<span style="font-size:15px;font-weight:700;color:#1F2937;">为您推荐</span>' +
-        '<span style="font-size:12px;color:#9CA3AF;">按家庭标签匹配课程系列</span></div>';
-    if (!r.folderCount) {
-        html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">课程库还没有系列课程<br>请联系管理员在「课程汇总」中新建系列并录入文章</div>';
-    } else if (!r.list.length) {
-        html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">暂未匹配到合适的课程系列<br>可在「我家」补充成员健康标签后再试</div>';
-    } else {
-        r.list.forEach(function (g, gi) {
-            try { html += _classroomFolderCard(g, gi); }
-            catch (e) { html += '<div style="padding:10px;font-size:12px;color:#B91C1C;">系列渲染异常</div>'; }
-        });
-    }
-    box.innerHTML = html;
-    if (isNew) {
-        showToast(r.list && r.list.length ? ('已为你匹配 ' + r.list.length + ' 个课程系列') : '暂未匹配到合适课程');
-    }
-}
-
-function _classroomOpenArticle(articleId) {
-    var entry = _CLASSROOM_CACHE[articleId];
-    if (!entry || !entry.course) { showToast('课程不存在'); return; }
-    var c = entry.course;
-    if (c.isPremium && !_coursePurchased(c.id)) {
-        _classroomPayCourse(c, function () {
-            _markCoursePurchased(c.id);
-            _renderClassroomReco(false);
-            _openClassroomCourse(c.id, 'library');
-        });
-        return;
-    }
-    _openClassroomCourse(c.id, 'library');
-}
-
-// 模拟支付弹层（不用原生 confirm，避免嵌入式浏览器阻塞黑屏）
-function _classroomPayCourse(c, onPaid) {
-    var old = document.getElementById('classroomPayOverlay');
-    if (old) old.remove();
-    var price = (Number(c.price) || 0).toFixed(2);
-    var ov = document.createElement('div');
-    ov.id = 'classroomPayOverlay';
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100050;display:flex;align-items:center;justify-content:center;padding:24px;';
-    ov.innerHTML =
-        '<div style="background:#fff;border-radius:16px;width:100%;max-width:320px;padding:20px;">' +
-        '<div style="text-align:center;font-size:15px;font-weight:700;color:#1F2937;margin-bottom:6px;">课程解锁</div>' +
-        '<div style="text-align:center;font-size:13px;color:#6B7280;line-height:1.7;margin-bottom:14px;">' + escapeHtml(c.title || '') + '</div>' +
-        '<div style="text-align:center;font-size:26px;font-weight:800;color:#EA580C;margin-bottom:16px;">¥' + price + '</div>' +
-        '<button type="button" id="cpPay" style="width:100%;padding:11px;border:none;background:#F97316;border-radius:10px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:8px;">模拟支付</button>' +
-        '<button type="button" id="cpCancel" style="width:100%;padding:10px;border:1px solid #E5E7EB;background:#fff;border-radius:10px;font-size:13px;color:#6B7280;cursor:pointer;">取消</button>' +
-        '<div style="text-align:center;font-size:11px;color:#B0AAA2;margin-top:10px;">演示环境，不产生真实扣款</div>' +
+        '<div style="text-align:right;font-size:12px;color:#16A34A;margin-top:6px;">查看全部 ' + n + ' 篇 ›</div>' +
         '</div>';
-    document.body.appendChild(ov);
-    ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
-    ov.querySelector('#cpCancel').onclick = function () { ov.remove(); };
-    ov.querySelector('#cpPay').onclick = function () {
-        var btn = ov.querySelector('#cpPay');
-        btn.disabled = true; btn.textContent = '支付中…'; btn.style.opacity = '0.7';
-        setTimeout(function () {
-            ov.remove();
-            showToast('✅ 已解锁「' + (c.title || '课程') + '」');
-            try { onPaid(); } catch (err) { showToast('打开课程失败：' + (err.message || err)); }
-        }, 600);
+}
+
+// 文章行（系列内层）
+function _myClassroomArticleRow(folder, a, subscribed) {
+    var premium = !!a.isPremium;
+    var payTag = !premium ? '免费' : (subscribed ? '已订阅 · 可读' : '🔒 订阅解锁');
+    var btnLabel = (!premium || subscribed) ? '阅读' : '订阅解锁';
+    var btnStyle = (!premium || subscribed) ? 'background:#F97316;' : 'background:#F59E0B;';
+    return '<div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #EDE9E3;border-radius:12px;padding:12px;margin-bottom:10px;">' +
+        '<div style="flex:1;min-width:0;">' +
+        '<div style="font-size:14px;font-weight:600;color:#374151;line-height:1.5;">' + escapeHtml(a.title || '未命名文章') + '</div>' +
+        '<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">⏱ ' + (Number(a.duration) || 5) + ' 分钟 · ' + payTag + '</div>' +
+        '</div>' +
+        '<button type="button" onclick="_myClassroomOpenArticle(\'' + escapeAttr(folder.folderId) + '\',\'' + escapeAttr(a.articleId) + '\')" style="flex-shrink:0;padding:7px 13px;border:none;border-radius:8px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;' + btnStyle + '">' + btnLabel + '</button>' +
+        '</div>';
+}
+
+function _renderMyClassroom() {
+    var body = document.getElementById('classroomBody');
+    if (!body) return;
+    if (_MY_CLASSROOM_RECO === null) {
+        _MY_CLASSROOM_RECO = getRecommendedCourses(getFamilyMembers()) || { list: [], folderCount: 0 };
+    }
+    var r = _MY_CLASSROOM_RECO;
+    var list = r.list || [];
+    var fid = _MY_CLASSROOM_VIEW.folderId;
+    var cur = null;
+    if (fid) {
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] && list[i].folder && list[i].folder.folderId === fid) { cur = list[i]; break; }
+        }
+        if (!cur) { _MY_CLASSROOM_VIEW.folderId = null; fid = null; }
+    }
+    var subEl = document.getElementById('myClassroomSub');
+    if (subEl) {
+        subEl.textContent = '当前家庭：' + _currentFamilyName() +
+            (cur ? '　·　' + String(cur.folder.folderName || '') : '');
+    }
+    var backEl = document.getElementById('myClassroomBackBtn');
+    if (backEl) backEl.textContent = cur ? '← 返回列表' : '← 返回';
+
+    var html = '';
+    if (cur) {
+        html += '<div style="display:flex;align-items:baseline;gap:8px;margin:2px 2px 10px;">' +
+            '<span style="font-size:15px;font-weight:700;color:#1F2937;">📁 ' + escapeHtml(cur.folder.folderName || '') + '</span>' +
+            '<span style="font-size:12px;color:#9CA3AF;">' + cur.articles.length + ' 篇</span></div>';
+        html += '<div style="font-size:12px;color:#EA580C;margin:0 2px 12px;">推荐理由：' + escapeHtml(_myClassroomReason(cur)) + '</div>';
+        var subscribed = (typeof isSubscribed === 'function') ? !!isSubscribed() : false;
+        var arts = cur.articles || [];
+        if (!arts.length) {
+            html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:16px;text-align:center;font-size:13px;color:#6B7280;">这个系列还没有文章</div>';
+        } else {
+            arts.forEach(function (a) {
+                try { html += _myClassroomArticleRow(cur.folder, a, subscribed); }
+                catch (e) { html += '<div style="padding:8px;font-size:12px;color:#B91C1C;">文章渲染异常</div>'; }
+            });
+        }
+    } else {
+        html += '<div id="dailyLessonBox"></div>';
+        html += '<div style="display:flex;align-items:baseline;gap:8px;margin:2px 2px 10px;">' +
+            '<span style="font-size:15px;font-weight:700;color:#1F2937;">推荐课程</span>' +
+            '<span style="font-size:12px;color:#9CA3AF;">按家庭标签匹配</span></div>';
+        if (!r.folderCount) {
+            html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">课程库还没有系列课程<br>请联系管理员在「课程汇总」中新建系列并录入文章</div>';
+        } else if (!list.length) {
+            html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">暂未匹配到合适的课程系列<br>可在「我家」补充成员健康标签后再试</div>';
+        } else {
+            list.forEach(function (g) {
+                try { html += _myClassroomFolderCard(g); }
+                catch (e) { html += '<div style="padding:10px;font-size:12px;color:#B91C1C;">系列渲染异常</div>'; }
+            });
+        }
+        html += '<div style="text-align:center;font-size:11px;color:#B0AAA2;line-height:1.7;padding:8px 12px;">课程内容为日常饮食参考，不替代医疗建议。如有持续不适请及时就医。</div>';
+    }
+    body.innerHTML = html;
+    if (!cur) {
+        _renderDailyLessonCard();
+        _maybeGenerateDailyLesson().then(function () { _renderDailyLessonCard(); });
+    }
+}
+
+// 点击文章：未订阅 + 收费文章 → 订阅引导；否则进入阅读页（Markdown 渲染）
+function _myClassroomOpenArticle(folderId, articleId) {
+    var folder = _getCourseFolder(folderId) || {};
+    var arts = getCourseArticles();
+    var a = null;
+    for (var i = 0; i < arts.length; i++) {
+        if (arts[i] && arts[i].articleId === articleId) { a = arts[i]; break; }
+    }
+    if (!a) { showToast('文章不存在'); return; }
+    if (a.isPremium) {
+        var subscribed = (typeof isSubscribed === 'function') ? !!isSubscribed() : false;
+        if (!subscribed) {
+            _openSubscribeGuide();
+            return;
+        }
+    }
+    _CLASSROOM_CACHE[articleId] = {
+        course: {
+            id: articleId,
+            articleId: articleId,
+            folderId: folderId,
+            folderName: folder.folderName || '',
+            title: a.title,
+            content: a.content,
+            duration: a.duration,
+            targetTags: Array.isArray(folder.targetTags) ? folder.targetTags : [],
+            type: 'article',
+            isPremium: !!a.isPremium,
+            price: Number(a.price) || 0,
+            createdAt: a.createdAt
+        },
+        kind: 'library'
     };
+    _openClassroomCourse(articleId, 'library');
 }
 
 // ====== V211: 全家桶 · 每日专属微课（每天只生成一次，365 天有效期） ======
@@ -9712,25 +9763,6 @@ async function _maybeGenerateDailyLesson() {
     } catch (e) {}
 }
 
-function _renderClassroomBody() {
-    var box = document.getElementById('classroomBody');
-    if (!box) return;
-    var html = '';
-
-    // V211: 全家桶每日专属微课（置顶，仅 premium 展示）
-    html += '<div id="dailyLessonBox"></div>';
-
-    // V210: 顶部「获取推荐」入口——本地匹配课程库，秒出
-    html += '<button type="button" onclick="_classroomGetRecommendations()" style="width:100%;padding:12px;margin-bottom:16px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);border-radius:14px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">🔍 获取推荐</button>' +
-        '<div id="classroomRecoBox"></div>';
-
-    html += '<div style="text-align:center;font-size:11px;color:#B0AAA2;line-height:1.7;padding:8px 12px;">课程内容为日常饮食参考，不替代医疗建议。如有持续不适请及时就医。</div>';
-    box.innerHTML = html;
-    _renderClassroomReco(false);
-    _renderDailyLessonCard();
-    _maybeGenerateDailyLesson().then(function () { _renderDailyLessonCard(); });
-}
-
 // ====== V207.1: 获取专属课程建议（弹窗交互） ======
 var _SUGGEST_CACHE = {};
 
@@ -9866,7 +9898,7 @@ function _confirmCourseSuggestions() {
         showToast('这些课程已在超管审核中，无需重复提交');
     } else if (submitted > 0) {
         showToast('定制申请已提交，请留意审核进度。');
-        _renderClassroomBody();
+        _renderMyClassroom();
     }
 }
 
@@ -9906,7 +9938,7 @@ async function _generateForSuggestion(s, members) {
         profile.name = profile.name || target.name || '';
         if (profile.age == null && target.age != null) profile.age = Number(target.age);
         await callCustomCourse(baseId, profile);
-        _renderClassroomBody();
+        _renderMyClassroom();
     } catch (e) {
         console.warn('[课程建议] 生成失败（已保留申请记录）', e);
     }
@@ -9952,7 +9984,7 @@ async function _classroomGenerateCustom(btn) {
         showToast('定制失败：' + (e.message || e) + '，请稍后再试');
     }
     if (btn) { btn.disabled = false; btn.textContent = '为家人定制课程'; btn.style.opacity = '1'; }
-    _renderClassroomBody();
+    _renderMyClassroom();
 }
 
 function _closeClassroomCourse() {
@@ -10066,7 +10098,7 @@ function _submitClassroomQuiz(courseId) {
     if (correct === quiz.length) {
         setCourseProgress(courseId, 'completed', 100);
         showToast('全部答对，本课已学完 ✅');
-        _renderClassroomBody();
+        _renderMyClassroom();
     } else {
         setCourseProgress(courseId, 'learning', 60);
         showToast('答对 ' + correct + '/' + quiz.length + '，可以回看课程后再试一次');
@@ -30179,7 +30211,10 @@ function _openPremiumContent() {
         + '</ul>'
         + '<div style="margin-top:18px;font-size:11px;color:#9CA3AF;">订阅到期后自动回退免费版，已收藏的食养堂内容保留。</div>'
         + '</div>'
-        + '<div style="flex-shrink:0;padding:10px 18px calc(14px + env(safe-area-inset-bottom));border-top:1px solid #F3F4F6;background:white;">'
+        + '<div style="flex-shrink:0;padding:10px 18px 0;background:white;">'
+        + '<button onclick="_closePremiumContent();_openMyClassroom();" style="width:100%;height:44px;border-radius:12px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:700;cursor:pointer;">🎓 我的专属课堂</button>'
+        + '</div>'
+        + '<div style="flex-shrink:0;padding:8px 18px calc(14px + env(safe-area-inset-bottom));background:white;">'
         + '<button onclick="_closePremiumContent()" style="width:100%;height:42px;border-radius:12px;border:none;background:#F3F4F6;color:#4B5563;font-size:15px;font-weight:600;cursor:pointer;">关闭</button>'
         + '</div>';
     ov.appendChild(sheet);
@@ -34374,14 +34409,10 @@ function renderFamily() {
                 + '<div style="font-size:12px;color:#9CA3AF;line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + sub + '</div>'
                 + '</div>';
         }
-        // V206.2: 我的专属课堂移入四宫格（原「我的复刻」位置），复刻入口保留在「我的食记」组内
-        var _myPubCnt = 0;
-        try { _myPubCnt = getCustomCourses().filter(function(c){ return c && c.status === 'published'; }).length; } catch(e) {}
+        // V217: 「我的专属课堂」入口（我家页），副标题显示已匹配的课程系列数
         var _myClsCnt = 0;
-        try { _myClsCnt = getEduCourses().length; } catch(e) {}
-        var _mySub = isSubscribed()
-            ? ('定制 ' + _myPubCnt + ' 篇 · 通识 ' + _myClsCnt + ' 篇')
-            : '订阅后开启';
+        try { _myClsCnt = (getRecommendedCourses(getFamilyMembers()).list || []).length; } catch(e) {}
+        var _mySub = _myClsCnt ? ('已匹配 ' + _myClsCnt + ' 个课程系列') : '按家庭档案匹配课程';
         familyList.insertAdjacentHTML('beforeend', `
             <div style="display:flex;gap:10px;margin-bottom:10px;">
                 ${card('📔', '膳食日记', '本周已记 ' + weekCnt + ' 篇', 'openDiaryTimeline()')}
