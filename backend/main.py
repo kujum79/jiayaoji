@@ -4423,6 +4423,139 @@ async def _error_status_middleware(request: Request, call_next):
     return response
 
 
+# ========== V227: 超管「系统监控」（错误总览 + 活跃付费客户数） ==========
+_ERR_RESOLVED_FILE = _ERR_LOG_DIR / "error_resolved.json"
+
+
+class ErrorResolveRequest(BaseModel):
+    errorIds: List[str] = []
+
+
+def _err_load_entries(limit: int = 300) -> List[Dict[str, Any]]:
+    """从 system_error.log 里解析最近的 JSON 行（倒序）。"""
+    if not _ERR_LOG_FILE.exists():
+        return []
+    try:
+        lines = _ERR_LOG_FILE.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except OSError:
+        return []
+    items: List[Dict[str, Any]] = []
+    for line in lines[-limit:]:
+        idx = line.find('{"')
+        if idx < 0:
+            continue
+        try:
+            obj = json.loads(line[idx:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict):
+            # 记录日志行前缀时间（后端直接产生、没有 clientCreatedAt 的记录靠它归日）
+            obj["_logTime"] = line[:idx].strip()[:19]
+            items.append(obj)
+    items.reverse()
+    return items
+
+
+def _err_load_resolved() -> set:
+    try:
+        if _ERR_RESOLVED_FILE.exists():
+            data = json.loads(_ERR_RESOLVED_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                return {str(x) for x in data}
+    except (OSError, json.JSONDecodeError):
+        pass
+    return set()
+
+
+def _err_save_resolved(ids: set) -> None:
+    try:
+        _ERR_RESOLVED_FILE.write_text(json.dumps(sorted(ids), ensure_ascii=False), encoding="utf-8")
+    except OSError as e:
+        print(f"[admin-monitor] 写入解决状态失败：{e}")
+
+
+def _count_active_paid() -> int:
+    """扫描家庭云备份里的 subscriptionStatus，统计未到期的付费家庭数（premium + basic）。"""
+    if not _FAMILY_BACKUP_DIR.exists():
+        return 0
+    now = int(time.time())
+    count = 0
+    for p in _FAMILY_BACKUP_DIR.glob("*.json"):
+        try:
+            payload = json.loads(p.read_text(encoding="utf-8"))
+            raw = (payload.get("data") or {}).get("subscriptionStatus")
+            if not raw or not isinstance(raw, str):
+                continue
+            sub = json.loads(raw)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(sub, dict) or not sub.get("isSubscribed"):
+            continue
+        if str(sub.get("tier") or sub.get("planType") or "") not in ("premium", "basic"):
+            continue
+        expire = int(sub.get("expireAt") or sub.get("expireDate") or 0)
+        if expire and expire < now:
+            continue
+        count += 1
+    return count
+
+
+@app.post("/api/admin/monitor")
+async def admin_monitor() -> Dict[str, Any]:
+    """V227: 返回今日报错总数、活跃付费客户数、未处理报警列表。"""
+    resolved = _err_load_resolved()
+    today = _date_cls.today().strftime("%Y-%m-%d")
+    entries = _err_load_entries(300)
+    today_count = 0
+    unresolved: List[Dict[str, Any]] = []
+    for obj in entries:
+        ts = int(obj.get("clientCreatedAt") or 0)
+        ts_str = ""
+        if ts > 0:
+            ts_str = _dt_cls.fromtimestamp(ts / 1000).strftime("%Y-%m-%d %H:%M")
+            if ts_str.startswith(today):
+                today_count += 1
+        elif str(obj.get("_logTime") or "").startswith(today):
+            ts_str = str(obj.get("_logTime") or "")[:16]
+            today_count += 1
+        eid = str(obj.get("errorId") or "")
+        if eid and eid in resolved:
+            continue
+        if len(unresolved) >= 100:
+            continue
+        unresolved.append({
+            "id": eid,
+            "type": str(obj.get("type") or "api_timeout"),
+            "message": str(obj.get("message") or ""),
+            "familyId": str(obj.get("familyId") or ""),
+            "familyName": str(obj.get("familyName") or ""),
+            "source": str(obj.get("source") or "frontend"),
+            "createdAt": ts,
+            "timeText": ts_str,
+            "resolved": False,
+        })
+    return {
+        "ok": True,
+        "todayErrorCount": today_count,
+        "totalErrorCount": len(entries),
+        "activePaidCount": _count_active_paid(),
+        "unresolvedCount": len(unresolved),
+        "unresolved": unresolved,
+    }
+
+
+@app.post("/api/admin/error-resolve")
+async def admin_error_resolve(req: ErrorResolveRequest) -> Dict[str, Any]:
+    """V227: 将报警标记为已处理（errorId 列表）。"""
+    ids = [str(x).strip() for x in (req.errorIds or []) if str(x).strip()]
+    if not ids:
+        return {"ok": False, "error": "缺少 errorIds"}
+    resolved = _err_load_resolved()
+    resolved.update(ids)
+    _err_save_resolved(resolved)
+    return {"ok": True, "resolvedCount": len(resolved)}
+
+
 # V157: 文件末尾补跑别名注册——覆盖定义在本块之后的 /api/daily-tip、/api/weather、
 # /api/migration 等 POST 路由（catch-all 仅 GET，POST 别名无被吞风险；已注册路径自动去重）
 _register_api_prefix_aliases()
