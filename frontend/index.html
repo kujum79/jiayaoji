@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V217-20261025';
+        var APP_VER = 'V218-20261025';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -30204,11 +30204,12 @@ function _openPremiumContent() {
         + _subRenderBoundNeeds(boundNeeds)
         + '<div style="margin-top:16px;font-size:13px;color:#4B5563;line-height:1.7;">✅ 已解锁功能：</div>'
         + '<ul style="margin-top:6px;padding-left:18px;font-size:13px;color:#4B5563;line-height:1.9;">'
-        + '<li>AI 每日推演家庭饮食，精准推送</li>'
-        + '<li>专项饮食建议（体质/慢病/育儿/训练）</li>'
-        + '<li>家庭成员饮食档案与偏好画像</li>'
-        + '<li>优先客服通道与 AI 推荐增强</li>'
+        + '<li>👑 APP 全部核心功能（无限规划/食材闭环）</li>'
+        + '<li>🎓 我的专属饮食课堂（全库免费学）</li>'
+        + '<li>📊 深度健康复盘与治未病预警（每周/每月）</li>'
+        + '<li>👨‍⚕️ 真人营养师个案定制（配餐复核/体检解读）</li>'
         + '</ul>'
+        + '<div style="margin-top:14px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:11px 12px;font-size:12px;color:#9A3412;line-height:1.8;">订阅后，您的【复盘】将升级为【家庭健康深度体检】，帮您科学饮食，降低健康风险。</div>'
         + '<div style="margin-top:18px;font-size:11px;color:#9CA3AF;">订阅到期后自动回退免费版，已收藏的食养堂内容保留。</div>'
         + '</div>'
         + '<div style="flex-shrink:0;padding:10px 18px 0;background:white;">'
