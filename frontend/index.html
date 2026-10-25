@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V228-20261025';
+        var APP_VER = 'V229-20261026';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -10951,6 +10951,7 @@ var _MONITOR_TYPE_META = {
     frontend_crash: { label: '前端崩溃', color: '#DC2626' },
     ai_error:       { label: 'AI 异常',  color: '#DC2626' },
     payment_error:  { label: '支付异常', color: '#DC2626' },
+    churn_warning:  { label: '流失预警', color: '#D97706' },
     api_timeout:    { label: '接口异常', color: '#D97706' }
 };
 
@@ -11414,10 +11415,57 @@ async function _remoteCmdPoll() {
     } catch (e) {}
 }
 
+// ---------- V229: 付费客户心跳（lastActiveAt，每次打开 APP 上报一次） ----------
+function _recordLastActiveAt() {
+    var now = Date.now();
+    try {
+        var s = _getSubscriptionStatus();
+        if (s && s.isSubscribed) {
+            s.lastActiveAt = now;
+            s.lastActiveText = _fmtDateTime(now);
+            _setSubscriptionStatus(s);
+        }
+    } catch (e) {}
+    return now;
+}
+
+function _fmtDateTime(ms) {
+    try {
+        var d = new Date(ms);
+        var p = function (n) { return (n < 10 ? '0' : '') + n; };
+        return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+    } catch (e) { return ''; }
+}
+
+async function _sendActiveHeartbeat() {
+    var fid = (typeof getFamilyId === 'function') ? getFamilyId() : null;
+    if (!fid) return;                                   // 游客态不上报
+    var sub = _getSubscriptionStatus();
+    if (!sub || !isSubscribed()) return;                // 非订阅用户不需要活跃心跳
+    try {
+        if (sessionStorage.getItem('_hbV229') === fid) return;   // 同一会话只上报一次
+        sessionStorage.setItem('_hbV229', fid);
+    } catch (e) {}
+    var at = _recordLastActiveAt();
+    var tier = '';
+    try { tier = _subTier() || ''; } catch (e) { tier = ''; }
+    var name = '';
+    try { name = _currentFamilyName() || ''; } catch (e) { name = ''; }
+    try {
+        await fetch('/api/system/heartbeat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ familyId: fid, familyName: name, tier: tier }),
+            __noLog: true
+        });
+    } catch (e) {}
+}
+
 (function _v228StartPolling() {
     function kick() {
         try { _noticePoll(); } catch (e) {}
         try { _remoteCmdPoll(); } catch (e) {}
+        try { _sendActiveHeartbeat(); } catch (e) {}
     }
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () { setTimeout(kick, 2500); });
@@ -69028,6 +69076,7 @@ setTimeout(function () { try { _maybeGenerateDailyLesson(); } catch (e) {} }, 80
         </div>
     </div>
 </div>
+
 
 </body>
 </html>

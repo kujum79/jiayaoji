@@ -4790,6 +4790,192 @@ async def system_notice() -> Dict[str, Any]:
     return {"ok": True, "notice": None}
 
 
+# ========== V229: 付费客户掉线预警（心跳 + 每日凌晨扫描） ==========
+_HB_FILE = _ERR_LOG_DIR / "active_heartbeats.json"
+_CHURN_STATE_FILE = _ERR_LOG_DIR / "churn_scan_state.json"
+_CHURN_DAYS = 3                       # 连续未使用天数阈值
+_CHURN_SCAN_HOUR = 0                  # 每天 00:05 扫描（凌晨）
+# 旧三档 planType 到套餐 tier 的兼容映射（与前端 _SUBSCRIPTION_PKG_MAP 一致）
+_SUB_PKG_FALLBACK = {"education": "premium", "special_care": "premium", "premium": "premium"}
+
+class HeartbeatRequest(BaseModel):
+    familyId: str = ""
+    familyName: str = ""
+    tier: str = ""
+
+
+def _hb_load() -> Dict[str, Dict[str, Any]]:
+    data = _json_read(_HB_FILE, {})
+    return data if isinstance(data, dict) else {}
+
+
+@app.post("/api/system/heartbeat")
+async def system_heartbeat(req: HeartbeatRequest) -> Dict[str, Any]:
+    """V229: 订阅用户打开 APP 时上报心跳，记录 lastActiveAt（按家庭隔离）。"""
+    fid = (req.familyId or "").strip()[:64]
+    if not fid:
+        return {"ok": False, "error": "缺少 familyId"}
+    now = int(time.time() * 1000)
+    beats = _hb_load()
+    old = beats.get(fid) if isinstance(beats.get(fid), dict) else {}
+    beats[fid] = {
+        "familyId": fid,
+        "familyName": (req.familyName or old.get("familyName") or "").strip()[:64],
+        "tier": (req.tier or old.get("tier") or "").strip()[:16],
+        "lastActiveAt": now,
+        "lastActiveText": _dt_cls.fromtimestamp(now / 1000).strftime("%Y-%m-%d %H:%M"),
+        "firstActiveAt": int(old.get("firstActiveAt") or now),
+    }
+    # 只保留最近 1000 个家庭，防止文件无限增长
+    if len(beats) > 1000:
+        beats = dict(sorted(beats.items(), key=lambda x: -int((x[1] or {}).get("lastActiveAt") or 0))[:1000])
+    _json_write(_HB_FILE, beats)
+    return {"ok": True, "familyId": fid, "lastActiveAt": now}
+
+
+def _premium_families() -> Dict[str, Dict[str, Any]]:
+    """汇总所有 premium 家庭及其最近活跃时间：云备份订阅状态 + 心跳记录双数据源。"""
+    now = int(time.time())
+    out: Dict[str, Dict[str, Any]] = {}
+    if _FAMILY_BACKUP_DIR.exists():
+        for p in _FAMILY_BACKUP_DIR.glob("*.json"):
+            try:
+                payload = json.loads(p.read_text(encoding="utf-8"))
+                raw = (payload.get("data") or {}).get("subscriptionStatus")
+                sub = json.loads(raw) if isinstance(raw, str) else None
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(sub, dict) or not sub.get("isSubscribed"):
+                continue
+            tier = str(sub.get("tier") or _SUB_PKG_FALLBACK.get(str(sub.get("planType") or ""), ""))
+            if tier != "premium":
+                continue
+            expire = int(sub.get("expireAt") or sub.get("expireDate") or 0)
+            if expire and expire < now:
+                continue
+            fid = str(payload.get("familyId") or p.stem)
+            out[fid] = {
+                "familyId": fid,
+                "familyName": "",
+                "lastActiveAt": int(sub.get("lastActiveAt") or 0),
+            }
+    for fid, hb in _hb_load().items():
+        if not isinstance(hb, dict) or str(hb.get("tier") or "") != "premium":
+            continue
+        item = out.setdefault(fid, {"familyId": fid, "familyName": "", "lastActiveAt": 0})
+        item["familyName"] = str(hb.get("familyName") or item.get("familyName") or "")
+        item["lastActiveAt"] = max(int(item.get("lastActiveAt") or 0), int(hb.get("lastActiveAt") or 0))
+        item["heartbeatAt"] = int(hb.get("lastActiveAt") or 0)
+    return out
+
+
+def _churn_scan(force: bool = False) -> Dict[str, Any]:
+    """V229: 扫描 premium 家庭，连续 >=3 天未打开 APP 的生成黄色预警（同一家庭只保留一条未处理）。"""
+    now = int(time.time() * 1000)
+    today = _date_cls.today().strftime("%Y-%m-%d")
+    state = _json_read(_CHURN_STATE_FILE, {})
+    if not isinstance(state, dict):
+        state = {}
+    if not force and str(state.get("lastScanDate") or "") == today:
+        return {"ok": True, "skipped": True, "reason": "今日已扫描", "warned": [],
+                "checked": int(state.get("checked") or 0)}
+
+    resolved = _err_load_resolved()
+    pending_fams = set()
+    for obj in _err_load_entries(300):
+        if str(obj.get("type") or "") != "churn_warning":
+            continue
+        if str(obj.get("errorId") or "") in resolved:
+            continue
+        fid = str(obj.get("familyId") or "")
+        if fid:
+            pending_fams.add(fid)
+
+    fams = _premium_families()
+    warned: List[Dict[str, Any]] = []
+    skipped: List[str] = []
+    for fid, info in fams.items():
+        last = int(info.get("lastActiveAt") or 0)
+        name = str(info.get("familyName") or "").strip() or fid
+        if last <= 0:
+            skipped.append(fid)          # 从未上报心跳（功能上线前的老用户）：不误报
+            continue
+        days = int((now - last) // 86400000)
+        if days < _CHURN_DAYS:
+            continue
+        if fid in pending_fams:
+            skipped.append(fid)          # 已有未处理预警，避免重复堆积
+            continue
+        msg = f"⚠️ 付费客户流失预警：{name}已 {days} 天未使用 APP，建议后台推送关怀消息。"
+        _err_write_line({
+            "source": "backend",
+            "type": "churn_warning",
+            "message": msg,
+            "familyId": fid,
+            "familyName": name,
+            "clientCreatedAt": now,
+            "inactiveDays": days,
+            "lastActiveAt": last,
+        })
+        warned.append({"familyId": fid, "familyName": name, "inactiveDays": days})
+    _json_write(_CHURN_STATE_FILE, {
+        "lastScanDate": today,
+        "lastScanAt": now,
+        "lastScanText": _dt_cls.fromtimestamp(now / 1000).strftime("%Y-%m-%d %H:%M"),
+        "checked": len(fams),
+        "warned": warned,
+        "skipped": skipped,
+    })
+    return {"ok": True, "skipped": False, "checked": len(fams), "warned": warned, "skippedFamilies": skipped}
+
+
+@app.post("/api/admin/churn-scan")
+async def admin_churn_scan() -> Dict[str, Any]:
+    """V229: 手动立即执行一次掉线扫描（后台每日 00:05 自动执行）。"""
+    return _churn_scan(force=True)
+
+
+@app.post("/api/admin/churn-status")
+async def admin_churn_status() -> Dict[str, Any]:
+    """V229: 查看最近一次扫描结果与心跳覆盖情况。"""
+    state = _json_read(_CHURN_STATE_FILE, {})
+    beats = _hb_load()
+    return {"ok": True, "state": state if isinstance(state, dict) else {},
+            "heartbeatCount": len(beats), "thresholdDays": _CHURN_DAYS,
+            "scanHour": _CHURN_SCAN_HOUR}
+
+
+_CHURN_TASK_STARTED = False
+
+
+async def _churn_scheduler() -> None:
+    """V229: 每天凌晨 00:05 执行一次掉线扫描；启动后先补扫一次。"""
+    await asyncio.sleep(15)
+    while True:
+        try:
+            _churn_scan()
+        except Exception as _e:
+            print(f"[churn] 扫描失败：{_e}")
+        try:
+            now = _dt_cls.now()
+            nxt = now.replace(hour=_CHURN_SCAN_HOUR, minute=5, second=0, microsecond=0)
+            if nxt <= now:
+                nxt = nxt + _td_cls(days=1)
+            wait = max(60.0, (nxt - now).total_seconds())
+        except Exception:
+            wait = 3600.0
+        await asyncio.sleep(wait)
+
+
+@app.on_event("startup")
+async def _churn_startup() -> None:
+    global _CHURN_TASK_STARTED
+    if _CHURN_TASK_STARTED:
+        return
+    _CHURN_TASK_STARTED = True
+    asyncio.create_task(_churn_scheduler())
+
+
 # V157: 文件末尾补跑别名注册——覆盖定义在本块之后的 /api/daily-tip、/api/weather、
 # /api/migration 等 POST 路由（catch-all 仅 GET，POST 别名无被吞风险；已注册路径自动去重）
 _register_api_prefix_aliases()
