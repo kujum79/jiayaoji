@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V229-20261026';
+        var APP_VER = 'V232-20261026';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -35165,9 +35165,9 @@ function renderFamily() {
         `);
         // V163: 超管专属快捷条（仅超管可见）—— 食养管理/文库管理/课程汇总/系统监控，一级直达
         if (typeof isSuperAdmin === 'function' && isSuperAdmin()) {
-            var _sBtn = 'flex:1 1 45%;min-width:0;box-sizing:border-box;padding:9px 6px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:13px;font-weight:600;color:#9A3412;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;line-height:1.3;';
+            var _sBtn = 'flex:1 1 0;min-width:0;box-sizing:border-box;padding:9px 4px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:12px;font-weight:600;color:#9A3412;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;line-height:1.3;white-space:nowrap;';
             familyList.insertAdjacentHTML('beforeend', `
-                <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:nowrap;">
                     <button type="button" onclick="_openFoodHallMgr()" style="${_sBtn}">食养管理</button>
                     <button type="button" id="superLibMgrBtn" style="${_sBtn}">文库管理</button>
                     <button type="button" onclick="_openCourseLibraryPanel()" style="${_sBtn}">课程汇总</button>
