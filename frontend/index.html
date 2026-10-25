@@ -35163,15 +35163,15 @@ function renderFamily() {
                 ${card('👨‍🍳', '我的创作', worksCnt ? worksCnt + ' 个作品' : '记录你的私房创作', 'openMyWorksPage()')}
             </div>
         `);
-        // V163: 超管专属快捷条（仅超管可见）—— 食养堂管理/文库管理/AI 用量，一级直达
+        // V163: 超管专属快捷条（仅超管可见）—— 食养管理/文库管理/课程汇总/系统监控，一级直达
         if (typeof isSuperAdmin === 'function' && isSuperAdmin()) {
-            var _sBtn = 'flex:1 1 0;min-width:0;padding:9px 6px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:13px;font-weight:600;color:#9A3412;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;line-height:1.3;';
+            var _sBtn = 'flex:1 1 45%;min-width:0;box-sizing:border-box;padding:9px 6px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:13px;font-weight:600;color:#9A3412;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;line-height:1.3;';
             familyList.insertAdjacentHTML('beforeend', `
                 <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-                    <button type="button" onclick="_openFoodHallMgr()" style="${_sBtn}flex:1 1 28%;">食养管理</button>
-                    <button type="button" id="superLibMgrBtn" style="${_sBtn}flex:1 1 28%;">文库管理</button>
-                    <button type="button" onclick="_openCourseLibraryPanel()" style="${_sBtn}flex:1 1 28%;">课程汇总</button>
-                    <button type="button" onclick="_openSystemMonitor()" style="${_sBtn}flex:1 1 28%;position:relative;">
+                    <button type="button" onclick="_openFoodHallMgr()" style="${_sBtn}">食养管理</button>
+                    <button type="button" id="superLibMgrBtn" style="${_sBtn}">文库管理</button>
+                    <button type="button" onclick="_openCourseLibraryPanel()" style="${_sBtn}">课程汇总</button>
+                    <button type="button" onclick="_openSystemMonitor()" style="${_sBtn}position:relative;">
                         系统监控<span id="monitorBadge" style="display:none;position:absolute;top:-6px;right:-4px;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;background:#DC2626;color:#fff;border-radius:9px;font-size:11px;font-weight:700;line-height:18px;text-align:center;">0</span>
                     </button>
                 </div>
