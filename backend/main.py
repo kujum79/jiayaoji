@@ -4556,6 +4556,240 @@ async def admin_error_resolve(req: ErrorResolveRequest) -> Dict[str, Any]:
     return {"ok": True, "resolvedCount": len(resolved)}
 
 
+# ========== V228: 报警「一键修复」（远程重置缓存 / 切换 AI 服务商）+ 全局安抚公告 ==========
+import sys as _sys
+
+_CMD_FILE = _ERR_LOG_DIR / "remote_commands.json"
+_NOTICE_FILE = _ERR_LOG_DIR / "global_notice.json"
+_AI_OVERRIDE_FILE = _ERR_LOG_DIR / "ai_provider_override.json"
+_CMD_TTL_MS = 30 * 60 * 1000          # 指令有效期：30 分钟内该家庭打开 APP 才会执行
+_CMD_KEEP_MS = 24 * 3600 * 1000       # 指令文件保留 24 小时
+
+# model_config 可能以包形式或同级模块形式导入，按已加载模块名取回同一实例
+_mc = _sys.modules.get("backend.model_config") or _sys.modules.get("model_config")
+_DEFAULT_PROVIDER_PRIORITY = {
+    _n: int(_c.get("priority", 99)) for _n, _c in (_mc.PROVIDERS.items() if _mc else [])
+}
+
+
+def _json_read(path: Path, default: Any) -> Any:
+    try:
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        pass
+    return default
+
+
+def _json_write(path: Path, obj: Any) -> bool:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(obj, ensure_ascii=False, indent=1), encoding="utf-8")
+        return True
+    except OSError as _e:
+        print(f"[admin-fix] 写入 {path.name} 失败：{_e}")
+        return False
+
+
+def _apply_provider_override() -> None:
+    """启动时应用 ai_provider_override.json 里保存的首选服务商（把它的优先级提到最前）。"""
+    if not _mc:
+        return
+    ov = _json_read(_AI_OVERRIDE_FILE, {})
+    name = str((ov or {}).get("provider") or "")
+    if not name or name not in _mc.PROVIDERS:
+        return
+    order = sorted(_mc.PROVIDERS.items(), key=lambda x: (x[0] != name, x[1].get("priority", 99)))
+    for _idx, (_n, _c) in enumerate(order):
+        _c["priority"] = _idx + 1
+
+
+_apply_provider_override()
+
+
+def _provider_list() -> List[Dict[str, Any]]:
+    """当前多模型路由层的服务商清单（含是否配置 Key / 是否当前首选）。"""
+    if not _mc:
+        return []
+    order = _mc.get_provider_order()
+    current = ""
+    for _n, _c in order:
+        if _c.get("api_key"):
+            current = _n
+            break
+    out: List[Dict[str, Any]] = []
+    for _n, _c in order:
+        _models = _c.get("models") or {}
+        out.append({
+            "name": _n,
+            "priority": int(_c.get("priority", 99)),
+            "hasKey": bool(_c.get("api_key")),
+            "isCurrent": _n == current,
+            "textModel": _models.get("text") or _models.get("text_fast") or "",
+            "supportsVision": bool(_models.get("vision")),
+        })
+    return out
+
+
+class AiProviderSwitchRequest(BaseModel):
+    provider: str = ""
+
+
+@app.post("/api/admin/ai-providers")
+async def admin_ai_providers() -> Dict[str, Any]:
+    """V228: 返回多模型路由层当前的服务商列表与优先级。"""
+    return {"ok": bool(_mc), "providers": _provider_list()}
+
+
+@app.post("/api/admin/ai-provider/switch")
+async def admin_ai_provider_switch(req: AiProviderSwitchRequest) -> Dict[str, Any]:
+    """V228: 一键把某个服务商提到路由最前（持久化，重启后仍生效）。"""
+    name = (req.provider or "").strip()
+    if not _mc or name not in _mc.PROVIDERS:
+        return {"ok": False, "error": "服务商不存在"}
+    if not (_mc.PROVIDERS[name].get("api_key") or ""):
+        return {"ok": False, "error": f"{name} 未配置 API Key，无法切换"}
+    order = sorted(_mc.PROVIDERS.items(), key=lambda x: (x[0] != name, x[1].get("priority", 99)))
+    for _idx, (_n, _c) in enumerate(order):
+        _c["priority"] = _idx + 1
+    _json_write(_AI_OVERRIDE_FILE, {"provider": name, "updatedAt": int(time.time() * 1000)})
+    print(f"[admin-fix] AI 服务商已切换为首选：{name}")
+    return {"ok": True, "current": name, "providers": _provider_list()}
+
+
+@app.post("/api/admin/ai-provider/reset")
+async def admin_ai_provider_reset() -> Dict[str, Any]:
+    """V228: 恢复默认优先级顺序。"""
+    if not _mc:
+        return {"ok": False, "error": "路由层未加载"}
+    for _n, _c in _mc.PROVIDERS.items():
+        if _n in _DEFAULT_PROVIDER_PRIORITY:
+            _c["priority"] = _DEFAULT_PROVIDER_PRIORITY[_n]
+    try:
+        _AI_OVERRIDE_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+    return {"ok": True, "providers": _provider_list()}
+
+
+class RemoteCommandRequest(BaseModel):
+    familyId: str = ""
+    familyName: str = ""
+    action: str = "reset_cache"
+    note: str = ""
+
+
+class RemoteCommandPollRequest(BaseModel):
+    familyId: str = ""
+
+
+@app.post("/api/admin/remote-command")
+async def admin_remote_command(req: RemoteCommandRequest) -> Dict[str, Any]:
+    """V228: 给指定家庭下发一条客户端指令（当前支持 reset_cache：清理草稿/卡死状态）。"""
+    fid = (req.familyId or "").strip()
+    if not fid:
+        return {"ok": False, "error": "缺少 familyId"}
+    action = (req.action or "").strip()
+    if action not in ("reset_cache",):
+        return {"ok": False, "error": "不支持的指令类型"}
+    now = int(time.time() * 1000)
+    items = _json_read(_CMD_FILE, [])
+    if not isinstance(items, list):
+        items = []
+    cmd = {
+        "cmdId": "cmd_" + _secrets.token_hex(4),
+        "familyId": fid,
+        "familyName": (req.familyName or "").strip()[:64],
+        "action": action,
+        "note": (req.note or "").strip()[:200],
+        "createdAt": now,
+        "createdText": _dt_cls.fromtimestamp(now / 1000).strftime("%Y-%m-%d %H:%M"),
+        "deliveredAt": 0,
+    }
+    items.append(cmd)
+    items = [x for x in items if isinstance(x, dict) and now - int(x.get("createdAt") or 0) < _CMD_KEEP_MS]
+    _json_write(_CMD_FILE, items[-200:])
+    return {"ok": True, "command": cmd}
+
+
+@app.post("/api/system/commands")
+async def system_commands(req: RemoteCommandPollRequest) -> Dict[str, Any]:
+    """V228: 客户端轮询自己的待执行指令（取一次即标记已投递，避免重复清理）。"""
+    fid = (req.familyId or "").strip()
+    if not fid:
+        return {"ok": False, "commands": []}
+    now = int(time.time() * 1000)
+    items = _json_read(_CMD_FILE, [])
+    if not isinstance(items, list):
+        items = []
+    picked: List[Dict[str, Any]] = []
+    changed = False
+    for x in items:
+        if not isinstance(x, dict) or str(x.get("familyId") or "") != fid:
+            continue
+        if int(x.get("deliveredAt") or 0) > 0:
+            continue
+        if now - int(x.get("createdAt") or 0) > _CMD_TTL_MS:
+            continue
+        x["deliveredAt"] = now
+        changed = True
+        picked.append({
+            "cmdId": x.get("cmdId") or "",
+            "action": x.get("action") or "reset_cache",
+            "note": x.get("note") or "",
+            "createdText": x.get("createdText") or "",
+        })
+    if changed:
+        _json_write(_CMD_FILE, items[-200:])
+    return {"ok": True, "commands": picked}
+
+
+class AnnouncementRequest(BaseModel):
+    action: str = "send"          # send / clear
+    text: str = ""
+    durationMinutes: int = 30
+
+
+@app.post("/api/admin/announcement")
+async def admin_announcement(req: AnnouncementRequest) -> Dict[str, Any]:
+    """V228: 发送/撤销全局安抚公告（所有在线用户顶部红条）。"""
+    now = int(time.time() * 1000)
+    if (req.action or "").strip() == "clear":
+        _json_write(_NOTICE_FILE, {"active": False, "updatedAt": now})
+        return {"ok": True, "active": False}
+    text = (req.text or "").strip()[:120] or "系统正在抢修，请稍后再试"
+    minutes = max(5, min(24 * 60, int(req.durationMinutes or 30)))
+    notice = {
+        "id": "ntc_" + _secrets.token_hex(4),
+        "text": text,
+        "active": True,
+        "createdAt": now,
+        "createdText": _dt_cls.fromtimestamp(now / 1000).strftime("%Y-%m-%d %H:%M"),
+        "expiresAt": now + minutes * 60000,
+    }
+    _json_write(_NOTICE_FILE, notice)
+    print(f"[admin-fix] 已发送全局安抚公告：{text}（{minutes} 分钟）")
+    return {"ok": True, "notice": notice}
+
+
+@app.post("/api/system/notice")
+async def system_notice() -> Dict[str, Any]:
+    """V228: 客户端轮询全局公告（未激活/已过期返回 null）。"""
+    now = int(time.time() * 1000)
+    n = _json_read(_NOTICE_FILE, {})
+    if isinstance(n, dict) and n.get("active") and int(n.get("expiresAt") or 0) > now:
+        return {
+            "ok": True,
+            "notice": {
+                "id": n.get("id") or "",
+                "text": n.get("text") or "",
+                "createdText": n.get("createdText") or "",
+                "expiresAt": int(n.get("expiresAt") or 0),
+            },
+        }
+    return {"ok": True, "notice": None}
+
+
 # V157: 文件末尾补跑别名注册——覆盖定义在本块之后的 /api/daily-tip、/api/weather、
 # /api/migration 等 POST 路由（catch-all 仅 GET，POST 别名无被吞风险；已注册路径自动去重）
 _register_api_prefix_aliases()

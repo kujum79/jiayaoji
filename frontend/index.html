@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V227-20261025';
+        var APP_VER = 'V228-20261025';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -10987,7 +10987,7 @@ function _monitorRowHtml(r) {
         '<div style="font-size:12px;color:#1F2937;line-height:1.7;word-break:break-all;">' + escapeHtml(r.message || '') + '</div>' +
         '<div style="display:flex;align-items:center;gap:8px;margin-top:6px;">' +
         '<span style="font-size:11px;color:#6B7280;">👪 ' + escapeHtml(fam) + '</span>' +
-        '<button type="button" onclick="_monitorResolve(\'' + escapeHtml(r.id || '') + '\')" style="margin-left:auto;border:1px solid #E5E7EB;background:#F9FAFB;border-radius:8px;padding:3px 9px;font-size:11px;color:#374151;cursor:pointer;">标记已处理</button>' +
+        '<button type="button" onclick="_openMonitorFix(\'' + escapeHtml(r.id || '') + '\')" style="margin-left:auto;border:1px solid #FDBA74;background:#FFF7ED;color:#9A3412;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;">🛠 修复</button>' +
         '</div></div>';
 }
 
@@ -10999,10 +10999,11 @@ function _monitorBodyHtml(d) {
     };
     var list = (d && Array.isArray(d.unresolved)) ? d.unresolved : [];
     return '<div style="padding:12px 16px 24px;">' +
-        '<div style="display:flex;gap:10px;margin-bottom:14px;">' +
+        '<div style="display:flex;gap:10px;margin-bottom:10px;">' +
         stat('今日报错总数', (d && d.todayErrorCount) || 0, '#DC2626') +
         stat('活跃付费客户', (d && d.activePaidCount) || 0, '#16A34A') +
         '</div>' +
+        '<button type="button" onclick="_openAnnounceSheet()" style="width:100%;border:none;border-radius:12px;background:#DC2626;color:#fff;font-size:13px;font-weight:700;padding:10px;cursor:pointer;margin-bottom:14px;box-shadow:0 2px 8px rgba(220,38,38,0.25);">📢 发送全局安抚公告</button>' +
         '<div style="display:flex;align-items:center;margin-bottom:8px;">' +
         '<div style="font-size:13px;font-weight:700;color:#1F2937;">🚨 未处理报警</div>' +
         '<span style="margin-left:8px;font-size:11px;color:#9CA3AF;">按时间倒序 · 共 ' + list.length + ' 条</span>' +
@@ -11074,6 +11075,357 @@ async function _monitorResolve(errorId) {
     _MONITOR_CACHE = null;
     _reloadSystemMonitor();
 }
+
+// ====== V228: 系统监控「一键修复」+ 全局安抚公告 ======
+var _MONITOR_FIX_ROW = null;
+var _AI_PROVIDERS = [];
+var _ANNOUNCE_MINUTES = 30;
+var _REMOTE_RESET_APPLYING = false;
+
+function _monitorFindRow(errorId) {
+    var list = (_MONITOR_CACHE && _MONITOR_CACHE.unresolved) || [];
+    for (var i = 0; i < list.length; i++) {
+        if (String(list[i].id || '') === String(errorId || '')) return list[i];
+    }
+    return null;
+}
+
+function _closeMonitorFix() {
+    var el = document.getElementById('monitorFixOverlay');
+    if (el) el.remove();
+}
+
+function _openMonitorFix(errorId) {
+    var row = _monitorFindRow(errorId);
+    _MONITOR_FIX_ROW = row || { id: errorId, type: 'api_timeout', familyId: '', familyName: '' };
+    _closeMonitorFix();
+    var m = _monitorTypeMeta(_MONITOR_FIX_ROW.type);
+    var isAi = String(_MONITOR_FIX_ROW.type || '') === 'ai_error';
+    var fam = _MONITOR_FIX_ROW.familyName || _MONITOR_FIX_ROW.familyId || '未知家庭';
+    var btn = 'width:100%;text-align:left;border:1px solid #EDE9E3;background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:9px;cursor:pointer;';
+    var subtitle = 'font-size:11px;color:#6B7280;margin-top:3px;line-height:1.6;';
+    var ov = document.createElement('div');
+    ov.id = 'monitorFixOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:10001;display:flex;align-items:flex-end;justify-content:center;';
+    ov.onclick = function (e) { if (e.target === ov) _closeMonitorFix(); };
+    ov.innerHTML =
+        '<div style="width:100%;max-width:430px;background:#F7F5F2;border-radius:18px 18px 0 0;padding:18px 16px 20px;">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">' +
+        '<div style="font-size:15px;font-weight:800;color:#1F2937;">🛠 修复处理</div>' +
+        '<span style="font-size:10px;font-weight:700;color:#fff;background:' + m.color + ';border-radius:6px;padding:1px 7px;">' + m.label + '</span>' +
+        '<button type="button" onclick="_closeMonitorFix()" style="margin-left:auto;border:none;background:none;font-size:13px;color:#9CA3AF;cursor:pointer;">✕</button>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#6B7280;margin-bottom:12px;word-break:break-all;">👪 ' + escapeHtml(fam) + ' · ' + escapeHtml(String(_MONITOR_FIX_ROW.message || '').slice(0, 60)) + '</div>' +
+        '<div id="monitorFixBody">' +
+        '<button type="button" onclick="_monitorFixResetCache()" style="' + btn + '">' +
+        '<div style="font-size:13px;font-weight:700;color:#1F2937;">🧹 重置该用户本地缓存</div>' +
+        '<div style="' + subtitle + '">向该家庭下发指令，其浏览器下次打开 APP 时自动清理草稿 / 卡死状态（保留订阅与家庭业务数据）</div></button>' +
+        (isAi ?
+            '<button type="button" onclick="_openAiProviderSheet()" style="' + btn + '">' +
+            '<div style="font-size:13px;font-weight:700;color:#1F2937;">🤖 切换备用 AI 服务商</div>' +
+            '<div style="' + subtitle + '">一键调整多模型路由层的首选服务商，立即生效</div></button>'
+            :
+            '<div style="border:1px dashed #E5E7EB;border-radius:12px;padding:10px 14px;margin-bottom:9px;font-size:11px;color:#9CA3AF;">🤖 切换备用 AI 服务商（仅「AI 异常」类型报警可用）</div>') +
+        '<button type="button" onclick="_monitorFixResolve()" style="' + btn + '">' +
+        '<div style="font-size:13px;font-weight:700;color:#16A34A;">✅ 标记为已解决</div>' +
+        '<div style="' + subtitle + '">从报警列表中移除该条记录</div></button>' +
+        '</div></div>';
+    document.body.appendChild(ov);
+}
+
+async function _monitorFixResetCache() {
+    var row = _MONITOR_FIX_ROW || {};
+    var fid = String(row.familyId || '');
+    if (!fid) { showToast('该条报错缺少家庭信息，无法下发指令'); return; }
+    try {
+        var res = await fetch('/api/admin/remote-command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ familyId: fid, familyName: row.familyName || '', action: 'reset_cache', note: row.message || '' })
+        });
+        var out = await res.json();
+        if (!out || !out.ok) { showToast('指令下发失败，请稍后重试'); return; }
+    } catch (e) {
+        showToast('指令下发失败，请稍后重试');
+        return;
+    }
+    _closeMonitorFix();
+    if (typeof getFamilyId === 'function' && getFamilyId() === fid) {
+        showToast('🛠 已开始清理本机缓存…');
+        _applyRemoteResetCache();
+    } else {
+        showToast('✅ 指令已下发，该家庭下次打开 APP 时自动生效');
+    }
+}
+
+async function _openAiProviderSheet() {
+    var body = document.getElementById('monitorFixBody');
+    if (!body) return;
+    body.innerHTML = '<div style="text-align:center;padding:22px;font-size:12px;color:#6B7280;">正在读取多模型路由配置…</div>';
+    var list = [];
+    try {
+        var res = await fetch('/api/admin/ai-providers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        var out = await res.json();
+        if (out && out.ok && Array.isArray(out.providers)) list = out.providers;
+    } catch (e) {}
+    _AI_PROVIDERS = list;
+    if (!list.length) {
+        body.innerHTML = '<div style="text-align:center;padding:22px;font-size:12px;color:#DC2626;">读取失败，请稍后重试</div>';
+        return;
+    }
+    var rows = list.map(function (p, idx) {
+        var tag = p.isCurrent
+            ? '<span style="font-size:10px;font-weight:700;color:#fff;background:#16A34A;border-radius:6px;padding:1px 6px;">当前</span>'
+            : (p.hasKey ? '' : '<span style="font-size:10px;font-weight:700;color:#9CA3AF;background:#F3F4F6;border-radius:6px;padding:1px 6px;">未配置 Key</span>');
+        return '<button type="button" onclick="_switchAiProvider(' + idx + ')" ' + (p.hasKey ? '' : 'disabled ') +
+            'style="width:100%;text-align:left;border:1px solid ' + (p.isCurrent ? '#BBF7D0' : '#EDE9E3') + ';background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:' + (p.hasKey ? 'pointer' : 'not-allowed') + ';opacity:' + (p.hasKey ? '1' : '0.55') + ';">' +
+            '<div style="display:flex;align-items:center;gap:6px;">' +
+            '<span style="font-size:13px;font-weight:700;color:#1F2937;">' + escapeHtml(p.name || '') + '</span>' + tag +
+            '<span style="margin-left:auto;font-size:10px;color:#9CA3AF;">优先级 ' + (p.priority || 0) + '</span></div>' +
+            '<div style="font-size:11px;color:#6B7280;margin-top:3px;">模型：' + escapeHtml(p.textModel || '—') + '</div></button>';
+    }).join('');
+    body.innerHTML =
+        '<div style="font-size:11px;color:#6B7280;margin-bottom:10px;">选择后立即调整路由优先级，并持久化到服务器（重启后仍生效）。</div>' +
+        rows +
+        '<button type="button" onclick="_resetAiProvider()" style="width:100%;border:1px solid #E5E7EB;background:#F9FAFB;border-radius:12px;padding:9px;font-size:12px;color:#374151;cursor:pointer;margin-top:2px;">↩️ 恢复默认优先级</button>' +
+        '<button type="button" onclick="_closeMonitorFix()" style="width:100%;border:none;background:none;border-radius:12px;padding:10px;font-size:12px;color:#6B7280;cursor:pointer;margin-top:4px;">取消</button>';
+}
+
+async function _switchAiProvider(idx) {
+    var p = _AI_PROVIDERS[idx];
+    if (!p || !p.hasKey) return;
+    try {
+        var res = await fetch('/api/admin/ai-provider/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: p.name })
+        });
+        var out = await res.json();
+        if (!out || !out.ok) { showToast((out && out.error) || '切换失败，请稍后重试'); return; }
+        showToast('✅ 已切换 AI 服务商：' + p.name);
+    } catch (e) {
+        showToast('切换失败，请稍后重试');
+        return;
+    }
+    _closeMonitorFix();
+    _reloadSystemMonitor();
+}
+
+async function _resetAiProvider() {
+    try {
+        var res = await fetch('/api/admin/ai-provider/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        var out = await res.json();
+        if (!out || !out.ok) { showToast('恢复失败，请稍后重试'); return; }
+        showToast('↩️ 已恢复默认优先级');
+    } catch (e) {
+        showToast('恢复失败，请稍后重试');
+        return;
+    }
+    _closeMonitorFix();
+    _reloadSystemMonitor();
+}
+
+function _monitorFixResolve() {
+    var row = _MONITOR_FIX_ROW || {};
+    _closeMonitorFix();
+    if (row.id) _monitorResolve(row.id);
+}
+
+// ---------- 全局安抚公告（超管发送 / 全体用户顶部红条） ----------
+function _removeNoticeBar() {
+    var el = document.getElementById('globalNoticeBar');
+    if (el) el.remove();
+}
+
+function _showNoticeBar(text) {
+    var el = document.getElementById('globalNoticeBar');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'globalNoticeBar';
+        el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:100000;background:#DC2626;color:#fff;text-align:center;padding:9px 14px;font-size:13px;font-weight:700;line-height:1.5;box-shadow:0 2px 10px rgba(220,38,38,0.35);';
+        document.body.appendChild(el);
+    }
+    el.textContent = '⚠️ ' + text;
+}
+
+async function _noticePoll() {
+    try {
+        var res = await fetch('/api/system/notice', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', __noLog: true
+        });
+        var out = await res.json();
+        var n = (out && out.notice) || null;
+        if (n && n.text) _showNoticeBar(n.text);
+        else _removeNoticeBar();
+    } catch (e) {}
+}
+
+function _closeAnnounceSheet() {
+    var el = document.getElementById('announceOverlay');
+    if (el) el.remove();
+}
+
+function _setAnnounceMinutes(min) {
+    _ANNOUNCE_MINUTES = min;
+    ['30', '60', '120'].forEach(function (k) {
+        var b = document.getElementById('announceMin' + k);
+        if (!b) return;
+        var on = Number(k) === min;
+        b.style.background = on ? '#FEE2E2' : '#F9FAFB';
+        b.style.borderColor = on ? '#DC2626' : '#E5E7EB';
+        b.style.color = on ? '#B91C1C' : '#6B7280';
+    });
+}
+
+function _openAnnounceSheet() {
+    _closeAnnounceSheet();
+    _ANNOUNCE_MINUTES = 30;
+    var ov = document.createElement('div');
+    ov.id = 'announceOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:10002;display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.onclick = function (e) { if (e.target === ov) _closeAnnounceSheet(); };
+    var minBtn = function (k) {
+        return '<button type="button" id="announceMin' + k + '" onclick="_setAnnounceMinutes(' + k + ')" style="flex:1;border:1px solid #E5E7EB;background:#F9FAFB;color:#6B7280;border-radius:9px;padding:7px 0;font-size:12px;font-weight:600;cursor:pointer;">' + k + ' 分钟</button>';
+    };
+    ov.innerHTML =
+        '<div style="width:100%;max-width:380px;background:#fff;border-radius:16px;padding:18px 16px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">' +
+        '<div style="font-size:15px;font-weight:800;color:#1F2937;margin-bottom:4px;">📢 发送全局安抚公告</div>' +
+        '<div style="font-size:11px;color:#6B7280;margin-bottom:10px;">所有当前打开 APP 的用户会在顶部看到红色提示条</div>' +
+        '<input id="announceText" maxlength="120" value="系统正在抢修，请稍后再试" style="width:100%;box-sizing:border-box;border:1px solid #E5E7EB;border-radius:10px;padding:10px 12px;font-size:13px;color:#1F2937;outline:none;margin-bottom:10px;">' +
+        '<div style="display:flex;gap:8px;margin-bottom:14px;">' + minBtn('30') + minBtn('60') + minBtn('120') + '</div>' +
+        '<button type="button" onclick="_sendAnnouncement()" style="width:100%;border:none;border-radius:11px;background:#DC2626;color:#fff;font-size:13px;font-weight:700;padding:11px;cursor:pointer;">发送公告</button>' +
+        '<button type="button" onclick="_clearAnnouncement()" style="width:100%;border:1px solid #E5E7EB;background:#F9FAFB;border-radius:11px;color:#374151;font-size:12px;font-weight:600;padding:9px;cursor:pointer;margin-top:8px;">撤销当前公告</button>' +
+        '<button type="button" onclick="_closeAnnounceSheet()" style="width:100%;border:none;background:none;color:#9CA3AF;font-size:12px;padding:9px;cursor:pointer;">取消</button>' +
+        '</div>';
+    document.body.appendChild(ov);
+    _setAnnounceMinutes(30);
+}
+
+async function _sendAnnouncement() {
+    var el = document.getElementById('announceText');
+    var text = (el && el.value ? el.value : '').trim() || '系统正在抢修，请稍后再试';
+    try {
+        var res = await fetch('/api/admin/announcement', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'send', text: text, durationMinutes: _ANNOUNCE_MINUTES })
+        });
+        var out = await res.json();
+        if (!out || !out.ok) { showToast('公告发送失败，请稍后重试'); return; }
+        showToast('📢 公告已发送，在线用户将看到顶部提示');
+    } catch (e) {
+        showToast('公告发送失败，请稍后重试');
+        return;
+    }
+    _closeAnnounceSheet();
+    _noticePoll();
+}
+
+async function _clearAnnouncement() {
+    try {
+        var res = await fetch('/api/admin/announcement', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'clear' })
+        });
+        var out = await res.json();
+        if (!out || !out.ok) { showToast('撤销失败，请稍后重试'); return; }
+    } catch (e) {
+        showToast('撤销失败，请稍后重试');
+        return;
+    }
+    _removeNoticeBar();
+    _closeAnnounceSheet();
+    showToast('已撤销全局公告');
+}
+
+// ---------- 远程指令：清理该用户草稿 / 卡死状态 ----------
+var _REMOTE_RESET_PROTECT = ['foodHallArticles', 'foodHallDrafts', 'courseFolders', 'courseArticles',
+    'courseLibrary', 'eduCourses', 'eduCoursesVer', 'courseLibraryPurchases',
+    'jj_login_user', 'jj_login_family', 'familyId_', 'familyName_', 'superAdmin'];
+var _REMOTE_RESET_PREFIX = ['ai_cache_', 'aiRecipeCache', 'menuParseCache', 'tempPrepNewBuy',
+    'lastSplitMembers', 'jj_aiErrorSeenTs', 'dailyReviewDone_', 'kpiVegBoostWeek', 'currentChatCustomTitle'];
+var _REMOTE_RESET_RE = /(^|[_\-.$])(draft|tmp|temp|retry|pending|stuck|busy|loading)([_\-.$]|$)/i;
+
+function _remoteKeyBase(full) {
+    var fid = (typeof getFamilyId === 'function') ? getFamilyId() : null;
+    if (fid && full.indexOf(fid + '_') === 0) return full.slice(fid.length + 1);
+    return full;
+}
+
+function _remoteKeyProtected(base) {
+    var i;
+    for (i = 0; i < _REMOTE_RESET_PROTECT.length; i++) {
+        var p = _REMOTE_RESET_PROTECT[i];
+        if (base === p || base.indexOf(p) === 0) return true;
+    }
+    if (typeof _FAMILY_BACKUP_KEYS !== 'undefined') {
+        for (i = 0; i < _FAMILY_BACKUP_KEYS.length; i++) {
+            var b = _FAMILY_BACKUP_KEYS[i];
+            if (base === b || base.indexOf(b) === 0) return true;
+        }
+    }
+    return false;
+}
+
+function _applyRemoteResetCache() {
+    if (_REMOTE_RESET_APPLYING) return;
+    _REMOTE_RESET_APPLYING = true;
+    var removed = 0;
+    try {
+        var targets = [];
+        for (var i = 0; i < localStorage.length; i++) {
+            var full = localStorage.key(i);
+            if (!full) continue;
+            var base = _remoteKeyBase(full);
+            if (_remoteKeyProtected(base)) continue;
+            var hit = _REMOTE_RESET_RE.test(base);
+            if (!hit) {
+                for (var j = 0; j < _REMOTE_RESET_PREFIX.length; j++) {
+                    if (base === _REMOTE_RESET_PREFIX[j] || base.indexOf(_REMOTE_RESET_PREFIX[j]) === 0) { hit = true; break; }
+                }
+            }
+            if (hit) targets.push(full);
+        }
+        for (var k = 0; k < targets.length; k++) {
+            localStorage.removeItem(targets[k]);
+            removed++;
+        }
+        try { sessionStorage.clear(); } catch (e) {}
+    } catch (e) {}
+    showToast(removed > 0 ? ('🛠 已清理 ' + removed + ' 项本地缓存，正在刷新…') : '🛠 正在刷新页面以恢复状态…');
+    setTimeout(function () {
+        try { location.reload(); } catch (e) {}
+    }, 1200);
+}
+
+async function _remoteCmdPoll() {
+    var fid = (typeof getFamilyId === 'function') ? getFamilyId() : null;
+    if (!fid) return;
+    try {
+        var res = await fetch('/api/system/commands', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ familyId: fid }), __noLog: true
+        });
+        var out = await res.json();
+        var cmds = (out && out.commands) || [];
+        for (var i = 0; i < cmds.length; i++) {
+            if (cmds[i] && cmds[i].action === 'reset_cache') { _applyRemoteResetCache(); return; }
+        }
+    } catch (e) {}
+}
+
+(function _v228StartPolling() {
+    function kick() {
+        try { _noticePoll(); } catch (e) {}
+        try { _remoteCmdPoll(); } catch (e) {}
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () { setTimeout(kick, 2500); });
+    } else {
+        setTimeout(kick, 2500);
+    }
+    setInterval(kick, 90000);
+})();
 
 // ========== V226: 全局错误日志（systemErrorLogs）+ 后端上报 ==========
 var _ERR_LOG_KEY = 'systemErrorLogs';
@@ -68676,5 +69028,6 @@ setTimeout(function () { try { _maybeGenerateDailyLesson(); } catch (e) {} }, 80
         </div>
     </div>
 </div>
+
 </body>
 </html>
