@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V242-20261026';
+        var APP_VER = 'V245-20261026';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -9394,6 +9394,18 @@ function getFamilyTags(familyMembers) {
 // 课程匹配推荐：系列为单位，folder.targetTags 与 familyTags 有交集即命中
 function getRecommendedCourses(familyMembers) {
     var familyTags = getFamilyTags(familyMembers);
+    // V245: 订阅时勾选的特殊需求也作为推荐标签参与课程匹配
+    try {
+        var _st = (typeof _getSubscriptionStatus === 'function') ? _getSubscriptionStatus() : null;
+        var _needs = (_st && (_st.needTags || _st.selectedNeeds)) || [];
+        if (Array.isArray(_needs)) {
+            _needs.forEach(function (k) {
+                if (!k) return;
+                var dup = familyTags.some(function (t) { return _tagNorm(t) === _tagNorm(k); });
+                if (!dup) familyTags.push(String(k));
+            });
+        }
+    } catch (e) {}
     var tagSet = {};
     familyTags.forEach(function (t) { tagSet[_tagNorm(t)] = true; });
     var folders = [], articles = [];
@@ -31027,19 +31039,42 @@ function _closeDtFull() {
 var _SUBSCRIPTION_KEY = 'subscriptionStatus';
 // V202: 双轨套餐——基础服务（体验期全免，期满 9.9/99）、全家桶订阅（含特殊人群，29/299）
 var _SUBSCRIPTION_TIERS = [
-    { key: 'basic', icon: '🌱', title: '基础服务', subtitle: '体验期 2 个月全免',
-      desc: '覆盖家庭日常营养建议与常规食材规划', priceMonth: '9.9元/月', priceYear: '99元/年', trialDays: 60 },
-    { key: 'premium', icon: '🎯', title: '全家桶订阅', subtitle: '含特殊人群深度定制',
-      desc: '婴儿/老人/增高/体育生/康养，AI 每日推演家庭需求', priceMonth: '29元/月', priceYear: '299元/年' }
+    { key: 'basic', icon: '🌱', title: '基础服务', badge: '体验期2个月全免', subtitle: '覆盖家庭日常食材与食谱规划',
+      descLines: [{ text: 'APP 全功能无限制使用' }],
+      priceMonth: '9.9元/月', priceYear: '99元/年', trialDays: 60 },
+    { key: 'premium', icon: '🎯', title: '全家桶订阅', badge: '含基础服务', subtitle: '全订阅健康专享，含特殊人群深度定制',
+      descLines: [
+        { text: '专属饮食认知课堂 + 每日专属微课' },
+        { text: '深度健康复盘与治未病风险预警' },
+        { text: '针对孕妇/婴儿/生病/增高/体育生/健身等专项定制' },
+        { text: 'AI营养师极速干预建议' },
+        { text: '每年 3-4 次专项深度调理周期' }
+      ],
+      priceMonth: '29元/月', priceYear: '299元/年' }
 ];
 // 旧三档 education/special_care/premium 的兼容映射——老订阅用户自动归入全家桶
 var _SUBSCRIPTION_PKG_MAP = { 'education': 'premium', 'special_care': 'premium', 'premium': 'premium' };
+// V245: 订阅勾选的特殊需求（needTags）转成一句可直接注入配餐 Prompt 的说明
+function _subNeedTagsBrief() {
+    try {
+        var st = _getSubscriptionStatus();
+        var arr = (st && (st.needTags || st.selectedNeeds)) || [];
+        if (!Array.isArray(arr) || !arr.length) return '';
+        var labels = arr.map(function (k) {
+            for (var i = 0; i < _SUBSCRIPTION_NEEDS.length; i++) {
+                if (_SUBSCRIPTION_NEEDS[i].key === k) return _SUBSCRIPTION_NEEDS[i].label;
+            }
+            return String(k);
+        });
+        return '本家庭已勾选特殊需求：' + labels.join('、') + '。请在配餐与推荐时优先照顾这些成员。';
+    } catch (e) { return ''; }
+}
 // V201: 家庭需求勾选选项，key 写入 needTags
 var _SUBSCRIPTION_NEEDS = [
     { key: '婴儿', label: '有宝宝（0-3岁辅食）' },
     { key: '老人', label: '有老人（慢病/软食）' },
     { key: '增高', label: '需增高（发育期青少年）' },
-    { key: '体育生', label: '体育生（高能/增肌）' },
+    { key: '体育生', label: '体育生/健身（高能/增肌）' },
     { key: '康养', label: '康养恢复（术后/血虚/孕妇）' }
 ];
 function _getSubscriptionStatus() {
@@ -31149,8 +31184,9 @@ function openSubscriptionModal(mode) {
     var m = mode || 'intro';
     if (typeof isLogined === 'function' && !isLogined()) { showLoginPage(); return; }
     if (m === 'basic' || m === 'premium') {
+        selectedPlan = m;
         _subSelectedTier = m;
-        _openSubscribeModal();
+        _openSubscribeModal(m);
         return;
     }
     _openSubscribeGuide();
@@ -31404,21 +31440,31 @@ function _closeSubscribeGuide() {
 }
 
 // V202: 订阅中心面板（双轨套餐 + 家庭需求绑定 + 算力说明）
-var _subSelectedTier = 'basic';    // 默认选中基础服务（体验期全免）
+var selectedPlan = 'premium';     // V245: 当前选中的套餐，默认全家桶
+var _subSelectedTier = 'premium'; // 兼容旧引用，与 selectedPlan 保持同步
 var _subSelectedNeeds = [];       // V201/V202: 用户勾选的家庭需求 needTags
-function _openSubscribeModal() {
+function _subPayBtnText() {
+    return selectedPlan === 'basic' ? '立即订阅基础版（99元/年）' : '立即订阅全家桶（299元/年）';
+}
+function _openSubscribeModal(preferTier) {
     var old = document.getElementById('subscribeOv');
     if (old) old.remove();
+    // V245: 每次打开默认选中全家桶，仅显式指定 basic 时选基础版
+    selectedPlan = (preferTier === 'basic') ? 'basic' : 'premium';
+    _subSelectedTier = selectedPlan;
     // V202: 双轨套餐卡片（基础服务 / 全家桶订阅）
     var cardsHtml = _SUBSCRIPTION_TIERS.map(function (tier) {
-        var selected = (tier.key === _subSelectedTier);
+        var selected = (tier.key === selectedPlan);
         var isBasic = (tier.key === 'basic');
         var badgeHtml = isBasic
-            ? '<span style="font-size:10px;color:#047857;background:#ECFDF5;border-radius:8px;padding:1px 6px;border:1px solid #A7F3D0;margin-left:4px;">🎁 ' + (tier.trialDays || 60) + '天全免</span>'
-            : '<span style="font-size:10px;color:#F97316;background:#FFF7ED;border-radius:8px;padding:1px 6px;border:1px solid #FED7AA;margin-left:4px;">含特殊人群</span>';
-        return '<div data-subtier="' + tier.key + '" onclick="_subSelectTier(\'' + tier.key + '\')" style="cursor:pointer;padding:14px;border-radius:12px;border:'
-            + (selected ? '2px solid #F97316;background:#FFF7ED;' : '1px solid #E5E7EB;background:white;')
+            ? '<span style="font-size:10px;color:#047857;background:#ECFDF5;border-radius:8px;padding:1px 6px;border:1px solid #A7F3D0;margin-left:4px;white-space:nowrap;">' + (tier.badge || ((tier.trialDays || 60) + '天全免')) + '</span>'
+            : '<span style="font-size:10px;color:#F97316;background:#FFF7ED;border-radius:8px;padding:1px 6px;border:1px solid #FED7AA;margin-left:4px;white-space:nowrap;">' + (tier.badge || '') + '</span>';
+        // V245: 选中态——右上角绿色打勾图标 + 加粗红色边框
+        var checkHtml = '<span data-tiercheck="' + tier.key + '" style="display:' + (selected ? 'flex' : 'none') + ';position:absolute;top:-7px;right:-5px;width:20px;height:20px;border-radius:50%;background:#10B981;color:#fff;font-size:12px;font-weight:700;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(16,185,129,.4);z-index:2;">✓</span>';
+        return '<div data-subtier="' + tier.key + '" onclick="_subSelectTier(\'' + tier.key + '\')" style="position:relative;cursor:pointer;padding:14px;border-radius:12px;border:'
+            + (selected ? '3px solid #EF4444;background:#FFF7F7;box-shadow:0 2px 10px rgba(239,68,68,.15);' : '1px solid #E5E7EB;background:white;')
             + 'margin-bottom:10px;transition:all .15s;">'
+            + checkHtml
             + '<div style="display:flex;align-items:flex-start;gap:12px;">'
             + '<div style="font-size:28px;flex-shrink:0;">' + tier.icon + '</div>'
             + '<div style="flex:1;min-width:0;">'
@@ -31427,7 +31473,12 @@ function _openSubscribeModal() {
             + badgeHtml
             + '</div>'
             + '<div style="font-size:11px;color:#92400E;margin-top:2px;">' + tier.subtitle + '</div>'
-            + '<div style="font-size:12px;color:#6B7280;margin-top:4px;line-height:1.5;">' + tier.desc + '</div>'
+            + '<div style="font-size:12px;color:#6B7280;margin-top:4px;line-height:1.55;">'
+            + (tier.descLines || []).map(function (ln) {
+                if (ln.head) return '<div style="font-weight:700;color:#C2410C;margin-bottom:2px;">' + ln.text + '</div>';
+                return '<div style="display:flex;gap:4px;"><span style="flex-shrink:0;">·</span><span style="flex:1;min-width:0;">' + ln.text + '</span></div>';
+            }).join('')
+            + '</div>'
             + '</div>'
             + '<div style="font-size:14px;font-weight:700;color:#F97316;white-space:nowrap;text-align:right;">'
             + '<div>' + tier.priceMonth + '</div>'
@@ -31436,21 +31487,17 @@ function _openSubscribeModal() {
             + '</div></div>';
     }).join('');
 
-    // V201: 家庭需求勾选区——回填上次订阅时的勾选与选中的 tier
+    // V201: 家庭需求勾选区——回填上次订阅时勾选的需求（套餐选中态固定以 selectedPlan 为准）
     try {
         var prev = _getSubscriptionStatus();
         if (prev) {
             var prevNeeds = prev.needTags || prev.selectedNeeds;
             if (prevNeeds && Array.isArray(prevNeeds)) _subSelectedNeeds = prevNeeds.slice();
-            var prevTier = prev.tier || _SUBSCRIPTION_PKG_MAP[prev.planType];
-            if (prevTier && _SUBSCRIPTION_TIERS.some(function (t) { return t.key === prevTier; })) {
-                _subSelectedTier = prevTier;
-            }
         }
     } catch (e) {}
     if (!Array.isArray(_subSelectedNeeds)) _subSelectedNeeds = [];
     var needsHtml = '<div style="background:#FFFBEB;border:1px solid #FEF3C7;border-radius:12px;padding:12px 14px;margin-bottom:14px;">'
-        + '<div style="font-size:13px;color:#92400E;font-weight:600;">📌 请为您家勾选核心需求，AI 将以此调整推送方向：</div>'
+        + '<div style="font-size:13px;color:#92400E;font-weight:600;">📌 请为您家勾选特殊需求，AI 将以此调整推送特别方案：</div>'
         + '<div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;">'
         + _SUBSCRIPTION_NEEDS.map(function (n) {
             var checked = _subSelectedNeeds.indexOf(n.key) >= 0;
@@ -31460,9 +31507,16 @@ function _openSubscribeModal() {
                 + '</label>';
         }).join('')
         + '</div></div>';
-    // V202: 算力说明提示卡
+    // V202: 算力说明提示卡（V245: 修正文案语病，分段展示）
     var costHtml = '<div style="background:#F3F4F6;border:1px solid #E5E7EB;border-radius:12px;padding:12px 14px;margin-top:8px;">'
-        + '<div style="font-size:12px;color:#4B5563;line-height:1.7;">💡 为什么订阅需要付费？专属方案需要每日进行 AI 动态推演与深度分析，伴随较高的算力成本。全家桶将为您提供更深度的定制服务。</div>'
+        + '<div style="font-size:12px;color:#1F2937;line-height:1.7;font-weight:600;">💡 为什么订阅需要付费？</div>'
+        + '<div style="font-size:12px;color:#4B5563;line-height:1.75;margin-top:4px;">我们提供 60 天全免体验，是因为相信它能帮到您。但每日的 AI 深度推演与专属算力成本真实存在，我们希望用透明的价格，为您提供长久的健康管家服务。</div>'
+        + '<div style="font-size:12px;color:#4B5563;line-height:1.75;margin-top:6px;">99元/年初订阅，买的是全家人的饮食知识库与体系化课堂。</div>'
+        + '<div style="font-size:12px;color:#4B5563;line-height:1.75;margin-top:6px;">299元/年全订阅，不仅有 APP 全功能无限制使用，更有 365 天的深度健康体检、专项调理计划。每天约 8 毛 2 分钱，请个专业管家回家，让全家少生病、多健康！</div>'
+        + '</div>';
+    // V244: 订阅联系与关注渠道
+    var contactHtml = '<div style="background:#FFFBEB;border:1px solid #FEF3C7;border-radius:12px;padding:12px 14px;margin-top:8px;">'
+        + '<div style="font-size:12px;color:#92400E;line-height:1.75;">订阅后，如有任何问题可发邮件69390597@qq.com或加qq号69390597，或请关注小红书及抖音号：家肴记；亦可稍后关注公众号及视频号：智厨</div>'
         + '</div>';
 
     var ov = document.createElement('div');
@@ -31479,15 +31533,15 @@ function _openSubscribeModal() {
         + '<span style="margin-left:auto;font-size:11px;color:#9CA3AF;">按月订阅·随时取消</span>'
         + '<button onclick="_closeSubscribeModal()" style="border:none;background:none;font-size:20px;cursor:pointer;color:#9CA3AF;">✕</button>'
         + '</div>'
-        + '<div style="font-size:12px;color:#6B7280;margin-top:6px;line-height:1.6;">基于家庭成员的年龄、体质、健康状况与饮食偏好，由营养师每周为全家定制专属食谱与饮食方案。</div>'
+        + '<div style="font-size:12px;color:#6B7280;margin-top:6px;line-height:1.6;">基于家庭成员的年龄、体质、健康状况与饮食偏好，定制专属饮食方案。</div>'
         + '</div>'
-        + '<div style="flex:1;overflow-y:auto;padding:14px 18px;">' + needsHtml + cardsHtml + costHtml + '</div>'
+        + '<div style="flex:1;overflow-y:auto;padding:14px 18px;">' + needsHtml + cardsHtml + costHtml + contactHtml + '</div>'
         + '<div style="flex-shrink:0;padding:10px 18px calc(14px + env(safe-area-inset-bottom));border-top:1px solid #F3F4F6;background:white;">'
         + (_subTierState() === 'basic'
             ? '<button onclick="_mockSubscribePay(\'upgrade\')" style="width:100%;height:38px;border-radius:10px;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:8px;">升级全订阅（补差价 ¥200）</button>'
             : '')
-        + '<button onclick="_subscribePay()" style="width:100%;height:42px;border-radius:12px;border:none;background:#F97316;color:white;font-size:15px;font-weight:600;cursor:pointer;">立即订阅</button>'
-        + '<div style="font-size:10px;color:#9CA3AF;margin-top:8px;text-align:center;">基础服务体验期 60 天全免，期满后可随时取消</div>'
+        + '<button id="subPayBtn" onclick="_subscribePay()" style="width:100%;height:42px;border-radius:12px;border:none;background:#F97316;color:white;font-size:15px;font-weight:600;cursor:pointer;">' + _subPayBtnText() + '</button>'
+        + '<div style="font-size:10px;color:#9CA3AF;margin-top:8px;text-align:center;">基础服务体验期 60 天全免，订阅期满后自动续费或可随时取消</div>'
         + '</div>';
     ov.appendChild(sheet);
     document.body.appendChild(ov);
@@ -31496,14 +31550,27 @@ function _openSubscribeModal() {
         sheet.style.transform = 'translateY(0)';
     });
 }
-// V202: 选中/切换双轨套餐（按 tier key）
+// V202/V245: 选中/切换双轨套餐（按 tier key），同步绿色打勾图标与底部按钮文案
 function _subSelectTier(tierKey) {
-    _subSelectedTier = tierKey;
+    selectedPlan = (tierKey === 'basic') ? 'basic' : 'premium';
+    _subSelectedTier = selectedPlan;
     document.querySelectorAll('[data-subtier]').forEach(function (el) {
         var key = el.getAttribute('data-subtier');
-        if (key === tierKey) { el.style.border = '2px solid #F97316'; el.style.background = '#FFF7ED'; }
-        else { el.style.border = '1px solid #E5E7EB'; el.style.background = 'white'; }
+        var isOn = (key === selectedPlan);
+        if (isOn) {
+            el.style.border = '3px solid #EF4444';
+            el.style.background = '#FFF7F7';
+            el.style.boxShadow = '0 2px 10px rgba(239,68,68,.15)';
+        } else {
+            el.style.border = '1px solid #E5E7EB';
+            el.style.background = 'white';
+            el.style.boxShadow = 'none';
+        }
+        var chk = el.querySelector('[data-tiercheck]');
+        if (chk) chk.style.display = isOn ? 'flex' : 'none';
     });
+    var btn = document.getElementById('subPayBtn');
+    if (btn) btn.textContent = _subPayBtnText();
 }
 // V201/V202: 勾选/取消家庭需求
 function _subToggleNeed(key) {
@@ -31536,14 +31603,15 @@ function _closeSubscribeModal() {
     setTimeout(function () { ov.remove(); }, 260);
 }
 function _subscribePay() {
-    _applySubscription(_subSelectedTier);
+    _applySubscription(selectedPlan);
     _closeSubscribeModal();
-    var tierLabels = { basic: '🌱 基础服务', premium: '🎯 全家桶订阅' };
     var tierDef = null;
-    for (var i = 0; i < _SUBSCRIPTION_TIERS.length; i++) { if (_SUBSCRIPTION_TIERS[i].key === _subSelectedTier) { tierDef = _SUBSCRIPTION_TIERS[i]; break; } }
-    var days = (tierDef && tierDef.trialDays) ? tierDef.trialDays : 30;
-    var suffix = tierDef && tierDef.trialDays ? '（体验期 ' + days + ' 天全免）' : '';
-    showToast && showToast('✅ 订阅成功！已为您解锁【' + (tierLabels[_subSelectedTier] || '专属方案') + '】' + suffix);
+    for (var i = 0; i < _SUBSCRIPTION_TIERS.length; i++) { if (_SUBSCRIPTION_TIERS[i].key === selectedPlan) { tierDef = _SUBSCRIPTION_TIERS[i]; break; } }
+    var days = (tierDef && tierDef.trialDays) ? tierDef.trialDays : 365;
+    var suffix = (tierDef && tierDef.trialDays) ? '（含 ' + days + ' 天免费体验）' : '';
+    var label = selectedPlan === 'basic' ? '🌱 基础服务' : '🎯 全家桶订阅';
+    var needCnt = (_subSelectedNeeds || []).length;
+    showToast && showToast('✅ 订阅成功！已为您解锁【' + label + '】' + suffix + (needCnt ? '，已绑定 ' + needCnt + ' 项特殊需求' : ''));
 }
 function _subscribePoints() {
     _applySubscription(_subSelectedTier);
@@ -51719,6 +51787,11 @@ async function generateAiMealRecommendation() {
         if (knowledgeSummary) {
             userMessage += `【维度③ 食知-用户浏览/收藏知识】\n${knowledgeSummary}\n`;
         }
+        // V245: 订阅勾选的特殊需求也加入配餐约束
+        if (typeof _subNeedTagsBrief === 'function') {
+            var _needBrief1 = _subNeedTagsBrief();
+            if (_needBrief1) userMessage += `【订阅特殊需求】\n${_needBrief1}\n`;
+        }
         // V234: 专项计划与全家三餐合并（单日推荐）
         var _spBrief1 = (typeof getActiveSpecialPlansBriefLines === 'function') ? getActiveSpecialPlansBriefLines() : [];
         var _hasSP1 = _spBrief1.length > 0;
@@ -52682,6 +52755,11 @@ function buildRecommendationPrompt(data, weekDatesStr) {
         prompt += `【人群食疗约束规则】\n${groupConstraints}\n\n`;
     }
 
+    // V245: 订阅勾选的特殊需求也加入一周配餐约束
+    if (typeof _subNeedTagsBrief === 'function') {
+        var _needBriefWeek = _subNeedTagsBrief();
+        if (_needBriefWeek) prompt += `【订阅特殊需求】\n${_needBriefWeek}\n\n`;
+    }
     // V234: 专项计划与全家三餐合并 —— 读取激活中的专项计划，强制优先满足，并在 JSON 中标注 specialInterventions
     var activeSPBrief = (typeof getActiveSpecialPlansBriefLines === 'function') ? getActiveSpecialPlansBriefLines() : [];
     var hasActiveSP = activeSPBrief.length > 0;
