@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V237-20261026';
+        var APP_VER = 'V238-20261026';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -15733,6 +15733,9 @@ function _savingRestaurantFallback(name) {
     var n = name || '';
     // V99: 虾皮/虾米是少量配料不算海鲜大菜，避免「冬瓜虾皮汤」被按大虾计价
     if (/虾(?!皮|米)|蟹|贝|鱿|鲍|海参|黄颡/.test(n)) return 36;
+    // V238: 补「鱼」——原规则漏了鱼，清蒸鲈鱼/鲫鱼等落入素菜兜底 ¥13/人，和清蒸鱼 ¥36 严重不一致；
+    // 「鱼香」是调味做法（鱼香肉丝/鱼香茄子）不含鱼，单独按猪肉/素菜口径
+    if (!/鱼香/.test(n) && /鱼|鳕|鲈|鲫|鲳|带鱼|龙利|罗非|三文/.test(n)) return 34;
     if (/牛腩|牛肉|牛排|牛柳/.test(n)) return 32;
     if (/排骨|肘子|红烧肉|猪蹄/.test(n)) return 30;
     if (/鸡|鸭|鹅|鸽子/.test(n)) return 22;
@@ -15773,16 +15776,34 @@ function getDishRestaurantPerPerson(dishName) {
     if (!p) p = _savingRestaurantFallback(key);
     return Math.max(3, Math.round(p));
 }
+// V238: 外面吃总价的口径修正——一人一份的主食/蛋/饮品按人数线性翻倍；
+// 一桌共享的菜/汤/羹不线性翻倍（3 人约 2.2 倍），避免「清蒸鱼 ¥36/人 × 3 = ¥108 一条鱼」这类离谱值
+var SAVING_PER_PERSON_RE = /^(米饭|白米饭|糙米饭|杂粮饭|蛋炒饭|炒饭|煲仔饭|面条|拌面|阳春面|牛肉面|米线|米粉|粉|粥|稀饭|馄饨|水饺|蒸饺|饺子|包子|馒头|花卷|饼|面包|吐司|三明治|水煮蛋|煎蛋|荷包蛋|茶叶蛋|鸡蛋)/;
+function _savingOutFactor(dishName, servings) {
+    var sv = Math.max(1, Number(servings) || 1);
+    if (sv <= 1) return 1;
+    var n = String(dishName || '').trim();
+    // 一人一碗/一份的主食（含小米粥、南瓜粥等前缀变体）按人数线性
+    if (SAVING_PER_PERSON_RE.test(n) || /(粥|稀饭|面条|米线|米粉|炒饭|水饺|馄饨)$/.test(n)) return sv;
+    return 1 + (sv - 1) * 0.6;
+}
+// V238: 无配方菜的家常成本比例——原来一律按餐厅价 42% 折算，素菜/汤粥被明显高估（炒青菜 3 人 ¥16.4）
+function _savingHomeFallbackRatio(name) {
+    var n = String(name || '');
+    if (/粥|稀饭|汤|羹|米糊|糊/.test(n)) return 0.35;
+    if (/肉|鱼|虾|鸡|鸭|鹅|牛|猪|羊|排骨|肘子|海鲜|蛋|豆腐/.test(n)) return 0.45;
+    if (/饭|面|粉|包|饼|馒头|吐司|面包|饺|馄饨/.test(n)) return 0.40;
+    return 0.30; // 素菜/凉拌/时蔬
+}
 // 单道菜算账（按人数）：{home, out, saved}
 function calcDishSaving(dishName, servings) {
     var sv = Math.max(1, Number(servings) || 1);
     var perOut = getDishRestaurantPerPerson(dishName);
-    var out = perOut * sv;
+    var out = Math.round(perOut * _savingOutFactor(dishName, sv));
     var home = getDishHomeCost(dishName, sv);
     if (home == null) {
-        // V99: 无食材用量表的菜 → 按餐厅价 42% 比例估算在家成本（家常做饭食材成本约为餐厅价 4 成），
-        // 保证「预计：在家做/外面吃/省」行总有内容（原方案整道剔除导致预计行空白/待记录）
-        var estHome = Math.round(out * 0.42 * 10) / 10;
+        // V99: 无食材用量表的菜 → 按餐厅价比例估算在家成本（V238 改为按菜品类型取 30%~45%）
+        var estHome = Math.round(out * _savingHomeFallbackRatio(dishName) * 10) / 10;
         return { name: dishName, home: estHome, out: out, saved: Math.max(0, Math.round((out - estHome) * 10) / 10), noRecipe: true, estimated: true };
     }
     // 在家价不可能高于外面吃，异常数据兜底
@@ -15818,7 +15839,9 @@ function isPlainFruitDish(dishName) {
 // V160: 纯配餐饮品识别——牛奶/酸奶/白水等是直接饮用的配餐饮品，不是"在家做 vs 外面吃"的菜，
 // 不参与省钱计算（避免"3杯牛奶 外食¥39、省¥22"这类失真）。配方库中的奶制菜（牛奶燕麦等）不排除。
 var PLAIN_DRINK_NAMES = ['牛奶', '纯牛奶', '鲜牛奶', '早餐奶', '热牛奶', '温牛奶', '全脂牛奶', '脱脂牛奶',
-    '酸奶', '原味酸奶', '白开水', '温水', '热水', '矿泉水', '纯净水', '饮用水'];
+    '酸奶', '原味酸奶', '白开水', '温水', '热水', '矿泉水', '纯净水', '饮用水',
+    // V238: 带「杯/盒/瓶」后缀与常见自制饮品，避免「酸奶杯」被当成一道菜按 ¥13/人 计账
+    '酸奶杯', '牛奶杯', '豆浆杯', '豆奶', '鲜榨果汁', '橙汁', '苹果汁', '果汁', '米浆', '奶茶', '咖啡'];
 function isPlainDrinkDish(dishName) {
     var raw = String(dishName || '').trim();
     if (!raw) return false;
@@ -15826,8 +15849,10 @@ function isPlainDrinkDish(dishName) {
     if (typeof DISH_INGREDIENTS !== 'undefined' && DISH_INGREDIENTS[raw]) return false;
     var core = raw.replace(/[（(].*?[)）]/g, '').trim();
     if (PLAIN_DRINK_NAMES.indexOf(core) >= 0) return true;
-    // 「一杯/一盒 + 牛奶/酸奶」这类带量词前缀的纯饮品记录
+    // 「一杯/一盒/一瓶/一袋 + 牛奶/酸奶」这类带量词前缀的纯饮品记录
     if (/^(一杯|一盒|一瓶|一袋|热|温|冰)?(纯|鲜)?牛奶$/.test(core) || /^(一杯|一盒|一瓶|一袋)?(原味)?酸奶$/.test(core)) return true;
+    // V238: 纯饮品后缀识别（酸奶杯/牛奶杯/豆浆杯/果汁杯/一杯豆浆…），但它们不是"在家做 vs 外面吃"的菜
+    if (/^(一杯|一盒|一瓶|一袋|一碗)?(原味|无糖|低脂|脱脂|希腊|老)?(酸奶|牛奶|豆浆|豆奶|果汁|鲜榨果汁|米浆|奶茶|咖啡)(杯|盒|瓶|袋)?$/.test(core)) return true;
     return false;
 }
 // 解析餐次就餐人数
@@ -20310,9 +20335,12 @@ function _collectIngredientNameSet() {
     return __INGREDIENT_NAME_SET_CACHE;
 }
 
-// 流质主食/甜羹类互斥：同一餐最多保留 1 道（粥/稀饭/豆浆/米糊/芝麻糊/藕粉/羹/甜汤），避免"粥+豆浆""百合粥+银耳羹"同餐
+// 流质主食/甜羹/饮品互斥：同一餐最多保留 1 道（粥/稀饭/豆浆/米糊/芝麻糊/藕粉/羹/汤/牛奶/酸奶/果汁等），
+// V238：原规则漏了牛奶/酸奶/果汁，导致"小米粥 + 酸奶杯"同餐并列；且汤也算液体，一餐只留一处液体
+var _LIQUID_DISH_RE = /粥|稀饭|豆浆|豆奶|米糊|芝麻糊|藕粉|米浆|羹|汤|牛奶|酸奶|奶昔|果汁|鲜榨|奶茶|咖啡|饮品/;
+function _isLiquidDishName(n) { return _LIQUID_DISH_RE.test(String(n || '')); }
 function _filterLiquidStaplePerMeal(arr) {
-    var RE = /粥|稀饭|豆浆|米糊|芝麻糊|藕粉|羹|甜汤/;
+    var RE = _LIQUID_DISH_RE;
     var seen = false;
     return (arr || []).filter(function(d) {
         var n = (typeof d === 'string') ? d : ((d && (d.dish || d.name)) || '');
@@ -51486,6 +51514,7 @@ async function generateAiMealRecommendation() {
             userMessage += `请在返回的 JSON 数据中，将专门为特殊成员准备的菜品，标注在 specialInterventions 字段中（每餐一个数组，没有专项干预的餐返回 []）。\n`;
             userMessage += `specialInterventions 中 planType 只能取：illness/fitness/growth/athlete/pregnancy/infant。\n\n`;
         }
+        userMessage += `\n【硬性规则·流质同餐互斥】粥/稀饭/汤/羹/豆浆/米糊/牛奶/酸奶/果汁/奶茶等流质与饮品，同一餐合计最多1道：早餐若已有粥，就不要再给酸奶/牛奶/豆浆/果汁；午餐/晚餐若已有汤，就不要再给粥/羹。早餐必须至少有1道固体主食（面包/馒头/包子/饼/蛋/饭团等），不能只给流食。\n`;
         userMessage += `\n请严格按照以下JSON格式返回推荐方案，不要添加任何其他文字。\n**每道菜必须含 ingredients 字段（全部食材及每人份用量），不可省略。**\n`;
         var _spMealFrag1 = _hasSP1 ? ',"specialInterventions":[{"memberName":"儿子","planType":"illness","targetDish":"菜名","note":"低油少盐，易消化"}]' : '';
         userMessage += `{"date":"${targetDateStr}","solarTerm":"${solarTerm.name}","meals":{"breakfast":{"dishes":[{"name":"菜名","ingredients":[{"name":"食材","quantity":2,"unit":"个"}]}],"reason":"理由"${_spMealFrag1}},"lunch":{"dishes":[同上结构]${_spMealFrag1}},"dinner":{"dishes":[同上结构]${_spMealFrag1}}},"summary":"综合说明（如何结合节气/食材/成员/历史）"}`;
@@ -51972,12 +52001,21 @@ function confirmAiRecommendation() {
             // 读取已有计划，合并新菜品
             const existing = getMealData(targetDateKey, mealType);
             const existingDishes = (existing.plan && existing.plan.dishes) ? existing.plan.dishes : [];
+            // V238: 已有计划里若已含液体（粥/汤/牛奶/酸奶等），AI 新增的同类液体不再追加，保证一餐只有一处液体
+            var _liquidSeenInPlan = existingDishes.some(function (x) {
+                return (typeof _isLiquidDishName === 'function') && _isLiquidDishName(x);
+            });
             const existingMeta = (existing.plan && existing.plan.dishMeta) ? existing.plan.dishMeta : {};
             const merged = [...existingDishes];
             const mergedMeta = { ...existingMeta };
             const cServings = (existing.plan && existing.plan.servings) ? existing.plan.servings : ((typeof getDiaryDiningGroup === 'function' && getDiaryDiningGroup()) ? getDiaryDiningGroup().members.length : 1);
             normalizedDishes.forEach(d => {
                 if (!d.name) return;
+                // V238: 流质同餐互斥——已有液体时跳过新增液体，AI 自身多道液体也只留第一道
+                if (typeof _isLiquidDishName === 'function' && _isLiquidDishName(d.name)) {
+                    if (_liquidSeenInPlan) return;
+                    _liquidSeenInPlan = true;
+                }
                 var wasPresent = merged.some(function(x){ return x===d.name; });
                 if (!wasPresent) merged.push(d.name);
                 // 合并 prior（保留之前用户已经勾选的 confirmed=true / 原 source 标注）
@@ -52462,6 +52500,7 @@ function buildRecommendationPrompt(data, weekDatesStr) {
     prompt += `${startIdx + 2}. 7天内菜品尽量不重复，避免连续两天出现相同菜；跨天去重时主食（米饭/粥/面/馒头/饼/玉米/红薯等）允许重复，仅主菜、副菜、汤品严格不重复\n`;
     prompt += `${startIdx + 3}. 【硬性规则】同一餐中甜品类/甜汤类（如银耳羹、莲子羹、雪梨羹、糖水、水果沙拉、酸奶等）最多只能出现1道，严禁同餐出现2道或以上的甜食/甜汤\n`;
     prompt += `${startIdx + 4}. 同一餐中主食类最多1-2道（如同时有米饭+汤是允许的，但不能同时有米饭+面条+粥），主菜（蛋白质类）至少1道，素菜至少1道\n`;
+    prompt += `【硬性规则·流质同餐互斥】粥/稀饭/汤/羹/豆浆/米糊/牛奶/酸奶/果汁/奶茶等流质与饮品，同一餐合计最多1道：早餐若已有粥，就不要再给酸奶/牛奶/豆浆/果汁；午餐/晚餐若已有汤，就不要再给粥/羹。早餐必须至少有1道固体主食（面包/馒头/包子/饼/蛋/饭团等），不能只给流食。\n`;
     prompt += `\n请严格按照以下JSON格式返回，不要添加任何其他文字：\n`;
     // V234: 有激活专项计划时，每餐 JSON 追加 specialInterventions 字段
     var _spMealFrag = hasActiveSP ? ',"specialInterventions":[{"memberName":"儿子","planType":"illness","targetDish":"菜名","note":"低油少盐，易消化"}]' : '';
