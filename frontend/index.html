@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V238-20261026';
+        var APP_VER = 'V239-20261026';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -13536,12 +13536,13 @@ function getDishConstitutions(dishName, ingredients) {
 }
 
 // V155: 菜品体质标签 HTML（用于食记餐卡计划菜行等；无匹配返回空串）
-function constitutionTagHtmlForDish(dishName) {
+// opts.plain = true 时不带前置图标
+function constitutionTagHtmlForDish(dishName, opts) {
     try {
         if (!dishName) return '';
         var cons = getDishConstitutions(dishName, []);
         if (!cons.length) return '';
-        return '<span class="constitution-tag">🥗 适合：' + escapeHtml(cons.join('、')) + '</span>';
+        return '<span class="constitution-tag">' + ((opts && opts.plain) ? '' : '🥗 ') + '适合：' + escapeHtml(cons.join('、')) + '</span>';
     } catch (e) { return ''; }
 }
 
@@ -14415,12 +14416,13 @@ function dishUsesSeasonalIngredient(dishName, ingredients, term) {
 }
 
 // V171: 菜品节气标签 HTML——当季菜返回「🌿 当季 · 小暑 · 清热解暑」，非当季返回空串
-function solarTermTagHtmlForDish(dishName, ingredients, term) {
+// opts.plain = true 时不带前置图标
+function solarTermTagHtmlForDish(dishName, ingredients, term, opts) {
     try {
         var t = term || getSolarTermForDate(new Date());
         if (!t || !t.name) return '';
         if (!dishUsesSeasonalIngredient(dishName, ingredients, t)) return '';
-        return '<span class="solar-term-tag">🌿 当季 · ' + escapeHtml(t.name)
+        return '<span class="solar-term-tag">' + ((opts && opts.plain) ? '' : '🌿 ') + '当季 · ' + escapeHtml(t.name)
             + (t.diet ? (' · ' + escapeHtml(t.diet)) : '') + '</span>';
     } catch (e) { return ''; }
 }
@@ -14696,12 +14698,14 @@ function parseHealthTags(source) {
 }
 
 // 渲染人群标签 HTML（小色块，绿底暖字），可直接插入菜名旁
-function renderHealthTagsHtml(source) {
+// opts.plain = true 时不带前置图标（食记餐卡等纯文字场景）
+function renderHealthTagsHtml(source, opts) {
     var tags = parseHealthTags(source);
     if (!tags.length) return '';
+    var _icon = (opts && opts.plain) ? '' : (tags[0].emoji + ' ');
     return tags.map(function(t) {
         return '<span class="health-state-tag health-tag-' + t.key + '" style="display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:600;color:#15803D;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:1px 7px;margin:0 4px 0 0;white-space:nowrap;">'
-            + t.emoji + ' ' + escapeHtml(t.label) + '</span>';
+            + _icon + escapeHtml(t.label) + '</span>';
     }).join('');
 }
 
@@ -14719,12 +14723,13 @@ function healthTagObjsFromKeys(keys) {
 }
 
 // 渲染已持久化的健康标签（meta.healthTags 为 key 数组）
-function renderHealthTagsFromKeys(keys) {
+function renderHealthTagsFromKeys(keys, opts) {
     var tags = healthTagObjsFromKeys(keys);
     if (!tags.length) return '';
+    var _icon = (opts && opts.plain) ? '' : (tags[0].emoji + ' ');
     return tags.map(function(t) {
         return '<span class="health-state-tag health-tag-' + t.key + '" style="display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:600;color:#15803D;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:1px 6px;margin:0 2px 0 0;white-space:nowrap;">'
-            + t.emoji + ' ' + escapeHtml(t.label) + '</span>';
+            + _icon + escapeHtml(t.label) + '</span>';
     }).join('');
 }
 
@@ -54356,9 +54361,9 @@ function renderDiary() {
                 // healthTags 优先用持久化的；为空则从 userComment 回退解析（兼容旧数据）
                 var hTagsHtml = '';
                 if (it.meta.healthTags && it.meta.healthTags.length) {
-                    hTagsHtml = renderHealthTagsFromKeys(it.meta.healthTags);
+                    hTagsHtml = renderHealthTagsFromKeys(it.meta.healthTags, { plain: true });
                 } else if (it.meta.userComment) {
-                    hTagsHtml = renderHealthTagsHtml(it.meta.userComment);
+                    hTagsHtml = renderHealthTagsHtml(it.meta.userComment, { plain: true });
                 }
                 return '<label class="diary-dish-row" style="display:inline-flex;align-items:center;gap:2px;'
                     + (_isSpecial
@@ -54372,8 +54377,8 @@ function renderDiary() {
                     + (typeof specialInterventionBadgesHtml === 'function' ? specialInterventionBadgesHtml(_siList, it.name) : '')
                     + ('speechSynthesis' in window ? '<button type="button" title="朗读" onclick="event.preventDefault();event.stopPropagation();_dishListenReadDirect(\'' + escapeAttr(it.name) + '\');" style="border:none;background:none;padding:0;font-size:14px;line-height:1;color:#F97316;cursor:pointer;flex-shrink:0;margin-left:2px;vertical-align:middle;">🔊</button>' : '')
                     + hTagsHtml
-                    + (typeof constitutionTagHtmlForDish === 'function' ? constitutionTagHtmlForDish(it.name) : '')
-                    + (typeof solarTermTagHtmlForDish === 'function' ? solarTermTagHtmlForDish(it.name) : '')
+                    + (typeof constitutionTagHtmlForDish === 'function' ? constitutionTagHtmlForDish(it.name, { plain: true }) : '')
+                    + (typeof solarTermTagHtmlForDish === 'function' ? solarTermTagHtmlForDish(it.name, null, null, { plain: true }) : '')
                     + '</label>';
             }).join('');
             var planConfirmedLocal = (data.plan.state === 'confirmed' || data.plan.confirmed === true || data.plan.state === 'completed');
@@ -54493,7 +54498,7 @@ function renderDiary() {
 
         html += `<div class="diary-meal-card" style="border:none !important;box-shadow:none !important;background:transparent !important;">
             <div class="diary-meal-header">
-                <div><span class="diary-meal-label">${meal.icon} ${meal.name}</span>${_siMealBadge}${statusBadge}</div>
+                <div><span class="diary-meal-label">${meal.name}</span>${_siMealBadge}${statusBadge}</div>
                 <div class="diary-meal-actions">
                     ${isDiningOut ? (
                         outStatus === 'completed'
