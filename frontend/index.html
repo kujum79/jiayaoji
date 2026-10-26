@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V239-20261026';
+        var APP_VER = 'V240-20261026';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -277,7 +277,9 @@
         }
         .home-card-title { font-size: 16px; font-weight: 600; color: #1F2937; margin-bottom: 10px; } /* V45: 与"晚餐"字号统一 16px */
         /* V139: 食养堂·今日一课卡片 */
-        .daily-tip-card { min-height: 110px; max-height: 130px; overflow: hidden; }
+        .daily-tip-card { min-height: 110px; max-height: 210px; overflow: hidden; }
+        /* V240: 订阅按钮独占一行（三态文案较长，放标题行会挤压标题） */
+        .dt-sub-row { margin-top: 8px; }
         /* V140: 标题行 flex——左侧标题、右侧"读完整/收藏"按钮贴右边框；换一条已移除 */
         .dt-head { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #F97316; padding-bottom: 8px; border-bottom: 1px solid #F3F4F6; margin-bottom: 8px; }
         .dt-head-btns { margin-left: auto; display: flex; gap: 6px; flex: 0 0 auto; }
@@ -30748,6 +30750,7 @@ function renderHomeCards() {
     renderHomeIngrTags();
     renderHomeDiaryCard();
     _mountHomeDiningSelector(); // V41: 就餐人选择器搬到首页食记卡（与食记页同一节点，数据天然同步）
+    try { _ensureSubscriptionStatusShape(); } catch (e) {} // V240: 订阅状态结构归一（tier + expireAt）
     renderHomeDailyTipCard(); // V139: 食养堂·今日一课
     // V140: 食养堂每日草稿——每天首次打开自动生成（错峰 4s 后台跑，当天已有批次则幂等跳过）
     setTimeout(function () { _fhEnsureDailyDrafts(false); }, 4000);
@@ -30789,14 +30792,11 @@ function _dtRenderCard(tip) {
             + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:6px;" onclick="event.stopPropagation(); _fhReviewAuto(\'' + (tip.date || '') + '\',\'confirm\')">保留</button>'
             + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:8px;color:#B91C1C;" onclick="event.stopPropagation(); _fhReviewAuto(\'' + (tip.date || '') + '\',\'withdraw\')">换篇</button>';
     }
-    // V198: 订阅状态区分按钮——已订阅显示「已订阅」，未订阅显示「订阅」
-    var subBtnHtml;
-    if (isSubscribed()) {
-        subBtnHtml = '<button class="dt-btn dt-btn-primary" style="background:#F97316;border-color:#F97316;" onclick="event.stopPropagation(); _openPremiumContent()">已订阅</button>';
-    } else {
-        // V200: 先引导价值，再由引导弹窗进入套餐面板
-        subBtnHtml = '<button class="dt-btn" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;" onclick="event.stopPropagation(); _openSubscribeGuide()">订阅</button>';
-    }
+    // V240: 订阅三态按钮——none「请订阅（了解特权）」/ basic「初订阅（已解锁全年全功能无限制使用）」/ premium「全订阅…（剩余 N 天）」
+    var _subState = (typeof _subTierState === 'function') ? _subTierState() : 'none';
+    var _subMeta = (typeof _subBtnMeta === 'function') ? _subBtnMeta(_subState) : { text: '请订阅（了解特权）', style: '' };
+    var subBtnHtml = '<button class="dt-btn" data-substate="' + _subState + '" style="width:100%;white-space:normal;line-height:1.4;font-size:11px;padding:6px 10px;border-radius:10px;text-align:center;' + _subMeta.style + '"'
+        + ' onclick="event.stopPropagation(); openSubscriptionModal(\'' + _subState + '\')">' + _subMeta.text + '</button>';
     // V206.4: 移除「订阅专享内容」徽标（订阅状态已由按钮表达，不再重复标注）
     var exclusiveBadge = '';
     // V197: 移除「收藏」按钮，替换为「订阅」入口；标题+摘要整块可点开详情
@@ -30804,12 +30804,12 @@ function _dtRenderCard(tip) {
         + '<span class="dt-head-btns" onclick="event.stopPropagation()">'
         + adminCtl
         + '<button id="dtCardSpeakBtn" onclick="event.stopPropagation(); _dtSpeakTip(\'card\')" style="border:none;background:none;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;color:#6B7280;" title="语音播报">🔊</button>'
-        + subBtnHtml
         + '</span></div>'
         + '<div onclick="_openDailyTipFull()" style="cursor:pointer;">'
         + '<div class="dt-title">' + emoji + ' ' + (tip.title || '') + '</div>'
         + '<div class="dt-summary">' + (tip.summary || '') + '</div>'
-        + '</div>';
+        + '</div>'
+        + '<div class="dt-sub-row">' + subBtnHtml + '</div>';
 }
 function _dtRenderDegraded(latestDate) {
     var el = document.getElementById('homeDailyTipCard');
@@ -31084,6 +31084,78 @@ function _subTier() {
     if (s.planType && _SUBSCRIPTION_PKG_MAP[s.planType]) return _SUBSCRIPTION_PKG_MAP[s.planType];
     return '';
 }
+// V240: 订阅三态（none/basic/premium）与剩余天数
+function _subTierState() {
+    var t = _subTier();
+    if (t === 'premium') return 'premium';
+    if (t === 'basic') return 'basic';
+    return 'none';
+}
+function _subDaysLeft() {
+    var s = _getSubscriptionStatus() || {};
+    var exp = s.expireDate || s.expireAt || 0;
+    if (!exp) return 0;
+    return Math.max(0, Math.ceil((exp - Math.floor(Date.now() / 1000)) / 86400));
+}
+// V240: 保证 subscriptionStatus 结构固定为 { tier: 'none'|'basic'|'premium', expireAt: 0|时间戳 }
+// 游客态一律不读写订阅键（V191 铁律）
+function _ensureSubscriptionStatusShape() {
+    try {
+        var fid = (typeof getFamilyId === 'function') ? getFamilyId() : '';
+        if (!fid) return null;
+        var s = _getSubscriptionStatus();
+        if (!s || typeof s !== 'object') {
+            s = { tier: 'none', expireAt: 0 };
+            _setSubscriptionStatus(s);
+            return s;
+        }
+        var changed = false;
+        var valid = isSubscribed();
+        if (!s.tier) {
+            s.tier = valid ? (_SUBSCRIPTION_PKG_MAP[s.planType] || 'none') : 'none';
+            changed = true;
+        }
+        if (s.expireAt == null) {
+            s.expireAt = Number(s.expireDate) || 0;
+            changed = true;
+        }
+        // 已过期：tier 归位 none（expireAt 保留，便于展示到期时间）
+        if (!valid && s.tier !== 'none') { s.tier = 'none'; changed = true; }
+        if (changed) _setSubscriptionStatus(s);
+        return s;
+    } catch (e) { return null; }
+}
+// V240: 订阅按钮三态配置（文案 + 颜色）
+function _subBtnMeta(state) {
+    if (state === 'premium') {
+        return {
+            text: '全订阅·已解锁专属饮食认知课堂·健康管家（剩余 ' + _subDaysLeft() + ' 天）',
+            style: 'background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;border:1px solid #EA580C;font-weight:600;'
+        };
+    }
+    if (state === 'basic') {
+        return {
+            text: '初订阅（已解锁全年全功能无限制使用）',
+            style: 'background:#ECFDF5;color:#047857;border:1px solid #A7F3D0;font-weight:600;'
+        };
+    }
+    return {
+        text: '请订阅（了解特权）',
+        style: 'background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;font-weight:600;'
+    };
+}
+// V240: 订阅入口统一分发——intro 先看特权引导，basic/premium 直达对应套餐
+function openSubscriptionModal(mode) {
+    var m = mode || 'intro';
+    if (typeof isLogined === 'function' && !isLogined()) { showLoginPage(); return; }
+    if (m === 'basic' || m === 'premium') {
+        _subSelectedTier = m;
+        _openSubscribeModal();
+        return;
+    }
+    _openSubscribeGuide();
+}
+window.openSubscriptionModal = openSubscriptionModal;
 // V202: 订阅一个月（默认 30 天）；选基础服务时先给 60 天体验期
 function _applySubscription(tierKey, needsArr) {
     var now = Math.floor(Date.now() / 1000);
