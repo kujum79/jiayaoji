@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V245-20261026';
+        var APP_VER = 'V249-20261026';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -278,6 +278,9 @@
         .home-card-title { font-size: 16px; font-weight: 600; color: #1F2937; margin-bottom: 10px; } /* V45: 与"晚餐"字号统一 16px */
         /* V139: 食养堂·今日一课卡片 */
         .daily-tip-card { min-height: 110px; max-height: 150px; overflow: hidden; }
+        /* V246: 食邦邻聚·首页公告栏 */
+        .community-bar-card { padding: 12px 14px; cursor: pointer; }
+        .community-bar-text { flex: 1; min-width: 0; font-size: 12px; color: #6B7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         /* V240: 订阅按钮三态（V242 起并入标题行右侧，原 .dt-sub-row 已移除） */
         /* V242: 订阅按钮位置：小喇叭右侧 */
         /* V140: 标题行 flex——左侧标题、右侧"读完整/收藏"按钮贴右边框；换一条已移除 */
@@ -4321,6 +4324,8 @@ async function _submitFeedback() {
         </div>
         <!-- V139: 食养堂·今日一课卡片（食记卡片下方、试问 chips 上方） -->
         <div class="home-card daily-tip-card" id="homeDailyTipCard"></div>
+        <!-- V246: 食邦邻聚·公告栏（食养堂卡片下方） -->
+        <div class="home-card community-bar-card" id="homeCommunityBar" onclick="openCommunityPage()"></div>
         </div><!-- /home-scroll -->
         <div style="width:100%; padding:0 4px 6px;">
             <div class="input-row">
@@ -30764,6 +30769,7 @@ function renderHomeCards() {
     _mountHomeDiningSelector(); // V41: 就餐人选择器搬到首页食记卡（与食记页同一节点，数据天然同步）
     try { _ensureSubscriptionStatusShape(); } catch (e) {} // V240: 订阅状态结构归一（tier + expireAt）
     renderHomeDailyTipCard(); // V139: 食养堂·今日一课
+    try { renderHomeCommunityBar(); } catch (e) {} // V246: 食邦邻聚·公告栏
     // V140: 食养堂每日草稿——每天首次打开自动生成（错峰 4s 后台跑，当天已有批次则幂等跳过）
     setTimeout(function () { _fhEnsureDailyDrafts(false); }, 4000);
 }
@@ -69596,6 +69602,471 @@ function focusTodayDiaryMeals() {
     }, 120);
 }
 window.focusTodayDiaryMeals = focusTodayDiaryMeals;
+
+// ========== V246: 食邦邻聚（社区互助 / 拼购 / 活动） ==========
+// 数据结构：communityPosts = [{ id, type, community, authorName, title, content, contactInfo, buyLink, volunteer, createdAt }]
+// type: mutual 互助 / group_buy 拼购 / activity 活动；数据按家庭码前缀隔离存储并纳入云备份
+var _COMMUNITY_TYPES = [
+    { key: 'mutual', label: '邻里互助', emoji: '🤝', color: '#EA580C', bg: '#FFF7ED', border: '#FED7AA' },
+    { key: 'group_buy', label: '社区拼购', emoji: '🛒', color: '#047857', bg: '#ECFDF5', border: '#A7F3D0' },
+    { key: 'activity', label: '社区活动', emoji: '🎉', color: '#1D4ED8', bg: '#EFF6FF', border: '#BFDBFE' }
+];
+var _communityFilter = 'all';
+var _communitySelectedName = ''; // V247: 当前查看的小区（可在顶部下拉切换）
+
+// 从家庭住址里提取小区名：去掉「XX市 / XX区（县）」前缀与楼栋门牌尾巴
+function _communityNameFromAddress(addr) {
+    var s = String(addr || '').trim();
+    if (!s) return '';
+    var m = s.match(/[市区县]([^市区县]+)$/);
+    if (m && m[1]) s = m[1];
+    s = s.replace(/[0-9０-９]+(号|栋|幢|单元|楼|室|层|座).*$/, '').replace(/(栋|幢|单元|号楼).*$/, '').trim();
+    return s.slice(0, 30);
+}
+function getCommunityName() {
+    var addr = '';
+    try {
+        addr = (typeof familyHomeAddress !== 'undefined' && familyHomeAddress) || lsGet('familyHomeAddress') || '';
+    } catch (e) { addr = ''; }
+    // 兼容 familyData 以对象形式存放地址的情况（familyData.address）
+    if (!addr) {
+        try {
+            var fd = JSON.parse(lsGet('familyData') || 'null');
+            if (fd && !Array.isArray(fd) && typeof fd === 'object') addr = fd.address || fd.homeAddress || '';
+        } catch (e2) {}
+    }
+    return _communityNameFromAddress(addr) || '我的小区';
+}
+// 所有可切换的小区：当前小区 + 已发帖出现的小区，去重
+function _communityAllNames() {
+    var names = [];
+    var push = function (n) {
+        var s = String(n || '').trim();
+        if (s && names.indexOf(s) < 0) names.push(s);
+    };
+    push(getCommunityName());
+    getCommunityPosts().forEach(function (p) { push(p.community); });
+    return names;
+}
+function _communitySetName(name) {
+    _communitySelectedName = String(name || '').trim() || getCommunityName();
+    // 顶部下拉与当前小区保持同步（选项里存在时才回写，避免选中值丢失）
+    var sel = document.getElementById('communitySelector');
+    if (sel) {
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === _communitySelectedName) { sel.value = _communitySelectedName; break; }
+        }
+    }
+    renderCommunityList();
+}
+function _communityTypeMeta(type) {
+    for (var i = 0; i < _COMMUNITY_TYPES.length; i++) {
+        if (_COMMUNITY_TYPES[i].key === type) return _COMMUNITY_TYPES[i];
+    }
+    return _COMMUNITY_TYPES[0];
+}
+function _communityTimeText(ts) {
+    var t = parseInt(ts, 10) || 0;
+    if (!t) return '';
+    var diff = Math.floor(Date.now() / 1000) - t;
+    if (diff < 60) return '刚刚';
+    if (diff < 3600) return Math.floor(diff / 60) + ' 分钟前';
+    if (diff < 86400) return Math.floor(diff / 3600) + ' 小时前';
+    if (diff < 86400 * 30) return Math.floor(diff / 86400) + ' 天前';
+    var d = new Date(t * 1000);
+    return (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日';
+}
+// 首次使用时按用户小区生成示例帖子（已有数据不覆盖）
+function _seedCommunityPostsIfEmpty() {
+    if (lsGet('communityPosts') !== null) return;
+    if (!getFamilyId() || window.__demoMode) return; // 游客态 / 演示态不写入
+    var community = getCommunityName();
+    var now = Math.floor(Date.now() / 1000);
+    var seed = [
+        { id: 'post_001', type: 'mutual', community: community, authorName: '张姐',
+          title: '代包手工韭菜猪肉饺子', content: '20元/盒（20个），纯手工，可互换。',
+          contactInfo: '电话：13800138001 微信：zhangjie123', buyLink: '', createdAt: now - 3600 * 5 },
+        { id: 'post_002', type: 'group_buy', community: community, authorName: '李哥',
+          title: '土鸡蛋拼购（30枚装）', content: '农场直发，满 20 份成团，单价 28 元，明早 10 点截止。',
+          contactInfo: '电话：13800138002 微信：lige1988', buyLink: '', createdAt: now - 3600 * 26 },
+        { id: 'post_003', type: 'activity', community: community, authorName: '王阿姨',
+          title: '周末小区共享厨房', content: '本周六下午两点，活动室一起做时令菜，自带一道拿手菜即可参加。',
+          contactInfo: '电话：13800138003 微信：wangayi666', buyLink: '', createdAt: now - 86400 * 3 }
+    ];
+    lsSetJSON('communityPosts', seed);
+}
+// V248: 旧示例帖只写了微信号，补齐联系电话（每个家庭只迁移一次）
+function _migrateCommunitySeedContacts() {
+    if (lsGet('communityContactMigrated_v1') === '1') return;
+    if (!getFamilyId() || window.__demoMode) return;
+    var list = lsGetJSON('communityPosts', []);
+    if (!Array.isArray(list) || !list.length) return;
+    var seedPhones = { post_001: '13800138001', post_002: '13800138002', post_003: '13800138003' };
+    var changed = false;
+    list.forEach(function (p) {
+        var tel = seedPhones[p.id];
+        if (!tel) return;
+        var raw = String(p.contactInfo || '');
+        if (/1[3-9]\d{9}/.test(raw)) return;
+        p.contactInfo = ('电话：' + tel + ' ' + raw).trim();
+        changed = true;
+    });
+    if (changed) lsSetJSON('communityPosts', list);
+    lsSet('communityContactMigrated_v1', '1');
+}
+function getCommunityPosts() {
+    _seedCommunityPostsIfEmpty();
+    _migrateCommunitySeedContacts();
+    var list = lsGetJSON('communityPosts', []) || [];
+    if (!Array.isArray(list)) list = [];
+    list.sort(function (a, b) { return (parseInt(b.createdAt, 10) || 0) - (parseInt(a.createdAt, 10) || 0); });
+    return list;
+}
+// 首页公告栏：取最新 3 条拼成一句话
+function renderHomeCommunityBar() {
+    var el = document.getElementById('homeCommunityBar');
+    if (!el) return;
+    var posts = getCommunityPosts();
+    var parts = [];
+    for (var i = 0; i < posts.length && parts.length < 3; i++) {
+        var p = posts[i];
+        var verb = (p.type === 'mutual') ? '发布了' : '发起了';
+        parts.push(String(p.authorName || '邻居') + verb + String(p.title || ''));
+    }
+    var text = parts.length ? (parts.join('、') + '…') : '小区里还没有新动态，来看看邻居们在做什么吧';
+    el.innerHTML = '<div style="display:flex;align-items:center;gap:8px;">'
+        + '<span style="font-size:15px;flex-shrink:0;">🤝</span>'
+        + '<span style="font-size:13px;font-weight:700;color:#C2410C;flex-shrink:0;">食邦邻聚</span>'
+        + '<span class="community-bar-text">' + escapeHtml(text) + '</span>'
+        + '<span style="flex-shrink:0;font-size:12px;font-weight:600;color:#EA580C;background:#FFF7ED;border:1px solid #FED7AA;border-radius:9px;padding:3px 8px;">去看看 ›</span>'
+        + '</div>';
+}
+function closeCommunityPage() {
+    closeCommunityPublishModal();
+    var ov = document.getElementById('communityPageOverlay');
+    if (ov) ov.remove();
+}
+function _communityCopyText(txt, doneMsg) {
+    var t = String(txt || '').trim();
+    if (!t) return;
+    var done = function () { showToast && showToast(doneMsg || ('已复制：' + t)); };
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(t).then(done, done);
+            return;
+        }
+    } catch (e) {}
+    try {
+        var ta = document.createElement('textarea');
+        ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+        done();
+    } catch (e2) { showToast && showToast('复制失败，请手动记录'); }
+}
+// V248: 把联系信息拆成「电话」与「微信」两部分
+function _communityParseContact(raw) {
+    var s = String(raw || '').trim();
+    var out = { phone: '', wechat: '' };
+    if (!s) return out;
+    var pm = s.match(/1[3-9]\d{9}/) || s.match(/0\d{2,3}-?\d{7,8}/);
+    if (pm) out.phone = pm[0];
+    var wm = s.match(/(?:微信|wechat|weixin|微信号|vx|wx)\s*(?:号)?\s*[:：]?\s*([A-Za-z0-9_-]{4,30})/i);
+    if (wm && wm[1] && wm[1] !== out.phone) {
+        out.wechat = wm[1];
+    } else {
+        var rest = s.replace(/1[3-9]\d{9}/g, ' ').replace(/0\d{2,3}-?\d{7,8}/g, ' ')
+            .replace(/电话|手机|微信|wechat|weixin|vx|wx|号|[:：]/gi, ' ').trim();
+        var im = rest.match(/[A-Za-z][A-Za-z0-9_-]{3,29}/);
+        if (im && im[0] !== out.phone) out.wechat = im[0];
+    }
+    return out;
+}
+function _communityCallPhone(tel) {
+    var t = String(tel || '').trim();
+    if (!t) { showToast && showToast('该邻居未留下联系电话'); return; }
+    try { window.location.href = 'tel:' + t; } catch (e) {}
+    _communityCopyText(t, '已复制电话：' + t);
+}
+function _communityAddWechat(wx) {
+    var w = String(wx || '').trim();
+    if (!w) { showToast && showToast('该邻居未留下微信号'); return; }
+    _communityCopyText(w, '已复制微信号「' + w + '」，打开微信搜索添加');
+}
+// 联系 Ta —— 联系方式无法拆分时的兜底：有手机号则拨打，否则整串复制
+function _communityContactByText(raw) {
+    var s = String(raw || '').trim();
+    if (!s) { showToast && showToast('该邻居未留下联系方式'); return; }
+    var parsed = _communityParseContact(s);
+    if (parsed.phone) { _communityCallPhone(parsed.phone); return; }
+    _communityCopyText(s);
+}
+// V249: 电商链接规范化 + 返利参数
+var _COMMUNITY_AFFILIATE_PARAMS = 'aff=jiayaoji&ch=community';
+function _communityNormalizeBuyLink(raw) {
+    var s = String(raw || '').trim();
+    if (!s) return '';
+    if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+    return s;
+}
+function _communityAffiliateUrl(raw) {
+    var s = _communityNormalizeBuyLink(raw);
+    if (!s) return '';
+    var hash = '';
+    var hi = s.indexOf('#');
+    if (hi >= 0) { hash = s.slice(hi); s = s.slice(0, hi); }
+    s += (s.indexOf('?') >= 0 ? '&' : '?') + _COMMUNITY_AFFILIATE_PARAMS;
+    return s + hash;
+}
+function _communityOpenBuy(raw) {
+    var url = _communityAffiliateUrl(raw);
+    if (!url) { showToast && showToast('该帖子没有拼购链接'); return; }
+    try { window.open(url, '_blank', 'noopener'); } catch (e) {}
+}
+// 发布表单默认联系方式：优先用本家庭上次发布时记住的，其次按登录账号推导微信号
+function _communityDefaultContact() {
+    var saved = String(lsGet('communityMyContact') || '').trim();
+    if (saved) return saved;
+    try {
+        var u = getLoginUser();
+        var prefix = u && u.email ? String(u.email).split('@')[0].replace(/[^A-Za-z0-9_-]/g, '') : '';
+        if (prefix.length >= 4) return '微信：' + prefix;
+    } catch (e) {}
+    return '';
+}
+function _communityPostAuthorName() {
+    try {
+        var m = getCurrentMember();
+        if (m && m.name) return String(m.name);
+    } catch (e) {}
+    try {
+        var ctx = getCurrentUserContext();
+        if (ctx && ctx.name) return String(ctx.name);
+    } catch (e) {}
+    return '我';
+}
+var _communityPubType = 'mutual';
+function _communityPubSelectType(key) {
+    _communityPubType = key || 'mutual';
+    var wrap = document.getElementById('communityPubTypes');
+    if (!wrap) return;
+    wrap.querySelectorAll('[data-ptype]').forEach(function (btn) {
+        var on = btn.getAttribute('data-ptype') === _communityPubType;
+        btn.style.border = on ? '1px solid #F97316' : '1px solid #E5E7EB';
+        btn.style.background = on ? '#F97316' : '#fff';
+        btn.style.color = on ? '#fff' : '#6B7280';
+        btn.style.fontWeight = on ? '700' : '400';
+    });
+}
+function closeCommunityPublishModal() {
+    var ov = document.getElementById('communityPublishOverlay');
+    if (ov) ov.remove();
+}
+function openCommunityPublishModal() {
+    closeCommunityPublishModal();
+    _communityPubType = 'mutual';
+    var typeBtns = _COMMUNITY_TYPES.map(function (t) {
+        return '<button type="button" data-ptype="' + t.key + '" onclick="_communityPubSelectType(\'' + t.key + '\')" '
+            + 'style="flex:1;padding:8px 4px;border-radius:10px;font-size:12px;cursor:pointer;border:1px solid #E5E7EB;background:#fff;color:#6B7280;">'
+            + t.emoji + ' ' + t.label + '</button>';
+    }).join('');
+    var ov = document.createElement('div');
+    ov.id = 'communityPublishOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10012;background:rgba(17,24,39,0.55);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:400px;max-height:92vh;overflow-y:auto;padding:16px;box-sizing:border-box;box-shadow:0 12px 32px rgba(0,0,0,0.2);">'
+        + '<div style="font-size:16px;font-weight:700;color:#1F2937;margin-bottom:12px;">发布邻聚信息</div>'
+        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">选择分类</div>'
+        + '<div id="communityPubTypes" style="display:flex;gap:8px;margin-bottom:12px;">' + typeBtns + '</div>'
+        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">标题</div>'
+        + '<input id="communityPubTitle" type="text" maxlength="40" placeholder="例如：代包手工饺子 / 土鸡蛋拼购" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />'
+        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">内容详情</div>'
+        + '<textarea id="communityPubContent" maxlength="500" rows="3" placeholder="说明价格、时间、地点等信息" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;resize:vertical;margin-bottom:12px;"></textarea>'
+        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">联系方式</div>'
+        + '<input id="communityPubContact" type="text" maxlength="60" value="' + escapeAttr(_communityDefaultContact()) + '" placeholder="微信号或手机号，例如：微信 zhangsan123" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />'
+        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">拼购链接（选填）</div>'
+        + '<input id="communityPubLink" type="text" maxlength="500" placeholder="淘宝/京东等商品链接，可留空" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />'
+        + '<label style="display:flex;align-items:center;gap:8px;padding:9px 10px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;margin-bottom:12px;cursor:pointer;">'
+        +   '<input id="communityPubVolunteer" type="checkbox" style="width:16px;height:16px;accent-color:#047857;cursor:pointer;" />'
+        +   '<span style="font-size:13px;color:#047857;font-weight:600;">♿ 这是一条助老/助残志愿服务</span>'
+        + '</label>'
+        + '<div style="display:flex;gap:8px;">'
+        +   '<button type="button" id="communityPubCancelBtn" style="flex:1;padding:10px;border:1px solid #E5E7EB;border-radius:10px;background:#fff;color:#6B7280;font-size:14px;cursor:pointer;">取消</button>'
+        +   '<button type="button" id="communityPubSubmitBtn" style="flex:2;padding:10px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">发布</button>'
+        + '</div>'
+        + '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) closeCommunityPublishModal(); });
+    document.body.appendChild(ov);
+    _communityPubSelectType('mutual');
+    document.getElementById('communityPubCancelBtn').onclick = closeCommunityPublishModal;
+    document.getElementById('communityPubSubmitBtn').onclick = submitCommunityPost;
+}
+function submitCommunityPost() {
+    if (!getFamilyId()) {
+        showToast && showToast('请先登录家庭账号后再发布');
+        return;
+    }
+    var titleEl = document.getElementById('communityPubTitle');
+    var contentEl = document.getElementById('communityPubContent');
+    var contactEl = document.getElementById('communityPubContact');
+    var linkEl = document.getElementById('communityPubLink');
+    var volEl = document.getElementById('communityPubVolunteer');
+    var title = String((titleEl && titleEl.value) || '').trim();
+    var content = String((contentEl && contentEl.value) || '').trim();
+    var contact = String((contactEl && contactEl.value) || '').trim();
+    var buyLink = _communityNormalizeBuyLink((linkEl && linkEl.value) || '');
+    if (!title) { showToast && showToast('请填写标题'); titleEl && titleEl.focus(); return; }
+    if (!content) { showToast && showToast('请填写内容详情'); contentEl && contentEl.focus(); return; }
+    if (!contact) { showToast && showToast('请填写联系方式'); contactEl && contactEl.focus(); return; }
+    var posts = lsGetJSON('communityPosts', []) || [];
+    if (!Array.isArray(posts)) posts = [];
+    posts.unshift({
+        id: 'post_' + Date.now(),
+        type: _communityPubType,
+        community: _communitySelectedName || getCommunityName(),
+        authorName: _communityPostAuthorName(),
+        title: title,
+        content: content,
+        contactInfo: contact,
+        buyLink: buyLink,
+        volunteer: !!(volEl && volEl.checked),
+        createdAt: Math.floor(Date.now() / 1000)
+    });
+    lsSetJSON('communityPosts', posts);
+    lsSet('communityMyContact', contact);
+    closeCommunityPublishModal();
+    _communityFilter = 'all';
+    renderCommunityList();
+    renderHomeCommunityBar();
+    showToast && showToast('发布成功，邻居们都能看到啦');
+}
+window.openCommunityPublishModal = openCommunityPublishModal;
+window.closeCommunityPublishModal = closeCommunityPublishModal;
+window._communityPubSelectType = _communityPubSelectType;
+window._communityOpenBuy = _communityOpenBuy;
+function _communityPostCardHtml(p) {
+    var meta = _communityTypeMeta(p.type);
+    var hasBuy = !!String(p.buyLink || '').trim();
+    var contact = String(p.contactInfo || '').trim();
+    var parsed = _communityParseContact(contact);
+    // V248: 电话与微信并列展示，各自独立入口
+    var contactBtns = '';
+    if (parsed.phone) {
+        contactBtns += '<button type="button" data-phone="' + escapeHtml(parsed.phone) + '" style="padding:6px 12px;border:1px solid #FED7AA;border-radius:9px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;cursor:pointer;">📞 ' + escapeHtml(parsed.phone) + '</button>';
+    }
+    if (parsed.wechat) {
+        contactBtns += '<button type="button" data-wechat="' + escapeHtml(parsed.wechat) + '" style="padding:6px 12px;border:1px solid #A7F3D0;border-radius:9px;background:#ECFDF5;color:#047857;font-size:12px;font-weight:600;cursor:pointer;">💬 微信 ' + escapeHtml(parsed.wechat) + '</button>';
+    }
+    if (!parsed.phone && !parsed.wechat) {
+        contactBtns += '<button type="button" data-contact="' + escapeHtml(contact) + '" style="padding:6px 12px;border:1px solid #FED7AA;border-radius:9px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;cursor:pointer;">📞 联系Ta</button>';
+    }
+    return '<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
+        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap;">'
+        +   '<span style="font-size:10px;font-weight:700;color:' + meta.color + ';background:' + meta.bg + ';border:1px solid ' + meta.border + ';border-radius:8px;padding:1px 6px;">' + meta.emoji + ' ' + meta.label + '</span>'
+        +   (p.volunteer ? '<span style="font-size:10px;font-weight:700;color:#047857;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;padding:1px 6px;">♿ 助老助残志愿服务</span>' : '')
+        +   '<span style="font-size:12px;color:#374151;font-weight:600;">' + escapeHtml(p.authorName || '邻居') + '</span>'
+        +   '<span style="font-size:11px;color:#9CA3AF;margin-left:auto;">' + escapeHtml(_communityTimeText(p.createdAt)) + '</span>'
+        + '</div>'
+        + '<div style="font-size:14px;font-weight:700;color:#1F2937;line-height:1.5;">' + escapeHtml(p.title || '') + '</div>'
+        + '<div style="font-size:12px;color:#4B5563;line-height:1.8;margin-top:4px;">' + escapeHtml(p.content || '') + '</div>'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;">'
+        +   contactBtns
+        +   (hasBuy ? '<button type="button" data-buy="' + escapeAttr(p.buyLink) + '" style="padding:6px 12px;border:none;border-radius:9px;background:#F97316;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">🔗 去拼购</button>' : '')
+        + '</div>'
+        + '</div>';
+}
+function _communitySelectorHtml() {
+    var names = _communityAllNames();
+    var cur = _communitySelectedName || names[0] || '';
+    var opts = names.map(function (n) {
+        return '<option value="' + escapeHtml(n) + '"' + (n === cur ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
+    }).join('');
+    return '<select id="communitySelector" onchange="_communitySetName(this.value)" '
+        + 'style="margin-left:auto;max-width:160px;font-size:11px;color:#C2410C;background:#FFF7ED;border:1px solid #FED7AA;border-radius:9px;padding:4px 6px;outline:none;cursor:pointer;">'
+        + opts + '</select>';
+}
+function openCommunityPage() {
+    closeCommunityPage();
+    _communitySelectedName = getCommunityName(); // 默认定位到家庭住址对应小区
+    var overlay = document.createElement('div');
+    overlay.id = 'communityPageOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10008;background:#f0f0f0;display:flex;justify-content:center;';
+    var panel = document.createElement('div');
+    panel.style.cssText = 'position:relative;width:100%;max-width:430px;background:#FFF7ED;display:flex;flex-direction:column;box-shadow:0 0 24px rgba(0,0,0,0.12);';
+    panel.innerHTML = '<div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:14px 12px;background:#fff;border-bottom:1px solid #FED7AA;">'
+        + '<button type="button" id="communityCloseBtn" style="width:34px;height:34px;border:none;background:#FFF7ED;border-radius:10px;font-size:18px;color:#C2410C;cursor:pointer;line-height:1;">＜</button>'
+        + '<div style="font-size:17px;font-weight:700;color:#C2410C;">食邦邻聚</div>'
+        + _communitySelectorHtml()
+        + '</div>'
+        + '<div style="flex:1;overflow-y:auto;min-height:0;padding:12px 14px 86px;" id="communityBody"></div>'
+        + '<button type="button" id="communityPublishBtn" onclick="openCommunityPublishModal()" '
+        +   'style="position:absolute;right:14px;bottom:18px;z-index:2;padding:11px 18px;border:none;border-radius:24px;background:#F97316;color:#fff;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 6px 16px rgba(249,115,22,0.4);">＋ 发布邻聚信息</button>';
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    document.getElementById('communityCloseBtn').onclick = closeCommunityPage;
+    _communityFilter = 'all';
+    renderCommunityList();
+}
+function _communitySetFilter(key) {
+    _communityFilter = key || 'all';
+    renderCommunityList();
+}
+function renderCommunityList() {
+    var body = document.getElementById('communityBody');
+    if (!body) return;
+    var chips = '<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;">';
+    chips += '<button type="button" onclick="_communitySetFilter(\'all\')" style="flex-shrink:0;padding:6px 12px;border-radius:16px;font-size:12px;cursor:pointer;'
+        + (_communityFilter === 'all' ? 'border:1px solid #F97316;background:#F97316;color:#fff;font-weight:700;' : 'border:1px solid #E5E7EB;background:#fff;color:#6B7280;')
+        + '">全部</button>';
+    _COMMUNITY_TYPES.forEach(function (t) {
+        chips += '<button type="button" onclick="_communitySetFilter(\'' + t.key + '\')" style="flex-shrink:0;padding:6px 12px;border-radius:16px;font-size:12px;cursor:pointer;'
+            + (_communityFilter === t.key ? 'border:1px solid #F97316;background:#F97316;color:#fff;font-weight:700;' : 'border:1px solid #E5E7EB;background:#fff;color:#6B7280;')
+            + '">' + t.emoji + ' ' + t.label + '</button>';
+    });
+    chips += '</div>';
+
+    var posts = getCommunityPosts();
+    var curCommunity = _communitySelectedName || getCommunityName();
+    // V247: 先按当前选中小区过滤，再按分类过滤
+    var inCommunity = posts.filter(function (p) { return String(p.community || '').trim() === curCommunity; });
+    var shown = inCommunity.filter(function (p) { return _communityFilter === 'all' || p.type === _communityFilter; });
+    var listHtml = '';
+    if (!shown.length) {
+        if (!inCommunity.length) {
+            // 空状态：当前小区完全没有信息
+            listHtml = '<div style="padding:52px 24px;text-align:center;">'
+                + '<div style="font-size:40px;">🏘️</div>'
+                + '<div style="font-size:13px;color:#4B5563;line-height:1.85;margin-top:14px;">本小区还没有人发布信息，快来抢沙发，成为第一个互帮互助的邻居吧！</div>'
+                + '</div>';
+        } else {
+            listHtml = '<div style="padding:52px 24px;text-align:center;">'
+                + '<div style="font-size:40px;">🍃</div>'
+                + '<div style="font-size:13px;color:#4B5563;line-height:1.85;margin-top:14px;">这个分类还没有邻居发帖，换个分类看看吧。</div>'
+                + '</div>';
+        }
+    } else {
+        shown.forEach(function (p) {
+            try { listHtml += _communityPostCardHtml(p); } catch (e) {}
+        });
+    }
+    body.innerHTML = chips + listHtml;
+    // V248: 电话拨号 / 微信复制 / 无法拆分时兜底复制（单条帖子异常不影响整体）
+    body.querySelectorAll('[data-phone]').forEach(function (btn) {
+        btn.onclick = function () { _communityCallPhone(btn.getAttribute('data-phone')); };
+    });
+    body.querySelectorAll('[data-wechat]').forEach(function (btn) {
+        btn.onclick = function () { _communityAddWechat(btn.getAttribute('data-wechat')); };
+    });
+    body.querySelectorAll('[data-contact]').forEach(function (btn) {
+        btn.onclick = function () { _communityContactByText(btn.getAttribute('data-contact')); };
+    });
+    body.querySelectorAll('[data-buy]').forEach(function (btn) {
+        btn.onclick = function () { _communityOpenBuy(btn.getAttribute('data-buy')); };
+    });
+}
+window.renderHomeCommunityBar = renderHomeCommunityBar;
+window.openCommunityPage = openCommunityPage;
+window.closeCommunityPage = closeCommunityPage;
+window._communitySetFilter = _communitySetFilter;
+window._communitySetName = _communitySetName;
 
 // 结束计划（自定义确认弹层，避免原生 confirm 在部分环境导致黑屏）
 function _confirmEndSpecialPlan(plan) {
