@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V249-20261026';
+        var APP_VER = 'V251-20261026';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -69604,8 +69604,9 @@ function focusTodayDiaryMeals() {
 window.focusTodayDiaryMeals = focusTodayDiaryMeals;
 
 // ========== V246: 食邦邻聚（社区互助 / 拼购 / 活动） ==========
-// 数据结构：communityPosts = [{ id, type, community, authorName, title, content, contactInfo, buyLink, volunteer, createdAt }]
-// type: mutual 互助 / group_buy 拼购 / activity 活动；数据按家庭码前缀隔离存储并纳入云备份
+// 数据结构：communityPosts = [{ id, type, community, authorName, authorKey, title, content, contactPhone, contactWechat, contactInfo, images, buyLink, volunteer, auditStatus, rejectReason, createdAt }]
+// type: mutual 互助 / group_buy 拼购 / activity 活动；auditStatus: pending 审核中 / passed 已通过 / rejected 未通过
+// 数据按家庭码前缀隔离存储并纳入云备份
 var _COMMUNITY_TYPES = [
     { key: 'mutual', label: '邻里互助', emoji: '🤝', color: '#EA580C', bg: '#FFF7ED', border: '#FED7AA' },
     { key: 'group_buy', label: '社区拼购', emoji: '🛒', color: '#047857', bg: '#ECFDF5', border: '#A7F3D0' },
@@ -69613,6 +69614,7 @@ var _COMMUNITY_TYPES = [
 ];
 var _communityFilter = 'all';
 var _communitySelectedName = ''; // V247: 当前查看的小区（可在顶部下拉切换）
+var _communityView = 'feed'; // V250: feed 小区帖子 / mine 我的发布
 
 // 从家庭住址里提取小区名：去掉「XX市 / XX区（县）」前缀与楼栋门牌尾巴
 function _communityNameFromAddress(addr) {
@@ -69685,13 +69687,19 @@ function _seedCommunityPostsIfEmpty() {
     var seed = [
         { id: 'post_001', type: 'mutual', community: community, authorName: '张姐',
           title: '代包手工韭菜猪肉饺子', content: '20元/盒（20个），纯手工，可互换。',
-          contactInfo: '电话：13800138001 微信：zhangjie123', buyLink: '', createdAt: now - 3600 * 5 },
+          contactPhone: '13800138001', contactWechat: 'zhangjie123',
+          contactInfo: '电话：13800138001 微信：zhangjie123', images: [], buyLink: '',
+          auditStatus: 'passed', rejectReason: '', createdAt: now - 3600 * 5 },
         { id: 'post_002', type: 'group_buy', community: community, authorName: '李哥',
           title: '土鸡蛋拼购（30枚装）', content: '农场直发，满 20 份成团，单价 28 元，明早 10 点截止。',
-          contactInfo: '电话：13800138002 微信：lige1988', buyLink: '', createdAt: now - 3600 * 26 },
+          contactPhone: '13800138002', contactWechat: 'lige1988',
+          contactInfo: '电话：13800138002 微信：lige1988', images: [], buyLink: '',
+          auditStatus: 'passed', rejectReason: '', createdAt: now - 3600 * 26 },
         { id: 'post_003', type: 'activity', community: community, authorName: '王阿姨',
           title: '周末小区共享厨房', content: '本周六下午两点，活动室一起做时令菜，自带一道拿手菜即可参加。',
-          contactInfo: '电话：13800138003 微信：wangayi666', buyLink: '', createdAt: now - 86400 * 3 }
+          contactPhone: '13800138003', contactWechat: 'wangayi666',
+          contactInfo: '电话：13800138003 微信：wangayi666', images: [], buyLink: '',
+          auditStatus: 'passed', rejectReason: '', createdAt: now - 86400 * 3 }
     ];
     lsSetJSON('communityPosts', seed);
 }
@@ -69714,9 +69722,27 @@ function _migrateCommunitySeedContacts() {
     if (changed) lsSetJSON('communityPosts', list);
     lsSet('communityContactMigrated_v1', '1');
 }
+// V250: 历史帖子补齐审核状态与拆分后的联系方式（旧数据默认视为已通过）
+function _migrateCommunityAuditStatus() {
+    if (lsGet('communityAuditMigrated_v1') === '1') return;
+    if (!getFamilyId() || window.__demoMode) return;
+    var list = lsGetJSON('communityPosts', []);
+    if (!Array.isArray(list) || !list.length) return;
+    var changed = false;
+    list.forEach(function (p) {
+        if (!p.auditStatus) { p.auditStatus = 'passed'; changed = true; }
+        if (p.rejectReason === undefined) { p.rejectReason = ''; changed = true; }
+        var parsed = _communityParseContact(p.contactInfo || '');
+        if (!p.contactPhone && parsed.phone) { p.contactPhone = parsed.phone; changed = true; }
+        if (!p.contactWechat && parsed.wechat) { p.contactWechat = parsed.wechat; changed = true; }
+    });
+    if (changed) lsSetJSON('communityPosts', list);
+    lsSet('communityAuditMigrated_v1', '1');
+}
 function getCommunityPosts() {
     _seedCommunityPostsIfEmpty();
     _migrateCommunitySeedContacts();
+    _migrateCommunityAuditStatus();
     var list = lsGetJSON('communityPosts', []) || [];
     if (!Array.isArray(list)) list = [];
     list.sort(function (a, b) { return (parseInt(b.createdAt, 10) || 0) - (parseInt(a.createdAt, 10) || 0); });
@@ -69726,7 +69752,7 @@ function getCommunityPosts() {
 function renderHomeCommunityBar() {
     var el = document.getElementById('homeCommunityBar');
     if (!el) return;
-    var posts = getCommunityPosts();
+    var posts = getCommunityPosts().filter(function (p) { return (p.auditStatus || 'passed') === 'passed'; });
     var parts = [];
     for (var i = 0; i < posts.length && parts.length < 3; i++) {
         var p = posts[i];
@@ -69822,14 +69848,17 @@ function _communityOpenBuy(raw) {
     if (!url) { showToast && showToast('该帖子没有拼购链接'); return; }
     try { window.open(url, '_blank', 'noopener'); } catch (e) {}
 }
-// 发布表单默认联系方式：优先用本家庭上次发布时记住的，其次按登录账号推导微信号
-function _communityDefaultContact() {
-    var saved = String(lsGet('communityMyContact') || '').trim();
+// 发布表单默认联系方式：电话取上次填写的，微信号取上次填写或按登录账号推导
+function _communityDefaultPhone() {
+    return String(lsGet('communityMyPhone') || '').trim();
+}
+function _communityDefaultWechat() {
+    var saved = String(lsGet('communityMyWechat') || '').trim();
     if (saved) return saved;
     try {
         var u = getLoginUser();
         var prefix = u && u.email ? String(u.email).split('@')[0].replace(/[^A-Za-z0-9_-]/g, '') : '';
-        if (prefix.length >= 4) return '微信：' + prefix;
+        if (prefix.length >= 4) return prefix;
     } catch (e) {}
     return '';
 }
@@ -69843,6 +69872,74 @@ function _communityPostAuthorName() {
         if (ctx && ctx.name) return String(ctx.name);
     } catch (e) {}
     return '我';
+}
+// 我的发布判定键：家庭码 + 当前操作人，避免同名家人串号
+function _communityMyAuthorKey() {
+    return String(getFamilyId() || '') + '|' + _communityPostAuthorName();
+}
+// V250: 图片上传（最多 3 张，压缩后以 dataURL 存 localStorage）
+var _communityPubImages = [];
+function _communityPubPickImages(input) {
+    var files = input && input.files ? Array.prototype.slice.call(input.files) : [];
+    if (!files.length) return;
+    var room = 3 - _communityPubImages.length;
+    if (room <= 0) {
+        showToast && showToast('最多上传 3 张图片');
+        input.value = '';
+        return;
+    }
+    files.slice(0, room).forEach(function (file) {
+        if (!file || !/^image\//.test(file.type || '')) return;
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+            var img = new Image();
+            img.onload = function () {
+                var data = '';
+                try {
+                    var maxW = 900;
+                    var scale = Math.min(1, maxW / (img.width || maxW));
+                    var canvas = document.createElement('canvas');
+                    canvas.width = Math.round((img.width || maxW) * scale);
+                    canvas.height = Math.round((img.height || maxW) * scale);
+                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                    data = canvas.toDataURL('image/jpeg', 0.72);
+                } catch (e) {
+                    data = String(ev.target.result || '');
+                }
+                if (data) _communityPubImages.push(data);
+                _communityPubRenderPreviews();
+            };
+            img.src = String(ev.target.result || '');
+        };
+        reader.readAsDataURL(file);
+    });
+    input.value = '';
+}
+function _communityPubRenderPreviews() {
+    var box = document.getElementById('communityPubPreviews');
+    if (!box) return;
+    var html = '';
+    _communityPubImages.forEach(function (src, i) {
+        html += '<div style="position:relative;width:64px;height:64px;flex-shrink:0;">'
+            + '<img src="' + escapeAttr(src) + '" alt="待发布图片" style="width:100%;height:100%;object-fit:cover;border-radius:10px;border:1px solid #E5E7EB;display:block;" />'
+            + '<button type="button" onclick="_communityPubRemoveImage(' + i + ')" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border:none;border-radius:50%;background:#EF4444;color:#fff;font-size:12px;line-height:1;cursor:pointer;">×</button>'
+            + '</div>';
+    });
+    box.innerHTML = html;
+}
+function _communityPubRemoveImage(idx) {
+    _communityPubImages.splice(idx, 1);
+    _communityPubRenderPreviews();
+}
+function _communityShowImage(src) {
+    var old = document.getElementById('communityImgViewer');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'communityImgViewer';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10030;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.innerHTML = '<img src="' + escapeAttr(src) + '" alt="邻里图片" style="max-width:100%;max-height:100%;border-radius:10px;" />';
+    ov.onclick = function () { ov.remove(); };
+    document.body.appendChild(ov);
 }
 var _communityPubType = 'mutual';
 function _communityPubSelectType(key) {
@@ -69864,6 +69961,7 @@ function closeCommunityPublishModal() {
 function openCommunityPublishModal() {
     closeCommunityPublishModal();
     _communityPubType = 'mutual';
+    _communityPubImages = [];
     var typeBtns = _COMMUNITY_TYPES.map(function (t) {
         return '<button type="button" data-ptype="' + t.key + '" onclick="_communityPubSelectType(\'' + t.key + '\')" '
             + 'style="flex:1;padding:8px 4px;border-radius:10px;font-size:12px;cursor:pointer;border:1px solid #E5E7EB;background:#fff;color:#6B7280;">'
@@ -69878,16 +69976,28 @@ function openCommunityPublishModal() {
         + '<div id="communityPubTypes" style="display:flex;gap:8px;margin-bottom:12px;">' + typeBtns + '</div>'
         + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">标题</div>'
         + '<input id="communityPubTitle" type="text" maxlength="40" placeholder="例如：代包手工饺子 / 土鸡蛋拼购" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />'
-        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">内容详情</div>'
+        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">详细说明</div>'
         + '<textarea id="communityPubContent" maxlength="500" rows="3" placeholder="说明价格、时间、地点等信息" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;resize:vertical;margin-bottom:12px;"></textarea>'
-        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">联系方式</div>'
-        + '<input id="communityPubContact" type="text" maxlength="60" value="' + escapeAttr(_communityDefaultContact()) + '" placeholder="微信号或手机号，例如：微信 zhangsan123" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />'
+        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">电话</div>'
+        + '<input id="communityPubPhone" type="tel" maxlength="20" value="' + escapeAttr(_communityDefaultPhone()) + '" placeholder="方便邻居电话联系（选填）" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />'
+        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">微信号</div>'
+        + '<input id="communityPubWechat" type="text" maxlength="40" value="' + escapeAttr(_communityDefaultWechat()) + '" placeholder="方便邻居微信添加（选填）" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />'
+        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">图片上传（最多 3 张）</div>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;" id="communityPubPreviews"></div>'
+        + '<label style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px dashed #FED7AA;border-radius:10px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;cursor:pointer;">'
+        +   '<span>＋ 添加图片</span>'
+        +   '<input id="communityPubImageInput" type="file" accept="image/*" multiple onchange="_communityPubPickImages(this)" style="display:none;" />'
+        + '</label>'
+        + '<div style="font-size:11px;color:#9CA3AF;margin:4px 0 12px;">支持 jpg / png，最多 3 张</div>'
         + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">拼购链接（选填）</div>'
         + '<input id="communityPubLink" type="text" maxlength="500" placeholder="淘宝/京东等商品链接，可留空" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />'
         + '<label style="display:flex;align-items:center;gap:8px;padding:9px 10px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;margin-bottom:12px;cursor:pointer;">'
         +   '<input id="communityPubVolunteer" type="checkbox" style="width:16px;height:16px;accent-color:#047857;cursor:pointer;" />'
         +   '<span style="font-size:13px;color:#047857;font-weight:600;">♿ 这是一条助老/助残志愿服务</span>'
         + '</label>'
+        + '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:9px 10px;font-size:11px;color:#92400E;line-height:1.7;margin-bottom:12px;">'
+        +   '发布须知：请如实填写信息，禁止发布违法违规、虚假宣传、医疗诊断等内容；涉及交易请当面核实，平台不承担担保责任。信息审核通过后才会展示给邻居。'
+        + '</div>'
         + '<div style="display:flex;gap:8px;">'
         +   '<button type="button" id="communityPubCancelBtn" style="flex:1;padding:10px;border:1px solid #E5E7EB;border-radius:10px;background:#fff;color:#6B7280;font-size:14px;cursor:pointer;">取消</button>'
         +   '<button type="button" id="communityPubSubmitBtn" style="flex:2;padding:10px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">发布</button>'
@@ -69899,77 +70009,287 @@ function openCommunityPublishModal() {
     document.getElementById('communityPubCancelBtn').onclick = closeCommunityPublishModal;
     document.getElementById('communityPubSubmitBtn').onclick = submitCommunityPost;
 }
-function submitCommunityPost() {
+async function submitCommunityPost() {
     if (!getFamilyId()) {
         showToast && showToast('请先登录家庭账号后再发布');
         return;
     }
     var titleEl = document.getElementById('communityPubTitle');
     var contentEl = document.getElementById('communityPubContent');
-    var contactEl = document.getElementById('communityPubContact');
+    var phoneEl = document.getElementById('communityPubPhone');
+    var wechatEl = document.getElementById('communityPubWechat');
     var linkEl = document.getElementById('communityPubLink');
     var volEl = document.getElementById('communityPubVolunteer');
     var title = String((titleEl && titleEl.value) || '').trim();
     var content = String((contentEl && contentEl.value) || '').trim();
-    var contact = String((contactEl && contactEl.value) || '').trim();
+    var phone = String((phoneEl && phoneEl.value) || '').trim();
+    var wechat = String((wechatEl && wechatEl.value) || '').trim();
     var buyLink = _communityNormalizeBuyLink((linkEl && linkEl.value) || '');
     if (!title) { showToast && showToast('请填写标题'); titleEl && titleEl.focus(); return; }
-    if (!content) { showToast && showToast('请填写内容详情'); contentEl && contentEl.focus(); return; }
-    if (!contact) { showToast && showToast('请填写联系方式'); contactEl && contactEl.focus(); return; }
+    if (!content) { showToast && showToast('请填写详细说明'); contentEl && contentEl.focus(); return; }
+    if (phone && !/^[0-9+\-\s]{6,20}$/.test(phone)) { showToast && showToast('电话号码格式不正确'); phoneEl && phoneEl.focus(); return; }
+    if (!phone && !wechat) { showToast && showToast('请至少填写电话或微信号'); wechatEl && wechatEl.focus(); return; }
+    // V251: 发布前先走 AI 审核，通过才入库
+    var submitBtn = document.getElementById('communityPubSubmitBtn');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '审核中…'; }
+    var audit = null;
+    try {
+        audit = await _communityAuditPost(title, content, _communityPubType);
+    } catch (e) {
+        audit = null;
+    }
+    if (!audit || typeof audit.passed === 'undefined') {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '发布'; }
+        _communityAlert('审核服务暂时不可用，请稍后再试');
+        return;
+    }
+    if (!audit.passed) {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '发布'; }
+        _communityAlert('发布失败：' + (audit.reason || '内容不符合社区发布规范') + '，请修改后再试');
+        return;
+    }
     var posts = lsGetJSON('communityPosts', []) || [];
     if (!Array.isArray(posts)) posts = [];
+    var contactInfo = [];
+    if (phone) contactInfo.push('电话：' + phone);
+    if (wechat) contactInfo.push('微信：' + wechat);
     posts.unshift({
         id: 'post_' + Date.now(),
         type: _communityPubType,
         community: _communitySelectedName || getCommunityName(),
         authorName: _communityPostAuthorName(),
+        authorKey: _communityMyAuthorKey(),
         title: title,
         content: content,
-        contactInfo: contact,
+        contactPhone: phone,
+        contactWechat: wechat,
+        contactInfo: contactInfo.join(' '),
+        images: _communityPubImages.slice(),
         buyLink: buyLink,
         volunteer: !!(volEl && volEl.checked),
+        auditStatus: 'passed',
+        rejectReason: '',
         createdAt: Math.floor(Date.now() / 1000)
     });
     lsSetJSON('communityPosts', posts);
-    lsSet('communityMyContact', contact);
+    lsSet('communityMyPhone', phone);
+    lsSet('communityMyWechat', wechat);
     closeCommunityPublishModal();
+    _communityView = 'feed';
     _communityFilter = 'all';
     renderCommunityList();
     renderHomeCommunityBar();
-    showToast && showToast('发布成功，邻居们都能看到啦');
+    showToast && showToast('发布成功，已通过审核并展示给邻居');
 }
 window.openCommunityPublishModal = openCommunityPublishModal;
 window.closeCommunityPublishModal = closeCommunityPublishModal;
 window._communityPubSelectType = _communityPubSelectType;
 window._communityOpenBuy = _communityOpenBuy;
-function _communityPostCardHtml(p) {
+// V251: 发帖前 AI 审核（后端 /api/audit-post），返回 {passed, reason}
+async function _communityAuditPost(title, content, type) {
+    var resp = await fetch(API_BASE + '/api/audit-post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title, content: content, type: type })
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    return await resp.json();
+}
+// V251: 自定义提示弹层（避免原生 alert 在部分 webview 黑屏）
+function _communityAlert(msg) {
+    var old = document.getElementById('communityAlertBox');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'communityAlertBox';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10020;background:rgba(17,24,39,0.55);display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:14px;width:100%;max-width:320px;padding:18px;box-sizing:border-box;">'
+        + '<div style="font-size:14px;color:#374151;line-height:1.8;white-space:pre-wrap;">' + escapeHtml(msg) + '</div>'
+        + '<button type="button" id="communityAlertOk" style="width:100%;margin-top:14px;padding:10px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">知道了</button>'
+        + '</div>';
+    document.body.appendChild(ov);
+    document.getElementById('communityAlertOk').onclick = function () { ov.remove(); };
+}
+// V251: 举报
+var _communityReportTargetId = '';
+var _communityReportReason = '';
+var _COMMUNITY_REPORT_REASONS = [
+    { key: 'fake', label: '虚假诈骗' },
+    { key: 'food', label: '食品安全' },
+    { key: 'bad', label: '不良信息' },
+    { key: 'other', label: '其他' }
+];
+function _communityReportSelectReason(key) {
+    _communityReportReason = key || '';
+    var wrap = document.getElementById('communityReportReasons');
+    if (!wrap) return;
+    wrap.querySelectorAll('[data-rreason]').forEach(function (btn) {
+        var on = btn.getAttribute('data-rreason') === _communityReportReason;
+        btn.style.border = on ? '1px solid #EF4444' : '1px solid #E5E7EB';
+        btn.style.background = on ? '#FEF2F2' : '#fff';
+        btn.style.color = on ? '#B91C1C' : '#6B7280';
+        btn.style.fontWeight = on ? '700' : '400';
+    });
+}
+function closeCommunityReportModal() {
+    var ov = document.getElementById('communityReportOverlay');
+    if (ov) ov.remove();
+}
+function openCommunityReportModal(postId) {
+    var post = (getCommunityPosts() || []).filter(function (p) { return p.id === postId; })[0];
+    if (!post) { showToast && showToast('未找到该帖子'); return; }
+    closeCommunityReportModal();
+    _communityReportTargetId = postId;
+    _communityReportReason = '';
+    var reasonBtns = _COMMUNITY_REPORT_REASONS.map(function (r) {
+        return '<button type="button" data-rreason="' + r.key + '" onclick="_communityReportSelectReason(\'' + r.key + '\')" '
+            + 'style="flex:1;min-width:calc(50% - 4px);padding:8px 4px;border-radius:9px;font-size:12px;cursor:pointer;border:1px solid #E5E7EB;background:#fff;color:#6B7280;">'
+            + r.label + '</button>';
+    }).join('');
+    var ov = document.createElement('div');
+    ov.id = 'communityReportOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10015;background:rgba(17,24,39,0.55);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:14px;width:100%;max-width:340px;padding:16px;box-sizing:border-box;">'
+        + '<div style="font-size:15px;font-weight:700;color:#1F2937;margin-bottom:6px;">举报这条信息</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;line-height:1.6;margin-bottom:12px;">举报后该信息将暂时下架，交由平台核实处理。</div>'
+        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px;">举报原因</div>'
+        + '<div id="communityReportReasons" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' + reasonBtns + '</div>'
+        + '<textarea id="communityReportDetail" maxlength="200" rows="2" placeholder="补充说明（选填）" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:13px;outline:none;resize:vertical;margin-bottom:12px;"></textarea>'
+        + '<div style="display:flex;gap:8px;">'
+        +   '<button type="button" id="communityReportCancel" style="flex:1;padding:10px;border:1px solid #E5E7EB;border-radius:10px;background:#fff;color:#6B7280;font-size:13px;cursor:pointer;">取消</button>'
+        +   '<button type="button" id="communityReportSubmit" style="flex:2;padding:10px;border:none;border-radius:10px;background:#EF4444;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">提交举报</button>'
+        + '</div>'
+        + '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) closeCommunityReportModal(); });
+    document.body.appendChild(ov);
+    _communityReportSelectReason('');
+    document.getElementById('communityReportCancel').onclick = closeCommunityReportModal;
+    document.getElementById('communityReportSubmit').onclick = submitCommunityReport;
+}
+async function submitCommunityReport() {
+    if (!_communityReportReason) { showToast && showToast('请选择举报原因'); return; }
+    var post = (getCommunityPosts() || []).filter(function (p) { return p.id === _communityReportTargetId; })[0];
+    if (!post) { closeCommunityReportModal(); showToast && showToast('未找到该帖子'); return; }
+    var btn = document.getElementById('communityReportSubmit');
+    var detailEl = document.getElementById('communityReportDetail');
+    if (btn) { btn.disabled = true; btn.textContent = '提交中…'; }
+    var ok = true;
+    try {
+        var resp = await fetch(API_BASE + '/api/report-post', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                postId: post.id,
+                reason: _communityReportReason,
+                detail: String((detailEl && detailEl.value) || ''),
+                title: post.title || '',
+                content: post.content || '',
+                community: post.community || '',
+                authorName: post.authorName || '',
+                familyId: getFamilyId() || '',
+                appVer: String(lsGet('_appVer') || '')
+            })
+        });
+        var data = resp.ok ? await resp.json() : null;
+        ok = !!(data && data.ok);
+    } catch (e) {
+        ok = false;
+    }
+    if (!ok) {
+        if (btn) { btn.disabled = false; btn.textContent = '提交举报'; }
+        showToast && showToast('举报提交失败，请稍后再试');
+        return;
+    }
+    // 本地置为 reported（下架），待超管核实
+    var list = lsGetJSON('communityPosts', []) || [];
+    list.forEach(function (p) {
+        if (p.id === post.id) { p.auditStatus = 'reported'; p.reportReason = _communityReportReason; }
+    });
+    lsSetJSON('communityPosts', list);
+    closeCommunityReportModal();
+    renderCommunityList();
+    renderHomeCommunityBar();
+    showToast && showToast('举报已提交，平台会尽快核实处理');
+}
+window.openCommunityReportModal = openCommunityReportModal;
+window.closeCommunityReportModal = closeCommunityReportModal;
+window._communityReportSelectReason = _communityReportSelectReason;
+function _communityPostCardHtml(p, opts) {
+    opts = opts || {};
     var meta = _communityTypeMeta(p.type);
     var hasBuy = !!String(p.buyLink || '').trim();
-    var contact = String(p.contactInfo || '').trim();
-    var parsed = _communityParseContact(contact);
-    // V248: 电话与微信并列展示，各自独立入口
+    var phone = String(p.contactPhone || '').trim();
+    var wechat = String(p.contactWechat || '').trim();
+    var rawContact = String(p.contactInfo || '').trim();
+    if (!phone && !wechat) {
+        var parsed = _communityParseContact(rawContact);
+        phone = parsed.phone;
+        wechat = parsed.wechat;
+    }
+    // V248/V250: 电话与微信并列展示，各自独立入口
     var contactBtns = '';
-    if (parsed.phone) {
-        contactBtns += '<button type="button" data-phone="' + escapeHtml(parsed.phone) + '" style="padding:6px 12px;border:1px solid #FED7AA;border-radius:9px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;cursor:pointer;">📞 ' + escapeHtml(parsed.phone) + '</button>';
+    if (phone) {
+        contactBtns += '<button type="button" data-phone="' + escapeHtml(phone) + '" style="padding:6px 12px;border:1px solid #FED7AA;border-radius:9px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;cursor:pointer;">📞 ' + escapeHtml(phone) + '</button>';
     }
-    if (parsed.wechat) {
-        contactBtns += '<button type="button" data-wechat="' + escapeHtml(parsed.wechat) + '" style="padding:6px 12px;border:1px solid #A7F3D0;border-radius:9px;background:#ECFDF5;color:#047857;font-size:12px;font-weight:600;cursor:pointer;">💬 微信 ' + escapeHtml(parsed.wechat) + '</button>';
+    if (wechat) {
+        contactBtns += '<button type="button" data-wechat="' + escapeHtml(wechat) + '" style="padding:6px 12px;border:1px solid #A7F3D0;border-radius:9px;background:#ECFDF5;color:#047857;font-size:12px;font-weight:600;cursor:pointer;">💬 微信 ' + escapeHtml(wechat) + '</button>';
     }
-    if (!parsed.phone && !parsed.wechat) {
-        contactBtns += '<button type="button" data-contact="' + escapeHtml(contact) + '" style="padding:6px 12px;border:1px solid #FED7AA;border-radius:9px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;cursor:pointer;">📞 联系Ta</button>';
+    if (!phone && !wechat) {
+        contactBtns += '<button type="button" data-contact="' + escapeHtml(rawContact) + '" style="padding:6px 12px;border:1px solid #FED7AA;border-radius:9px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;cursor:pointer;">📞 联系Ta</button>';
     }
-    return '<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
+    // 图片缩略图（最多 3 张）
+    var images = Array.isArray(p.images) ? p.images.filter(Boolean).slice(0, 3) : [];
+    var imagesHtml = '';
+    if (images.length) {
+        imagesHtml = '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">';
+        images.forEach(function (src) {
+            imagesHtml += '<button type="button" data-img="' + escapeAttr(src) + '" style="width:72px;height:72px;padding:0;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;background:#F9FAFB;cursor:pointer;flex-shrink:0;">'
+                + '<img src="' + escapeAttr(src) + '" alt="邻里图片" style="width:100%;height:100%;object-fit:cover;display:block;" />'
+                + '</button>';
+        });
+        imagesHtml += '</div>';
+    }
+    // 我的发布：展示审核状态与驳回原因
+    var status = String(p.auditStatus || 'passed');
+    var statusHtml = '';
+    var watermarkHtml = '';
+    var rejectHtml = '';
+    if (opts.mine) {
+        var stMap = {
+            pending: { text: '⏳ 审核中', color: '#B45309', bg: '#FFFBEB', border: '#FDE68A' },
+            passed: { text: '✅ 已通过', color: '#047857', bg: '#ECFDF5', border: '#A7F3D0' },
+            rejected: { text: '❌ 未通过', color: '#B91C1C', bg: '#FEF2F2', border: '#FECACA' },
+            reported: { text: '🚩 已下架', color: '#B91C1C', bg: '#FEF2F2', border: '#FECACA' }
+        };
+        var st = stMap[status] || stMap.pending;
+        statusHtml = '<span style="font-size:10px;font-weight:700;color:' + st.color + ';background:' + st.bg + ';border:1px solid ' + st.border + ';border-radius:8px;padding:1px 6px;">' + st.text + '</span>';
+        if (status === 'pending') {
+            watermarkHtml = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-18deg);font-size:28px;font-weight:900;letter-spacing:4px;color:rgba(217,119,6,0.18);pointer-events:none;white-space:nowrap;">审核中</div>';
+        } else if (status === 'rejected') {
+            watermarkHtml = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-18deg);font-size:28px;font-weight:900;letter-spacing:4px;color:rgba(220,38,38,0.18);pointer-events:none;white-space:nowrap;">未通过</div>';
+        } else if (status === 'reported') {
+            watermarkHtml = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-18deg);font-size:28px;font-weight:900;letter-spacing:4px;color:rgba(220,38,38,0.18);pointer-events:none;white-space:nowrap;">已下架</div>';
+        }
+        if (status === 'rejected' && p.rejectReason) {
+            rejectHtml = '<div style="margin-top:8px;padding:8px 10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#B91C1C;line-height:1.6;">未通过原因：' + escapeHtml(p.rejectReason) + '</div>';
+        }
+    }
+    return '<div style="position:relative;overflow:hidden;background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
+        + watermarkHtml
         + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap;">'
         +   '<span style="font-size:10px;font-weight:700;color:' + meta.color + ';background:' + meta.bg + ';border:1px solid ' + meta.border + ';border-radius:8px;padding:1px 6px;">' + meta.emoji + ' ' + meta.label + '</span>'
         +   (p.volunteer ? '<span style="font-size:10px;font-weight:700;color:#047857;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;padding:1px 6px;">♿ 助老助残志愿服务</span>' : '')
+        +   statusHtml
         +   '<span style="font-size:12px;color:#374151;font-weight:600;">' + escapeHtml(p.authorName || '邻居') + '</span>'
         +   '<span style="font-size:11px;color:#9CA3AF;margin-left:auto;">' + escapeHtml(_communityTimeText(p.createdAt)) + '</span>'
         + '</div>'
         + '<div style="font-size:14px;font-weight:700;color:#1F2937;line-height:1.5;">' + escapeHtml(p.title || '') + '</div>'
         + '<div style="font-size:12px;color:#4B5563;line-height:1.8;margin-top:4px;">' + escapeHtml(p.content || '') + '</div>'
+        + imagesHtml
+        + rejectHtml
         + '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;">'
         +   contactBtns
         +   (hasBuy ? '<button type="button" data-buy="' + escapeAttr(p.buyLink) + '" style="padding:6px 12px;border:none;border-radius:9px;background:#F97316;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">🔗 去拼购</button>' : '')
+        +   '<button type="button" data-report="' + escapeHtml(String(p.id || '')) + '" title="举报这条信息" style="margin-left:auto;padding:2px 4px;border:none;background:transparent;color:#9CA3AF;font-size:11px;cursor:pointer;">🚩 举报</button>'
         + '</div>'
         + '</div>';
 }
@@ -70003,15 +70323,30 @@ function openCommunityPage() {
     document.body.appendChild(overlay);
     document.getElementById('communityCloseBtn').onclick = closeCommunityPage;
     _communityFilter = 'all';
+    _communityView = 'feed';
     renderCommunityList();
 }
 function _communitySetFilter(key) {
     _communityFilter = key || 'all';
     renderCommunityList();
 }
+// V250: 切换「小区帖子 / 我的发布」
+function _communitySetView(view) {
+    _communityView = view === 'mine' ? 'mine' : 'feed';
+    renderCommunityList();
+}
 function renderCommunityList() {
     var body = document.getElementById('communityBody');
     if (!body) return;
+    var isMine = _communityView === 'mine';
+    var tabs = '<div style="display:flex;background:#fff;border:1px solid #FED7AA;border-radius:12px;padding:3px;margin-bottom:10px;">';
+    tabs += '<button type="button" onclick="_communitySetView(\'feed\')" style="flex:1;padding:8px;border:none;border-radius:9px;font-size:13px;cursor:pointer;'
+        + (!isMine ? 'background:#F97316;color:#fff;font-weight:700;' : 'background:transparent;color:#6B7280;')
+        + '">邻居动态</button>';
+    tabs += '<button type="button" onclick="_communitySetView(\'mine\')" style="flex:1;padding:8px;border:none;border-radius:9px;font-size:13px;cursor:pointer;'
+        + (isMine ? 'background:#F97316;color:#fff;font-weight:700;' : 'background:transparent;color:#6B7280;')
+        + '">我的发布</button>';
+    tabs += '</div>';
     var chips = '<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;">';
     chips += '<button type="button" onclick="_communitySetFilter(\'all\')" style="flex-shrink:0;padding:6px 12px;border-radius:16px;font-size:12px;cursor:pointer;'
         + (_communityFilter === 'all' ? 'border:1px solid #F97316;background:#F97316;color:#fff;font-weight:700;' : 'border:1px solid #E5E7EB;background:#fff;color:#6B7280;')
@@ -70025,30 +70360,51 @@ function renderCommunityList() {
 
     var posts = getCommunityPosts();
     var curCommunity = _communitySelectedName || getCommunityName();
-    // V247: 先按当前选中小区过滤，再按分类过滤
-    var inCommunity = posts.filter(function (p) { return String(p.community || '').trim() === curCommunity; });
-    var shown = inCommunity.filter(function (p) { return _communityFilter === 'all' || p.type === _communityFilter; });
     var listHtml = '';
-    if (!shown.length) {
-        if (!inCommunity.length) {
-            // 空状态：当前小区完全没有信息
+    if (isMine) {
+        // 我的发布：包含 pending / passed / rejected，不受小区与分类筛选影响
+        var myKey = _communityMyAuthorKey();
+        var mine = posts.filter(function (p) {
+            if (p.authorKey) return p.authorKey === myKey;
+            return String(p.authorName || '') === _communityPostAuthorName();
+        });
+        if (!mine.length) {
             listHtml = '<div style="padding:52px 24px;text-align:center;">'
-                + '<div style="font-size:40px;">🏘️</div>'
-                + '<div style="font-size:13px;color:#4B5563;line-height:1.85;margin-top:14px;">本小区还没有人发布信息，快来抢沙发，成为第一个互帮互助的邻居吧！</div>'
+                + '<div style="font-size:40px;">📝</div>'
+                + '<div style="font-size:13px;color:#4B5563;line-height:1.85;margin-top:14px;">你还没有发布过信息，点右下角「发布邻聚信息」试试吧。</div>'
                 + '</div>';
         } else {
-            listHtml = '<div style="padding:52px 24px;text-align:center;">'
-                + '<div style="font-size:40px;">🍃</div>'
-                + '<div style="font-size:13px;color:#4B5563;line-height:1.85;margin-top:14px;">这个分类还没有邻居发帖，换个分类看看吧。</div>'
-                + '</div>';
+            mine.forEach(function (p) {
+                try { listHtml += _communityPostCardHtml(p, { mine: true }); } catch (e) {}
+            });
         }
     } else {
-        shown.forEach(function (p) {
-            try { listHtml += _communityPostCardHtml(p); } catch (e) {}
+        // V247/V250: 只展示审核通过、且属于当前小区、匹配分类的帖子
+        var inCommunity = posts.filter(function (p) {
+            return String(p.community || '').trim() === curCommunity && String(p.auditStatus || 'passed') === 'passed';
         });
+        var shown = inCommunity.filter(function (p) { return _communityFilter === 'all' || p.type === _communityFilter; });
+        if (!shown.length) {
+            if (!inCommunity.length) {
+                // 空状态：当前小区完全没有已通过的信息
+                listHtml = '<div style="padding:52px 24px;text-align:center;">'
+                    + '<div style="font-size:40px;">🏘️</div>'
+                    + '<div style="font-size:13px;color:#4B5563;line-height:1.85;margin-top:14px;">本小区还没有人发布信息，快来抢沙发，成为第一个互帮互助的邻居吧！</div>'
+                    + '</div>';
+            } else {
+                listHtml = '<div style="padding:52px 24px;text-align:center;">'
+                    + '<div style="font-size:40px;">🍃</div>'
+                    + '<div style="font-size:13px;color:#4B5563;line-height:1.85;margin-top:14px;">这个分类还没有邻居发帖，换个分类看看吧。</div>'
+                    + '</div>';
+            }
+        } else {
+            shown.forEach(function (p) {
+                try { listHtml += _communityPostCardHtml(p); } catch (e) {}
+            });
+        }
     }
-    body.innerHTML = chips + listHtml;
-    // V248: 电话拨号 / 微信复制 / 无法拆分时兜底复制（单条帖子异常不影响整体）
+    body.innerHTML = tabs + chips + listHtml;
+    // V248/V250: 电话拨号 / 微信复制 / 兜底复制 / 拼购跳转 / 图片预览（单条帖子异常不影响整体）
     body.querySelectorAll('[data-phone]').forEach(function (btn) {
         btn.onclick = function () { _communityCallPhone(btn.getAttribute('data-phone')); };
     });
@@ -70061,12 +70417,22 @@ function renderCommunityList() {
     body.querySelectorAll('[data-buy]').forEach(function (btn) {
         btn.onclick = function () { _communityOpenBuy(btn.getAttribute('data-buy')); };
     });
+    body.querySelectorAll('[data-img]').forEach(function (btn) {
+        btn.onclick = function () { _communityShowImage(btn.getAttribute('data-img')); };
+    });
+    body.querySelectorAll('[data-report]').forEach(function (btn) {
+        btn.onclick = function () { openCommunityReportModal(btn.getAttribute('data-report')); };
+    });
 }
 window.renderHomeCommunityBar = renderHomeCommunityBar;
 window.openCommunityPage = openCommunityPage;
 window.closeCommunityPage = closeCommunityPage;
 window._communitySetFilter = _communitySetFilter;
 window._communitySetName = _communitySetName;
+window._communitySetView = _communitySetView;
+window._communityPubPickImages = _communityPubPickImages;
+window._communityPubRemoveImage = _communityPubRemoveImage;
+window._communityShowImage = _communityShowImage;
 
 // 结束计划（自定义确认弹层，避免原生 confirm 在部分环境导致黑屏）
 function _confirmEndSpecialPlan(plan) {

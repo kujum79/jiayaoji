@@ -4430,6 +4430,141 @@ async def special_plan(req: SpecialPlanRequest) -> Dict[str, Any]:
     }
 
 
+# ========== V251: 食邦邻聚发帖 AI 审核 + 举报受理（POST /api/audit-post、POST /api/report-post） ==========
+class AuditPostRequest(BaseModel):
+    title: str = Field(default="", max_length=100)
+    content: str = Field(default="", max_length=2000)
+    type: str = Field(default="", max_length=20)
+
+
+_AUDIT_POST_TYPE_LABELS = {"mutual": "邻里互助", "group_buy": "社区拼购", "activity": "社区活动"}
+
+_AUDIT_POST_PROMPT = """你是社区互助信息审核员。请审核以下用户发布的信息：
+【标题】{title}
+【内容】{content}
+【分类】{type}
+
+【审核红线】：
+1. 严禁出现医疗功效承诺（治疗、治愈、降血压、偏方等）。
+2. 严禁出现金融诈骗、高额返利、拉人头、诱导私下巨额转账。
+3. 严禁出现黄赌毒、政治敏感、违禁品交易。
+4. 严禁出现谩骂、地域歧视等攻击性言论。
+
+【判定标准】：
+如果触碰红线，返回 {{ "passed": false, "reason": "具体驳回原因" }}
+如果是正常的邻里互助、拼购、聚餐，返回 {{ "passed": true, "reason": "" }}。
+请严格返回 JSON。"""
+
+# 关键词兜底：拦住最明显的红线词，避免 AI 漏判后直接发布
+_AUDIT_POST_BANNED = [
+    "治愈", "包治", "偏方", "药到病除", "根治", "降血压", "降血糖",
+    "高额返利", "拉人头", "刷单", "稳赚", "日入过万", "内部消息",
+    "毒品", "冰毒", "大麻", "赌博", "博彩", "色情", "枪支", "违禁品",
+]
+
+
+def _audit_post_banned_hits(text: str) -> List[str]:
+    body = text or ""
+    return [w for w in _AUDIT_POST_BANNED if w in body]
+
+
+@app.post("/api/audit-post")
+async def audit_post(req: AuditPostRequest) -> Dict[str, Any]:
+    """V251: 邻里信息发布前 AI 审核，返回 {passed, reason}。"""
+    title = (req.title or "").strip()
+    content = (req.content or "").strip()
+    type_label = _AUDIT_POST_TYPE_LABELS.get((req.type or "").strip(), "邻里互助")
+    if not title or not content:
+        return {"passed": False, "reason": "标题和内容不能为空"}
+
+    hits = _audit_post_banned_hits(title + "\n" + content)
+    if hits:
+        return {"passed": False, "reason": "内容含违规信息：" + "、".join(hits[:3])}
+
+    prompt = _AUDIT_POST_PROMPT.format(
+        title=title[:80], content=content[:800], type=type_label
+    )
+    messages = [
+        {"role": "system", "content": "你是家肴记社区的信息审核员，只输出 JSON。"},
+        {"role": "user", "content": prompt},
+    ]
+    try:
+        raw = await call_qwen(
+            messages, json_mode=True, max_tokens=300, task_type="audit_post", timeout=30.0
+        )
+        parsed = extract_json_object(raw)
+    except Exception as exc:
+        print(f"[audit-post] AI failed: {exc}")
+        # 审核不可用时按不通过处理，避免绕过审核直接发布
+        return {"passed": False, "reason": "审核服务暂时不可用，请稍后再试"}
+
+    if not isinstance(parsed, dict) or "passed" not in parsed:
+        return {"passed": False, "reason": "审核结果异常，请稍后再试"}
+
+    passed_raw = parsed.get("passed")
+    if isinstance(passed_raw, str):
+        passed = passed_raw.strip().lower() in {"true", "1", "yes", "pass", "通过"}
+    else:
+        passed = bool(passed_raw)
+    if passed:
+        return {"passed": True, "reason": ""}
+    reason = str(parsed.get("reason") or "").strip()[:100]
+    return {"passed": False, "reason": reason or "内容不符合社区发布规范"}
+
+
+_COMMUNITY_REPORT_PATH = _FH_DATA_DIR / "community_reports.jsonl"
+_REPORT_REASON_LABELS = {
+    "fake": "虚假诈骗",
+    "food": "食品安全",
+    "bad": "不良信息",
+    "other": "其他",
+}
+
+
+class ReportPostRequest(BaseModel):
+    postId: str = Field(..., max_length=60)
+    reason: str = Field(default="", max_length=20)
+    detail: str = Field(default="", max_length=300)
+    title: str = Field(default="", max_length=100)
+    content: str = Field(default="", max_length=2000)
+    community: str = Field(default="", max_length=60)
+    authorName: str = Field(default="", max_length=40)
+    familyId: str = Field(default="", max_length=20)
+    appVer: str = Field(default="", max_length=40)
+
+
+@app.post("/api/report-post")
+async def report_post(req: ReportPostRequest) -> Dict[str, Any]:
+    """V251: 邻聚帖子举报受理，追加写 jsonl 供超管处理。"""
+    post_id = (req.postId or "").strip()
+    if not post_id:
+        return {"ok": False, "error": "帖子标识为空"}
+    reason_key = (req.reason or "").strip()
+    reason_label = _REPORT_REASON_LABELS.get(reason_key, reason_key)
+    if not reason_label:
+        return {"ok": False, "error": "请选择举报原因"}
+
+    record = {
+        "ts": _dt_cls.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "postId": post_id,
+        "reason": reason_label,
+        "detail": (req.detail or "").strip(),
+        "title": (req.title or "").strip(),
+        "content": (req.content or "").strip(),
+        "community": (req.community or "").strip(),
+        "authorName": (req.authorName or "").strip(),
+        "familyId": (req.familyId or "").strip().upper(),
+        "appVer": (req.appVer or "").strip(),
+    }
+    try:
+        _COMMUNITY_REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(_COMMUNITY_REPORT_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        return {"ok": False, "error": f"写入失败：{exc}"}
+    return {"ok": True}
+
+
 # ========== V226: 全局错误日志（后端异常拦截 + 前端错误上报） ==========
 import traceback as _tb
 import logging
