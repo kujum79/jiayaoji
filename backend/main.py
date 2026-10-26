@@ -4310,6 +4310,126 @@ async def expert_assess(req: ExpertAssessRequest) -> Dict[str, Any]:
     return {"ok": True, "result": text, "usedVision": used_vision, "mode": "ai"}
 
 
+# ========== V226: 专项饮食计划生成（POST /api/special-plan） ==========
+class SpecialPlanRequest(BaseModel):
+    memberBrief: str = ""
+    planType: str = ""       # illness / growth / athlete / fitness / pregnancy / infant
+    description: str = ""
+    familyBrief: str = ""
+    solarTerm: str = ""
+
+
+_SPECIAL_PLAN_LABELS = {
+    "illness": "生病调理",
+    "growth": "增高冲刺",
+    "athlete": "体育生备赛",
+    "fitness": "健身减脂",
+    "pregnancy": "孕期护理",
+    "infant": "婴儿辅食",
+}
+
+_SPECIAL_PLAN_PROMPT = """你是一位专业的家庭营养师。请为家庭中的这位成员制定一个为期 7 天的专项饮食调理计划。
+【成员】{memberBrief}
+【家庭背景】{familyBrief}
+【计划类型】{planType}
+【具体情况】{description}
+【当前节气】{solarTerm}
+【要求】
+1. 输出一个包含 7 天一日三餐的 JSON 数据（早/中/晚餐的菜名）。
+2. 生成一段 200 字左右的【专项饮食报告】。
+3. 报告需结合节气（当前为{solarTerm}）。
+4. 严禁使用治疗、治愈等医疗词汇。生病调理需强调补水、易消化；增高/体育生需强调高蛋白高钙。
+5. 返回格式：{{ "weeklyPlan": {{ "day1": ["早餐...", "午餐...", "晚餐..."], "day2": ["早餐...", "午餐...", "晚餐..."] }}, "report": "..." }}
+只输出 JSON，不要输出 Markdown 代码块或额外说明。"""
+
+
+@app.post("/api/special-plan")
+async def special_plan(req: SpecialPlanRequest) -> Dict[str, Any]:
+    """V226: 生成 7 天专项食谱（day1~day7 三餐）与专项饮食报告。"""
+    plan_type = (req.planType or "").strip()
+    label = _SPECIAL_PLAN_LABELS.get(plan_type)
+    if not label:
+        return {"ok": False, "error": "不支持的专项计划类型"}
+    description = (req.description or "").strip()[:600]
+    if not description:
+        return {"ok": False, "error": "请填写具体情况"}
+
+    member_brief = (req.memberBrief or "").strip()[:300] or "家庭成员"
+    family_brief = (req.familyBrief or "").strip()[:500] or "普通家庭"
+    solar_term = (req.solarTerm or "").strip()[:20] or "当季"
+
+    prompt = _SPECIAL_PLAN_PROMPT.format(
+        memberBrief=member_brief,
+        familyBrief=family_brief,
+        planType=label,
+        description=description,
+        solarTerm=solar_term,
+    )
+    messages = [
+        {"role": "system", "content": "你是家肴记的专业家庭营养师，严格按用户要求的 JSON 格式输出。"},
+        {"role": "user", "content": prompt},
+    ]
+
+    try:
+        raw = await call_qwen(messages, json_mode=True, max_tokens=2200, task_type="special_plan", timeout=90.0)
+        parsed = extract_json_object(raw)
+    except Exception as exc:
+        print(f"[special-plan] AI failed: {exc}")
+        return {"ok": False, "error": "AI 生成失败，请稍后重试"}
+
+    if not isinstance(parsed, dict):
+        return {"ok": False, "error": "AI 返回格式异常，请稍后重试"}
+
+    weekly_raw = parsed.get("weeklyPlan") or parsed.get("weekly_plan") or {}
+    if not isinstance(weekly_raw, dict):
+        weekly_raw = {}
+    raw_days = weekly_raw.get("days") or weekly_raw.get("week") or []
+    if not isinstance(raw_days, list):
+        raw_days = []
+
+    weekly_plan: Dict[str, List[str]] = {}
+    for i in range(1, 8):
+        item = weekly_raw.get(f"day{i}") or weekly_raw.get(f"day_{i}")
+        if item is None and len(raw_days) >= i:
+            item = raw_days[i - 1]
+        if isinstance(item, dict):
+            item = [
+                item.get("breakfast") or item.get("breakfastName"),
+                item.get("lunch") or item.get("lunchName"),
+                item.get("dinner") or item.get("dinnerName"),
+            ]
+        if isinstance(item, list):
+            meals = [str(x).strip() for x in item if x is not None and str(x).strip()][:3]
+        elif isinstance(item, str) and item.strip():
+            meals = [item.strip()]
+        else:
+            meals = []
+        while len(meals) < 3:
+            meals.append("")
+        weekly_plan[f"day{i}"] = meals
+
+    if not any(any(m for m in meals) for meals in weekly_plan.values()):
+        return {"ok": False, "error": "AI 未生成有效食谱，请补充具体情况后重试"}
+
+    report = str(parsed.get("report") or "").strip()
+    for w in _EXPERT_BAD_WORDS:
+        report = report.replace(w, "")
+    if not report:
+        report = f"本周结合{solar_term}节气安排饮食，以新鲜当季食材为主，三餐规律、荤素搭配，按计划执行并留意身体反馈。"
+    if not report.startswith("【专项饮食报告】"):
+        report = "【专项饮食报告】" + report
+    if _EXPERT_DISCLAIMER not in report:
+        report = report + "\n\n" + _EXPERT_DISCLAIMER
+
+    return {
+        "ok": True,
+        "planType": plan_type,
+        "planLabel": label,
+        "weeklyPlan": weekly_plan,
+        "report": report,
+    }
+
+
 # ========== V226: 全局错误日志（后端异常拦截 + 前端错误上报） ==========
 import traceback as _tb
 import logging

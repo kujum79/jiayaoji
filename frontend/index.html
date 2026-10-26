@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V232-20261026';
+        var APP_VER = 'V237-20261026';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -4361,20 +4361,23 @@ async function _submitFeedback() {
             <button class="menu-btn" id="knowledgeGuideBackBtn" style="display:none;" onclick="_backGuideToHome()" title="返回首页">&lt;</button>
             <!-- [🗂️] 饮食文库入口：仅食知页显示（💬 历史对话按钮右侧；与底部食知 📚 区分） -->
             <button class="menu-btn" id="knowledgeLibBtn" style="display:none;" onclick="_onLibraryBtnClick()" title="饮食文库">🗂️</button>
-            <button class="menu-btn" id="diaryRecipePickerTopBtn" style="display:none;position:absolute;left:12px;top:50%;transform:translateY(-50%);" onclick="openDiaryRecentDishes()" title="最近吃过的菜">☰</button>
             <span class="title" id="topTitle" onclick="clickTitleAction()">AI对话</span>
-            <div style="display:flex;gap:4px;margin-left:auto;align-items:center;">
-                <!-- 食记就餐人选择器（V123: 移到 ➕ 左侧，与首页食记卡槽位共用同一节点） -->
+            <!-- 食记就餐人选择器（V226: 移到顶栏左上角，与首页食记卡槽位共用同一节点） -->
+            <div id="diaryDiningLeftSlot" style="display:flex;position:absolute;left:12px;top:50%;transform:translateY(-50%);z-index:12;align-items:center;">
                 <div id="diaryDiningSelector" style="display:none;align-items:center;gap:4px;position:relative;">
                     <button id="diaryDiningBtn" style="display:flex;align-items:center;gap:2px;background:white;border:1px solid #F97316;border-radius:10px;padding:0 6px;font-size:12px;line-height:1;height:24px;width:auto;box-sizing:border-box;color:#F97316;font-weight:600;cursor:pointer;white-space:nowrap;overflow:hidden;position:relative;" onclick="toggleDiaryDiningDropdown()">
                         <span id="diaryDiningLabel">选择就餐人</span>
                         <span style="font-size:9px;">▼</span>
                     </button>
-                    <!-- 下拉菜单（右对齐，避免贴边溢出） -->
-                    <div id="diaryDiningDropdown" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.15);padding:10px;z-index:200;width:240px;max-height:380px;overflow-y:auto;border:1px solid #E5E7EB;">
+                    <!-- 下拉菜单（左对齐，向下展开） -->
+                    <div id="diaryDiningDropdown" style="display:none;position:absolute;top:100%;left:0;margin-top:4px;background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.15);padding:10px;z-index:200;width:240px;max-height:380px;overflow-y:auto;border:1px solid #E5E7EB;">
                     </div>
                 </div>
+            </div>
+            <div style="display:flex;gap:4px;margin-left:auto;align-items:center;">
                 <button class="clear-btn" id="knowledgeResetBtn" style="display:none;" title="重新对话">🔄</button>
+                <!-- V227: 食记页右上角「专项计划」看板入口（在 ➕ 左侧） -->
+                <button class="clear-btn" id="diarySpecialPlanBtn" style="display:none;width:auto;height:24px;padding:0 8px;border:1px solid rgba(255,255,255,0.55);border-radius:12px;background:rgba(255,255,255,0.18);color:#fff;font-size:12px;font-weight:600;line-height:1;white-space:nowrap;" onclick="openSpecialPlanBoard()">健康管家</button>
                 <button class="clear-btn" id="clearBtn">➕</button>
             </div>
         </div>
@@ -4585,8 +4588,6 @@ async function _submitFeedback() {
                         </div>
                     </div>
                     <!-- 餐次卡片容器 -->
-                    <!-- V202.1: 未来 N 天饮食沙盘入口（订阅 premium 显示，JS 动态填充） -->
-                    <div id="diaryDeepPlanCard" style="display:none;margin:0 7px 10px;"></div>
                     <div id="diaryMeals"></div>
                     <!-- AI回复显示区域 -->
                     <div id="diaryAiReply" style="display:none;margin:0 7px 10px;padding:12px 14px;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;font-size:14px;color:#0C4A6E;line-height:1.6;white-space:pre-wrap;word-break:break-word;"></div>
@@ -6740,6 +6741,10 @@ function migrateToDietCalendar() {
         Object.keys(mealKeyMap).forEach(meal => {
             if (!calendar[date][meal]) calendar[date][meal] = { plan: null, actual: null };
             const items = dayPlan[meal] || [];
+            // V233: 老 mealPlans 若把某餐存成对象并带专项干预，原样迁到餐次节点
+            if (!Array.isArray(items) && Array.isArray(items.specialInterventions) && items.specialInterventions.length) {
+                calendar[date][meal].specialInterventions = items.specialInterventions;
+            }
             if (items.length > 0) {
                 calendar[date][meal].plan = {
                     dishes: items.map(item => {
@@ -6758,6 +6763,10 @@ function migrateToDietCalendar() {
                 dishes: dayPlan.dishes,
                 note: dayPlan.note || ''
             };
+            // V233: 就餐计划若带专项干预，一并迁移到午餐餐次节点
+            if (Array.isArray(dayPlan.specialInterventions) && dayPlan.specialInterventions.length) {
+                calendar[date][mealType].specialInterventions = dayPlan.specialInterventions;
+            }
         }
     });
     
@@ -8179,6 +8188,7 @@ function familyKey(key) {
         'customCaseOrders',
         'reviewRiskAI',
         'expertAssessments',
+        'specialPlans',
         'systemErrorLogs',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
@@ -11940,9 +11950,148 @@ function saveDietCalendar(calendar) {
     lsSet('dietCalendar', JSON.stringify(calendar));
 }
 
+// ==================== V233: 专项干预 specialInterventions ====================
+// 挂在「某天某一餐」的餐次节点上，与 plan / actual 同级；一条干预 = 某位成员针对某道菜的调整说明：
+//   calendar['2026-10-26'].lunch.specialInterventions = [
+//     { memberName:'儿子', planType:'illness', targetDish:'山药瘦肉粥', note:'低油少盐，易消化' }
+//   ]
+// 只做数据结构与读写工具，渲染/入口由上层调用方决定。
+// 单条干预归一化：memberName / targetDish 必填，其余字段清洗为字符串；非法返回 null
+function normalizeSpecialIntervention(item) {
+    if (!item || typeof item !== 'object') return null;
+    var memberName = String(item.memberName || '').trim();
+    var targetDish = String(item.targetDish || '').trim();
+    if (!memberName || !targetDish) return null;
+    var planType = String(item.planType || '').trim();
+    return {
+        memberName: memberName,
+        planType: planType,
+        targetDish: targetDish,
+        note: String(item.note || '').trim()
+    };
+}
+
+// 去重键：同一成员 + 同一计划类型 + 同一道菜只保留一条
+function _spInterventionKey(it) {
+    return it.memberName + '|' + it.planType + '|' + it.targetDish;
+}
+
+function _spInterventionList(raw) {
+    var out = [], seen = {};
+    (Array.isArray(raw) ? raw : []).forEach(function(it) {
+        var n = normalizeSpecialIntervention(it);
+        if (!n) return;
+        var k = _spInterventionKey(n);
+        if (seen[k]) return;
+        seen[k] = 1;
+        out.push(n);
+    });
+    return out;
+}
+
+// 读取：兼容三种落点 —— 餐次节点 / plan 内 / actual 内（老数据或 AI 直接塞在 plan 里）
+function _readSpecialInterventionsFromSlot(slot) {
+    if (!slot || typeof slot !== 'object') return [];
+    if (Array.isArray(slot.specialInterventions) && slot.specialInterventions.length) return slot.specialInterventions;
+    if (slot.plan && Array.isArray(slot.plan.specialInterventions) && slot.plan.specialInterventions.length) return slot.plan.specialInterventions;
+    if (slot.actual && Array.isArray(slot.actual.specialInterventions) && slot.actual.specialInterventions.length) return slot.actual.specialInterventions;
+    return [];
+}
+
+function getSpecialInterventions(date, mealType) {
+    var calendar = getDietCalendar();
+    var slot = calendar && calendar[date] && calendar[date][mealType];
+    return _spInterventionList(_readSpecialInterventionsFromSlot(slot));
+}
+
+// V235: 卡片上的「特供」小标签 —— 菜品名后追加，如 [🤒 儿子特供]
+var _SP_TYPE_EMOJI = { illness: '🤒', fitness: '💪', growth: '📈', athlete: '🏅', pregnancy: '🤰', infant: '🍼' };
+
+function specialInterventionsForDish(list, dishName) {
+    var name = String(dishName || '').trim();
+    if (!name) return [];
+    return (Array.isArray(list) ? list : []).filter(function (it) {
+        return it && String(it.targetDish || '').trim() === name;
+    });
+}
+
+function specialInterventionBadgesHtml(list, dishName) {
+    var hits = specialInterventionsForDish(list, dishName);
+    if (!hits.length) return '';
+    return hits.map(function (it) {
+        var emoji = _SP_TYPE_EMOJI[it.planType] || '👑';
+        return '<span style="display:inline-block;margin-left:4px;padding:0 5px;border-radius:8px;background:#FFF7ED;border:1px solid #FED7AA;color:#EA580C;font-size:11px;font-weight:600;line-height:16px;vertical-align:middle;white-space:nowrap;">'
+            + emoji + ' ' + escapeHtml(it.memberName) + '特供</span>';
+    }).join('');
+}
+
+// V237: 统计某餐专项干预的完成情况（读取激活计划 progress 中当天该餐的记录）
+function getSpecialInterventionDoneCount(date, mealType) {
+    var items = (typeof getSpecialInterventions === 'function') ? getSpecialInterventions(date, mealType) : [];
+    if (!items.length) return { total: 0, done: 0, allDone: false };
+    var doneDishes = {};
+    var plans = (typeof getSpecialPlans === 'function') ? getSpecialPlans() : [];
+    plans.forEach(function (p) {
+        if (!p || !Array.isArray(p.progress)) return;
+        p.progress.forEach(function (r) {
+            if (!r || r.date !== date || r.mealType !== mealType) return;
+            if (r.ok === true) doneDishes[String(r.targetDish || '')] = true;
+        });
+    });
+    var done = items.filter(function (it) { return !!doneDishes[String(it.targetDish || '')]; }).length;
+    return { total: items.length, done: done, allDone: done >= items.length };
+}
+
+// 写入（全量替换）：list 为空时删除该餐的 specialInterventions，避免残留空数组
+function setSpecialInterventions(date, mealType, list) {
+    if (!date || !mealType) return [];
+    var normalized = _spInterventionList(list);
+    var calendar = getDietCalendar();
+    if (!calendar[date]) calendar[date] = {};
+    if (!calendar[date][mealType]) calendar[date][mealType] = { plan: null, actual: null };
+    var slot = calendar[date][mealType];
+    if (normalized.length) slot.specialInterventions = normalized;
+    else delete slot.specialInterventions;
+    // 统一落到餐次节点，清掉 plan / actual 内的副本，保证单一数据源
+    if (slot.plan) delete slot.plan.specialInterventions;
+    if (slot.actual) delete slot.actual.specialInterventions;
+    saveDietCalendar(calendar);
+    return normalized;
+}
+
+// 追加（同键覆盖）：同成员同类型同菜已存在时更新备注，不重复堆积
+function addSpecialIntervention(date, mealType, item) {
+    var one = normalizeSpecialIntervention(item);
+    var list = getSpecialInterventions(date, mealType);
+    if (!one) return list;
+    var k = _spInterventionKey(one);
+    var replaced = false;
+    list = list.map(function(it) {
+        if (_spInterventionKey(it) === k) { replaced = true; return one; }
+        return it;
+    });
+    if (!replaced) list.push(one);
+    return setSpecialInterventions(date, mealType, list);
+}
+
+// 删除：target 可传字符串（按菜名）或对象 {memberName?, planType?, targetDish?}
+function removeSpecialIntervention(date, mealType, target) {
+    var t = (target && typeof target === 'object') ? target : { targetDish: String(target || '') };
+    var kept = getSpecialInterventions(date, mealType).filter(function(it) {
+        if (t.memberName && it.memberName !== String(t.memberName)) return true;
+        if (t.targetDish && it.targetDish !== String(t.targetDish)) return true;
+        if (t.planType && it.planType !== String(t.planType)) return true;
+        return false;
+    });
+    return setSpecialInterventions(date, mealType, kept);
+}
+
 function getMealData(date, mealType) {
     const calendar = getDietCalendar();
-    return calendar[date]?.[mealType] || { plan: null, actual: null };
+    const slot = calendar[date]?.[mealType];
+    if (!slot) return { plan: null, actual: null, specialInterventions: [] };
+    if (!Array.isArray(slot.specialInterventions)) slot.specialInterventions = _spInterventionList(_readSpecialInterventionsFromSlot(slot));
+    return slot;
 }
 
 // 获取某天某餐的计划状态：pending / confirmed / completed
@@ -12954,6 +13103,24 @@ function updateMealPlan(date, mealType, planData) {
                 planData.diningMembers = [...dg.members];
             }
         }
+    }
+    // V233: 专项干预挂在餐次节点（与 plan/actual 同级）。写入计划时合并进来，且不覆盖已有条目；
+    // planData 里带的 specialInterventions 一律落到餐次节点，plan 内不留副本（单一数据源）。
+    var incomingSI = (planData && Array.isArray(planData.specialInterventions)) ? planData.specialInterventions : null;
+    if (planData) delete planData.specialInterventions;
+    if (incomingSI && incomingSI.length) {
+        var mergedSI = _spInterventionList(calendar[date][mealType].specialInterventions);
+        incomingSI.forEach(function(item) {
+            var n = normalizeSpecialIntervention(item);
+            if (!n) return;
+            var k = _spInterventionKey(n);
+            var hit = -1;
+            for (var i = 0; i < mergedSI.length; i++) {
+                if (_spInterventionKey(mergedSI[i]) === k) { hit = i; break; }
+            }
+            if (hit >= 0) mergedSI[hit] = n; else mergedSI.push(n);
+        });
+        calendar[date][mealType].specialInterventions = mergedSI;
     }
     calendar[date][mealType].plan = planData;
     saveDietCalendar(calendar);
@@ -32196,13 +32363,13 @@ function _mountHomeDiningSelector() {
     sel.style.display = 'flex';
     try { updateDiaryDiningLabel(); } catch (e) {}
 }
-// 归还到食记页顶栏原位（V123 起：➕ 左侧；切子 Tab 时调用，显示与否由 switchTab 原逻辑接管）
+// 归还到食记页顶栏左上角（V226 起：原「最近吃过的菜」按钮位置；切子 Tab 时调用，显示与否由 switchTab 原逻辑接管）
 function _unmountHomeDiningSelector() {
     var sel = document.getElementById('diaryDiningSelector');
     var slot = document.getElementById('homeDiaryDiningSlot');
     if (!sel || !slot || sel.parentElement !== slot) return;
-    var anchor = document.getElementById('clearBtn');
-    if (anchor && anchor.parentElement) anchor.parentElement.insertBefore(sel, anchor);
+    var leftSlot = document.getElementById('diaryDiningLeftSlot');
+    if (leftSlot) leftSlot.appendChild(sel);
     else slot.appendChild(sel);
     sel.style.display = 'none'; // 由 switchTab 的 (tab==='diary') 判定立即覆盖
 }
@@ -35225,6 +35392,7 @@ function renderFamily() {
                 ${_memberPreferenceSummary(selMember) ? '<div class="detail" style="font-size:12px;color:#9A3412;background:#FFF7ED;border-radius:6px;padding:3px 8px;margin-top:2px;">🍽️ ' + escapeHtml(_memberPreferenceSummary(selMember)) + '</div>' : ''}
             </div>
             <div style="display:flex;gap:6px;align-items:center;">
+                <button type="button" onclick="window.openSpecialPlanModal('${selMember.id}')" style="padding:4px 10px;border:1px solid #F97316;border-radius:14px;background:#FFF7ED;color:#EA580C;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">发起专项计划</button>
                 <button data-id="${selMember.id}" class="edit-member" onclick="window.editMemberCard('${selMember.id}')" style="background:none;border:none;color:#F97316;font-size:14px;cursor:pointer;">✎</button>
             </div>`;
         familyList.appendChild(div);
@@ -43850,7 +44018,10 @@ function addToPlan(planItem) {
     });
 
     if (addedCount > 0) {
-        updateMealPlan(key, mealType, { dishes: merged, note: (existing.plan && existing.plan.note) ? existing.plan.note : '', dishMeta: mergedMeta, state: 'pending' });
+        updateMealPlan(key, mealType, { dishes: merged, note: (existing.plan && existing.plan.note) ? existing.plan.note : '', dishMeta: mergedMeta, state: 'pending', specialInterventions: planItem.specialInterventions });
+    } else if (Array.isArray(planItem.specialInterventions) && planItem.specialInterventions.length) {
+        // 菜品已在计划中（addedCount=0）但带了专项干预时，仍要落盘
+        planItem.specialInterventions.forEach(function(it) { addSpecialIntervention(key, mealType, it); });
     }
     return addedCount;
 }
@@ -51156,6 +51327,8 @@ async function generateMultiDayRecommendation(days) {
                     }
                 });
                 let planData = { dishes: dishNames, note: 'AI自动推荐' };
+                // V234: AI 返回的专项干预随计划一起落到餐次节点
+                if (Array.isArray(meal.specialInterventions) && meal.specialInterventions.length) planData.specialInterventions = meal.specialInterventions;
                 if (Object.keys(dishMeta).length > 0) planData.dishMeta = dishMeta;
                 if (diningGroup) {
                     planData.diningGroupId = diningGroup.groupId;
@@ -51302,8 +51475,20 @@ async function generateAiMealRecommendation() {
         if (knowledgeSummary) {
             userMessage += `【维度③ 食知-用户浏览/收藏知识】\n${knowledgeSummary}\n`;
         }
+        // V234: 专项计划与全家三餐合并（单日推荐）
+        var _spBrief1 = (typeof getActiveSpecialPlansBriefLines === 'function') ? getActiveSpecialPlansBriefLines() : [];
+        var _hasSP1 = _spBrief1.length > 0;
+        if (_hasSP1) {
+            userMessage += `【专项计划（强制优先）】\n`;
+            userMessage += `请注意，该家庭目前有成员的专项计划处于激活状态：${_spBrief1.join('；')}。\n`;
+            userMessage += `请在安排全家一日三餐时，优先满足这些特殊成员的需求。\n`;
+            userMessage += `例如：如果儿子在感冒，全家菜单应尽量清淡，并专门为儿子提供易消化的流食/半流食。\n`;
+            userMessage += `请在返回的 JSON 数据中，将专门为特殊成员准备的菜品，标注在 specialInterventions 字段中（每餐一个数组，没有专项干预的餐返回 []）。\n`;
+            userMessage += `specialInterventions 中 planType 只能取：illness/fitness/growth/athlete/pregnancy/infant。\n\n`;
+        }
         userMessage += `\n请严格按照以下JSON格式返回推荐方案，不要添加任何其他文字。\n**每道菜必须含 ingredients 字段（全部食材及每人份用量），不可省略。**\n`;
-        userMessage += `{"date":"${targetDateStr}","solarTerm":"${solarTerm.name}","meals":{"breakfast":{"dishes":[{"name":"菜名","ingredients":[{"name":"食材","quantity":2,"unit":"个"}]}],"reason":"理由"},"lunch":{"dishes":[同上结构]},"dinner":{"dishes":[同上结构]}},"summary":"综合说明（如何结合节气/食材/成员/历史）"}`;
+        var _spMealFrag1 = _hasSP1 ? ',"specialInterventions":[{"memberName":"儿子","planType":"illness","targetDish":"菜名","note":"低油少盐，易消化"}]' : '';
+        userMessage += `{"date":"${targetDateStr}","solarTerm":"${solarTerm.name}","meals":{"breakfast":{"dishes":[{"name":"菜名","ingredients":[{"name":"食材","quantity":2,"unit":"个"}]}],"reason":"理由"${_spMealFrag1}},"lunch":{"dishes":[同上结构]${_spMealFrag1}},"dinner":{"dishes":[同上结构]${_spMealFrag1}}},"summary":"综合说明（如何结合节气/食材/成员/历史）"}`;
 
         // 调用 Aliyun Qwen API（维度①：AI大模型）；V140: 显式 json_mode（返回结构被 JSON.parse 解析）
         const aiResponse = await callAliyunQwenApi(systemPrompt, userMessage, { mode: getCurrentRecommendMode(), jsonMode: true });
@@ -51837,11 +52022,15 @@ function confirmAiRecommendation() {
                 if (fs2SpIdx >= 0) fs2Reordered.push(merged[fs2SpIdx]);
                 for (var fs2i3 = 0; fs2i3 < merged.length; fs2i3++) { if (fs2i3 !== fs2StIdx && fs2i3 !== fs2SpIdx) fs2Reordered.push(merged[fs2i3]); }
                 let planData = { dishes: fs2Reordered, note: (existing.plan && existing.plan.note) ? existing.plan.note : '', dishMeta: mergedMeta, state: 'pending' };
+                // V234: 专项干预随 AI 推荐一起写入餐次节点
+                if (Array.isArray(meal.specialInterventions) && meal.specialInterventions.length) planData.specialInterventions = meal.specialInterventions;
                 updateMealPlan(targetDateKey, mealType, planData);
                 addedCount += merged.length - existingDishes.length;
-            } else if (Object.keys(mergedMeta).length > 0) {
-                // 无新菜，但补齐了 dishMeta（confirmed=false/source=ai），仍写一次保证下次渲染分组正确
-                updateMealPlan(targetDateKey, mealType, { dishes: merged, note: (existing.plan && existing.plan.note) ? existing.plan.note : '', dishMeta: mergedMeta, state: (existing.plan && existing.plan.state) ? existing.plan.state : 'pending' });
+            } else if (Object.keys(mergedMeta).length > 0 || (Array.isArray(meal.specialInterventions) && meal.specialInterventions.length)) {
+                // 无新菜，但补齐了 dishMeta / 带了专项干预，仍写一次保证下次渲染分组正确
+                var _keepPlanData = { dishes: merged, note: (existing.plan && existing.plan.note) ? existing.plan.note : '', dishMeta: mergedMeta, state: (existing.plan && existing.plan.state) ? existing.plan.state : 'pending' };
+                if (Array.isArray(meal.specialInterventions) && meal.specialInterventions.length) _keepPlanData.specialInterventions = meal.specialInterventions;
+                updateMealPlan(targetDateKey, mealType, _keepPlanData);
             }
         }
     });
@@ -52239,6 +52428,18 @@ function buildRecommendationPrompt(data, weekDatesStr) {
         prompt += `【人群食疗约束规则】\n${groupConstraints}\n\n`;
     }
 
+    // V234: 专项计划与全家三餐合并 —— 读取激活中的专项计划，强制优先满足，并在 JSON 中标注 specialInterventions
+    var activeSPBrief = (typeof getActiveSpecialPlansBriefLines === 'function') ? getActiveSpecialPlansBriefLines() : [];
+    var hasActiveSP = activeSPBrief.length > 0;
+    if (hasActiveSP) {
+        prompt += `【专项计划（强制优先）】\n`;
+        prompt += `请注意，该家庭目前有成员的专项计划处于激活状态：${activeSPBrief.join('；')}。\n`;
+        prompt += `请在安排全家一日三餐时，优先满足这些特殊成员的需求。\n`;
+        prompt += `例如：如果儿子在感冒，全家菜单应尽量清淡，并专门为儿子提供易消化的流食/半流食。\n`;
+        prompt += `请在返回的 JSON 数据中，将专门为特殊成员准备的菜品，标注在 specialInterventions 字段中（每餐一个数组，没有专项干预的餐返回 []）。\n`;
+        prompt += `specialInterventions 中 planType 只能取：illness（生病）/fitness（健身）/growth（增高）/athlete（体育生）/pregnancy（孕期）/infant（婴儿）。\n\n`;
+    }
+
     prompt += `【第9优先级 AI综合推理】\n`;
     prompt += `请综合以上所有维度数据，生成一周三餐推荐方案。要求：\n`;
     prompt += `1. 优先使用家中现有食材，特别是即将过期的食材\n`;
@@ -52262,7 +52463,9 @@ function buildRecommendationPrompt(data, weekDatesStr) {
     prompt += `${startIdx + 3}. 【硬性规则】同一餐中甜品类/甜汤类（如银耳羹、莲子羹、雪梨羹、糖水、水果沙拉、酸奶等）最多只能出现1道，严禁同餐出现2道或以上的甜食/甜汤\n`;
     prompt += `${startIdx + 4}. 同一餐中主食类最多1-2道（如同时有米饭+汤是允许的，但不能同时有米饭+面条+粥），主菜（蛋白质类）至少1道，素菜至少1道\n`;
     prompt += `\n请严格按照以下JSON格式返回，不要添加任何其他文字：\n`;
-    prompt += `{"days":[{"date":"日期","weekDay":"周几","meals":{"breakfast":{"dishes":[{"name":"菜名","ingredients":[{"name":"食材","quantity":2,"unit":"个"}],"reason":"理由"}],"reason":"本餐理由"},"lunch":{"dishes":[同上结构]},"dinner":{"dishes":[同上结构]}}}],"summary":"综合说明"}\n`;
+    // V234: 有激活专项计划时，每餐 JSON 追加 specialInterventions 字段
+    var _spMealFrag = hasActiveSP ? ',"specialInterventions":[{"memberName":"儿子","planType":"illness","targetDish":"菜名","note":"低油少盐，易消化"}]' : '';
+    prompt += `{"days":[{"date":"日期","weekDay":"周几","meals":{"breakfast":{"dishes":[{"name":"菜名","ingredients":[{"name":"食材","quantity":2,"unit":"个"}],"reason":"理由"}],"reason":"本餐理由"${_spMealFrag}},"lunch":{"dishes":[同上结构]${_spMealFrag}},"dinner":{"dishes":[同上结构]${_spMealFrag}}}}],"summary":"综合说明"}\n`;
     prompt += `reason 要求：含推荐依据；每道菜 reason 中显式引用《中国居民膳食指南》具体数值（如"蔬菜300-500g，深色占一半"）。参考每日量：${DAILY_GUIDE_CUE}`;
 
     // 多样性约束注入
@@ -52913,6 +53116,8 @@ function confirmWeeklyAiRecommendation() {
                     for (var fsi3 = 0; fsi3 < merged.length; fsi3++) { if (fsi3 !== fstIdx && fsi3 !== fspIdx) finalReordered.push(merged[fsi3]); }
                     // 同步重排 mergedMeta 的 key 顺序（不需要，因为 meta 是按 name 索引的）
                     let planData = { dishes: finalReordered, note: '' };
+                    // V234: 专项干预随 AI 计划一起写入餐次节点
+                    if (Array.isArray(meal.specialInterventions) && meal.specialInterventions.length) planData.specialInterventions = meal.specialInterventions;
                     if (Object.keys(mergedMeta).length > 0) planData.dishMeta = mergedMeta;
                     updateMealPlan(targetDateKey, mealType, planData);
                     dayAdded += merged.length;
@@ -54010,8 +54215,6 @@ function renderDiary() {
     const calendar = getDietCalendar();
     const dayData = calendar[dateKey] || {};
     
-    // V202.1: 未来 N 天饮食沙盘（订阅 premium 专属）
-    try { _renderDiaryDeepPlanCard && _renderDiaryDeepPlanCard(); } catch (e) {}
     // === 记录提示条 ===
     updateDiaryReminder();
     // 同步刷新首页"本月已省"卡片
@@ -54053,6 +54256,9 @@ function renderDiary() {
         const data = dayData[meal.key] || { plan: null, actual: null };
         const hasPlan = data.plan && data.plan.dishes && data.plan.dishes.length > 0;
         const hasActual = data.actual && data.actual.dishes && data.actual.dishes.length > 0;
+        // V237: 本餐专项干预（餐次徽章 / 菜品高亮 / 完成状态共用）
+        var _siList = (typeof _readSpecialInterventionsFromSlot === 'function')
+            ? _spInterventionList(_readSpecialInterventionsFromSlot(data)) : [];
         
         // 检测就餐类型（外带+自制 已合并到 外卖，向后兼容旧数据）
         const isDiningOut = data.actual && data.actual.diningType === '外出就餐';
@@ -54105,6 +54311,9 @@ function renderDiary() {
             var rowsHtml = '';
             if (allDishes.length === 0) rowsHtml = '<div class="diary-empty-source">（暂无计划菜品，点 ☰ 选择食谱）</div>';
             else rowsHtml = allDishes.map(function(it){
+                // V237: 命专项干预的菜高亮显示（普通菜保持原样）
+                var _siHits = (typeof specialInterventionsForDish === 'function') ? specialInterventionsForDish(_siList, it.name) : [];
+                var _isSpecial = _siHits.length > 0;
                 // healthTags 优先用持久化的；为空则从 userComment 回退解析（兼容旧数据）
                 var hTagsHtml = '';
                 if (it.meta.healthTags && it.meta.healthTags.length) {
@@ -54112,12 +54321,16 @@ function renderDiary() {
                 } else if (it.meta.userComment) {
                     hTagsHtml = renderHealthTagsHtml(it.meta.userComment);
                 }
-                return '<label class="diary-dish-row" style="display:inline-flex;align-items:center;gap:2px;white-space:nowrap;">'
+                return '<label class="diary-dish-row" style="display:inline-flex;align-items:center;gap:2px;'
+                    + (_isSpecial
+                        ? 'max-width:100%;flex-wrap:wrap;white-space:normal;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:0 4px;'
+                        : 'white-space:nowrap;') + '">'
                     + '<input type="checkbox" class="diary-dish-cb"'
                     + ' data-datekey="' + escapeAttr(dateKey) + '" data-meal="' + escapeAttr(meal.key) + '" data-dish="' + escapeAttr(it.name) + '"'
                     + (it.meta.confirmed ? ' checked' : '')
                     + ' onchange="diaryToggleDishConfirmed(\'' + escapeAttr(dateKey) + '\',\'' + escapeAttr(meal.key) + '\',\'' + escapeAttr(it.name) + '\', this.checked)"/>'
-                    + '<span class="dish-tag-clickable" onclick="showDishDetail(\'' + escapeAttr(it.name) + '\',\'' + escapeAttr(dateKey) + '\',\'' + escapeAttr(meal.key) + '\')">' + escapeHtml(it.name) + '</span>'
+                    + '<span class="dish-tag-clickable"' + (_isSpecial ? ' style="color:#C2410C;font-weight:700;"' : '') + ' onclick="showDishDetail(\'' + escapeAttr(it.name) + '\',\'' + escapeAttr(dateKey) + '\',\'' + escapeAttr(meal.key) + '\')">' + escapeHtml(it.name) + '</span>'
+                    + (typeof specialInterventionBadgesHtml === 'function' ? specialInterventionBadgesHtml(_siList, it.name) : '')
                     + ('speechSynthesis' in window ? '<button type="button" title="朗读" onclick="event.preventDefault();event.stopPropagation();_dishListenReadDirect(\'' + escapeAttr(it.name) + '\');" style="border:none;background:none;padding:0;font-size:14px;line-height:1;color:#F97316;cursor:pointer;flex-shrink:0;margin-left:2px;vertical-align:middle;">🔊</button>' : '')
                     + hTagsHtml
                     + (typeof constitutionTagHtmlForDish === 'function' ? constitutionTagHtmlForDish(it.name) : '')
@@ -54153,7 +54366,8 @@ function renderDiary() {
                 const dName = d.name || '';
                 const hasTag = /（外卖）|（外带）|\(外卖\)|\(外带\)/.test(dName);
                 const tag = isDelivery && !hasTag ? '<span style="color:#6B7280;font-size:12px;">（外卖）</span>' : '';
-                return `<span class="dish-tag-clickable" onclick="showDishDetail('${escapeHtml(dName)}', '${dateKey}', '${meal.key}')">${escapeHtml(dName)}${tag}</span>` + ('speechSynthesis' in window ? `<button type="button" title="朗读" onclick="event.preventDefault();event.stopPropagation();_dishListenReadDirect('${escapeHtml(dName)}');" style="border:none;background:none;padding:0;font-size:14px;line-height:1;color:#F97316;cursor:pointer;flex-shrink:0;margin-left:2px;vertical-align:middle;">🔊</button>` : '');
+                const _siHitHere = (typeof specialInterventionsForDish === 'function' && specialInterventionsForDish(_siList, dName).length > 0);
+                return `<span class="dish-tag-clickable"${_siHitHere ? ' style="color:#C2410C;font-weight:700;"' : ''} onclick="showDishDetail('${escapeHtml(dName)}', '${dateKey}', '${meal.key}')">${escapeHtml(dName)}${tag}</span>` + ('speechSynthesis' in window ? `<button type="button" title="朗读" onclick="event.preventDefault();event.stopPropagation();_dishListenReadDirect('${escapeHtml(dName)}');" style="border:none;background:none;padding:0;font-size:14px;line-height:1;color:#F97316;cursor:pointer;flex-shrink:0;margin-left:2px;vertical-align:middle;">🔊</button>` : '');
             }).join('、');
             // 外卖类型追加金额标注
             if (isDelivery && data.actual.totalCost) {
@@ -54227,9 +54441,20 @@ function renderDiary() {
             else statusBadge = '<span class="diary-status-tag diary-tag-muted">未安排</span>';
         }
 
+        // V237: 餐次标题旁的专项徽章 ——「含专项特供」；完成态放到「实际」行，避免标题行拥挤
+        var _siDoneStat = (typeof getSpecialInterventionDoneCount === 'function')
+            ? getSpecialInterventionDoneCount(dateKey, meal.key) : { total: 0, done: 0, allDone: false };
+        var _siMealBadge = '';
+        if (_siList && _siList.length) {
+            _siMealBadge = '<span class="diary-status-badge" style="background:#FFF7ED;color:#C2410C;border:1px solid #FDBA74;border-radius:9px;font-size:10px;font-weight:700;line-height:16px;padding:0 6px;">含专项特供</span>';
+        }
+        var _siDoneTag = (_siList && _siList.length && _siDoneStat.allDone)
+            ? '<span style="display:inline-block;margin-left:6px;padding:0 6px;border-radius:9px;background:#F0FDF4;border:1px solid #BBF7D0;color:#16A34A;font-size:10px;font-weight:700;line-height:16px;vertical-align:middle;white-space:nowrap;">✅ 今日专项已完成</span>'
+            : '';
+
         html += `<div class="diary-meal-card" style="border:none !important;box-shadow:none !important;background:transparent !important;">
             <div class="diary-meal-header">
-                <div><span class="diary-meal-label">${meal.icon} ${meal.name}</span>${statusBadge}</div>
+                <div><span class="diary-meal-label">${meal.icon} ${meal.name}</span>${_siMealBadge}${statusBadge}</div>
                 <div class="diary-meal-actions">
                     ${isDiningOut ? (
                         outStatus === 'completed'
@@ -54287,7 +54512,7 @@ function renderDiary() {
                         }
                         return '';
                     })()}
-                    <div><span class="diary-section-label">实际：</span>${actualText}${actualEmoji}</div>
+                    <div><span class="diary-section-label">实际：</span>${actualText}${actualEmoji}${_siDoneTag}</div>
                     ${hasActual && !data.actual.groupRecord && data.actual.location ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">📍 ${escapeHtml(data.actual.location)}${data.actual.location !== '家' ? ' 就餐' : ''}</div>` : ''}
                     ${hasActual && data.actual.groupRecord && data.actual.locationSummary ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">👥 ${escapeHtml(data.actual.locationSummary)}</div>` : ''}
                     ${hasActual && data.actual.photos && data.actual.photos.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${data.actual.photos.slice(0,4).map(p => `<img src="${p}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">`).join('')}</div>` : ''}
@@ -65243,6 +65468,18 @@ function openMealRecordModal(mealKey, opts) {
     let fEatingOut = false;
     let fRestaurant = '', fTotalCost = 0, fPeople = 0;
     let splitBuilt = false;
+    // V235: 本餐专项干预（激活计划 AI 生成的「特供」标记）
+    const spItems = (typeof getSpecialInterventions === 'function') ? getSpecialInterventions(dateKey, mealKey) : [];
+    // V237: 无计划菜品时也要保证特供菜出现在记录列表里（全家菜 + 特殊菜一起列）
+    spItems.forEach(function (it) {
+        if (it && it.targetDish && fDishes.indexOf(it.targetDish) < 0) fDishes.push(it.targetDish);
+    });
+    // 专项完成确认：key → 'yes' / 'no'，默认「是」
+    let fSpecialAnswers = {};
+    spItems.forEach(function (it) { fSpecialAnswers[_spInterventionKey(it)] = 'yes'; });
+    // 菜品勾选：默认全部勾选（取消勾选的菜不写入实际记录）
+    let fDishChecked = {};
+    fDishes.forEach(function (n) { fDishChecked[n] = true; });
 
     // 已有同类型弹窗先移除，避免元素 id 冲突
     const oldOv = document.getElementById('umrOverlay');
@@ -65278,6 +65515,7 @@ function openMealRecordModal(mealKey, opts) {
         +       '</div>'
         +     '</div>'
         +     '<div style="padding:0 16px;">'
+        +       '<div id="umrFSpecial" style="display:none;"></div>'
         +       '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">🍽️ 菜品</div>'
         +       '<div id="umrFDishTags" style="display:flex;flex-wrap:wrap;gap:6px;min-height:30px;"></div>'
         +       '<div style="display:flex;gap:6px;margin-top:6px;">'
@@ -65310,6 +65548,34 @@ function openMealRecordModal(mealKey, opts) {
     function closeAll() { overlay.remove(); }
 
     // ---------- 全家面板渲染 ----------
+    // V235: 专项完成确认区块 —— 勾选列表上方的「是 / 否」
+    function renderFSpecial() {
+        const box = $('umrFSpecial');
+        if (!box) return;
+        if (!spItems.length || fEatingOut) { box.style.display = 'none'; box.innerHTML = ''; return; }
+        box.style.display = 'block';
+        box.innerHTML = '<div style="margin-bottom:8px;padding:9px 10px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;">'
+            + '<div style="font-size:12px;font-weight:700;color:#C2410C;margin-bottom:6px;">👑 专项计划完成情况</div>'
+            + spItems.map(function (it) {
+                const key = _spInterventionKey(it);
+                const ans = fSpecialAnswers[key] || 'yes';
+                const emoji = _SP_TYPE_EMOJI[it.planType] || '👑';
+                return '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:#9A3412;line-height:1.6;">'
+                    + '<span style="flex:1;min-width:0;">' + emoji + ' ' + escapeHtml(it.memberName) + '是否食用了【' + escapeHtml(it.targetDish) + '】？</span>'
+                    + '<button type="button" class="umr-sp-ans" data-key="' + escapeAttr(key) + '" data-ans="yes" style="padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid ' + (ans === 'yes' ? '#F97316' : '#E5E7EB') + ';background:' + (ans === 'yes' ? '#F97316' : 'white') + ';color:' + (ans === 'yes' ? 'white' : '#6B7280') + ';">是</button>'
+                    + '<button type="button" class="umr-sp-ans" data-key="' + escapeAttr(key) + '" data-ans="no" style="padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid ' + (ans === 'no' ? '#F97316' : '#E5E7EB') + ';background:' + (ans === 'no' ? '#F97316' : 'white') + ';color:' + (ans === 'no' ? 'white' : '#6B7280') + ';">否</button>'
+                    + '</div>'
+                    + (it.note ? '<div style="font-size:11px;color:#B45309;margin-left:16px;">要求：' + escapeHtml(it.note) + '</div>' : '');
+            }).join('')
+            + '</div>';
+        box.querySelectorAll('.umr-sp-ans').forEach(function (b) {
+            b.addEventListener('click', function () {
+                fSpecialAnswers[this.dataset.key] = this.dataset.ans;
+                renderFSpecial();
+            });
+        });
+    }
+
     function renderFDishTags() {
         const box = $('umrFDishTags');
         box.style.display = 'block';
@@ -65317,11 +65583,18 @@ function openMealRecordModal(mealKey, opts) {
             box.innerHTML = '<span style="font-size:13px;color:#D1D5DB;line-height:30px;">还没有菜品，在下方输入框添加实际吃的菜</span>';
             return;
         }
-        // V182/V184: 每行一道菜——菜名 | 对这道菜的评价输入框 | ✕
+        // V182/V184: 每行一道菜——勾选 | 菜名 | 对这道菜的评价输入框 | ✕
         box.innerHTML = fDishes.map(function (n, i) {
             const cmt = fDishComments[n] || '';
-            return '<div style="display:flex;align-items:center;gap:6px;background:#F9FAFB;border:1px solid #F3F4F6;border-radius:10px;padding:6px 8px;margin-bottom:6px;">'
-                + '<span title="' + escapeAttr(n) + '" style="font-size:14px;color:#9A3412;font-weight:600;width:84px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(n) + '</span>'
+            const checked = fDishChecked[n] !== false;
+            // V237: 特供菜高亮 + 「成员特供」橙色标签
+            const _spHits = (typeof specialInterventionsForDish === 'function') ? specialInterventionsForDish(spItems, n) : [];
+            const _isSp = _spHits.length > 0;
+            const _spTag = (typeof specialInterventionBadgesHtml === 'function') ? specialInterventionBadgesHtml(spItems, n) : '';
+            return '<div style="display:flex;align-items:center;gap:6px;background:' + (_isSp ? '#FFF7ED' : '#F9FAFB') + ';border:1px solid ' + (_isSp ? '#FED7AA' : '#F3F4F6') + ';border-radius:10px;padding:6px 8px;margin-bottom:6px;">'
+                + '<input type="checkbox" class="umr-f-dish-cb" data-name="' + escapeAttr(n) + '"' + (checked ? ' checked' : '') + ' style="flex-shrink:0;width:14px;height:14px;margin:0;cursor:pointer;">'
+                + '<span title="' + escapeAttr(n) + '" style="font-size:14px;color:' + (checked ? (_isSp ? '#C2410C' : '#9A3412') : '#9CA3AF') + ';font-weight:' + (_isSp ? '700' : '600') + ';width:84px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' + (checked ? '' : 'text-decoration:line-through;') + '">' + escapeHtml(n) + '</span>'
+                + (_isSp ? '<span style="flex-shrink:0;">' + _spTag + '</span>' : '')
                 + '<input type="text" data-name="' + escapeAttr(n) + '" class="umr-f-dish-cmt" value="' + escapeAttr(cmt) + '" placeholder="对这道菜的评价" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #E5E7EB;border-radius:7px;font-size:13px;box-sizing:border-box;">'
                 + '<button type="button" data-i="' + i + '" class="umr-f-dish-del" title="删除" style="background:none;border:none;color:#FB923C;font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;">✕</button>'
                 + '</div>';
@@ -65331,7 +65604,7 @@ function openMealRecordModal(mealKey, opts) {
                 const idx = parseInt(this.dataset.i, 10);
                 const removed = fDishes[idx];
                 fDishes.splice(idx, 1);
-                if (removed) delete fDishComments[removed];
+                if (removed) { delete fDishComments[removed]; delete fDishChecked[removed]; }
                 renderFDishTags();
                 renderFPlanHint(); // V181: 删除后提示条可变为"加回今日计划菜"
             });
@@ -65339,6 +65612,13 @@ function openMealRecordModal(mealKey, opts) {
         box.querySelectorAll('.umr-f-dish-cmt').forEach(function (inp) {
             inp.addEventListener('input', function () {
                 fDishComments[this.dataset.name] = this.value;
+            });
+        });
+        // V235: 勾选状态同步（取消勾选 = 这顿没吃这道菜）
+        box.querySelectorAll('.umr-f-dish-cb').forEach(function (cb) {
+            cb.addEventListener('change', function () {
+                fDishChecked[this.dataset.name] = this.checked;
+                renderFDishTags();
             });
         });
     }
@@ -65382,17 +65662,21 @@ function openMealRecordModal(mealKey, opts) {
                 fPeople = dp.peopleCount || 0;
                 fTotalCost = dp.totalCost || 0;
                 fDishes = dp.dishes.slice();
+                fDishChecked = {};
+                fDishes.forEach(function (n) { fDishChecked[n] = true; });
                 renderFDishTags();
                 renderFPlanHint();
                 showToast('已带入外出就餐计划：' + (dp.restaurant || '未填餐厅') + ' · ' + dp.dishes.length + ' 道菜');
             } else {
                 fRestaurant = ''; fPeople = 0; fTotalCost = 0;
                 fDishes = [];
+                fDishChecked = {};
                 renderFDishTags();
                 renderFPlanHint();
                 showToast('今天还没有外出就餐计划，请直接填写餐厅和菜品');
             }
             renderFPills();
+            renderFSpecial(); // V235: 外食模式下隐藏专项完成确认
         } else {
             // 切回在家：恢复今日在家计划菜
             fEatingOut = false;
@@ -65402,9 +65686,12 @@ function openMealRecordModal(mealKey, opts) {
             fDishes = (Array.isArray(opts.prefillDishes) && opts.prefillDishes.length)
                 ? opts.prefillDishes.slice().filter(Boolean)
                 : _getMealPlanDishNames(dateKey, mealKey);
+            fDishChecked = {};
+            fDishes.forEach(function (n) { fDishChecked[n] = true; });
             renderFDishTags();
             renderFPlanHint();
             renderFPills();
+            renderFSpecial();
         }
         renderEatOut();
     }
@@ -65439,7 +65726,7 @@ function openMealRecordModal(mealKey, opts) {
             // 有计划菜被删掉了 → 可一键加回
             box.innerHTML = '<button type="button" id="umrFFillPlan" style="margin-top:6px;padding:4px 10px;border:1px dashed #93C5FD;background:#EFF6FF;color:#1E40AF;border-radius:8px;font-size:12px;cursor:pointer;">＋ 加回今日计划菜（' + missing.length + '道：' + escapeHtml(missing.slice(0, 3).join('、')) + (missing.length > 3 ? '…' : '') + '）</button>';
             $('umrFFillPlan').addEventListener('click', function () {
-                missing.forEach(function (n) { if (fDishes.indexOf(n) === -1) fDishes.push(n); });
+                missing.forEach(function (n) { if (fDishes.indexOf(n) === -1) { fDishes.push(n); fDishChecked[n] = true; } });
                 renderFDishTags(); renderFPlanHint();
             });
         } else {
@@ -65453,6 +65740,7 @@ function openMealRecordModal(mealKey, opts) {
         if (!n) { showToast('请输入菜名'); return; }
         if (fDishes.indexOf(n) > -1) { showToast('该菜已添加'); inp.value = ''; return; }
         fDishes.push(n);
+        fDishChecked[n] = true;
         inp.value = '';
         renderFDishTags();
         renderFPlanHint();
@@ -65477,7 +65765,9 @@ function openMealRecordModal(mealKey, opts) {
             }
             rating = 4; comment = '';
         } else {
-            dishes = fDishes.slice();
+            // V235: 只把勾选（吃了）的菜写入实际记录
+            dishes = fDishes.filter(function (n) { return fDishChecked[n] !== false; });
+            if (!dishes.length) { showToast('请至少勾选一道吃过的菜'); return; }
             dining = fEatingOut ? '外出就餐' : '在家做饭';
             location = fLocation; rating = fRating;
             comment = $('umrFComment').value.trim();
@@ -65494,12 +65784,24 @@ function openMealRecordModal(mealKey, opts) {
             dishComments: quick ? {} : fDishComments // 快速记录单菜评价留空（V178）
         });
         if (!res) return;
+        // V235: 回写专项计划进度（是=打勾，否=留痕待复盘纠偏）
+        var spProgress = [];
+        if (!fEatingOut && spItems.length && typeof recordSpecialInterventionProgress === 'function') {
+            spProgress = recordSpecialInterventionProgress(dateKey, mealKey, fSpecialAnswers) || [];
+        }
         closeAll();
         renderDiary();
+        var spTip = '';
+        if (spProgress.length) {
+            var okCount = spProgress.filter(function (r) { return r.ok; }).length;
+            spTip = okCount === spProgress.length
+                ? '，今日专项已完成 ✅'
+                : '，专项已记录（完成 ' + okCount + '/' + spProgress.length + '）';
+        }
         if (quick) {
-            showToast('已快速记录' + mealLabel + ' ✅');
+            showToast('已快速记录' + mealLabel + ' ✅' + spTip);
         } else {
-            showToast('✅ 记录已保存' + (!fEatingOut && res.deducted > 0 ? '，已扣除 ' + res.deducted + ' 种食材' : ''));
+            showToast('✅ 记录已保存' + (!fEatingOut && res.deducted > 0 ? '，已扣除 ' + res.deducted + ' 种食材' : '') + spTip);
         }
     }
 
@@ -65537,6 +65839,7 @@ function openMealRecordModal(mealKey, opts) {
     $('umrSaveBtn').addEventListener('click', function () { doSave(false); });
 
     renderFDishTags();
+    renderFSpecial();
     renderFStars();
     renderFPills();
     renderFPlanHint();
@@ -66094,9 +66397,9 @@ function switchTab(tab) {
     // 子 Tab：顶栏 ➕ 与 ☰ 默认可见（首页隐藏的必须恢复）
     if (menuBtn && tab !== 'diary') { menuBtn.style.visibility = 'visible'; }
     if (clearBtn) clearBtn.style.visibility = 'visible';
-    // 食记页：显示顶栏 ☰ 选择食谱按钮（无边框）
-    var diaryTopBtn = document.getElementById('diaryRecipePickerTopBtn');
-    if (diaryTopBtn) diaryTopBtn.style.display = (tab === 'diary') ? 'block' : 'none';
+    // V227: 「专项计划」入口仅食记页显示
+    var diarySpecialPlanBtn = document.getElementById('diarySpecialPlanBtn');
+    if (diarySpecialPlanBtn) diarySpecialPlanBtn.style.display = (tab === 'diary') ? 'flex' : 'none';
     // 切到食记Tab时渲染
     if (tab === 'diary') {
         try { renderDiary(); } catch(e) { console.error('renderDiary error:', e); }
@@ -68364,6 +68667,628 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // 首页加载时更新节气横幅（修复首页左上角硬编码"白露"不随日期变化的问题）
 try { updateSolarTermButtonText(); } catch(e) {}
+
+// ==================== V226: 专项饮食计划——底层数据结构与配额管理 ====================
+// 存储：specialPlans（家庭前缀隔离 + 云备份；游客态由 lsSet 统一拦截，禁止写入）
+// 记录结构：
+// { planId, familyId, memberName, planType, description, status, startDate, endDate, weeklyPlan, report }
+var SPECIAL_PLANS_KEY = 'specialPlans';
+// 配额规则写死在代码里（不要改成可配置项）
+var QUOTA_RULES = {
+    illness: 4,     // 生病：每年 4 次
+    fitness: 3,     // 健身：每年 3 次
+    growth: 2,      // 增高：每年 2 个长周期（半年为周期）
+    athlete: 2,     // 体育生：每年 2 个长周期
+    pregnancy: 1,   // 孕妇：整个孕期 1 次建档
+    infant: 1       // 婴儿：建档 1 次
+};
+var SPECIAL_PLAN_TYPES = {
+    illness:   { label: '生病',   quotaPeriod: 'year' },
+    fitness:   { label: '健身',   quotaPeriod: 'year' },
+    growth:    { label: '增高',   quotaPeriod: 'year', longTerm: true, termDays: 180 },
+    athlete:   { label: '体育生', quotaPeriod: 'year', longTerm: true, termDays: 180 },
+    pregnancy: { label: '孕妇',   quotaPeriod: 'lifetime' },
+    infant:    { label: '婴儿',   quotaPeriod: 'lifetime' }
+};
+
+// 读取全部专项计划（返回数组，脏数据兜底）
+function getSpecialPlans() {
+    var list = lsGetJSON(SPECIAL_PLANS_KEY, []);
+    return Array.isArray(list) ? list.filter(function (p) { return p && typeof p === 'object' && p.planType; }) : [];
+}
+// 写入全部专项计划
+function saveSpecialPlans(list) {
+    lsSetJSON(SPECIAL_PLANS_KEY, Array.isArray(list) ? list : []);
+    // 数组键走 lsSetJSON 不会自动触发云备份，这里显式调度一次
+    try { if (typeof cloudBackupSchedule === 'function') cloudBackupSchedule(); } catch (e) {}
+}
+function getSpecialPlanById(planId) {
+    var list = getSpecialPlans();
+    for (var i = 0; i < list.length; i++) {
+        if (list[i].planId === planId) return list[i];
+    }
+    return null;
+}
+function _specialPlanPad2(n) { return (n < 10 ? '0' : '') + n; }
+function _specialPlanToday() {
+    var d = new Date();
+    return d.getFullYear() + '-' + _specialPlanPad2(d.getMonth() + 1) + '-' + _specialPlanPad2(d.getDate());
+}
+function _specialPlanAddDays(dateStr, days) {
+    var d = new Date(String(dateStr || '') + 'T00:00:00');
+    if (isNaN(d.getTime())) d = new Date();
+    d.setDate(d.getDate() + (days || 0));
+    return d.getFullYear() + '-' + _specialPlanPad2(d.getMonth() + 1) + '-' + _specialPlanPad2(d.getDate());
+}
+function _specialPlanYearOf(dateStr) {
+    var m = /^(\d{4})-/.exec(String(dateStr || ''));
+    return m ? parseInt(m[1], 10) : null;
+}
+function _nextSpecialPlanId(list) {
+    var max = 0;
+    for (var i = 0; i < list.length; i++) {
+        var m = /^sp_(\d+)$/.exec(String(list[i] && list[i].planId || ''));
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    var next = String(max + 1);
+    while (next.length < 3) next = '0' + next;
+    return 'sp_' + next;
+}
+
+// 查询某类型专项计划的当年配额使用情况
+// 返回 { planType, label, limit, used, remaining, reached, quotaPeriod, message }
+function getSpecialPlanQuota(planType) {
+    if (!QUOTA_RULES.hasOwnProperty(planType) || !SPECIAL_PLAN_TYPES[planType]) return null;
+    var cfg = SPECIAL_PLAN_TYPES[planType];
+    var limit = QUOTA_RULES[planType];
+    var currentYear = new Date().getFullYear();
+    var used = 0;
+    var list = getSpecialPlans();
+    for (var i = 0; i < list.length; i++) {
+        var p = list[i];
+        if (p.planType !== planType) continue;
+        if (cfg.quotaPeriod === 'lifetime') { used++; continue; }
+        // 按开始日期所属年份统计；日期缺失时保守计入当年
+        var y = _specialPlanYearOf(p.startDate);
+        if (y === null || y === currentYear) used++;
+    }
+    var reached = used >= limit;
+    var message = cfg.quotaPeriod === 'lifetime'
+        ? '「' + cfg.label + '」专项计划仅支持建档 ' + limit + ' 次，已达上限'
+        : '本年度「' + cfg.label + '」专项计划已达上限（' + used + '/' + limit + '）';
+    return {
+        planType: planType,
+        label: cfg.label,
+        limit: limit,
+        used: used,
+        remaining: Math.max(0, limit - used),
+        reached: reached,
+        quotaPeriod: cfg.quotaPeriod,
+        message: reached ? message : ''
+    };
+}
+// 查询全部类型的配额概览
+function getSpecialPlanQuotaSummary() {
+    var out = [];
+    for (var type in QUOTA_RULES) {
+        if (!QUOTA_RULES.hasOwnProperty(type)) continue;
+        var q = getSpecialPlanQuota(type);
+        if (q) out.push(q);
+    }
+    return out;
+}
+
+// 发起专项计划：先校验配额，达到上限直接拒绝并返回原因
+// options: { memberName, planType, description, startDate, endDate, weeklyPlan, report }
+// 返回 { ok:true, plan, quota } 或 { ok:false, code, message, quota }
+function createSpecialPlan(options) {
+    options = options || {};
+    var planType = options.planType;
+    var quota = getSpecialPlanQuota(planType);
+    if (!quota) return { ok: false, code: 'INVALID_TYPE', message: '不支持的专项计划类型' };
+    var fid = getFamilyId();
+    if (!fid) return { ok: false, code: 'NO_FAMILY', message: '请先登录并加入家庭后再发起专项计划', quota: quota };
+    if (quota.reached) return { ok: false, code: 'QUOTA_REACHED', message: quota.message, quota: quota };
+
+    var list = getSpecialPlans();
+    var cfg = SPECIAL_PLAN_TYPES[planType];
+    var startDate = options.startDate || _specialPlanToday();
+    var plan = {
+        planId: _nextSpecialPlanId(list),
+        familyId: fid,
+        memberName: options.memberName || '',
+        planType: planType,
+        description: options.description || '',
+        status: 'active',
+        startDate: startDate,
+        endDate: options.endDate || _specialPlanAddDays(startDate, cfg.termDays || 7),
+        weeklyPlan: options.weeklyPlan || {},
+        report: options.report || ''
+    };
+    list.push(plan);
+    saveSpecialPlans(list);
+    return { ok: true, plan: plan, quota: getSpecialPlanQuota(planType) };
+}
+
+// 更新专项计划（写入 AI 生成的 weeklyPlan / report 等）
+function updateSpecialPlan(planId, patch) {
+    var list = getSpecialPlans();
+    for (var i = 0; i < list.length; i++) {
+        if (list[i].planId !== planId) continue;
+        patch = patch || {};
+        ['memberName', 'description', 'status', 'startDate', 'endDate', 'weeklyPlan', 'report', 'progress'].forEach(function (k) {
+            if (patch.hasOwnProperty(k)) list[i][k] = patch[k];
+        });
+        saveSpecialPlans(list);
+        return list[i];
+    }
+    return null;
+}
+// 标记专项计划完成
+function completeSpecialPlan(planId) {
+    return updateSpecialPlan(planId, { status: 'completed' });
+}
+
+// V235: 记录实际时回写专项进度 —— 是=打勾，否=留痕（复盘时用作纠偏依据）
+// answers: { '成员|类型|菜名': 'yes' | 'no' }
+// 返回 [{ planId, memberName, targetDish, ok }]
+function recordSpecialInterventionProgress(date, mealType, answers) {
+    var items = (typeof getSpecialInterventions === 'function') ? getSpecialInterventions(date, mealType) : [];
+    if (!items.length) return [];
+    answers = answers || {};
+    var plans = getSpecialPlans();
+    var today = _specialPlanToday();
+    var results = [];
+    items.forEach(function (it) {
+        var ans = answers[_spInterventionKey(it)] || 'yes';
+        for (var i = 0; i < plans.length; i++) {
+            var p = plans[i];
+            if (!p || p.status !== 'active') continue;
+            if (String(p.memberName || '') !== it.memberName) continue;
+            if (it.planType && String(p.planType || '') !== it.planType) continue;
+            if (p.startDate && today && today < String(p.startDate)) continue;
+            if (p.endDate && today && today > String(p.endDate)) continue;
+            var prog = Array.isArray(p.progress) ? p.progress.slice() : [];
+            var entry = {
+                date: date,
+                mealType: mealType,
+                targetDish: it.targetDish,
+                ok: ans === 'yes',
+                note: it.note || '',
+                recordedAt: Date.now()
+            };
+            var replaced = false;
+            for (var k = 0; k < prog.length; k++) {
+                if (prog[k] && prog[k].date === date && prog[k].mealType === mealType && prog[k].targetDish === it.targetDish) {
+                    prog[k] = entry; replaced = true; break;
+                }
+            }
+            if (!replaced) prog.push(entry);
+            updateSpecialPlan(p.planId, { progress: prog });
+            results.push({ planId: p.planId, memberName: it.memberName, targetDish: it.targetDish, ok: entry.ok });
+            break;
+        }
+    });
+    return results;
+}
+
+// 按钮配额绑定：达到上限时禁用按钮，点击时提示原因；未达上限则恢复可用
+function applySpecialPlanQuotaToButton(btn, planType) {
+    if (!btn) return null;
+    var quota = getSpecialPlanQuota(planType);
+    if (!quota) return null;
+    // 类型切换后旧提示闭包会引用旧配额，先解绑再按当前配额重新绑定
+    if (btn._specialQuotaHandler) {
+        btn.removeEventListener('click', btn._specialQuotaHandler, true);
+        btn._specialQuotaHandler = null;
+    }
+    if (quota.reached) {
+        btn.setAttribute('aria-disabled', 'true');
+        btn.style.opacity = '0.45';
+        btn.style.cursor = 'not-allowed';
+        btn.title = quota.message;
+        btn._specialQuotaHandler = function (ev) {
+            if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+            try { showToast(quota.message); } catch (e) {}
+        };
+        btn.addEventListener('click', btn._specialQuotaHandler, true);
+    } else {
+        btn.removeAttribute('aria-disabled');
+        btn.style.opacity = '';
+        btn.style.cursor = '';
+        btn.title = '';
+    }
+    btn.setAttribute('data-quota-used', quota.used);
+    btn.setAttribute('data-quota-limit', quota.limit);
+    return quota;
+}
+
+// ==================== V226: 专项饮食计划——发起弹窗与 AI 生成 ====================
+var SPECIAL_PLAN_UI_TYPES = [
+    { type: 'illness',   label: '生病调理' },
+    { type: 'growth',    label: '增高冲刺' },
+    { type: 'athlete',   label: '体育生备赛' },
+    { type: 'fitness',   label: '健身减脂' },
+    { type: 'pregnancy', label: '孕期护理' },
+    { type: 'infant',    label: '婴儿辅食' }
+];
+function _specialPlanUiLabel(planType) {
+    for (var i = 0; i < SPECIAL_PLAN_UI_TYPES.length; i++) {
+        if (SPECIAL_PLAN_UI_TYPES[i].type === planType) return SPECIAL_PLAN_UI_TYPES[i].label;
+    }
+    return planType;
+}
+
+// V234: 供「AI 生成三餐计划」读取 —— 当前真正处于激活期（active 且今天在起止日期内）的专项计划
+function getActiveSpecialPlans() {
+    var today = (typeof _specialPlanToday === 'function') ? _specialPlanToday() : '';
+    return getSpecialPlans().filter(function (p) {
+        if (!p || p.status !== 'active') return false;
+        if (p.startDate && today && String(p.startDate) > today) return false;
+        if (p.endDate && today && String(p.endDate) < today) return false;
+        return true;
+    });
+}
+// V234: 拼成 Prompt 里可读的一段，如「儿子：生病调理（感冒发烧）」
+function getActiveSpecialPlansBriefLines() {
+    return getActiveSpecialPlans().map(function (p) {
+        var label = _specialPlanUiLabel(p.planType);
+        var desc = String(p.description || '').trim();
+        return String(p.memberName || '家人') + '：' + label + (desc ? '（' + desc + '）' : '');
+    });
+}
+
+// 打开「发起专项」弹窗（仅订阅用户可用）
+function openSpecialPlanModal(memberId) {
+    if (typeof isSubscribed !== 'function' || !isSubscribed()) {
+        showToast('请先订阅全家桶');
+        return;
+    }
+    var member = null;
+    var list = (typeof familyData !== 'undefined' && Array.isArray(familyData)) ? familyData : [];
+    for (var i = 0; i < list.length; i++) {
+        if (String(list[i].id) === String(memberId)) { member = list[i]; break; }
+    }
+    if (!member) { showToast('未找到该家庭成员'); return; }
+
+    var old = document.getElementById('specialPlanOverlay');
+    if (old) old.remove();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'specialPlanOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10010;background:rgba(17,24,39,0.55);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    var panel = document.createElement('div');
+    panel.style.cssText = 'background:#fff;border-radius:16px;width:100%;max-width:380px;max-height:88vh;overflow-y:auto;padding:16px;box-sizing:border-box;box-shadow:0 12px 32px rgba(0,0,0,0.18);';
+    var radios = SPECIAL_PLAN_UI_TYPES.map(function(item, idx) {
+        return '<label style="display:flex;align-items:center;gap:6px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:7px 9px;font-size:13px;color:#9A3412;cursor:pointer;">'
+            + '<input type="radio" name="spPlanType" value="' + item.type + '"' + (idx === 0 ? ' checked' : '') + ' style="accent-color:#F97316;">'
+            + item.label + '</label>';
+    }).join('');
+    panel.innerHTML = ''
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+        +   '<div style="font-size:16px;font-weight:700;color:#1F2937;">🎯 发起专项计划</div>'
+        +   '<button type="button" id="spCloseBtn" style="background:none;border:none;font-size:18px;color:#9CA3AF;cursor:pointer;line-height:1;">✕</button>'
+        + '</div>'
+        + '<div style="font-size:13px;color:#6B7280;margin-bottom:12px;">为 <b style="color:#F97316;">' + escapeHtml(member.name || '家人') + '</b> 发起专项饮食计划</div>'
+        + '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">计划类型</div>'
+        + '<div id="spTypeGroup" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">' + radios + '</div>'
+        + '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">具体情况</div>'
+        + '<textarea id="spDescInput" rows="4" placeholder="如：感冒发烧第三天，食欲差、想吃清淡易消化的；或：体育生备赛期，需要高蛋白高能量" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:13px;line-height:1.6;resize:vertical;outline:none;"></textarea>'
+        + '<div id="spQuotaLine" style="margin:10px 0 12px;font-size:12px;color:#6B7280;background:#F9FAFB;border:1px solid #F3F4F6;border-radius:8px;padding:8px 10px;line-height:1.5;"></div>'
+        + '<div style="display:flex;gap:8px;">'
+        +   '<button type="button" id="spCancelBtn" style="flex:1;padding:10px;border:1px solid #E5E7EB;border-radius:10px;background:#fff;color:#6B7280;font-size:14px;cursor:pointer;">取消</button>'
+        +   '<button type="button" id="spGenerateBtn" style="flex:2;padding:10px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">生成计划</button>'
+        + '</div>';
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+
+    function selectedType() {
+        var checked = panel.querySelector('input[name="spPlanType"]:checked');
+        return checked ? checked.value : 'illness';
+    }
+    function refreshQuota() {
+        var type = selectedType();
+        var btn = document.getElementById('spGenerateBtn');
+        var line = document.getElementById('spQuotaLine');
+        var quota = applySpecialPlanQuotaToButton(btn, type) || getSpecialPlanQuota(type);
+        if (!quota || !line) return;
+        line.textContent = _specialPlanUiLabel(type) + '：' + (quota.quotaPeriod === 'lifetime'
+            ? ('剩余 ' + quota.remaining + ' 次（仅建档 ' + quota.limit + ' 次）')
+            : ('今年剩余 ' + quota.remaining + ' 次'));
+        line.style.color = quota.reached ? '#DC2626' : '#6B7280';
+    }
+    function closeOverlay() {
+        if (overlay.__busy) return;
+        overlay.remove();
+    }
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) closeOverlay(); });
+    document.getElementById('spCloseBtn').addEventListener('click', closeOverlay);
+    document.getElementById('spCancelBtn').addEventListener('click', closeOverlay);
+    var typeInputs = panel.querySelectorAll('input[name="spPlanType"]');
+    for (var t = 0; t < typeInputs.length; t++) typeInputs[t].addEventListener('change', refreshQuota);
+    refreshQuota();
+
+    document.getElementById('spGenerateBtn').addEventListener('click', function() {
+        var btn = this;
+        if (btn.getAttribute('aria-disabled') === 'true') return;
+        var type = selectedType();
+        var quota = getSpecialPlanQuota(type);
+        if (!quota) { showToast('不支持的专项计划类型'); return; }
+        if (quota.reached) { showToast(quota.message); return; }
+        var descEl = document.getElementById('spDescInput');
+        var desc = descEl ? descEl.value.trim() : '';
+        if (!desc) { showToast('请填写具体情况'); if (descEl) descEl.focus(); return; }
+
+        // 生成成功后写入 specialPlans（状态 active），失败则不占用配额
+        overlay.__busy = true;
+        btn.textContent = '生成中…';
+        btn.style.opacity = '0.7';
+        btn.setAttribute('aria-disabled', 'true');
+
+        // 成员简介 / 家庭简介 / 当前节气
+        var memberBrief = [
+            member.name || '家人',
+            member.age ? (member.age + '岁') : '',
+            member.gender || '',
+            member.constitution || '',
+            (Array.isArray(member.tags) && member.tags.length) ? ('标签：' + member.tags.join('/')) : '',
+            member.healthNote || member.dietaryPreference || member.taste || ''
+        ].filter(Boolean).join('，');
+        var familyBrief = '';
+        try { familyBrief = (typeof _buildFamilyBrief === 'function') ? _buildFamilyBrief() : ''; } catch (e) {}
+        if (!familyBrief && typeof _familyBriefCompact === 'function') {
+            try { familyBrief = _familyBriefCompact(typeof familyData !== 'undefined' ? familyData : []); } catch (e) {}
+        }
+        var solarTerm = '';
+        try {
+            var termObj = (typeof getSolarTermForDate === 'function') ? getSolarTermForDate(new Date()) : null;
+            solarTerm = (termObj && termObj.name) || '';
+        } catch (e) {}
+
+        var payload = {
+            memberBrief: memberBrief,
+            planType: type,
+            description: desc,
+            familyBrief: familyBrief,
+            solarTerm: solarTerm
+        };
+        fetch((typeof API_BASE !== 'undefined' ? API_BASE : '') + '/api/special-plan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(function(resp) { return resp.json(); }).then(function(data) {
+            if (data && data.ok) {
+                var created = createSpecialPlan({
+                    memberName: member.name || '',
+                    planType: type,
+                    description: desc,
+                    weeklyPlan: data.weeklyPlan || {},
+                    report: data.report || ''
+                });
+                if (!created.ok) {
+                    overlay.__busy = false;
+                    btn.textContent = '生成计划';
+                    refreshQuota();
+                    showToast(created.message);
+                    return;
+                }
+                overlay.__busy = false;
+                overlay.remove();
+                showToast('已为您加入食记计划');
+                return;
+            }
+            overlay.__busy = false;
+            btn.textContent = '生成计划';
+            refreshQuota();
+            showToast((data && data.error) || 'AI 生成失败，请稍后重试');
+        }).catch(function() {
+            overlay.__busy = false;
+            btn.textContent = '生成计划';
+            refreshQuota();
+            showToast('网络异常，专项计划内容生成失败，请稍后重试');
+        });
+    });
+}
+window.openSpecialPlanModal = openSpecialPlanModal;
+
+// ==================== V227: 食记页「专项计划」看板 ====================
+function _spParseDate(str) {
+    var d = new Date(String(str || '') + 'T00:00:00');
+    return isNaN(d.getTime()) ? null : d;
+}
+function _spDayDiff(a, b) {
+    return Math.round((a.getTime() - b.getTime()) / 86400000);
+}
+// 头部标题里的计划名：生病类优先用具体情况里的症状描述
+function _spPlanDisplayName(plan) {
+    var type = (plan && plan.planType) || '';
+    var base = (typeof _specialPlanUiLabel === 'function') ? _specialPlanUiLabel(type) : '专项';
+    if (type === 'illness') {
+        var d = String((plan && plan.description) || '').split(/[，,。；;、\s]/)[0] || '';
+        d = d.replace(/第[一二三四五六七八九十0-9]+天/g, '').replace(/(最近|今天|昨天|孩子|宝宝)/g, '').trim();
+        if (d && d.length <= 12) return d + '调理计划';
+        return '生病调理计划';
+    }
+    return (base || '专项') + '计划';
+}
+function _getActiveSpecialPlan() {
+    var list = getSpecialPlans().filter(function (p) { return p && p.status === 'active'; });
+    list.sort(function (a, b) {
+        var sa = String(a.startDate || ''), sb = String(b.startDate || '');
+        if (sa !== sb) return sa < sb ? 1 : -1;
+        return String(b.planId || '') < String(a.planId || '') ? -1 : 1;
+    });
+    return list[0] || null;
+}
+function closeSpecialPlanBoard() {
+    var ov = document.getElementById('specialPlanBoardOverlay');
+    if (ov) ov.remove();
+}
+function openSpecialPlanBoard() {
+    if (typeof isSubscribed !== 'function' || !isSubscribed()) {
+        showToast('请先订阅全家桶');
+        return;
+    }
+    closeSpecialPlanBoard();
+    var plan = _getActiveSpecialPlan();
+    var overlay = document.createElement('div');
+    overlay.id = 'specialPlanBoardOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10008;background:#f0f0f0;display:flex;justify-content:center;';
+    var panel = document.createElement('div');
+    panel.style.cssText = 'width:100%;max-width:430px;background:#FFF7ED;display:flex;flex-direction:column;box-shadow:0 0 24px rgba(0,0,0,0.12);';
+
+    var bodyHtml = '';
+    if (!plan) {
+        bodyHtml = '<div style="padding:52px 24px;text-align:center;">'
+            + '<div style="font-size:44px;">🎯</div>'
+            + '<div style="font-size:16px;font-weight:700;color:#374151;margin:12px 0 8px;">暂无进行中的专项计划</div>'
+            + '<div style="font-size:13px;color:#9CA3AF;line-height:1.8;">去「我家 → 家庭成员」发起专项计划，开启全家融合饮食调理。</div>'
+            + '<button type="button" id="spBoardGoCreateBtn" style="margin-top:18px;padding:10px 18px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">去发起专项计划</button>'
+            + '</div>';
+    } else {
+        var start = _spParseDate(plan.startDate) || new Date();
+        start.setHours(0, 0, 0, 0);
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        var diff = _spDayDiff(today, start);
+        // V236: 总天数按计划起止日期算，默认 7 天
+        var totalDays = 7;
+        var endD = _spParseDate(plan.endDate);
+        if (endD) {
+            var span = _spDayDiff(endD, start) + 1;
+            if (span >= 1 && span <= 365) totalDays = span;
+        }
+        var dayNo = Math.min(Math.max(diff + 1, 1), totalDays);
+        var pct = Math.round((dayNo / totalDays) * 100);
+        var isOver = diff > totalDays - 1;
+        var title = '👑 ' + escapeHtml(plan.memberName || '家人') + '的' + escapeHtml(_spPlanDisplayName(plan));
+
+        var reportRaw = String(plan.report || '').trim();
+        var reportText = reportRaw ? reportRaw.replace(/^【专项饮食报告】\s*/, '') : '暂无专项饮食报告。';
+        var reportHtml = escapeHtml(reportText).replace(/\n/g, '<br>');
+
+        // V237: 今日专项完成情况（记录后即回写，这里实时展示）
+        var _todayKey = dateToKey(new Date());
+        var _tTotal = 0, _tDone = 0;
+        ['breakfast', 'lunch', 'dinner'].forEach(function (mk) {
+            var st = (typeof getSpecialInterventionDoneCount === 'function')
+                ? getSpecialInterventionDoneCount(_todayKey, mk) : { total: 0, done: 0 };
+            _tTotal += st.total; _tDone += st.done;
+        });
+        var todayStatusHtml = _tTotal === 0
+            ? '<span style="font-size:11px;color:#9CA3AF;">今日暂无专项特供</span>'
+            : (_tDone >= _tTotal
+                ? '<span style="font-size:11px;font-weight:700;color:#16A34A;">✅ 今日专项已完成</span>'
+                : '<span style="font-size:11px;font-weight:700;color:#EA580C;">今日专项待完成 ' + _tDone + '/' + _tTotal + '</span>');
+
+        bodyHtml = '<div style="padding:14px 14px 18px;">'
+            + '<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
+            +   '<div style="display:flex;align-items:flex-start;gap:8px;">'
+            +     '<div style="flex:1;font-size:15px;font-weight:800;color:#C2410C;line-height:1.5;">' + title + '</div>'
+            +     (isOver ? '<span style="flex-shrink:0;font-size:11px;color:#6B7280;background:#F3F4F6;border-radius:10px;padding:2px 8px;">已结束</span>' : '<span style="flex-shrink:0;font-size:11px;color:#16A34A;background:#F0FDF4;border-radius:10px;padding:2px 8px;">调理中</span>')
+            +   '</div>'
+            +   '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;font-size:12px;color:#6B7280;">'
+            +     '<span>第 ' + dayNo + ' 天 / 共 ' + totalDays + ' 天</span>'
+            +     '<span>' + pct + '%</span>'
+            +   '</div>'
+            +   '<div style="height:8px;border-radius:4px;background:#FFEDD5;overflow:hidden;margin-top:6px;">'
+            +     '<div style="height:100%;width:' + pct + '%;border-radius:4px;background:linear-gradient(90deg,#FB923C,#F97316);transition:width .3s;"></div>'
+            +   '</div>'
+            +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;">'
+            +     '<span style="font-size:11px;color:#9CA3AF;">' + escapeHtml(plan.startDate || '') + ' 起 · ' + escapeHtml(plan.endDate || '') + ' 止</span>'
+            +     todayStatusHtml
+            +   '</div>'
+            + '</div>'
+            + '<div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
+            +   '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">'
+            +     '<span style="font-size:13px;font-weight:700;color:#92400E;">🍲 专项饮食报告</span>'
+            +     '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">AI 生成</span>'
+            +   '</div>'
+            +   '<div style="font-size:13px;color:#4B5563;line-height:1.9;">' + reportHtml + '</div>'
+            + '</div>'
+            + '</div>';
+    }
+
+    panel.innerHTML = '<div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:14px 12px;background:#fff;border-bottom:1px solid #FED7AA;">'
+        + '<button type="button" id="spBoardCloseBtn" style="width:34px;height:34px;border:none;background:#FFF7ED;border-radius:10px;font-size:18px;color:#C2410C;cursor:pointer;line-height:1;">＜</button>'
+        + '<div style="font-size:17px;font-weight:700;color:#C2410C;">健康管家</div>'
+        + (plan ? '<button type="button" id="spBoardEndBtn" style="margin-left:auto;padding:6px 10px;border:1px solid #FED7AA;border-radius:10px;background:#fff;color:#C2410C;font-size:12px;cursor:pointer;">结束计划</button>' : '')
+        + '</div>'
+        + '<div style="flex:1;overflow-y:auto;min-height:0;">' + bodyHtml + '</div>'
+        + (plan ? '<div style="flex-shrink:0;padding:12px 14px;background:#FFF7ED;border-top:1px solid #FED7AA;">'
+            + '<button type="button" id="spBoardTodayBtn" style="width:100%;padding:12px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">🍽️ 查看今日融合食谱</button>'
+            + '</div>' : '');
+
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+
+    document.getElementById('spBoardCloseBtn').onclick = closeSpecialPlanBoard;
+    var goBtn = document.getElementById('spBoardGoCreateBtn');
+    if (goBtn) goBtn.onclick = function () {
+        closeSpecialPlanBoard();
+        switchTab('family');
+    };
+    var todayBtn = document.getElementById('spBoardTodayBtn');
+    if (todayBtn && plan) todayBtn.onclick = function () {
+        closeSpecialPlanBoard();
+        focusTodayDiaryMeals();
+    };
+    var endBtn = document.getElementById('spBoardEndBtn');
+    if (endBtn && plan) endBtn.onclick = function () { _confirmEndSpecialPlan(plan); };
+}
+window.openSpecialPlanBoard = openSpecialPlanBoard;
+
+// V236: 关闭看板后回到食记「今天」并高亮今日三餐卡片
+function focusTodayDiaryMeals() {
+    try { if (currentDiaryDate) currentDiaryDate = new Date(); } catch (e) {}
+    try { if (typeof switchTab === 'function') switchTab('diary'); } catch (e) {}
+    try { if (typeof renderDiary === 'function') renderDiary(); } catch (e) {}
+    setTimeout(function () {
+        var cards = document.querySelectorAll('.diary-meal-card');
+        if (!cards.length) return;
+        // 即时滚动（不依赖 smooth，部分 webview 不支持）
+        try { cards[0].scrollIntoView({ block: 'start' }); } catch (e) { try { cards[0].scrollIntoView(); } catch (e2) {} }
+        for (var i = 0; i < cards.length; i++) {
+            cards[i].style.outline = '2px solid #F97316';
+            cards[i].style.outlineOffset = '2px';
+            cards[i].style.borderRadius = '12px';
+        }
+        setTimeout(function () {
+            for (var j = 0; j < cards.length; j++) {
+                cards[j].style.outline = '';
+                cards[j].style.outlineOffset = '';
+                cards[j].style.borderRadius = '';
+            }
+        }, 2000);
+    }, 120);
+}
+window.focusTodayDiaryMeals = focusTodayDiaryMeals;
+
+// 结束计划（自定义确认弹层，避免原生 confirm 在部分环境导致黑屏）
+function _confirmEndSpecialPlan(plan) {
+    var old = document.getElementById('specialPlanEndConfirm');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'specialPlanEndConfirm';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10020;background:rgba(17,24,39,0.55);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:320px;padding:18px;box-sizing:border-box;box-shadow:0 12px 32px rgba(0,0,0,0.2);">'
+        + '<div style="font-size:16px;font-weight:700;color:#1F2937;margin-bottom:8px;">结束专项计划</div>'
+        + '<div style="font-size:13px;color:#6B7280;line-height:1.7;margin-bottom:16px;">确定结束「' + escapeHtml(_spPlanDisplayName(plan)) + '」吗？结束后看板将不再显示，计划记录仍会保留。</div>'
+        + '<div style="display:flex;gap:8px;">'
+        +   '<button type="button" id="spEndCancelBtn" style="flex:1;padding:10px;border:1px solid #E5E7EB;border-radius:10px;background:#fff;color:#6B7280;font-size:14px;cursor:pointer;">取消</button>'
+        +   '<button type="button" id="spEndOkBtn" style="flex:1;padding:10px;border:none;border-radius:10px;background:#EF4444;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">确认结束</button>'
+        + '</div>'
+        + '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+    document.body.appendChild(ov);
+    document.getElementById('spEndCancelBtn').onclick = function () { ov.remove(); };
+    document.getElementById('spEndOkBtn').onclick = function () {
+        completeSpecialPlan(plan.planId);
+        ov.remove();
+        closeSpecialPlanBoard();
+        showToast('已结束专项计划');
+    };
+}
 
 // 全局错误捕获：任何未捕获的异常都在控制台显示，方便排查白屏问题
 window.addEventListener('error', function(e) {
