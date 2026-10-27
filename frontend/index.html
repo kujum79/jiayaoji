@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V263-20261027';
+        var APP_VER = 'V264-20261027';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -35785,14 +35785,11 @@ function renderFamily() {
         familyList.insertAdjacentHTML('beforeend', `
             <div style="display:flex;gap:10px;margin-bottom:10px;">
                 ${card('📔', '膳食日记', '本周已记 ' + weekCnt + ' 篇', 'openDiaryTimeline()')}
-                ${card('🍽️', '我的外食', outCnt ? outCnt + ' 次外食记录' : '记录外出就餐', '_openDiningOutListModal()')}
+                ${card('💰', '我的积分', (function(){ var t = 0; try { t = _pointsGetTotal(); } catch(e) {} return t ? ('当前 ' + t + ' 积分' + (_pointsCheckedToday() ? ' · 今日已打卡' : ' · 打卡 +2')) : '每日打卡 +2 积分'; })(), 'openPointsCenter()')}
             </div>
             <div style="display:flex;gap:10px;margin-bottom:12px;">
                 ${card('🎓', '我的专属课堂', _mySub, '_openMyClassroom()')}
                 ${card('👨‍🍳', '我的创作', worksCnt ? worksCnt + ' 个作品' : '记录你的私房创作', 'openMyWorksPage()')}
-            </div>
-            <div style="display:flex;gap:10px;margin-bottom:12px;">
-                ${card('💰', '我的积分', (function(){ var t = 0; try { t = _pointsGetTotal(); } catch(e) {} return t ? ('当前 ' + t + ' 积分' + (_pointsCheckedToday() ? ' · 今日已打卡' : ' · 打卡 +2')) : '每日打卡 +2 积分'; })(), 'openPointsCenter()')}
             </div>
         `);
         // V163: 超管专属快捷条（仅超管可见）—— 食养管理/文库管理/课程汇总/系统监控，一级直达
@@ -36211,7 +36208,7 @@ window.editMemberCard = function(id) {
     (function() {
         // V84: 「我的食记」组内「膳食日记」子项已删（顶部已有独立「膳食日记」卡），diaryCnt 无用删除
         var outCnt = 0;
-        try { outCnt = Object.keys(JSON.parse(lsGet('diningOutPlans') || '{}')).length; } catch(e) {}
+        try { outCnt = _diningOutHistory().length; } catch(e) {}
         var lib = [];
         try { lib = JSON.parse(lsGet('outdoorDishes') || '[]'); } catch(e) {}
         var pendingCnt = lib.filter(function(x){ return !x.clonedAt; }).length;
@@ -36223,7 +36220,13 @@ window.editMemberCard = function(id) {
                     <span class="fgroup-arrow" style="font-size:13px;color:#9CA3AF;font-weight:400;">▸</span>
                 </div>
                 <div class="fgroup-body" style="display:none;">
-                <!-- V162: 「我的外食」「我的复刻」已提升为顶部一级入口卡，此处仅保留清单快捷子项 -->
+                <!-- V264: 「我的外食」回归「我的食记」组；「我的积分」已提升为顶部一级入口卡 -->
+                <div onclick="_openDiningOutListModal()" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
+                    <span style="font-size:15px;flex:0 0 auto;line-height:1;">🍽️</span>
+                    <span style="font-size:14px;color:#6B7280;flex:0 0 auto;">我的外食</span>
+                    <span style="font-size:12px;color:#9CA3AF;flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:right;">${outCnt ? outCnt + ' 次外食记录' : '记录外出就餐'}</span>
+                    <span style="color:#D1D5DB;font-size:14px;flex:0 0 auto;line-height:1;">›</span>
+                </div>
                 <div onclick="_openCloneListModal('pending')" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
                     <span style="font-size:15px;flex:0 0 auto;line-height:1;">📌</span>
                     <span style="font-size:14px;color:#6B7280;flex:0 0 auto;">想复刻清单</span>
