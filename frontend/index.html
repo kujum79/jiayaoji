@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V251-20261026';
+        var APP_VER = 'V254-20261027';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -69958,7 +69958,107 @@ function closeCommunityPublishModal() {
     var ov = document.getElementById('communityPublishOverlay');
     if (ov) ov.remove();
 }
+// ========== V252: 食邦邻聚手机号认证（发布前置门槛） ==========
+var _communityAuthCodeTimer = null;
+var _communityAuthCodeLeft = 0;
+var _communityAuthCodeValue = '';
+function _communityPhoneAuth() {
+    try {
+        var o = lsGetJSON('communityPhoneAuth', null);
+        if (o && typeof o === 'object') {
+            return { phoneVerified: !!o.phoneVerified, phoneNumber: String(o.phoneNumber || '') };
+        }
+    } catch (e) {}
+    return { phoneVerified: false, phoneNumber: '' };
+}
+function _communitySavePhoneAuth(verified, phone) {
+    lsSetJSON('communityPhoneAuth', { phoneVerified: !!verified, phoneNumber: String(phone || '') });
+}
+function closeCommunityPhoneAuthModal() {
+    if (_communityAuthCodeTimer) { clearInterval(_communityAuthCodeTimer); _communityAuthCodeTimer = null; }
+    _communityAuthCodeLeft = 0;
+    _communityAuthCodeValue = '';
+    var ov = document.getElementById('communityPhoneAuthOverlay');
+    if (ov) ov.remove();
+}
+function openCommunityPhoneAuthModal() {
+    if (!getFamilyId()) { showToast && showToast('请先登录家庭账号后再发布'); return; }
+    closeCommunityPhoneAuthModal();
+    var cur = _communityPhoneAuth();
+    var ov = document.createElement('div');
+    ov.id = 'communityPhoneAuthOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10016;background:rgba(17,24,39,0.55);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:360px;padding:18px;box-sizing:border-box;box-shadow:0 12px 32px rgba(0,0,0,0.2);">'
+        + '<div style="font-size:16px;font-weight:700;color:#1F2937;margin-bottom:4px;">实名认证</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;line-height:1.6;margin-bottom:14px;">为保证邻里信息真实可信，发布前需完成手机号认证。</div>'
+        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">手机号</div>'
+        + '<input id="communityAuthPhone" type="tel" maxlength="11" value="' + escapeAttr(cur.phoneNumber || '') + '" placeholder="请输入 11 位手机号" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />'
+        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">验证码</div>'
+        + '<div style="display:flex;gap:8px;margin-bottom:14px;">'
+        +   '<input id="communityAuthCode" type="tel" maxlength="6" placeholder="请输入 6 位验证码" style="flex:1;min-width:0;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;" />'
+        +   '<button type="button" id="communityAuthCodeBtn" onclick="_communitySendAuthCode()" style="flex-shrink:0;padding:0 12px;border:1px solid #FED7AA;border-radius:10px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">获取验证码</button>'
+        + '</div>'
+        + '<div style="display:flex;gap:8px;">'
+        +   '<button type="button" id="communityAuthCancelBtn" style="flex:1;padding:10px;border:1px solid #E5E7EB;border-radius:10px;background:#fff;color:#6B7280;font-size:14px;cursor:pointer;">取消</button>'
+        +   '<button type="button" id="communityAuthSubmitBtn" style="flex:2;padding:10px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">确认认证</button>'
+        + '</div>'
+        + '<div style="font-size:10px;color:#9CA3AF;line-height:1.6;margin-top:10px;">当前为模拟认证流程，点击「获取验证码」后会直接提示本次的模拟验证码。</div>'
+        + '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) closeCommunityPhoneAuthModal(); });
+    document.body.appendChild(ov);
+    document.getElementById('communityAuthCancelBtn').onclick = closeCommunityPhoneAuthModal;
+    document.getElementById('communityAuthSubmitBtn').onclick = submitCommunityPhoneAuth;
+}
+function _communitySendAuthCode() {
+    var phoneEl = document.getElementById('communityAuthPhone');
+    var btn = document.getElementById('communityAuthCodeBtn');
+    var phone = String((phoneEl && phoneEl.value) || '').replace(/\s/g, '');
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+        showToast && showToast('请输入正确的 11 位手机号');
+        phoneEl && phoneEl.focus();
+        return;
+    }
+    if (_communityAuthCodeTimer) return;
+    _communityAuthCodeValue = String(Math.floor(100000 + Math.random() * 900000));
+    _communityAlert('【家肴记】您的模拟验证码是：' + _communityAuthCodeValue);
+    _communityAuthCodeLeft = 60;
+    if (btn) { btn.disabled = true; btn.style.color = '#9CA3AF'; btn.style.borderColor = '#E5E7EB'; btn.style.background = '#F9FAFB'; btn.textContent = '60s 后重发'; }
+    _communityAuthCodeTimer = setInterval(function () {
+        _communityAuthCodeLeft -= 1;
+        if (_communityAuthCodeLeft > 0) {
+            if (btn) btn.textContent = _communityAuthCodeLeft + 's 后重发';
+            return;
+        }
+        clearInterval(_communityAuthCodeTimer);
+        _communityAuthCodeTimer = null;
+        _communityAuthCodeValue = '';
+        if (btn) { btn.disabled = false; btn.style.color = '#C2410C'; btn.style.borderColor = '#FED7AA'; btn.style.background = '#FFF7ED'; btn.textContent = '重新获取'; }
+    }, 1000);
+}
+function submitCommunityPhoneAuth() {
+    var phoneEl = document.getElementById('communityAuthPhone');
+    var codeEl = document.getElementById('communityAuthCode');
+    var phone = String((phoneEl && phoneEl.value) || '').replace(/\s/g, '');
+    var code = String((codeEl && codeEl.value) || '').replace(/\s/g, '');
+    if (!/^1[3-9]\d{9}$/.test(phone)) { showToast && showToast('请输入正确的 11 位手机号'); phoneEl && phoneEl.focus(); return; }
+    if (!code) { showToast && showToast('请输入验证码'); codeEl && codeEl.focus(); return; }
+    if (!_communityAuthCodeValue) { showToast && showToast('请先获取验证码'); return; }
+    if (code !== _communityAuthCodeValue) { showToast && showToast('验证码不正确'); codeEl && codeEl.focus(); return; }
+    _communitySavePhoneAuth(true, phone);
+    closeCommunityPhoneAuthModal();
+    showToast && showToast('认证成功');
+    openCommunityPublishModal();
+}
+window.openCommunityPhoneAuthModal = openCommunityPhoneAuthModal;
+window.closeCommunityPhoneAuthModal = closeCommunityPhoneAuthModal;
+window._communitySendAuthCode = _communitySendAuthCode;
 function openCommunityPublishModal() {
+    if (!getFamilyId()) { showToast && showToast('请先登录家庭账号后再发布'); return; }
+    var auth = _communityPhoneAuth();
+    if (!auth.phoneVerified) { openCommunityPhoneAuthModal(); return; }
+    _renderCommunityPublishModal(auth.phoneNumber);
+}
+function _renderCommunityPublishModal(verifiedPhone) {
     closeCommunityPublishModal();
     _communityPubType = 'mutual';
     _communityPubImages = [];
@@ -69972,6 +70072,11 @@ function openCommunityPublishModal() {
     ov.style.cssText = 'position:fixed;inset:0;z-index:10012;background:rgba(17,24,39,0.55);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
     ov.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:400px;max-height:92vh;overflow-y:auto;padding:16px;box-sizing:border-box;box-shadow:0 12px 32px rgba(0,0,0,0.2);">'
         + '<div style="font-size:16px;font-weight:700;color:#1F2937;margin-bottom:12px;">发布邻聚信息</div>'
+        + '<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;margin-bottom:12px;">'
+        +   '<span style="font-size:12px;color:#6B7280;flex-shrink:0;">发布小区</span>'
+        +   '<span style="font-size:12px;font-weight:700;color:#1F2937;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(getCommunityName()) + '</span>'
+        +   '<span style="margin-left:auto;flex-shrink:0;font-size:10px;color:#9CA3AF;">🔒 仅限本小区</span>'
+        + '</div>'
         + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">选择分类</div>'
         + '<div id="communityPubTypes" style="display:flex;gap:8px;margin-bottom:12px;">' + typeBtns + '</div>'
         + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">标题</div>'
@@ -69979,7 +70084,12 @@ function openCommunityPublishModal() {
         + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">详细说明</div>'
         + '<textarea id="communityPubContent" maxlength="500" rows="3" placeholder="说明价格、时间、地点等信息" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;resize:vertical;margin-bottom:12px;"></textarea>'
         + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">电话</div>'
-        + '<input id="communityPubPhone" type="tel" maxlength="20" value="' + escapeAttr(_communityDefaultPhone()) + '" placeholder="方便邻居电话联系（选填）" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />'
+        + (verifiedPhone
+            ? '<div style="position:relative;margin-bottom:12px;">'
+                + '<input id="communityPubPhone" type="tel" maxlength="20" value="' + escapeAttr(verifiedPhone) + '" readonly style="width:100%;box-sizing:border-box;padding:9px 10px;padding-right:96px;border:1px solid #A7F3D0;border-radius:10px;font-size:14px;outline:none;background:#F9FAFB;color:#374151;" />'
+                + '<span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:700;color:#047857;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;padding:2px 6px;white-space:nowrap;">✅ 已认证</span>'
+              + '</div>'
+            : '<input id="communityPubPhone" type="tel" maxlength="20" value="' + escapeAttr(_communityDefaultPhone()) + '" placeholder="方便邻居电话联系（选填）" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />')
         + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">微信号</div>'
         + '<input id="communityPubWechat" type="text" maxlength="40" value="' + escapeAttr(_communityDefaultWechat()) + '" placeholder="方便邻居微信添加（选填）" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />'
         + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">图片上传（最多 3 张）</div>'
@@ -70025,6 +70135,9 @@ async function submitCommunityPost() {
     var phone = String((phoneEl && phoneEl.value) || '').trim();
     var wechat = String((wechatEl && wechatEl.value) || '').trim();
     var buyLink = _communityNormalizeBuyLink((linkEl && linkEl.value) || '');
+    // V252: 已认证手机号为准，避免只读字段被脚本篡改或为空
+    var authInfo = _communityPhoneAuth();
+    if (authInfo.phoneVerified && authInfo.phoneNumber) phone = authInfo.phoneNumber;
     if (!title) { showToast && showToast('请填写标题'); titleEl && titleEl.focus(); return; }
     if (!content) { showToast && showToast('请填写详细说明'); contentEl && contentEl.focus(); return; }
     if (phone && !/^[0-9+\-\s]{6,20}$/.test(phone)) { showToast && showToast('电话号码格式不正确'); phoneEl && phoneEl.focus(); return; }
@@ -70056,9 +70169,10 @@ async function submitCommunityPost() {
     posts.unshift({
         id: 'post_' + Date.now(),
         type: _communityPubType,
-        community: _communitySelectedName || getCommunityName(),
+        community: getCommunityName(),
         authorName: _communityPostAuthorName(),
         authorKey: _communityMyAuthorKey(),
+        authorVerified: true,
         title: title,
         content: content,
         contactPhone: phone,
@@ -70213,6 +70327,12 @@ async function submitCommunityReport() {
 window.openCommunityReportModal = openCommunityReportModal;
 window.closeCommunityReportModal = closeCommunityReportModal;
 window._communityReportSelectReason = _communityReportSelectReason;
+// V253: 作者认证标识——发布需手机号认证；历史帖无该字段时，留有电话视为已认证
+function _communityAuthorVerified(p) {
+    if (!p) return false;
+    if (typeof p.authorVerified === 'boolean') return p.authorVerified;
+    return !!(String(p.contactPhone || '').trim());
+}
 function _communityPostCardHtml(p, opts) {
     opts = opts || {};
     var meta = _communityTypeMeta(p.type);
@@ -70280,6 +70400,9 @@ function _communityPostCardHtml(p, opts) {
         +   (p.volunteer ? '<span style="font-size:10px;font-weight:700;color:#047857;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;padding:1px 6px;">♿ 助老助残志愿服务</span>' : '')
         +   statusHtml
         +   '<span style="font-size:12px;color:#374151;font-weight:600;">' + escapeHtml(p.authorName || '邻居') + '</span>'
+        +   (_communityAuthorVerified(p)
+                ? '<span style="font-size:10px;font-weight:700;color:#047857;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;padding:1px 5px;white-space:nowrap;">✅ 实名认证</span>'
+                : '<span style="font-size:10px;font-weight:700;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 5px;white-space:nowrap;">⚠️ 未认证</span>')
         +   '<span style="font-size:11px;color:#9CA3AF;margin-left:auto;">' + escapeHtml(_communityTimeText(p.createdAt)) + '</span>'
         + '</div>'
         + '<div style="font-size:14px;font-weight:700;color:#1F2937;line-height:1.5;">' + escapeHtml(p.title || '') + '</div>'
