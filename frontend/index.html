@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V259-20261027';
+        var APP_VER = 'V263-20261027';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -7849,6 +7849,7 @@ function cloneItemForPool(item, mode, user) {
         auditReason: item.auditReason || null,
         sharedBy: isAnon ? null : (user.id || 'unknown'),
         sharerName: isAnon ? '匿名用户' : (user.name || '我'),
+        sourceFamilyId: getFamilyId() || null,
         sharedAt: now,
         sharedAnonymity: isAnon ? 'anon' : 'real',
         // 简化标识，便于引用回源
@@ -11026,15 +11027,19 @@ function _monitorTypeMeta(t) {
 function _monitorRowHtml(r) {
     var m = _monitorTypeMeta(r.type);
     var fam = r.familyName || (r.familyId ? r.familyId : '未知家庭');
-    return '<div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px;border-left:3px solid ' + m.color + ';">' +
+    var done = !!r.resolved;
+    return '<div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px;border-left:3px solid ' + (done ? '#16A34A' : m.color) + ';">' +
         '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">' +
         '<span style="font-size:11px;font-weight:700;color:#fff;background:' + m.color + ';border-radius:6px;padding:1px 7px;">' + m.label + '</span>' +
+        (done ? '<span style="font-size:11px;font-weight:700;color:#fff;background:#16A34A;border-radius:6px;padding:1px 7px;">✅ 已修复</span>' : '') +
         '<span style="font-size:11px;color:#9CA3AF;margin-left:auto;">' + escapeHtml(r.timeText || '') + '</span>' +
         '</div>' +
-        '<div style="font-size:12px;color:#1F2937;line-height:1.7;word-break:break-all;">' + escapeHtml(r.message || '') + '</div>' +
+        '<div style="font-size:12px;color:#1F2937;line-height:1.7;word-break:break-all;' + (done ? 'opacity:0.6;' : '') + '">' + escapeHtml(r.message || '') + '</div>' +
         '<div style="display:flex;align-items:center;gap:8px;margin-top:6px;">' +
         '<span style="font-size:11px;color:#6B7280;">👪 ' + escapeHtml(fam) + '</span>' +
-        '<button type="button" onclick="_openMonitorFix(\'' + escapeHtml(r.id || '') + '\')" style="margin-left:auto;border:1px solid #FDBA74;background:#FFF7ED;color:#9A3412;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;">🛠 修复</button>' +
+        (done
+            ? '<span style="margin-left:auto;border:1px solid #BBF7D0;background:#F0FDF4;color:#16A34A;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;">✅ 已修复</span>'
+            : '<button type="button" onclick="_openMonitorFix(\'' + escapeHtml(r.id || '') + '\')" style="margin-left:auto;border:1px solid #FDBA74;background:#FFF7ED;color:#9A3412;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;">🛠 修复</button>') +
         '</div></div>';
 }
 
@@ -11045,10 +11050,13 @@ function _monitorBodyHtml(d) {
             '<div style="font-size:11px;color:#6B7280;margin-top:4px;">' + label + '</div></div>';
     };
     var list = (d && Array.isArray(d.unresolved)) ? d.unresolved : [];
+    var pending = 0;
+    for (var i = 0; i < list.length; i++) { if (!list[i].resolved) pending++; }
     return '<div style="padding:12px 16px 24px;">' +
-        '<div style="display:flex;gap:10px;margin-bottom:10px;">' +
+        '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
         stat('今日报错总数', (d && d.todayErrorCount) || 0, '#DC2626') +
-        stat('活跃付费客户', (d && d.activePaidCount) || 0, '#16A34A') +
+        stat('已修复', (d && d.resolvedTodayCount) || 0, '#16A34A') +
+        stat('活跃付费客户', (d && d.activePaidCount) || 0, '#2563EB') +
         '</div>' +
         '<div style="display:flex;gap:8px;margin-bottom:14px;">' +
         '<button type="button" onclick="_openAnnounceSheet()" style="flex:1;border:none;border-radius:12px;background:#DC2626;color:#fff;font-size:12px;font-weight:700;padding:10px 6px;cursor:pointer;box-shadow:0 2px 8px rgba(220,38,38,0.25);">📢 全局安抚公告</button>' +
@@ -11056,7 +11064,7 @@ function _monitorBodyHtml(d) {
         '</div>' +
         '<div style="display:flex;align-items:center;margin-bottom:8px;">' +
         '<div style="font-size:13px;font-weight:700;color:#1F2937;">🚨 未处理报警</div>' +
-        '<span style="margin-left:8px;font-size:11px;color:#9CA3AF;">按时间倒序 · 共 ' + list.length + ' 条</span>' +
+        '<span style="margin-left:8px;font-size:11px;color:#9CA3AF;">待处理 ' + pending + ' 条 · 今日已修复 ' + ((d && d.resolvedTodayCount) || 0) + ' 条</span>' +
         '</div>' +
         (list.length ? list.map(_monitorRowHtml).join('') :
             '<div style="background:#fff;border-radius:12px;padding:20px;text-align:center;font-size:12px;color:#6B7280;">✅ 暂无未处理报警</div>') +
@@ -11107,7 +11115,7 @@ async function _reloadSystemMonitor() {
     _refreshMonitorBadge();
 }
 
-async function _monitorResolve(errorId) {
+async function _monitorResolve(errorId, note) {
     if (!errorId) return;
     try {
         var res = await fetch('/api/admin/error-resolve', {
@@ -11117,13 +11125,23 @@ async function _monitorResolve(errorId) {
         });
         var out = await res.json();
         if (!out || !out.ok) { showToast('标记失败，请稍后重试'); return; }
-        showToast('✅ 已标记为处理完成');
+        showToast('✅ 已修复' + (note ? '（' + note + '）' : ''));
     } catch (e) {
         showToast('标记失败，请稍后重试');
         return;
     }
-    _MONITOR_CACHE = null;
-    _reloadSystemMonitor();
+    // 就地标记为「已修复」，保留在列表里展示，同时刷新顶部已修复计数
+    var row = _monitorFindRow(errorId);
+    if (row) { row.resolved = true; row.resolvedAt = Date.now(); }
+    if (_MONITOR_CACHE) {
+        _MONITOR_CACHE.resolvedTodayCount = (Number(_MONITOR_CACHE.resolvedTodayCount) || 0) + 1;
+        _MONITOR_CACHE.unresolvedCount = Math.max(0, (Number(_MONITOR_CACHE.unresolvedCount) || 0) - 1);
+        var body = document.getElementById('systemMonitorBody');
+        if (body) body.innerHTML = _monitorBodyHtml(_MONITOR_CACHE);
+    } else {
+        _reloadSystemMonitor();
+    }
+    _refreshMonitorBadge();
 }
 
 // ====== V228: 系统监控「一键修复」+ 全局安抚公告 ======
@@ -11169,7 +11187,7 @@ function _openMonitorFix(errorId) {
         '<div id="monitorFixBody">' +
         '<button type="button" onclick="_monitorFixResetCache()" style="' + btn + '">' +
         '<div style="font-size:13px;font-weight:700;color:#1F2937;">🧹 重置该用户本地缓存</div>' +
-        '<div style="' + subtitle + '">向该家庭下发指令，其浏览器下次打开 APP 时自动清理草稿 / 卡死状态（保留订阅与家庭业务数据）</div></button>' +
+        '<div style="' + subtitle + '">向该家庭下发指令，其浏览器下次打开 APP 时自动清理草稿 / 卡死状态（保留订阅与家庭业务数据）；执行成功后该报警自动转为「已修复」</div></button>' +
         (isAi ?
             '<button type="button" onclick="_openAiProviderSheet()" style="' + btn + '">' +
             '<div style="font-size:13px;font-weight:700;color:#1F2937;">🤖 切换备用 AI 服务商</div>' +
@@ -11177,8 +11195,8 @@ function _openMonitorFix(errorId) {
             :
             '<div style="border:1px dashed #E5E7EB;border-radius:12px;padding:10px 14px;margin-bottom:9px;font-size:11px;color:#9CA3AF;">🤖 切换备用 AI 服务商（仅「AI 异常」类型报警可用）</div>') +
         '<button type="button" onclick="_monitorFixResolve()" style="' + btn + '">' +
-        '<div style="font-size:13px;font-weight:700;color:#16A34A;">✅ 标记为已解决</div>' +
-        '<div style="' + subtitle + '">从报警列表中移除该条记录</div></button>' +
+        '<div style="font-size:13px;font-weight:700;color:#16A34A;">✅ 标记为已修复</div>' +
+        '<div style="' + subtitle + '">该条转入「已修复」状态并计入今日已修复数量，刷新后不再出现在待处理列表</div></button>' +
         '</div></div>';
     document.body.appendChild(ov);
 }
@@ -11200,11 +11218,13 @@ async function _monitorFixResetCache() {
         return;
     }
     _closeMonitorFix();
-    if (typeof getFamilyId === 'function' && getFamilyId() === fid) {
-        showToast('🛠 已开始清理本机缓存…');
-        _applyRemoteResetCache();
+    var sameFamily = (typeof getFamilyId === 'function' && getFamilyId() === fid);
+    if (sameFamily) _applyRemoteResetCache();
+    var note = sameFamily ? '已开始清理本机缓存' : '指令已下发，下次打开 APP 自动生效';
+    if (row.id) {
+        _monitorResolve(row.id, note);
     } else {
-        showToast('✅ 指令已下发，该家庭下次打开 APP 时自动生效');
+        showToast((sameFamily ? '🛠 ' : '✅ ') + note);
     }
 }
 
@@ -11258,7 +11278,9 @@ async function _switchAiProvider(idx) {
         return;
     }
     _closeMonitorFix();
-    _reloadSystemMonitor();
+    var rowI = _MONITOR_FIX_ROW || {};
+    if (rowI.id) _monitorResolve(rowI.id, '已切换 AI 服务商');
+    else _reloadSystemMonitor();
 }
 
 async function _resetAiProvider() {
@@ -47543,6 +47565,11 @@ function buildPoolCardHtml(p) {
                 <button class="kc-action primary" data-action="view"    data-source-id="${escapeHtml(p.sourceItemId)}">👁️ 查看</button>
                 <button class="kc-action"          data-action="ref"     data-source-id="${escapeHtml(p.sourceItemId)}">📝 引用</button>
                 <button class="kc-action"          data-action="download" data-source-id="${escapeHtml(p.sourceItemId)}">⬇️ 下载</button>
+                ${(typeof isSuperAdmin === 'function' && isSuperAdmin())
+                    ? (p.publicPromoted
+                        ? '<button class="kc-action" disabled data-action="promote" data-source-id="' + escapeHtml(p.sourceItemId) + '" style="background:#F3F4F6;color:#9CA3AF;cursor:not-allowed;">⭐ 已收录公共文库</button>'
+                        : '<button class="kc-action" data-action="promote" data-source-id="' + escapeHtml(p.sourceItemId) + '">⭐ 收录到公共文库</button>')
+                    : ''}
             </div>
             <div class="kc-stats">
                 <span>引用 ${stats.ref || 0}</span>
@@ -47558,6 +47585,7 @@ function handlePoolCardAction(action, sourceId) {
     if (!p) { showToast('条目已下架'); renderDietKnowledge(); return; }
     switch (action) {
         case 'view':    showPoolItemDetail(sourceId); break;
+        case 'promote': _kbPromotePoolItem(sourceId); break;
         case 'ref':
             // 引用到本地（家庭文库私密副本，带 basedOn）
             var user = getCurrentUserContext();
@@ -47610,6 +47638,96 @@ function handlePoolCardAction(action, sourceId) {
             } catch(e) { showToast('下载失败'); }
             break;
     }
+}
+
+// ===== V261: 超管将共享文库条目收录进公共文库，并给分享者奖励积分 =====
+var _KB_PROMOTE_POINTS = 50;
+function _kbPromotePoolItem(sourceId) {
+    if (typeof isSuperAdmin !== 'function' || !isSuperAdmin()) { showToast('仅超管可收录到公共文库'); return; }
+    var pool = getSharedPool();
+    var p = null;
+    for (var i = 0; i < pool.length; i++) {
+        if (String(pool[i].sourceItemId) === String(sourceId)) { p = pool[i]; break; }
+    }
+    if (!p) { showToast('条目已下架'); renderDietKnowledge(); return; }
+    if (p.publicPromoted) { showToast('该条目已收录到公共文库'); return; }
+    var dup = dietKnowledge.find(function(k) { return k.promotedFrom && String(k.promotedFrom.sourceItemId) === String(sourceId); });
+    if (dup) { p.publicPromoted = true; p.publicItemId = dup.id; saveSharedPool(pool); renderDietKnowledge(); showToast('该条目已收录到公共文库'); return; }
+
+    var user = getCurrentUserContext();
+    var maxId = dietKnowledge.reduce(function(m, k) { return Math.max(m, Number(k.id) || 0); }, 100);
+    var item = {
+        id: maxId + 1,
+        layer: 'public',
+        visibility: 'public',
+        ownerId: 'shared:' + (p.sharedBy || p.sourceItemId),
+        ownerName: p.sharerName || '共享文库',
+        createdBy: user.id,
+        familyId: null,
+        shareScope: 'none',
+        isPublic: true,
+        auditStatus: 'passed',
+        title: p.title,
+        content: p.content,
+        type: p.type,
+        mainCategory: p.mainCategory,
+        subCategory: p.subCategory,
+        tags: (p.tags || []).slice(),
+        sceneTags: (p.sceneTags || []).slice(),
+        nutrition: p.nutrition || null,
+        source: p.source || '共享文库收录',
+        images: (p.images || []).slice(),
+        stats: { ref: 0, replication: 0, download: 0 },
+        promotedFrom: {
+            sourceItemId: p.sourceItemId,
+            sharerName: p.sharerName || '匿名用户',
+            sharedAt: p.sharedAt || null,
+            promotedAt: Date.now()
+        },
+        createdAt: Date.now()
+    };
+    dietKnowledge.unshift(item);
+    saveDietKnowledge();
+
+    p.publicPromoted = true;
+    p.publicItemId = item.id;
+    p.promotedAt = Date.now();
+    p.promotedBy = user.id;
+    saveSharedPool(pool);
+
+    var awarded = _kbAwardPromotePoints(p);
+    updateVisibilityCounts();
+    renderDietKnowledge();
+    showToast('⭐ 已收录到公共文库' + (awarded ? '，已为分享者 +' + awarded + ' 积分' : ''));
+}
+
+// 给分享者家庭加积分：同一台设备可直接按家庭前缀写入，跨家庭同样走带前缀的键
+function _kbAwardPromotePoints(p) {
+    var pts = _KB_PROMOTE_POINTS;
+    var fid = p.sourceFamilyId || null;
+    try {
+        if (fid && fid !== getFamilyId()) {
+            var totalKey = fid + '_userPoints';
+            var recKey = fid + '_pointRecords';
+            var total = 0;
+            try { total = Number(JSON.parse(localStorage.getItem(totalKey) || '{"total":0}').total) || 0; } catch(e) {}
+            localStorage.setItem(totalKey, JSON.stringify({ total: total + pts }));
+            var recs = [];
+            try { recs = JSON.parse(localStorage.getItem(recKey) || '[]') || []; } catch(e) {}
+            recs.unshift({
+                id: 'p_' + Date.now() + '_' + Math.floor(Math.random() * 900 + 100),
+                action: 'library_promote',
+                points: pts,
+                createdAt: Math.floor(Date.now() / 1000),
+                note: '共享文库文章被超管收录到公共文库'
+            });
+            if (recs.length > 200) recs = recs.slice(0, 200);
+            localStorage.setItem(recKey, JSON.stringify(recs));
+            return pts;
+        }
+        if (typeof _pointsAdd === 'function') { _pointsAdd(pts, 'library_promote'); return pts; }
+    } catch(e) { console.error('promote award error:', e); }
+    return 0;
 }
 
 function showPoolItemDetail(sourceId) {
@@ -70209,7 +70327,8 @@ var _POINT_ACTION_LABELS = {
     redeem_course: '兑换定制课',
     redeem_ai: '兑换AI专家评估',
     redeem_spatula: '兑换定制木铲',
-    comment: '发布评论'
+    comment: '发布评论',
+    library_promote: '文库被收录奖励'
 };
 // V256: 防刷限制——每日总分上限 100，食谱 5 次/日，文库 2 次/日，分享 1 次/日
 var _POINT_DAILY_TOTAL_CAP = 100;
@@ -70397,8 +70516,36 @@ function _pointsRenderCenter() {
         +   (done ? '📅 今日已打卡' : '📅 立即打卡')
         + '</button>';
     var shareDone = _pointsDailyCount('share') >= 1;
+    // V260: 分享食谱 / 文库贡献 的当日次数与入口引导
+    var recipeCnt = _pointsDailyCount('recipe');
+    var libraryCnt = _pointsDailyCount('library');
+    var recipeDone = recipeCnt >= _POINT_DAILY_LIMITS.recipe;
+    var libraryDone = libraryCnt >= _POINT_DAILY_LIMITS.library;
+    var dailyFull = _pointsDailyEarned() >= _POINT_DAILY_TOTAL_CAP;
+    var recipeOff = recipeDone || dailyFull;
+    var libraryOff = libraryDone || dailyFull;
+    var taskRowStyle = 'background:#fff;border-radius:14px;padding:12px;display:flex;align-items:center;gap:10px;';
+    var taskBtn = function(id, off, label, onclick) {
+        return '<button type="button" id="' + id + '" ' + (off ? 'disabled' : '') + ' onclick="' + onclick + '" style="padding:7px 12px;border-radius:10px;border:' + (off ? '1px solid #E5E7EB' : 'none') + ';background:' + (off ? '#F3F4F6' : '#EA580C') + ';color:' + (off ? '#9CA3AF' : '#fff') + ';font-size:12px;font-weight:700;cursor:' + (off ? 'not-allowed' : 'pointer') + ';white-space:nowrap;">' + label + '</button>';
+    };
     var taskHtml = ''
         + '<div style="font-size:13px;font-weight:700;color:#1F2937;margin:0 2px 8px;">积分任务</div>'
+        + '<div style="' + taskRowStyle + 'margin-bottom:8px;">'
+        +   '<div style="width:34px;height:34px;border-radius:10px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;font-size:18px;">🍲</div>'
+        +   '<div style="flex:1;min-width:0;">'
+        +     '<div style="font-size:13px;font-weight:600;color:#1F2937;">分享食谱</div>'
+        +     '<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">「我的创作」右下角 ➕ 发布 · 今日 ' + recipeCnt + '/' + _POINT_DAILY_LIMITS.recipe + ' 次，每次 +20</div>'
+        +   '</div>'
+        +   taskBtn('pointsRecipeBtn', recipeOff, recipeDone ? '今日已达上限' : '去分享', '_pointsGuideRecipe()')
+        + '</div>'
+        + '<div style="' + taskRowStyle + 'margin-bottom:8px;">'
+        +   '<div style="width:34px;height:34px;border-radius:10px;background:#EFF6FF;display:flex;align-items:center;justify-content:center;font-size:18px;">📚</div>'
+        +   '<div style="flex:1;min-width:0;">'
+        +     '<div style="font-size:13px;font-weight:600;color:#1F2937;">文库贡献</div>'
+        +     '<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">「饮食问答」右上角 ➕ 添加后点「🔗分享」（家庭管理员）· 今日 ' + libraryCnt + '/' + _POINT_DAILY_LIMITS.library + ' 次，每次 +50</div>'
+        +   '</div>'
+        +   taskBtn('pointsLibraryBtn', libraryOff, libraryDone ? '今日已达上限' : '去贡献', '_pointsGuideLibrary()')
+        + '</div>'
         + '<div style="background:#fff;border-radius:14px;padding:12px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">'
         +   '<div style="width:34px;height:34px;border-radius:10px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;font-size:18px;">📤</div>'
         +   '<div style="flex:1;min-width:0;">'
@@ -70478,10 +70625,29 @@ function _pointsCheckin() {
     _pointsRenderCenter();
     if (typeof renderFamily === 'function') { try { renderFamily(); } catch (e) {} }
 }
+// V260: 积分中心任务引导——分享食谱 → 「我的创作」发布；文库贡献 → 「饮食问答」添加知识
+function _pointsGuideRecipe() {
+    if (!getFamilyId()) { showToast && showToast('请先登录家庭账号'); return; }
+    closePointsCenter();
+    setTimeout(function () {
+        try { openMyWorksPage(); } catch (e) { console.error('openMyWorksPage error:', e); }
+        setTimeout(function () { try { _openWorkAddModal(); } catch (e) {} }, 260);
+    }, 240);
+}
+function _pointsGuideLibrary() {
+    if (!getFamilyId()) { showToast && showToast('请先登录家庭账号'); return; }
+    closePointsCenter();
+    setTimeout(function () {
+        try { switchTab('knowledge'); } catch (e) { console.error('switchTab error:', e); }
+        setTimeout(function () { try { openAddKnowledgeModal(); } catch (e) {} }, 260);
+    }, 240);
+}
 window.openPointsCenter = openPointsCenter;
 window.closePointsCenter = closePointsCenter;
 window._pointsCheckin = _pointsCheckin;
 window._pointsGetTotal = _pointsGetTotal;
+window._pointsGuideRecipe = _pointsGuideRecipe;
+window._pointsGuideLibrary = _pointsGuideLibrary;
 
 // ========== V257: 分享朋友圈得积分 ==========
 var _SHARE_SLOGAN = '我在用家肴记管全家饮食，快来试试！';

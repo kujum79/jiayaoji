@@ -4838,20 +4838,23 @@ def _err_load_entries(limit: int = 300) -> List[Dict[str, Any]]:
     return items
 
 
-def _err_load_resolved() -> set:
+def _err_load_resolved() -> Dict[str, int]:
+    """返回 {errorId: 处理完成时间戳(毫秒)}；兼容旧的字符串数组格式。"""
     try:
         if _ERR_RESOLVED_FILE.exists():
             data = json.loads(_ERR_RESOLVED_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return {str(k): int(v or 0) for k, v in data.items()}
             if isinstance(data, list):
-                return {str(x) for x in data}
-    except (OSError, json.JSONDecodeError):
+                return {str(x): 0 for x in data}
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
         pass
-    return set()
+    return {}
 
 
-def _err_save_resolved(ids: set) -> None:
+def _err_save_resolved(items: Dict[str, int]) -> None:
     try:
-        _ERR_RESOLVED_FILE.write_text(json.dumps(sorted(ids), ensure_ascii=False), encoding="utf-8")
+        _ERR_RESOLVED_FILE.write_text(json.dumps(items, ensure_ascii=False, sort_keys=True), encoding="utf-8")
     except OSError as e:
         print(f"[admin-monitor] 写入解决状态失败：{e}")
 
@@ -4889,6 +4892,10 @@ async def admin_monitor() -> Dict[str, Any]:
     today = _date_cls.today().strftime("%Y-%m-%d")
     entries = _err_load_entries(300)
     today_count = 0
+    resolved_today = 0
+    for ts_ms in resolved.values():
+        if ts_ms and _dt_cls.fromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d") == today:
+            resolved_today += 1
     unresolved: List[Dict[str, Any]] = []
     for obj in entries:
         ts = int(obj.get("clientCreatedAt") or 0)
@@ -4921,6 +4928,8 @@ async def admin_monitor() -> Dict[str, Any]:
         "todayErrorCount": today_count,
         "totalErrorCount": len(entries),
         "activePaidCount": _count_active_paid(),
+        "resolvedTodayCount": resolved_today,
+        "resolvedTotalCount": len(resolved),
         "unresolvedCount": len(unresolved),
         "unresolved": unresolved,
     }
@@ -4933,7 +4942,9 @@ async def admin_error_resolve(req: ErrorResolveRequest) -> Dict[str, Any]:
     if not ids:
         return {"ok": False, "error": "缺少 errorIds"}
     resolved = _err_load_resolved()
-    resolved.update(ids)
+    now_ms = int(time.time() * 1000)
+    for i in ids:
+        resolved[i] = now_ms
     _err_save_resolved(resolved)
     return {"ok": True, "resolvedCount": len(resolved)}
 
