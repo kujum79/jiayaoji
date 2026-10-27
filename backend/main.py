@@ -4512,6 +4512,133 @@ async def audit_post(req: AuditPostRequest) -> Dict[str, Any]:
     return {"passed": False, "reason": reason or "内容不符合社区发布规范"}
 
 
+# ========== V255: 积分内容审核（POST /api/audit-content） ==========
+class AuditContentRequest(BaseModel):
+    actionType: str = Field(default="", max_length=30)
+    content: str = Field(default="", max_length=2000)
+
+
+_AUDIT_CONTENT_ACTION_LABELS = {
+    "checkin": "每日打卡",
+    "post": "发布邻聚信息",
+    "diary": "记录膳食日记",
+    "recipe": "分享食谱",
+    "comment": "发布评论",
+}
+
+_AUDIT_CONTENT_PROMPT = """你是家肴记社区内容审核员。请审核以下用户提交的内容：
+【行为】{action}
+【内容】{content}
+
+【审核红线】：
+1. 严禁医疗功效承诺（治疗、治愈、降血压、偏方、包治等）。
+2. 严禁金融诈骗、高额返利、拉人头、诱导私下转账。
+3. 严禁黄赌毒、政治敏感、违禁品交易。
+4. 严禁谩骂、地域歧视、人身攻击、虚假广告。
+
+【判定标准】：
+若触碰红线，返回 {{ "passed": false, "reason": "具体驳回原因" }}；
+若为正常的饮食记录、邻里分享、打卡内容，返回 {{ "passed": true, "reason": "" }}。
+请严格返回 JSON。"""
+
+
+@app.post("/api/audit-content")
+async def audit_content(req: AuditContentRequest) -> Dict[str, Any]:
+    """V255: 积分相关内容的 AI 审核，返回 {passed, reason}。"""
+    content = (req.content or "").strip()
+    if not content:
+        return {"passed": False, "reason": "内容不能为空"}
+
+    hits = _audit_post_banned_hits(content)
+    if hits:
+        return {"passed": False, "reason": "内容含违规信息：" + "、".join(hits[:3])}
+
+    action_label = _AUDIT_CONTENT_ACTION_LABELS.get(
+        (req.actionType or "").strip(), "内容提交"
+    )
+    prompt = _AUDIT_CONTENT_PROMPT.format(action=action_label, content=content[:800])
+    messages = [
+        {"role": "system", "content": "你是家肴记社区的信息审核员，只输出 JSON。"},
+        {"role": "user", "content": prompt},
+    ]
+    try:
+        raw = await call_qwen(
+            messages, json_mode=True, max_tokens=300, task_type="audit_content", timeout=30.0
+        )
+        parsed = extract_json_object(raw)
+    except Exception as exc:
+        print(f"[audit-content] AI failed: {exc}")
+        return {"passed": False, "reason": "审核服务暂时不可用，请稍后再试"}
+
+    if not isinstance(parsed, dict) or "passed" not in parsed:
+        return {"passed": False, "reason": "审核结果异常，请稍后再试"}
+
+    passed_raw = parsed.get("passed")
+    if isinstance(passed_raw, str):
+        passed = passed_raw.strip().lower() in {"true", "1", "yes", "pass", "通过"}
+    else:
+        passed = bool(passed_raw)
+    if passed:
+        return {"passed": True, "reason": ""}
+    reason = str(parsed.get("reason") or "").strip()[:100]
+    return {"passed": False, "reason": reason or "内容不符合社区规范"}
+
+
+# ========== V257: 分享朋友圈截图审核（POST /api/audit-share） ==========
+class AuditShareRequest(BaseModel):
+    image: str = Field(default="", max_length=8000000)
+
+
+_AUDIT_SHARE_PROMPT = """这是用户声称已分享到微信朋友圈的截图。请判断：
+1. 截图是否为微信朋友圈（或微信聊天/相册等社交分享）界面；
+2. 内容是否与「家肴记」APP 分享有关（出现家肴记海报、推荐语、二维码等）。
+
+若符合，返回 {{ "passed": true, "reason": "" }}；
+若为无关图片、空白、纯色或明显不是分享截图，返回 {{ "passed": false, "reason": "具体驳回原因" }}。
+请严格返回 JSON。"""
+
+
+@app.post("/api/audit-share")
+async def audit_share(req: AuditShareRequest) -> Dict[str, Any]:
+    """V257: 分享截图审核，优先多模态识别，失败时用体积规则做模拟兜底。"""
+    img = (req.image or "").strip()
+    if not img.startswith("data:image/"):
+        return {"passed": False, "reason": "请上传有效的截图"}
+
+    messages = [
+        {"role": "system", "content": "你是家肴记的分享截图审核员，只输出 JSON。"},
+        {
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": img}},
+                {"type": "text", "text": _AUDIT_SHARE_PROMPT},
+            ],
+        },
+    ]
+    try:
+        raw, _provider = await route_vision(
+            messages, max_tokens=200, timeout=60.0, task_type="audit_share"
+        )
+        parsed = extract_json_object(raw)
+        if not isinstance(parsed, dict) or "passed" not in parsed:
+            raise ValueError("vision result not json")
+        passed_raw = parsed.get("passed")
+        if isinstance(passed_raw, str):
+            passed = passed_raw.strip().lower() in {"true", "1", "yes", "pass", "通过"}
+        else:
+            passed = bool(passed_raw)
+        reason = str(parsed.get("reason") or "").strip()[:100]
+        if passed:
+            return {"passed": True, "reason": "", "mode": "ai"}
+        return {"passed": False, "reason": reason or "截图未通过审核，请上传真实的朋友圈分享截图", "mode": "ai"}
+    except Exception as exc:
+        print(f"[audit-share] vision failed: {exc}")
+        # 模拟兜底：图片体积达到正常截图量级即放行
+        if len(img) >= 20000:
+            return {"passed": True, "reason": "", "mode": "mock"}
+        return {"passed": False, "reason": "截图无法识别，请重新上传清晰的分享截图"}
+
+
 _COMMUNITY_REPORT_PATH = _FH_DATA_DIR / "community_reports.jsonl"
 _REPORT_REASON_LABELS = {
     "fake": "虚假诈骗",

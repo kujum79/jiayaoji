@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V254-20261027';
+        var APP_VER = 'V259-20261027';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -7806,6 +7806,14 @@ function finalizeAudit(item, result) {
     if (result.passed) {
         item.auditStatus = 'passed';
         item.auditReason = result.warning || null; // 通过时 warning 作为提示
+        // V256: 文库投稿奖励 50 积分（超管发布的官方文章不计分）
+        var isAdminPost = false;
+        try { isAdminPost = (typeof isSuperAdmin === 'function') && isSuperAdmin(); } catch (e) {}
+        if (!isAdminPost) {
+            try {
+                addPointsWithAudit('library', (item.title || '') + '\n' + (item.content || ''), 50);
+            } catch (e) {}
+        }
     } else {
         item.auditStatus = 'rejected';
         item.auditReason = result.reason || '未通过AI审核';
@@ -8196,6 +8204,7 @@ function familyKey(key) {
         'reviewRiskAI',
         'expertAssessments',
         'specialPlans',
+        'userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits',
         'systemErrorLogs',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
@@ -9630,8 +9639,16 @@ function _myClassroomOpenArticle(folderId, articleId) {
     if (a.isPremium) {
         var subscribed = (typeof isSubscribed === 'function') ? !!isSubscribed() : false;
         if (!subscribed) {
-            _openSubscribeGuide();
-            return;
+            // V258: 有积分商城兑换的课程额度时，消耗 1 次直接解锁本课
+            var credits = 0;
+            try { credits = Math.max(0, Math.floor(Number(lsGet('pointCourseCredits') || 0))); } catch (e) {}
+            if (credits > 0) {
+                lsSet('pointCourseCredits', String(credits - 1));
+                showToast('已使用 1 次课程解锁额度，剩余 ' + (credits - 1) + ' 次');
+            } else {
+                _openSubscribeGuide();
+                return;
+            }
         }
     }
     _CLASSROOM_CACHE[articleId] = {
@@ -31449,7 +31466,35 @@ function _closeSubscribeGuide() {
 var selectedPlan = 'premium';     // V245: 当前选中的套餐，默认全家桶
 var _subSelectedTier = 'premium'; // 兼容旧引用，与 selectedPlan 保持同步
 var _subSelectedNeeds = [];       // V201/V202: 用户勾选的家庭需求 needTags
+var _subUsePoints = false;         // V258: 本次支付是否使用积分抵扣
+var _subPointsChosen = false;      // V258: 是否已在抵扣弹窗中作出选择
+// V258: 套餐年价（积分抵扣基数）
+function _subPlanPrice(tier) {
+    return (tier === 'basic') ? 99 : 299;
+}
+// V258: 积分抵扣信息——1000 积分抵 10 元，且抵扣不超过总价 30%
+function _subDiscountInfo(tier) {
+    var key = tier || selectedPlan;
+    var price = _subPlanPrice(key);
+    var points = (typeof _pointsGetTotal === 'function') ? _pointsGetTotal() : 0;
+    var unitsByPoints = Math.floor(points / 1000);
+    var unitsByCap = Math.floor(price * 0.3 / 10);
+    var units = Math.max(0, Math.min(unitsByPoints, unitsByCap));
+    return {
+        price: price,
+        points: points,
+        units: units,
+        maxByCap: unitsByCap * 10,
+        maxNow: units * 10,
+        pointsSpent: units * 1000,
+        pay: price - units * 10
+    };
+}
 function _subPayBtnText() {
+    var info = _subDiscountInfo(selectedPlan);
+    if (_subUsePoints && info.units > 0) {
+        return (selectedPlan === 'basic' ? '立即订阅基础版（实付 ¥' : '立即订阅全家桶（实付 ¥') + info.pay + '）';
+    }
     return selectedPlan === 'basic' ? '立即订阅基础版（99元/年）' : '立即订阅全家桶（299元/年）';
 }
 function _openSubscribeModal(preferTier) {
@@ -31458,6 +31503,8 @@ function _openSubscribeModal(preferTier) {
     // V245: 每次打开默认选中全家桶，仅显式指定 basic 时选基础版
     selectedPlan = (preferTier === 'basic') ? 'basic' : 'premium';
     _subSelectedTier = selectedPlan;
+    _subUsePoints = false;
+    _subPointsChosen = false;
     // V202: 双轨套餐卡片（基础服务 / 全家桶订阅）
     var cardsHtml = _SUBSCRIPTION_TIERS.map(function (tier) {
         var selected = (tier.key === selectedPlan);
@@ -31609,6 +31656,77 @@ function _closeSubscribeModal() {
     setTimeout(function () { ov.remove(); }, 260);
 }
 function _subscribePay() {
+    var info = _subDiscountInfo(selectedPlan);
+    // V258: 积分充足时先弹抵扣确认框；否则直接支付
+    if (!_subPointsChosen && info.units > 0) {
+        _openSubPointsModal(info);
+        return;
+    }
+    _finishSubscribePayment();
+}
+// V258: 积分抵扣确认弹窗
+function _openSubPointsModal(info) {
+    var old = document.getElementById('subPointsOv');
+    if (old) old.remove();
+    var planName = selectedPlan === 'basic' ? '基础服务' : '全家桶订阅';
+    var ov = document.createElement('div');
+    ov.id = 'subPointsOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100010;background:rgba(17,24,39,0.55);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    ov.innerHTML = '<div style="width:370px;max-width:100%;background:#fff;border-radius:18px;padding:18px;box-sizing:border-box;">'
+        + '<div style="font-size:16px;font-weight:700;color:#1F2937;margin-bottom:6px;">积分抵扣</div>'
+        + '<div style="font-size:12px;color:#6B7280;line-height:1.7;">当前积分 <b style="color:#EA580C;">' + info.points + '</b> 分，1000 积分可抵 10 元，单笔抵扣不超过总价的 30%。</div>'
+        + '<label style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;padding:10px;border:1px solid #FED7AA;background:#FFF7ED;border-radius:12px;cursor:pointer;">'
+        +   '<input type="checkbox" id="subUsePointsChk" checked onchange="_subToggleUsePoints(this.checked)" style="width:18px;height:18px;margin-top:1px;accent-color:#F97316;cursor:pointer;">'
+        +   '<span style="font-size:12px;color:#9A3412;line-height:1.6;">使用 <b>' + info.pointsSpent + '</b> 积分抵扣 <b>' + info.maxNow + '</b> 元（当前最多可抵扣 ' + info.maxNow + ' 元）</span>'
+        + '</label>'
+        + '<div style="margin-top:12px;font-size:12px;color:#374151;line-height:1.9;">'
+        +   '<div style="display:flex;justify-content:space-between;"><span>' + planName + '年费</span><span>¥' + info.price + '</span></div>'
+        +   '<div id="subDeductRow" style="display:flex;justify-content:space-between;color:#EA580C;"><span>积分抵扣</span><span>-¥' + info.maxNow + '</span></div>'
+        +   '<div style="display:flex;justify-content:space-between;font-weight:700;color:#1F2937;border-top:1px dashed #E5E7EB;margin-top:4px;padding-top:4px;"><span>实付</span><span id="subPayAmount">¥' + info.pay + '</span></div>'
+        + '</div>'
+        + '<div style="display:flex;gap:10px;margin-top:14px;">'
+        +   '<button type="button" onclick="_subConfirmPay(false)" style="flex:1;padding:11px;border-radius:12px;border:1px solid #E5E7EB;background:#fff;color:#6B7280;font-size:13px;cursor:pointer;">不用积分</button>'
+        +   '<button type="button" id="subPointsPayBtn" onclick="_subConfirmPay(true)" style="flex:1.5;padding:11px;border-radius:12px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">确认支付 ¥' + info.pay + '</button>'
+        + '</div>'
+        + '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) { _closeSubPointsModal(); } });
+    document.body.appendChild(ov);
+}
+function _closeSubPointsModal() {
+    var ov = document.getElementById('subPointsOv');
+    if (ov) ov.remove();
+}
+function _subToggleUsePoints(on) {
+    var info = _subDiscountInfo(selectedPlan);
+    var deductRow = document.getElementById('subDeductRow');
+    var payEl = document.getElementById('subPayAmount');
+    var payBtn = document.getElementById('subPointsPayBtn');
+    var deduct = on ? info.maxNow : 0;
+    var pay = info.price - deduct;
+    if (deductRow) { deductRow.style.opacity = on ? '1' : '0.45'; deductRow.querySelector('span:last-child').textContent = '-¥' + deduct; }
+    if (payEl) payEl.textContent = '¥' + pay;
+    if (payBtn) payBtn.textContent = '确认支付 ¥' + pay;
+}
+function _subConfirmPay(usePoints) {
+    _subUsePoints = !!usePoints;
+    _subPointsChosen = true;
+    _closeSubPointsModal();
+    _finishSubscribePayment();
+}
+// V258: 实际完成订阅支付（含积分扣除）
+function _finishSubscribePayment() {
+    var info = _subDiscountInfo(selectedPlan);
+    var usedPoints = 0, discount = 0;
+    if (_subUsePoints && info.units > 0) {
+        if (_pointsSpend(info.pointsSpent, 'subscribe_deduct')) {
+            usedPoints = info.pointsSpent;
+            discount = info.maxNow;
+        } else {
+            showToast && showToast('积分不足，已按原价支付');
+        }
+    }
+    _subUsePoints = false;
+    _subPointsChosen = false;
     _applySubscription(selectedPlan);
     _closeSubscribeModal();
     var tierDef = null;
@@ -31617,7 +31735,11 @@ function _subscribePay() {
     var suffix = (tierDef && tierDef.trialDays) ? '（含 ' + days + ' 天免费体验）' : '';
     var label = selectedPlan === 'basic' ? '🌱 基础服务' : '🎯 全家桶订阅';
     var needCnt = (_subSelectedNeeds || []).length;
-    showToast && showToast('✅ 订阅成功！已为您解锁【' + label + '】' + suffix + (needCnt ? '，已绑定 ' + needCnt + ' 项特殊需求' : ''));
+    if (usedPoints > 0) {
+        showToast && showToast('✅ 订阅成功！已用 ' + usedPoints + ' 积分抵扣 ¥' + discount + '，实付 ¥' + (info.price - discount) + suffix);
+    } else {
+        showToast && showToast('✅ 订阅成功！已为您解锁【' + label + '】' + suffix + (needCnt ? '，已绑定 ' + needCnt + ' 项特殊需求' : ''));
+    }
 }
 function _subscribePoints() {
     _applySubscription(_subSelectedTier);
@@ -35647,6 +35769,9 @@ function renderFamily() {
                 ${card('🎓', '我的专属课堂', _mySub, '_openMyClassroom()')}
                 ${card('👨‍🍳', '我的创作', worksCnt ? worksCnt + ' 个作品' : '记录你的私房创作', 'openMyWorksPage()')}
             </div>
+            <div style="display:flex;gap:10px;margin-bottom:12px;">
+                ${card('💰', '我的积分', (function(){ var t = 0; try { t = _pointsGetTotal(); } catch(e) {} return t ? ('当前 ' + t + ' 积分' + (_pointsCheckedToday() ? ' · 今日已打卡' : ' · 打卡 +2')) : '每日打卡 +2 积分'; })(), 'openPointsCenter()')}
+            </div>
         `);
         // V163: 超管专属快捷条（仅超管可见）—— 食养管理/文库管理/课程汇总/系统监控，一级直达
         if (typeof isSuperAdmin === 'function' && isSuperAdmin()) {
@@ -37463,6 +37588,10 @@ function _mwSaveWork() {
     document.getElementById('mwAddOv').remove();
     renderMyWorksPage();
     showToast('🎉 作品「' + name + '」已发布');
+    // V256: 发布食谱 → AI 审核通过奖励 20 积分
+    try {
+        addPointsWithAudit('recipe', name + '\n' + (desc || ''), 20);
+    } catch (e) {}
 }
 
 // ============ V87: 我发布的作品列表（筛选作者+倒序+数据展开+编辑/删除） ============
@@ -62438,7 +62567,20 @@ function _expertUsedThisMonth() {
 }
 
 function _expertRemaining() {
-    return Math.max(0, _EXPERT_MONTHLY_FREE - _expertUsedThisMonth());
+    // V258: 积分商城兑换的评估额度可叠加到本月可用次数
+    var bonus = 0;
+    try { bonus = Math.max(0, Math.floor(Number(lsGet('pointAiCredits') || 0))); } catch (e) {}
+    return Math.max(0, _EXPERT_MONTHLY_FREE + bonus - _expertUsedThisMonth());
+}
+// V258: 消耗一次积分兑换的评估额度（仅在本月免费次数已用完时生效）
+function _consumePointAiCredit() {
+    var used = _expertUsedThisMonth();
+    if (used < _EXPERT_MONTHLY_FREE) return false;
+    var bonus = 0;
+    try { bonus = Math.max(0, Math.floor(Number(lsGet('pointAiCredits') || 0))); } catch (e) {}
+    if (bonus <= 0) return false;
+    lsSet('pointAiCredits', String(bonus - 1));
+    return true;
 }
 
 var _EXPERT_PANEL = { imageBase64: '', fileName: '' };
@@ -62527,6 +62669,8 @@ async function _submitExpertAssess() {
         showToast((out && out.error) || '评估失败，请稍后重试');
         return;
     }
+    // V258: 免费次数已用完时，自动消耗积分商城兑换的评估额度
+    _consumePointAiCredit();
     var list = _getExpertAssessments();
     list.push({
         id: 'assess_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
@@ -70052,6 +70196,637 @@ function submitCommunityPhoneAuth() {
 window.openCommunityPhoneAuthModal = openCommunityPhoneAuthModal;
 window.closeCommunityPhoneAuthModal = closeCommunityPhoneAuthModal;
 window._communitySendAuthCode = _communitySendAuthCode;
+
+// ========== V255: 积分中心（userPoints / pointRecords / checkinStatus） ==========
+var _POINT_ACTION_LABELS = {
+    checkin: '每日打卡',
+    post: '发布邻聚信息',
+    diary: '记录膳食日记',
+    recipe: '分享食谱',
+    library: '文库投稿',
+    share: '分享家肴记',
+    subscribe_deduct: '订阅积分抵扣',
+    redeem_course: '兑换定制课',
+    redeem_ai: '兑换AI专家评估',
+    redeem_spatula: '兑换定制木铲',
+    comment: '发布评论'
+};
+// V256: 防刷限制——每日总分上限 100，食谱 5 次/日，文库 2 次/日，分享 1 次/日
+var _POINT_DAILY_TOTAL_CAP = 100;
+var _POINT_DAILY_LIMITS = { recipe: 5, library: 2, share: 1 };
+// V258: 积分商城商品
+var _POINT_MALL = [
+    { key: 'course', points: 500, icon: '🎓', title: '单次解锁一门定制课', desc: '可在「我的专属课堂」解锁 1 次收费课程/文章' },
+    { key: 'ai', points: 800, icon: '🩺', title: '单次 AI 专家深度评估', desc: '本月 AI 专家营养师评估额度 +1 次' },
+    { key: 'spatula', points: 2000, icon: '🥄', title: '家肴记定制木铲（包邮）', desc: '需填写收货地址，7 个工作日内寄出' }
+];
+function _pointsDateStr(d) {
+    var t = d || new Date();
+    var m = t.getMonth() + 1, day = t.getDate();
+    return t.getFullYear() + '-' + (m < 10 ? '0' + m : '' + m) + '-' + (day < 10 ? '0' + day : '' + day);
+}
+function _pointsGetTotal() {
+    try {
+        var o = lsGetJSON('userPoints', null);
+        if (o && typeof o === 'object' && isFinite(Number(o.total))) return Math.max(0, Math.floor(Number(o.total)));
+    } catch (e) {}
+    return 0;
+}
+function _pointsSetTotal(total) {
+    lsSetJSON('userPoints', { total: Math.max(0, Math.floor(Number(total) || 0)) });
+}
+function _pointsGetRecords() {
+    try {
+        var arr = lsGetJSON('pointRecords', []);
+        if (Array.isArray(arr)) return arr;
+    } catch (e) {}
+    return [];
+}
+function _pointsAdd(amount, actionType) {
+    var pts = Math.floor(Number(amount) || 0);
+    if (!pts) return false;
+    if (!getFamilyId()) { showToast && showToast('请先登录家庭账号'); return false; }
+    var total = _pointsGetTotal() + pts;
+    _pointsSetTotal(total);
+    var records = _pointsGetRecords();
+    records.unshift({
+        id: 'p_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        action: String(actionType || 'other'),
+        points: pts,
+        createdAt: Math.floor(Date.now() / 1000)
+    });
+    if (records.length > 300) records = records.slice(0, 300);
+    lsSetJSON('pointRecords', records);
+    return true;
+}
+function _pointsLastCheckinDate() {
+    try {
+        var o = lsGetJSON('checkinStatus', null);
+        if (o && typeof o === 'object') return String(o.lastCheckinDate || '');
+    } catch (e) {}
+    return '';
+}
+// V258: 消耗积分（余额不足返回 false）
+function _pointsSpend(points, actionType) {
+    var pts = Math.floor(Number(points) || 0);
+    if (pts <= 0) return false;
+    if (!getFamilyId()) { showToast && showToast('请先登录家庭账号'); return false; }
+    if (_pointsGetTotal() < pts) return false;
+    _pointsSetTotal(_pointsGetTotal() - pts);
+    var records = _pointsGetRecords();
+    records.unshift({
+        id: 'p_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        action: String(actionType || 'spend'),
+        points: -pts,
+        createdAt: Math.floor(Date.now() / 1000)
+    });
+    if (records.length > 300) records = records.slice(0, 300);
+    lsSetJSON('pointRecords', records);
+    return true;
+}
+function _pointsCheckedToday() {
+    return _pointsLastCheckinDate() === _pointsDateStr();
+}
+// V256: 当日积分统计（用于防刷）
+function _pointsTodayRecords() {
+    var today = _pointsDateStr();
+    return _pointsGetRecords().filter(function (r) {
+        if (!r || !Number(r.createdAt)) return false;
+        return _pointsDateStr(new Date(Number(r.createdAt) * 1000)) === today;
+    });
+}
+function _pointsDailyEarned() {
+    return _pointsTodayRecords().reduce(function (sum, r) {
+        var p = Number(r && r.points) || 0;
+        return sum + (p > 0 ? p : 0);
+    }, 0);
+}
+function _pointsDailyCount(actionType) {
+    return _pointsTodayRecords().filter(function (r) {
+        return r && r.action === actionType && (Number(r.points) || 0) > 0;
+    }).length;
+}
+// V257: 统一配额校验（总上限 / 单行为次数上限 / 可发放额度）
+function _pointsQuotaCheck(actionType, pts) {
+    var earned = _pointsDailyEarned();
+    if (earned >= _POINT_DAILY_TOTAL_CAP) {
+        return { ok: false, msg: '今日积分已达上限（' + _POINT_DAILY_TOTAL_CAP + ' 分），明天再来吧' };
+    }
+    var dayLimit = _POINT_DAILY_LIMITS[actionType];
+    if (dayLimit && _pointsDailyCount(actionType) >= dayLimit) {
+        var label = _POINT_ACTION_LABELS[actionType] || '该行为';
+        return { ok: false, msg: '今日「' + label + '」奖励已达 ' + dayLimit + ' 次上限，明天再来吧' };
+    }
+    var payable = Math.min(Math.floor(Number(pts) || 0), _POINT_DAILY_TOTAL_CAP - earned);
+    if (payable <= 0) {
+        return { ok: false, msg: '今日积分已达上限（' + _POINT_DAILY_TOTAL_CAP + ' 分），明天再来吧' };
+    }
+    return { ok: true, payable: payable };
+}
+// 全局：内容先过 AI 审核，通过才加分；不通过弹窗提示原因
+async function addPointsWithAudit(actionType, content, points) {
+    var pts = Math.floor(Number(points) || 0);
+    if (!getFamilyId()) { showToast && showToast('请先登录家庭账号'); return false; }
+    // V256: 防刷限制（先拦截，避免无谓的 AI 审核）
+    var quota = _pointsQuotaCheck(actionType, pts);
+    if (!quota.ok) { _communityAlert(quota.msg); return false; }
+    var body = { actionType: String(actionType || ''), content: String(content || '') };
+    var data = null;
+    try {
+        var resp = await fetch(API_BASE + '/api/audit-content', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        data = await resp.json();
+    } catch (e) {
+        data = null;
+    }
+    if (!data || data.passed !== true) {
+        var reason = (data && data.reason) ? String(data.reason) : '审核服务暂时不可用，请稍后再试';
+        _communityAlert('AI审核未通过：' + reason);
+        return false;
+    }
+    if (!pts) return true;
+    // V256: 单日总分封顶，超出部分截断
+    var payable = quota.payable;
+    _pointsAdd(payable, actionType);
+    showToast && showToast('+' + payable + ' 积分' + (payable < pts ? '（今日已达上限）' : ''));
+    if (document.getElementById('pointsCenterOverlay')) { try { _pointsRenderCenter(); } catch (e) {} }
+    return true;
+}
+window.addPointsWithAudit = addPointsWithAudit;
+function closePointsCenter() {
+    var ov = document.getElementById('pointsCenterOverlay');
+    if (ov) ov.remove();
+}
+function openPointsCenter() {
+    if (!getFamilyId()) { showToast && showToast('请先登录家庭账号'); return; }
+    closePointsCenter();
+    var ov = document.createElement('div');
+    ov.id = 'pointsCenterOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10014;background:rgba(17,24,39,0.55);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px 0;box-sizing:border-box;';
+    ov.innerHTML = '<div style="width:430px;max-width:100%;min-height:100%;background:#F5F6F8;box-sizing:border-box;box-shadow:0 0 24px rgba(0,0,0,0.12);">'
+        + '<div style="display:flex;align-items:center;padding:14px 16px;background:#fff;position:sticky;top:0;z-index:2;border-bottom:1px solid #F3F4F6;">'
+        +   '<button type="button" onclick="closePointsCenter()" style="border:none;background:transparent;font-size:20px;color:#9A3412;cursor:pointer;padding:0 8px 0 0;line-height:1;">＜</button>'
+        +   '<div style="flex:1;text-align:center;font-size:16px;font-weight:700;color:#1F2937;">积分中心</div>'
+        +   '<span style="width:28px;"></span>'
+        + '</div>'
+        + '<div id="pointsCenterBody" style="padding:14px;"></div>'
+        + '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) closePointsCenter(); });
+    document.body.appendChild(ov);
+    _pointsRenderCenter();
+}
+function _pointsRenderCenter() {
+    var body = document.getElementById('pointsCenterBody');
+    if (!body) return;
+    var total = _pointsGetTotal();
+    var done = _pointsCheckedToday();
+    var totalHtml = ''
+        + '<div style="background:linear-gradient(135deg,#F97316,#EA580C);border-radius:16px;padding:18px;color:#fff;margin-bottom:12px;box-shadow:0 6px 16px rgba(249,115,22,0.25);">'
+        +   '<div style="font-size:12px;opacity:.9;margin-bottom:6px;">我的总积分</div>'
+        +   '<div style="display:flex;align-items:flex-end;gap:6px;">'
+        +     '<span style="font-size:34px;font-weight:800;line-height:1;">' + total + '</span>'
+        +     '<span style="font-size:12px;opacity:.9;padding-bottom:4px;">分</span>'
+        +   '</div>'
+        +   '<div style="font-size:11px;opacity:.85;margin-top:8px;">每日打卡 +2 积分，坚持记录更健康</div>'
+        + '</div>';
+    var checkinHtml = ''
+        + '<button type="button" id="pointsCheckinBtn" ' + (done ? 'disabled' : '') + ' style="width:100%;padding:12px;border-radius:12px;border:' + (done ? '1px solid #E5E7EB' : 'none') + ';background:' + (done ? '#F3F4F6' : 'linear-gradient(135deg,#F97316,#EA580C)') + ';color:' + (done ? '#9CA3AF' : '#fff') + ';font-size:15px;font-weight:700;cursor:' + (done ? 'not-allowed' : 'pointer') + ';margin-bottom:14px;">'
+        +   (done ? '📅 今日已打卡' : '📅 立即打卡')
+        + '</button>';
+    var shareDone = _pointsDailyCount('share') >= 1;
+    var taskHtml = ''
+        + '<div style="font-size:13px;font-weight:700;color:#1F2937;margin:0 2px 8px;">积分任务</div>'
+        + '<div style="background:#fff;border-radius:14px;padding:12px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">'
+        +   '<div style="width:34px;height:34px;border-radius:10px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;font-size:18px;">📤</div>'
+        +   '<div style="flex:1;min-width:0;">'
+        +     '<div style="font-size:13px;font-weight:600;color:#1F2937;">分享家肴记给朋友</div>'
+        +     '<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">每日限 1 次，+10 积分</div>'
+        +   '</div>'
+        +   '<button type="button" id="pointsShareBtn" ' + (shareDone ? 'disabled' : '') + ' style="padding:7px 12px;border-radius:10px;border:' + (shareDone ? '1px solid #E5E7EB' : 'none') + ';background:' + (shareDone ? '#F3F4F6' : '#EA580C') + ';color:' + (shareDone ? '#9CA3AF' : '#fff') + ';font-size:12px;font-weight:700;cursor:' + (shareDone ? 'not-allowed' : 'pointer') + ';white-space:nowrap;">'
+        +   (shareDone ? '今日已完成' : '去分享')
+        +   '</button>'
+        + '</div>';
+    var records = _pointsGetRecords();
+    var courseCredits = 0, aiCredits = 0;
+    try { courseCredits = Math.max(0, Math.floor(Number(lsGet('pointCourseCredits') || 0))); } catch (e) {}
+    try { aiCredits = Math.max(0, Math.floor(Number(lsGet('pointAiCredits') || 0))); } catch (e) {}
+    var mallHtml = ''
+        + '<div style="font-size:13px;font-weight:700;color:#1F2937;margin:0 2px 8px;">🛍 积分兑换</div>'
+        + ((courseCredits || aiCredits)
+            ? '<div style="font-size:11px;color:#047857;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:6px 10px;margin-bottom:8px;">已获权益：' + (courseCredits ? '课程解锁 ' + courseCredits + ' 次 ' : '') + (aiCredits ? 'AI 专家评估 ' + aiCredits + ' 次' : '') + '</div>'
+            : '')
+        + '<div style="background:#fff;border-radius:14px;overflow:hidden;margin-bottom:14px;">'
+        + _POINT_MALL.map(function (it, idx) {
+            var can = total >= it.points;
+            return '<div style="display:flex;align-items:center;gap:10px;padding:12px;' + (idx ? 'border-top:1px solid #F3F4F6;' : '') + '">'
+                + '<div style="width:34px;height:34px;border-radius:10px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;font-size:17px;">' + it.icon + '</div>'
+                + '<div style="flex:1;min-width:0;">'
+                +   '<div style="font-size:13px;font-weight:600;color:#1F2937;">' + it.title + '</div>'
+                +   '<div style="font-size:11px;color:#9CA3AF;margin-top:2px;line-height:1.5;">' + it.desc + '</div>'
+                + '</div>'
+                + '<button type="button" data-redeem="' + it.key + '" onclick="_openRedeemModal(\'' + it.key + '\')" ' + (can ? '' : 'disabled ') + 'style="padding:6px 10px;border-radius:10px;border:' + (can ? 'none' : '1px solid #E5E7EB') + ';background:' + (can ? '#EA580C' : '#F3F4F6') + ';color:' + (can ? '#fff' : '#9CA3AF') + ';font-size:11px;font-weight:700;cursor:' + (can ? 'pointer' : 'not-allowed') + ';white-space:nowrap;">' + it.points + ' 积分</button>'
+                + '</div>';
+        }).join('')
+        + '</div>';
+    var listHtml = '<div style="font-size:13px;font-weight:700;color:#1F2937;margin:0 2px 8px;">积分记录</div>';
+    if (!records.length) {
+        listHtml += '<div style="background:#fff;border-radius:14px;padding:24px 12px;text-align:center;font-size:12px;color:#9CA3AF;line-height:1.7;">还没有积分记录<br>点击「立即打卡」开始积累吧</div>';
+    } else {
+        listHtml += '<div style="background:#fff;border-radius:14px;overflow:hidden;">';
+        records.slice(0, 50).forEach(function (r, idx) {
+            try {
+                var label = _POINT_ACTION_LABELS[r && r.action] || '积分变动';
+                var pts = Number(r && r.points) || 0;
+                var ts = Number(r && r.createdAt) || 0;
+                var time = ts ? new Date(ts * 1000) : null;
+                var timeStr = time ? (function () {
+                    var m = time.getMonth() + 1, d = time.getDate();
+                    var hh = time.getHours(), mm = time.getMinutes();
+                    return (m < 10 ? '0' + m : m) + '-' + (d < 10 ? '0' + d : d) + ' ' + (hh < 10 ? '0' + hh : hh) + ':' + (mm < 10 ? '0' + mm : mm);
+                })() : '';
+                listHtml += '<div style="display:flex;align-items:center;gap:8px;padding:11px 12px;' + (idx ? 'border-top:1px solid #F3F4F6;' : '') + '">'
+                    +   '<div style="flex:1;min-width:0;">'
+                    +     '<div style="font-size:13px;color:#1F2937;font-weight:600;">' + escapeHtml(label) + '</div>'
+                    +     '<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">' + escapeHtml(timeStr) + '</div>'
+                    +   '</div>'
+                    +   '<span style="font-size:14px;font-weight:700;color:' + (pts >= 0 ? '#EA580C' : '#6B7280') + ';">' + (pts >= 0 ? '+' + pts : '' + pts) + '</span>'
+                    + '</div>';
+            } catch (e) {}
+        });
+        listHtml += '</div>';
+    }
+    body.innerHTML = totalHtml + checkinHtml + taskHtml + mallHtml + listHtml;
+    var btn = document.getElementById('pointsCheckinBtn');
+    if (btn && !done) btn.onclick = _pointsCheckin;
+    var shareBtn = document.getElementById('pointsShareBtn');
+    if (shareBtn && !shareDone) shareBtn.onclick = openSharePoster;
+}
+function _pointsCheckin() {
+    if (!getFamilyId()) { showToast && showToast('请先登录家庭账号'); return; }
+    if (_pointsCheckedToday()) {
+        showToast && showToast('今天已经打过卡了');
+        _pointsRenderCenter();
+        return;
+    }
+    var today = _pointsDateStr();
+    lsSetJSON('checkinStatus', { lastCheckinDate: today });
+    _pointsAdd(2, 'checkin');
+    showToast && showToast('打卡成功，+2积分');
+    _pointsRenderCenter();
+    if (typeof renderFamily === 'function') { try { renderFamily(); } catch (e) {} }
+}
+window.openPointsCenter = openPointsCenter;
+window.closePointsCenter = closePointsCenter;
+window._pointsCheckin = _pointsCheckin;
+window._pointsGetTotal = _pointsGetTotal;
+
+// ========== V257: 分享朋友圈得积分 ==========
+var _SHARE_SLOGAN = '我在用家肴记管全家饮食，快来试试！';
+function _shareDrawFakeQR(ctx, x, y, size) {
+    var n = 25, cell = size / n;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(x, y, size, size);
+    ctx.fillStyle = '#111827';
+    var seed = 20261027;
+    function rnd() { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }
+    for (var r = 0; r < n; r++) {
+        for (var c = 0; c < n; c++) {
+            if (rnd() > 0.52) ctx.fillRect(x + c * cell, y + r * cell, cell, cell);
+        }
+    }
+    function clearArea(cx, cy, w, h) { ctx.fillStyle = '#FFFFFF'; ctx.fillRect(x + cx * cell, y + cy * cell, w * cell, h * cell); }
+    function finder(cx, cy) {
+        ctx.fillStyle = '#111827'; ctx.fillRect(x + cx * cell, y + cy * cell, cell * 7, cell * 7);
+        ctx.fillStyle = '#FFFFFF'; ctx.fillRect(x + (cx + 1) * cell, y + (cy + 1) * cell, cell * 5, cell * 5);
+        ctx.fillStyle = '#111827'; ctx.fillRect(x + (cx + 2) * cell, y + (cy + 2) * cell, cell * 3, cell * 3);
+    }
+    clearArea(0, 0, 8, 8); clearArea(n - 8, 0, 8, 8); clearArea(0, n - 8, 8, 8);
+    finder(0, 0); finder(n - 7, 0); finder(0, n - 7);
+}
+function _shareDrawPoster(canvas) {
+    var W = 720, H = 1000;
+    canvas.width = W; canvas.height = H;
+    var ctx = canvas.getContext('2d');
+    var bg = ctx.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, '#FFF7ED');
+    bg.addColorStop(0.55, '#FFEDD5');
+    bg.addColorStop(1, '#FED7AA');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(30, 30, W - 60, H - 60, 28); ctx.fill(); }
+    else { ctx.fillRect(30, 30, W - 60, H - 60); }
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#EA580C';
+    ctx.font = 'bold 68px "Microsoft YaHei", sans-serif';
+    ctx.fillText('家 肴 记', W / 2, 165);
+    ctx.fillStyle = '#9A3412';
+    ctx.font = '26px "Microsoft YaHei", sans-serif';
+    ctx.fillText('三 仁 佳 欢 · 一家人的健康餐桌', W / 2, 212);
+
+    ctx.strokeStyle = '#FDBA74';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(150, 250);
+    ctx.lineTo(W - 150, 250);
+    ctx.stroke();
+
+    ctx.fillStyle = '#1F2937';
+    ctx.font = 'bold 46px "Microsoft YaHei", sans-serif';
+    ctx.fillText('我在用家肴记', W / 2, 340);
+    ctx.fillText('管全家饮食', W / 2, 405);
+    ctx.fillStyle = '#EA580C';
+    ctx.font = 'bold 52px "Microsoft YaHei", sans-serif';
+    ctx.fillText('快来试试！', W / 2, 485);
+
+    ctx.fillStyle = '#6B7280';
+    ctx.font = '24px "Microsoft YaHei", sans-serif';
+    ctx.fillText('按家人体质配三餐 · 节气食养 · 健康复盘', W / 2, 540);
+
+    _shareDrawFakeQR(ctx, W / 2 - 120, 585, 240);
+
+    ctx.fillStyle = '#1F2937';
+    ctx.font = 'bold 26px "Microsoft YaHei", sans-serif';
+    ctx.fillText('长按识别二维码', W / 2, 880);
+    ctx.fillStyle = '#9A3412';
+    ctx.font = '22px "Microsoft YaHei", sans-serif';
+    ctx.fillText('一起把一日三餐吃明白', W / 2, 918);
+}
+function closeSharePoster() {
+    var ov = document.getElementById('sharePosterOverlay');
+    if (ov) ov.remove();
+    var pv = document.getElementById('shareProofOverlay');
+    if (pv) pv.remove();
+    _shareProofImage = '';
+}
+function openSharePoster() {
+    if (!getFamilyId()) { showToast && showToast('请先登录家庭账号'); return; }
+    var quota = _pointsQuotaCheck('share', 10);
+    if (!quota.ok) { _communityAlert(quota.msg); _pointsRenderCenter(); return; }
+    closeSharePoster();
+    var ov = document.createElement('div');
+    ov.id = 'sharePosterOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10016;background:rgba(17,24,39,0.6);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px 0;box-sizing:border-box;';
+    ov.innerHTML = '<div style="width:430px;max-width:100%;min-height:100%;background:#F5F6F8;box-sizing:border-box;box-shadow:0 0 24px rgba(0,0,0,0.15);">'
+        + '<div style="display:flex;align-items:center;padding:14px 16px;background:#fff;position:sticky;top:0;z-index:2;border-bottom:1px solid #F3F4F6;">'
+        +   '<button type="button" onclick="closeSharePoster()" style="border:none;background:transparent;font-size:20px;color:#9A3412;cursor:pointer;padding:0 8px 0 0;line-height:1;">＜</button>'
+        +   '<div style="flex:1;text-align:center;font-size:16px;font-weight:700;color:#1F2937;">分享家肴记</div>'
+        +   '<span style="width:28px;"></span>'
+        + '</div>'
+        + '<div style="padding:14px;">'
+        +   '<canvas id="sharePosterCanvas" style="width:100%;border-radius:14px;display:block;box-shadow:0 6px 18px rgba(0,0,0,0.12);"></canvas>'
+        +   '<div style="font-size:11px;color:#9CA3AF;line-height:1.7;margin:10px 2px 12px;text-align:center;">保存图片后发到朋友圈，再回到这里上传截图领取 10 积分</div>'
+        +   '<div style="display:flex;gap:10px;">'
+        +     '<button type="button" onclick="_shareSavePoster()" style="flex:1;padding:12px;border-radius:12px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:700;cursor:pointer;">保存图片</button>'
+        +     '<button type="button" onclick="openShareProof()" style="flex:1;padding:12px;border-radius:12px;border:1px solid #FDBA74;background:#FFF7ED;color:#9A3412;font-size:14px;font-weight:700;cursor:pointer;">我已分享，领取积分</button>'
+        +   '</div>'
+        + '</div>'
+        + '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) closeSharePoster(); });
+    document.body.appendChild(ov);
+    try { _shareDrawPoster(document.getElementById('sharePosterCanvas')); } catch (e) {}
+}
+function _shareSavePoster() {
+    var canvas = document.getElementById('sharePosterCanvas');
+    if (!canvas) return;
+    try {
+        var url = canvas.toDataURL('image/jpeg', 0.92);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = '家肴记分享海报.jpg';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showToast && showToast('海报已保存，去朋友圈发布吧');
+    } catch (e) {
+        showToast && showToast('保存失败，请长按图片保存');
+    }
+}
+var _shareProofImage = '';
+function openShareProof() {
+    var ov = document.getElementById('shareProofOverlay');
+    if (ov) ov.remove();
+    _shareProofImage = '';
+    var pv = document.createElement('div');
+    pv.id = 'shareProofOverlay';
+    pv.style.cssText = 'position:fixed;inset:0;z-index:10018;background:rgba(17,24,39,0.6);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    pv.innerHTML = '<div style="width:390px;max-width:100%;background:#fff;border-radius:18px;padding:18px;box-sizing:border-box;">'
+        + '<div style="font-size:16px;font-weight:700;color:#1F2937;margin-bottom:4px;">上传分享截图</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;line-height:1.7;margin-bottom:12px;">请上传发到朋友圈的截图，系统会自动识别图片中的家肴记海报与朋友圈界面。</div>'
+        + '<label id="shareProofPickBox" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;height:150px;border:1.5px dashed #FDBA74;border-radius:12px;background:#FFF7ED;cursor:pointer;overflow:hidden;position:relative;">'
+        +   '<img id="shareProofPreview" style="display:none;width:100%;height:100%;object-fit:contain;" />'
+        +   '<div id="shareProofHint" style="text-align:center;font-size:12px;color:#C2410C;line-height:1.8;">📷 点击上传截图<br><span style="font-size:10px;color:#9CA3AF;">支持 JPG / PNG</span></div>'
+        +   '<input id="shareProofInput" type="file" accept="image/*" style="display:none;" onchange="_shareProofPick(this)" />'
+        + '</label>'
+        + '<div id="shareProofMsg" style="font-size:11px;color:#DC2626;margin-top:8px;min-height:16px;"></div>'
+        + '<div style="display:flex;gap:10px;margin-top:4px;">'
+        +   '<button type="button" onclick="document.getElementById(\'shareProofOverlay\').remove();_shareProofImage=\'\'" style="flex:1;padding:11px;border-radius:12px;border:1px solid #E5E7EB;background:#fff;color:#6B7280;font-size:14px;cursor:pointer;">取消</button>'
+        +   '<button type="button" id="shareProofSubmitBtn" onclick="_shareProofSubmit()" style="flex:1.4;padding:11px;border-radius:12px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">提交审核</button>'
+        + '</div>'
+        + '</div>';
+    pv.addEventListener('click', function (e) { if (e.target === pv) { pv.remove(); _shareProofImage = ''; } });
+    document.body.appendChild(pv);
+}
+function _shareProofPick(input) {
+    var file = input && input.files && input.files[0];
+    if (!file) return;
+    if (!/^image\//.test(file.type)) {
+        var msgEl = document.getElementById('shareProofMsg');
+        if (msgEl) msgEl.textContent = '请上传图片文件';
+        return;
+    }
+    var reader = new FileReader();
+    reader.onload = function (e) {
+        var img = new Image();
+        img.onload = function () {
+            var maxW = 900;
+            var scale = img.width > maxW ? maxW / img.width : 1;
+            var c = document.createElement('canvas');
+            c.width = Math.round(img.width * scale);
+            c.height = Math.round(img.height * scale);
+            var ctx = c.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, c.width, c.height);
+            ctx.drawImage(img, 0, 0, c.width, c.height);
+            _shareProofImage = c.toDataURL('image/jpeg', 0.8);
+            var preview = document.getElementById('shareProofPreview');
+            var hint = document.getElementById('shareProofHint');
+            if (preview) { preview.src = _shareProofImage; preview.style.display = 'block'; }
+            if (hint) hint.style.display = 'none';
+            var msgEl = document.getElementById('shareProofMsg');
+            if (msgEl) msgEl.textContent = '';
+        };
+        img.src = String(e.target.result);
+    };
+    reader.readAsDataURL(file);
+}
+async function _shareProofSubmit() {
+    if (!_shareProofImage) {
+        var msgEl = document.getElementById('shareProofMsg');
+        if (msgEl) msgEl.textContent = '请先上传分享截图';
+        return;
+    }
+    var quota = _pointsQuotaCheck('share', 10);
+    if (!quota.ok) {
+        document.getElementById('shareProofOverlay') && document.getElementById('shareProofOverlay').remove();
+        _communityAlert(quota.msg);
+        _pointsRenderCenter();
+        return;
+    }
+    var btn = document.getElementById('shareProofSubmitBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '审核中…'; btn.style.opacity = '0.7'; }
+    var data = null;
+    try {
+        var resp = await fetch(API_BASE + '/api/audit-share', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: _shareProofImage })
+        });
+        data = await resp.json();
+    } catch (e) {
+        data = null;
+    }
+    if (!data || data.passed !== true) {
+        var reason = (data && data.reason) ? String(data.reason) : '审核服务暂时不可用，请稍后再试';
+        var msgEl2 = document.getElementById('shareProofMsg');
+        if (msgEl2) msgEl2.textContent = '审核未通过：' + reason;
+        if (btn) { btn.disabled = false; btn.textContent = '重新提交'; btn.style.opacity = '1'; }
+        return;
+    }
+    var ov = document.getElementById('shareProofOverlay');
+    if (ov) ov.remove();
+    closeSharePoster();
+    _shareProofImage = '';
+    var payable = _pointsQuotaCheck('share', 10);
+    var addPts = payable.ok ? payable.payable : 0;
+    if (addPts > 0) {
+        _pointsAdd(addPts, 'share');
+        showToast && showToast('分享审核通过，+' + addPts + '积分');
+    }
+    if (typeof _pointsRenderCenter === 'function' && document.getElementById('pointsCenterOverlay')) { try { _pointsRenderCenter(); } catch (e) {} }
+}
+window.openSharePoster = openSharePoster;
+window.closeSharePoster = closeSharePoster;
+window._shareSavePoster = _shareSavePoster;
+window.openShareProof = openShareProof;
+window._shareProofPick = _shareProofPick;
+window._shareProofSubmit = _shareProofSubmit;
+
+// ========== V258: 积分商城兑换 ==========
+function _pointMallItem(key) {
+    for (var i = 0; i < _POINT_MALL.length; i++) { if (_POINT_MALL[i].key === key) return _POINT_MALL[i]; }
+    return null;
+}
+function _getPointRedemptions() {
+    try { var v = lsGetJSON('pointRedemptions', []); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+}
+function _savePointRedemptions(list) {
+    lsSetJSON('pointRedemptions', (list || []).slice(0, 100));
+}
+function _closeRedeemModal() {
+    var ov = document.getElementById('redeemOverlay');
+    if (ov) ov.remove();
+}
+function _openRedeemModal(key) {
+    var item = _pointMallItem(key);
+    if (!item) return;
+    if (!getFamilyId()) { showToast && showToast('请先登录家庭账号'); return; }
+    var total = _pointsGetTotal();
+    if (total < item.points) {
+        _communityAlert('积分不足，还差 ' + (item.points - total) + ' 分，继续打卡和分享来攒积分吧');
+        return;
+    }
+    _closeRedeemModal();
+    var shippingHtml = '';
+    if (key === 'spatula') {
+        var phone = '';
+        try { phone = String((_communityPhoneAuth() || {}).phoneNumber || ''); } catch (e) {}
+        var addr = '';
+        try { addr = String(getCommunityName && getCommunityName() || ''); } catch (e) {}
+        shippingHtml = '<div style="margin-top:12px;">'
+            + '<div style="font-size:12px;font-weight:700;color:#1F2937;margin-bottom:6px;">收货信息</div>'
+            + '<input id="redeemName" placeholder="收货人姓名" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:13px;outline:none;margin-bottom:8px;" />'
+            + '<input id="redeemPhone" placeholder="手机号" value="' + escapeAttr(phone) + '" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:13px;outline:none;margin-bottom:8px;" />'
+            + '<textarea id="redeemAddr" placeholder="详细收货地址（省市区+街道门牌）" rows="2" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:13px;outline:none;resize:none;">' + escapeHtml(addr) + '</textarea>'
+            + '</div>';
+    }
+    var ov = document.createElement('div');
+    ov.id = 'redeemOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10020;background:rgba(17,24,39,0.6);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    ov.innerHTML = '<div style="width:390px;max-width:100%;background:#fff;border-radius:18px;padding:18px;box-sizing:border-box;max-height:85vh;overflow:auto;">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+        +   '<span style="font-size:22px;">' + item.icon + '</span>'
+        +   '<span style="font-size:16px;font-weight:700;color:#1F2937;">' + item.title + '</span>'
+        + '</div>'
+        + '<div style="font-size:11px;color:#6B7280;line-height:1.7;">' + item.desc + '</div>'
+        + '<div style="margin-top:12px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:10px 12px;font-size:12px;color:#9A3412;line-height:1.7;">'
+        +   '将消耗 <b>' + item.points + '</b> 积分，兑换后当前剩余 <b>' + (total - item.points) + '</b> 积分'
+        + '</div>'
+        + shippingHtml
+        + '<div id="redeemMsg" style="font-size:11px;color:#DC2626;margin-top:8px;min-height:14px;"></div>'
+        + '<div style="display:flex;gap:10px;margin-top:6px;">'
+        +   '<button type="button" onclick="_closeRedeemModal()" style="flex:1;padding:11px;border-radius:12px;border:1px solid #E5E7EB;background:#fff;color:#6B7280;font-size:14px;cursor:pointer;">取消</button>'
+        +   '<button type="button" onclick="_confirmRedeem(\'' + key + '\')" style="flex:1.4;padding:11px;border-radius:12px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">确认兑换</button>'
+        + '</div>'
+        + '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) _closeRedeemModal(); });
+    document.body.appendChild(ov);
+}
+function _confirmRedeem(key) {
+    var item = _pointMallItem(key);
+    if (!item) return;
+    var msgEl = document.getElementById('redeemMsg');
+    var addrObj = null;
+    if (key === 'spatula') {
+        var name = String((document.getElementById('redeemName') || {}).value || '').trim();
+        var phone = String((document.getElementById('redeemPhone') || {}).value || '').replace(/\s/g, '');
+        var addr = String((document.getElementById('redeemAddr') || {}).value || '').trim();
+        if (!name) { if (msgEl) msgEl.textContent = '请填写收货人姓名'; return; }
+        if (!/^1[3-9]\d{9}$/.test(phone)) { if (msgEl) msgEl.textContent = '请填写正确的手机号'; return; }
+        if (addr.length < 6) { if (msgEl) msgEl.textContent = '请填写详细收货地址'; return; }
+        addrObj = { name: name, phone: phone, address: addr };
+    }
+    if (!_pointsSpend(item.points, 'redeem_' + key)) {
+        if (msgEl) msgEl.textContent = '积分不足，请刷新后重试';
+        return;
+    }
+    if (key === 'course') {
+        var c = 0;
+        try { c = Math.max(0, Math.floor(Number(lsGet('pointCourseCredits') || 0))); } catch (e) {}
+        lsSet('pointCourseCredits', String(c + 1));
+    } else if (key === 'ai') {
+        var a = 0;
+        try { a = Math.max(0, Math.floor(Number(lsGet('pointAiCredits') || 0))); } catch (e) {}
+        lsSet('pointAiCredits', String(a + 1));
+    }
+    var list = _getPointRedemptions();
+    list.unshift({
+        id: 'r_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+        item: key,
+        title: item.title,
+        points: item.points,
+        status: key === 'spatula' ? 'pending_ship' : 'granted',
+        address: addrObj,
+        createdAt: Math.floor(Date.now() / 1000)
+    });
+    _savePointRedemptions(list);
+    _closeRedeemModal();
+    var tips = {
+        course: '已获得 1 次课程解锁额度，可在「我的专属课堂」使用',
+        ai: '已获得 1 次 AI 专家评估额度，下月免费次数用完后自动生效',
+        spatula: '兑换成功，我们将在 7 个工作日内寄出'
+    };
+    showToast && showToast('🎁 ' + (tips[key] || '兑换成功'));
+    if (document.getElementById('pointsCenterOverlay')) { try { _pointsRenderCenter(); } catch (e) {} }
+}
+window._openRedeemModal = _openRedeemModal;
+window._confirmRedeem = _confirmRedeem;
+window._closeRedeemModal = _closeRedeemModal;
 function openCommunityPublishModal() {
     if (!getFamilyId()) { showToast && showToast('请先登录家庭账号后再发布'); return; }
     var auth = _communityPhoneAuth();
