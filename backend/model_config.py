@@ -440,6 +440,43 @@ def get_budget_status() -> Dict[str, Any]:
     return {"monthly": budget, "month": month, "used": round(used, 4), "ratio": round(ratio, 4), "status": status}
 
 
+# ========== V285: 服务商健康熔断 ==========
+# 某服务商连续失败达到阈值后，短时间内直接跳过。旧逻辑里 agnes 免费档偶发 ReadTimeout 时，
+# 每次请求都要先等满 timeout 才降级，叠加多家服务商后单次请求可拖到 60s+（首页食养堂 1 分钟空白）。
+_PROVIDER_HEALTH: Dict[str, Dict[str, float]] = {}
+PROVIDER_FAIL_THRESHOLD = 2      # 连续失败次数阈值
+PROVIDER_COOLDOWN_SEC = 180.0    # 熔断时长（秒）
+
+
+def _provider_cooling(name: str) -> bool:
+    st = _PROVIDER_HEALTH.get(name) or {}
+    return float(st.get("until") or 0) > time.time()
+
+
+def _mark_provider_fail(name: str) -> None:
+    st = _PROVIDER_HEALTH.setdefault(name, {"fails": 0, "until": 0})
+    st["fails"] = float(st.get("fails") or 0) + 1
+    if st["fails"] >= PROVIDER_FAIL_THRESHOLD:
+        st["until"] = time.time() + PROVIDER_COOLDOWN_SEC
+
+
+def _mark_provider_ok(name: str) -> None:
+    _PROVIDER_HEALTH.pop(name, None)
+
+
+def get_provider_health() -> Dict[str, Dict[str, Any]]:
+    """调试用：各服务商当前熔断状态。"""
+    now = time.time()
+    return {
+        name: {
+            "cooling": float(st.get("until") or 0) > now,
+            "fails": int(st.get("fails") or 0),
+            "remaining": max(0, int(float(st.get("until") or 0) - now)),
+        }
+        for name, st in _PROVIDER_HEALTH.items()
+    }
+
+
 async def call_ai(task_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     """多模型路由（通用任务入口）。
 
@@ -461,7 +498,10 @@ async def call_ai(task_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         print(f"budget check failed: {_be}")
     # V119: 文本场景路由档位（audit/nutrition_plan 用强档，其余快速档）
     text_model_kind = "text_pro" if str(payload.get("task_type") or "") in PRO_MODEL_TASKS else "text"
-    for name, config in get_provider_order():
+    # V285: 熔断中的服务商直接跳过（全部熔断时兜底按原顺序尝试，避免整体不可用）
+    _order = get_provider_order()
+    _active = [(n, c) for n, c in _order if not _provider_cooling(n)]
+    for name, config in (_active or _order):
         # public 服务商（pollinations）无需 Key 也参与路由
         if not config.get("api_key") and not config.get("public"):
             continue
@@ -533,11 +573,13 @@ async def call_ai(task_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
                 log_payload = dict(payload)
                 log_payload.setdefault("task_type", task_type)
                 log_ai_call(name, model, log_payload, result)
+                _mark_provider_ok(name)
                 return result
             except Exception as e:
                 print(f"{name}/{model} failed: {e}")
                 errors.append(f"{name}/{model}: {type(e).__name__}: {e}")
                 log_ai_error(name, model, payload, e)
+                _mark_provider_fail(name)
                 continue
     msg = "All providers failed -> " + "；".join(errors)
     if task_type == "video":

@@ -2935,17 +2935,31 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
         return True
 
     tip = None
+    # V285: 整条 AI 链路（含服务商逐个降级）共用 20s 截止时间——旧逻辑每家各自等满 60s，
+    # 线上单次请求累积到 60s+ 被网关 504。单家超时压到 8s，留时间给下一家兜底。
+    _ai_deadline = time.time() + 20.0
     for attempt in range(2 if sub_plan else 1):
+        _remain = _ai_deadline - time.time()
+        if _remain < 4:
+            print(f"[daily-tip] AI 截止时间已到，放弃本次生成（attempt {attempt + 1}）")
+            break
         try:
-            content = await call_qwen(
-                [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "\n".join(user_lines)},
-                ],
-                json_mode=True,
-                max_tokens=1200,
-                task_type="daily_tip",
+            content = await asyncio.wait_for(
+                call_qwen(
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": "\n".join(user_lines)},
+                    ],
+                    json_mode=True,
+                    max_tokens=1200,
+                    task_type="daily_tip",
+                    timeout=min(8.0, _remain),
+                ),
+                timeout=_remain,
             )
+        except asyncio.TimeoutError:
+            print(f"[daily-tip] AI 总耗时超限，放弃本次生成（attempt {attempt + 1}）")
+            break
         except Exception as e:  # AI 不可用不阻塞：返回降级提示
             print(f"[daily-tip] call_qwen error (attempt {attempt + 1}): {e}")
             continue

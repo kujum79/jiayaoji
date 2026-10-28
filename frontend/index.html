@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V284-20261028';
+        var APP_VER = 'V285-20261028';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -30925,7 +30925,7 @@ function _dtCollectWeather() {
     } catch (e) {}
     return null;
 }
-async function _fetchDailyTip(variant) {
+async function _fetchDailyTip(variant, timeoutMs) {
     var body = {
         date: _dtTodayKey(),
         familyId: getFamilyId() || 'default',
@@ -30943,8 +30943,20 @@ async function _fetchDailyTip(variant) {
     var wx = _dtCollectWeather();
     if (wx) body.weather = wx;
     if (variant) body.variant = variant;
-    var res = await fetch('/api/daily-tip', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    return res.json();
+    // V285: 首屏不再被 AI 长耗时阻塞——带超时中断，超时抛出由调用方保留已渲染内容
+    var opts = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+    var ctrl = null, timer = null;
+    if (typeof AbortController !== 'undefined') {
+        ctrl = new AbortController();
+        opts.signal = ctrl.signal;
+        timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, timeoutMs || 15000);
+    }
+    try {
+        var res = await fetch('/api/daily-tip', opts);
+        return await res.json();
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
 }
 async function renderHomeDailyTipCard(force) {
     var el = document.getElementById('homeDailyTipCard');
@@ -30954,64 +30966,71 @@ async function renderHomeDailyTipCard(force) {
     _dtLoadedKey = ck;
     _dtSwapCount = 0;
     _dtServerTip = null;
-    // V199: 订阅用户走 /api/daily-tip 的专属生成（带订阅 Prompt），拿不到再回落已发布文章
     var subPlan = _dtSubPlan();
+    // V285: 订阅用户的 AI 专属生成改为「并行后台」——先立即渲染已有内容，
+    // AI 结果晚到再替换，避免首屏被 60s 级 AI 请求卡住只显示骨架屏。
+    var aiPromise = null;
     if (subPlan) {
-        _dtRenderSkeleton();
-        try {
-            var subTip = await _fetchDailyTip();
-            if (subTip && subTip.title && !subTip.error) {
-                _dtServerTip = subTip;
-                _dtRecordHistory(subTip);
-                _dtRenderCard(subTip);
-                return;
-            }
-        } catch (e) { console.warn('[订阅专享] 生成失败，回落已发布文章', e); }
+        aiPromise = _fetchDailyTip(undefined, 30000).catch(function (e) {
+            console.warn('[订阅专享] 生成超时或失败，保留已渲染内容', e);
+            return null;
+        });
     }
-    // V142: 首页卡片只读已发布文章，不再调 AI 生成
-    try {
-        var pub = _fhPublishedToday();
-        if (pub) { _dtRecordHistory(pub); _dtRenderCard(pub); return; }
-    } catch (e) {}
-    // V145: 服务端 confirmed 文章优先（pending 不展示）
-    _dtRenderSkeleton();
-    try {
-        var resp = await fetch('/api/food-hall/published?date=' + encodeURIComponent(_dtTodayKey()), { cache: 'no-store' });
-        var out = await resp.json();
-        if (out && out.published && out.article && out.article.title) {
-            _dtServerTip = out.article;
-            _dtRecordHistory(out.article);
-            _dtRenderCard(out.article);
-            return;
-        }
-    } catch (e) {}
-    // V145: 今日无 confirmed → 降级显示昨日文章 + "昨日"小角标（凌晨 0:00-6:00 待审期间）
-    try {
-        var yd = new Date(); yd.setDate(yd.getDate() - 1);
-        var ydKey = yd.getFullYear() + '-' + String(yd.getMonth() + 1).padStart(2, '0') + '-' + String(yd.getDate()).padStart(2, '0');
-        var resp2 = await fetch('/api/food-hall/published?date=' + encodeURIComponent(ydKey), { cache: 'no-store' });
-        var out2 = await resp2.json();
-        if (out2 && out2.published && out2.article && out2.article.title) {
-            _dtServerTip = out2.article;
-            _dtRenderCard(_dtServerTip);
-            return;
-        }
-    } catch (e) {}
-    // V223: 今日/昨日都没有 confirmed 文章时，不再把归档旧文冒充「今日一课」（旧文可能含其它城市的天气语境），
-    // 仅提示暂未更新，并给出「查看往期精选」入口
-    var _latestDate = '';
-    try {
-        var resp3 = await fetch('/api/food-hall/published-list?days=120', { cache: 'no-store' });
-        var out3 = await resp3.json();
-        if (out3 && Array.isArray(out3.articles) && out3.articles.length) {
-            var latest = null;
-            for (var li = 0; li < out3.articles.length; li++) {
-                if (out3.articles[li] && out3.articles[li].title) { latest = out3.articles[li]; break; }
+    // 先秒出今天已发布的文章（本地缓存零延迟）
+    var fast = null;
+    try { fast = _fhPublishedToday(); } catch (e) {}
+    if (!fast) {
+        // V145: 服务端 confirmed 文章优先（pending 不展示）
+        try {
+            var resp = await fetch('/api/food-hall/published?date=' + encodeURIComponent(_dtTodayKey()), { cache: 'no-store' });
+            var out = await resp.json();
+            if (out && out.published && out.article && out.article.title) fast = out.article;
+        } catch (e) {}
+    }
+    if (fast) {
+        _dtServerTip = fast;
+        _dtRecordHistory(fast);
+        _dtRenderCard(fast);
+    } else {
+        // V145: 今日无 confirmed → 降级显示昨日文章（凌晨 0:00-6:00 待审期间）
+        try {
+            var yd = new Date(); yd.setDate(yd.getDate() - 1);
+            var ydKey = yd.getFullYear() + '-' + String(yd.getMonth() + 1).padStart(2, '0') + '-' + String(yd.getDate()).padStart(2, '0');
+            var resp2 = await fetch('/api/food-hall/published?date=' + encodeURIComponent(ydKey), { cache: 'no-store' });
+            var out2 = await resp2.json();
+            if (out2 && out2.published && out2.article && out2.article.title) {
+                _dtServerTip = out2.article;
+                _dtRenderCard(_dtServerTip);
             }
-            if (latest) _latestDate = String(latest.date || latest.publishDate || latest.publish_date || '');
+        } catch (e) {}
+    }
+    if (!fast && _dtServerTip) fast = true; // 昨日文章已展示，避免下面重复渲染降级态
+    if (!fast) {
+        // V223: 今日/昨日都没有 confirmed 文章时，不再把归档旧文冒充「今日一课」（旧文可能含其它城市的天气语境），
+        // 仅提示暂未更新，并给出「查看往期精选」入口
+        var _latestDate = '';
+        try {
+            var resp3 = await fetch('/api/food-hall/published-list?days=120', { cache: 'no-store' });
+            var out3 = await resp3.json();
+            if (out3 && Array.isArray(out3.articles) && out3.articles.length) {
+                var latest = null;
+                for (var li = 0; li < out3.articles.length; li++) {
+                    if (out3.articles[li] && out3.articles[li].title) { latest = out3.articles[li]; break; }
+                }
+                if (latest) _latestDate = String(latest.date || latest.publishDate || latest.publish_date || '');
+            }
+        } catch (e) {}
+        _dtRenderDegraded(_latestDate);
+    }
+    // V285: 等待并应用 AI 专属结果（成功则替换当前卡片）
+    if (aiPromise) {
+        var subTip = await aiPromise;
+        if (subTip && subTip.title && !subTip.error) {
+            _dtServerTip = subTip;
+            _dtRecordHistory(subTip);
+            _dtRenderCard(subTip);
         }
-    } catch (e) {}
-    _dtRenderDegraded(_latestDate);
+    }
 }
 // V143: 超管复核 AI 预选篇（confirm 保留 / withdraw 撤回换篇）
 async function _fhReviewAuto(date, action) {
