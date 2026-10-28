@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V286-20261028';
+        var APP_VER = 'V287-20261028';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -3983,20 +3983,30 @@ body.demo-mode .phone-frame { height: 100%; }
         <div style="font-size:48px;margin-bottom:8px;">🍳</div>
         <div style="font-size:22px;font-weight:800;color:#9A3412;margin-bottom:4px;">家肴记</div>
         <div style="font-size:14px;color:#9CA3AF;margin-bottom:18px;">AI 家庭膳食助理</div>
-        <!-- 主面板：家庭名称 + 家庭密码 登录 -->
-        <div id="loginPanelFamilyLogin">
-            <input id="familyLoginName" type="text" maxlength="20" placeholder="家庭名称" onkeydown="if(event.key==='Enter')doFamilyLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;box-sizing:border-box;" />
-            <input id="familyLoginPass" type="password" maxlength="40" placeholder="家庭密码" onkeydown="if(event.key==='Enter')doFamilyLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;box-sizing:border-box;" />
-            <button id="familyLoginBtn" onclick="doFamilyLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">进入家庭</button>
-            <div id="familyLoginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;line-height:1.6;"></div>
-            <!-- 三按钮并排一行：注册 / 邮箱登录 / 忘记家庭密码 -->
-            <div style="display:flex;gap:8px;margin-top:14px;">
-                <button onclick="openCombinedRegisterModal()" style="flex:1;padding:10px 2px;font-size:13px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">注册</button>
-                <button onclick="openEmailAccountModal()" style="flex:1;padding:10px 2px;font-size:13px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">邮箱登录</button>
-                <button onclick="openForgotPasswordFromLogin()" style="flex:1;padding:10px 2px;font-size:13px;font-weight:600;color:#9A3412;background:white;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">忘记家庭密码？</button>
+        <!-- 主面板：手机号 + 模拟验证码 登录/注册（V287 起替代邮箱与家庭密码登录） -->
+        <div id="loginPanelPhone">
+            <div style="font-size:13px;color:#9CA3AF;margin-bottom:14px;line-height:1.6;">手机号登录 · 未注册将自动创建家庭</div>
+            <input id="loginPhone" type="tel" inputmode="numeric" maxlength="11" autocomplete="tel" placeholder="请输入手机号" oninput="onLoginPhoneInput(this)" onkeydown="if(event.key==='Enter'){var c=document.getElementById('loginCode');if(c)c.focus();}" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;box-sizing:border-box;" />
+            <div style="display:flex;gap:8px;margin-bottom:14px;">
+                <input id="loginCode" type="tel" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6 位验证码" oninput="onLoginCodeInput(this)" onkeydown="if(event.key==='Enter')doPhoneLogin()" style="flex:1;min-width:0;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;letter-spacing:2px;box-sizing:border-box;" />
+                <button id="loginCodeBtn" type="button" onclick="sendLoginCode()" style="width:108px;flex:0 0 108px;padding:12px 4px;font-size:13px;font-weight:600;color:#9A3412;background:#fff;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">获取验证码</button>
             </div>
+            <button id="loginPhoneBtn" onclick="doPhoneLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录 / 注册</button>
+            <div id="loginPhoneErr" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;line-height:1.6;"></div>
             <div style="font-size:12px;color:#9CA3AF;margin-top:10px;">登录即表示同意家肴记服务条款</div>
         </div>
+    </div>
+</div>
+
+<!-- ====== V287: 新用户创建家庭（手机号验证码通过后填写家庭名称） ====== -->
+<div id="registerFamilyModal" style="position:fixed;inset:0;z-index:100014;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeRegisterFamilyModal()">
+    <div style="background:#fff;border-radius:20px;padding:24px 20px;width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
+        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">🏠 创建家庭</div>
+        <div style="font-size:13px;color:#9CA3AF;margin-bottom:16px;text-align:center;">手机号 <span id="regFamilyPhone" style="color:#9A3412;font-weight:600;"></span> 尚未注册，请先创建家庭</div>
+        <input id="regFamilyNameOnly" type="text" maxlength="20" placeholder="家庭名称（如：三仁佳欢）" onkeydown="if(event.key==='Enter')submitRegisterFamily()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;box-sizing:border-box;" />
+        <button onclick="submitRegisterFamily()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">创建并进入</button>
+        <div id="regFamilyNameErr" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;line-height:1.6;"></div>
+        <div onclick="closeRegisterFamilyModal()" style="font-size:13px;color:#9CA3AF;margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline;">返回</div>
     </div>
 </div>
 
@@ -5832,43 +5842,182 @@ function isSuperAdmin() {
 }
 function getLoginFamily() { try { return JSON.parse(localStorage.getItem('jj_login_family') || 'null'); } catch(e) { return null; } }
 function setLoginFamily(f) { if (window.__demoMode) return; localStorage.setItem('jj_login_family', JSON.stringify(f||null)); }
-function clearLogin() { if (window.__demoMode) return; localStorage.removeItem('jj_login_user'); localStorage.removeItem('jj_login_family'); }
+function clearLogin() { if (window.__demoMode) return; localStorage.removeItem('jj_login_user'); localStorage.removeItem('jj_login_family'); localStorage.removeItem('currentAccount'); }
 
 // 隐藏启动闪屏（页面就绪、目标界面已确定时调用）
 function hideBootSplash() { var bs = document.getElementById('bootSplash'); if (bs) bs.style.display = 'none'; }
 
-// 显示登录页（隐藏APP主界面）
+// 显示登录页（隐藏APP主界面）；V287: 改为手机号 + 模拟验证码登录
 function showLoginPage() {
     hideBootSplash();
     var lp = document.getElementById('loginPage');
     var app = document.getElementById('appRoot');
     if (lp) lp.style.display = 'flex';
     if (app) app.style.display = 'none';
-    // 主面板（家庭名称+密码）：清空旧输入与错误提示并聚焦
-    var ni = document.getElementById('familyLoginName');
-    var pi = document.getElementById('familyLoginPass');
-    var eb = document.getElementById('familyLoginErrBox');
-    if (eb) { eb.textContent = ''; eb.style.display = 'none'; }
-    switchLoginPanel('main');
-    setTimeout(function() { try { if (ni) ni.focus(); } catch(e) {} }, 150);
-}
-// 登录页面板切换：main=家庭名称+密码（主） / code=家庭码（家人加入）
-function switchLoginPanel(which) {
-    var main = document.getElementById('loginPanelFamilyLogin');
-    var code = document.getElementById('loginPanelFamilyCode');
-    if (!main || !code) return;
-    var showCode = (which === 'code');
-    main.style.display = showCode ? 'none' : 'block';
-    code.style.display = showCode ? 'block' : 'none';
-    if (showCode) {
-        var eb2 = document.getElementById('familyCodeErrBox');
-        if (eb2) { eb2.textContent = ''; eb2.style.display = 'none'; }
-        var ci = document.getElementById('familyCodeInput');
-        if (ci) setTimeout(function() { try { ci.focus(); } catch(e) {} }, 100);
-    }
+    _loginPhoneClearErr();
+    var ci = document.getElementById('loginCode');
+    if (ci) ci.value = '';
+    setTimeout(function() { try { var pi = document.getElementById('loginPhone'); if (pi) pi.focus(); } catch(e) {} }, 150);
 }
 // 显示创建家庭页（已移除 9/20，保留空实现防止调用报错）
 function showCreateFamilyPage() { return; }
+
+// ====== V287: 手机号 + 模拟验证码 登录/注册（替代邮箱登录） ======
+var MOCK_SMS_CODE = '123456';       // 模拟验证码（未接短信网关）
+var _loginCodeTimer = null;         // 「获取验证码」倒计时定时器
+var _pendingRegisterPhone = '';     // 待创建家庭的新用户手机号
+
+// 已注册账号列表（registeredUsers，手机号唯一）
+function getRegisteredUsers() {
+    try {
+        var arr = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
+        return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+}
+function saveRegisteredUsers(list) {
+    try { localStorage.setItem('registeredUsers', JSON.stringify(Array.isArray(list) ? list : [])); } catch (e) {}
+}
+// 按手机号查找账号（唯一性由注册写入时保证）
+function findRegisteredUser(phone) {
+    var p = String(phone || '');
+    var list = getRegisteredUsers();
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && String(list[i].phone) === p) return list[i];
+    }
+    return null;
+}
+// 手机号 / 验证码输入框只允许数字
+function onLoginPhoneInput(el) {
+    if (!el) return;
+    var v = String(el.value || '').replace(/\D/g, '').slice(0, 11);
+    if (v !== el.value) el.value = v;
+}
+function onLoginCodeInput(el) {
+    if (!el) return;
+    var v = String(el.value || '').replace(/\D/g, '').slice(0, 6);
+    if (v !== el.value) el.value = v;
+}
+function _loginPhoneErr(msg) {
+    var eb = document.getElementById('loginPhoneErr');
+    if (eb) { eb.textContent = msg; eb.style.display = 'block'; }
+}
+function _loginPhoneClearErr() {
+    var eb = document.getElementById('loginPhoneErr');
+    if (eb) { eb.textContent = ''; eb.style.display = 'none'; }
+}
+// 获取验证码：校验手机号 → 60 秒倒计时 → Toast 提示模拟验证码
+function sendLoginCode() {
+    _loginPhoneClearErr();
+    var phone = String(((document.getElementById('loginPhone') || {}).value) || '').replace(/\D/g, '');
+    if (!/^1\d{10}$/.test(phone)) { showToast('请输入正确的 11 位手机号'); _loginPhoneErr('请输入正确的 11 位手机号'); return; }
+    if (_loginCodeTimer) return;   // 倒计时中不重复发送
+    showToast('【模拟】验证码已发送：' + MOCK_SMS_CODE);
+    var btn = document.getElementById('loginCodeBtn');
+    var left = 60;
+    function tick() {
+        left--;
+        if (left <= 0) {
+            if (btn) { btn.disabled = false; btn.textContent = '获取验证码'; btn.style.color = '#9A3412'; btn.style.cursor = 'pointer'; }
+            _loginCodeTimer = null;
+            return;
+        }
+        if (btn) btn.textContent = left + ' 秒后重发';
+        _loginCodeTimer = setTimeout(tick, 1000);
+    }
+    if (btn) { btn.disabled = true; btn.textContent = '60 秒后重发'; btn.style.color = '#9CA3AF'; btn.style.cursor = 'not-allowed'; }
+    _loginCodeTimer = setTimeout(tick, 1000);
+}
+// 登录/注册：校验验证码 → 已注册则登录，未注册则弹「创建家庭」
+function doPhoneLogin() {
+    _loginPhoneClearErr();
+    var phone = String(((document.getElementById('loginPhone') || {}).value) || '').replace(/\D/g, '');
+    var code = String(((document.getElementById('loginCode') || {}).value) || '').replace(/\D/g, '');
+    if (!/^1\d{10}$/.test(phone)) { showToast('请输入正确的 11 位手机号'); _loginPhoneErr('请输入正确的 11 位手机号'); return; }
+    if (code.length !== 6) { showToast('请输入 6 位验证码'); _loginPhoneErr('请输入 6 位验证码'); return; }
+    if (code !== MOCK_SMS_CODE) { showToast('验证码错误'); _loginPhoneErr('验证码错误，请重新输入'); return; }
+    var user = findRegisteredUser(phone);
+    if (user) { _loginByAccount(user); return; }
+    _pendingRegisterPhone = phone;
+    openRegisterFamilyModal();
+}
+// 写入登录态（沿用 familySession 快捷登录链路：启动时不再校验 Supabase 会话）
+function _applyAccountSession(account) {
+    if (!account || !account.phone) return;
+    var phone = String(account.phone);
+    var fid = account.familyId || ('family_' + phone);
+    var fname = account.familyName || '我家';
+    setLoginUser({ id: phone, phone: phone, name: fname, familyName: fname, familySession: true, localAccount: true });
+    setFamilyId(fid);   // 依赖 jj_login_user.id，必须在 setLoginUser 之后
+    setLoginFamily({ id: fid, name: fname, owner_id: phone, ownerPhone: phone });
+    try { localStorage.setItem('familyName_' + fid, fname); } catch (e) {}
+    try {
+        localStorage.setItem('currentAccount', JSON.stringify({ phone: phone, familyId: fid, familyName: fname, loginAt: Date.now() }));
+    } catch (e) {}
+}
+function _loginByAccount(account) {
+    _applyAccountSession(account);
+    updateHomeAuthBtn();
+    showAppRoot();
+    showToast('欢迎回来，' + (account.familyName || '我家'));
+    // 家庭命名空间变化 → 整页重载，按新家庭前缀重新加载本地数据
+    if (getFamilyId() !== window.__bootFamilyId) {
+        setTimeout(function() { try { location.reload(); } catch (e) {} }, 500);
+    }
+}
+// 新用户创建家庭弹窗
+function openRegisterFamilyModal() {
+    var m = document.getElementById('registerFamilyModal');
+    if (!m) return;
+    m.style.display = 'flex';
+    var inp = document.getElementById('regFamilyNameOnly');
+    if (inp) inp.value = '';
+    var ph = document.getElementById('regFamilyPhone');
+    if (ph) ph.textContent = _pendingRegisterPhone;
+    var eb = document.getElementById('regFamilyNameErr');
+    if (eb) { eb.textContent = ''; eb.style.display = 'none'; }
+    setTimeout(function() { try { if (inp) inp.focus(); } catch(e) {} }, 150);
+}
+function closeRegisterFamilyModal() {
+    var m = document.getElementById('registerFamilyModal');
+    if (m) m.style.display = 'none';
+}
+// 生成唯一 familyId（不与 registeredUsers 中已有 familyId 冲突）
+function _genUniqueFamilyId() {
+    var used = {};
+    getRegisteredUsers().forEach(function(u) { if (u && u.familyId) used[String(u.familyId)] = 1; });
+    for (var i = 0; i < 50; i++) {
+        var id = 'family_' + Date.now().toString(36) + Math.floor(Math.random() * 900 + 100);
+        if (!used[id]) return id;
+    }
+    return 'family_' + Date.now();
+}
+// 新用户提交：写入 registeredUsers（手机号唯一）→ 登录进首页
+function submitRegisterFamily() {
+    var phone = _pendingRegisterPhone;
+    var eb = document.getElementById('regFamilyNameErr');
+    function showErr(msg) { showToast(msg); if (eb) { eb.textContent = msg; eb.style.display = 'block'; } }
+    if (!/^1\d{10}$/.test(String(phone || ''))) { closeRegisterFamilyModal(); showLoginPage(); return; }
+    var inp = document.getElementById('regFamilyNameOnly');
+    var name = String((inp && inp.value) || '').trim();
+    if (!name) { showErr('请输入家庭名称'); return; }
+    // 手机号唯一：已存在则直接登录，不重复写入
+    var account = findRegisteredUser(phone);
+    if (!account) {
+        account = { phone: phone, password: '', familyId: _genUniqueFamilyId(), familyName: name, createdAt: Date.now() };
+        var list = getRegisteredUsers().filter(function(u) { return !u || String(u.phone) !== phone; });
+        list.push(account);
+        saveRegisteredUsers(list);
+    }
+    _pendingRegisterPhone = '';
+    closeRegisterFamilyModal();
+    _applyAccountSession(account);
+    updateHomeAuthBtn();
+    showAppRoot();
+    showToast('注册成功，欢迎加入家肴记！');
+    if (getFamilyId() !== window.__bootFamilyId) {
+        setTimeout(function() { try { location.reload(); } catch (e) {} }, 500);
+    }
+}
 
 // ====== 合并注册弹窗（邮箱注册 + 创建家庭 一次完成） ======
 function openCombinedRegisterModal() {
