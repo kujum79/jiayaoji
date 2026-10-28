@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V288-20261028';
+        var APP_VER = 'V289-20261028';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -5905,7 +5905,7 @@ function showLoginPage() {
 function showCreateFamilyPage() { return; }
 
 // ====== V287: 手机号 + 模拟验证码 登录/注册（替代邮箱登录） ======
-var MOCK_SMS_CODE = '123456';       // 模拟验证码（未接短信网关）
+var MOCK_SMS_CODE = '110211';       // 模拟验证码（未接短信网关）
 var _loginCodeTimer = null;         // 「获取验证码」倒计时定时器
 var _pendingRegisterPhone = '';     // 待创建家庭的新用户手机号
 
@@ -5988,7 +5988,11 @@ function _applyAccountSession(account) {
     var phone = String(account.phone);
     var fid = account.familyId || ('family_' + phone);
     var fname = account.familyName || '我家';
-    setLoginUser({ id: phone, phone: phone, name: fname, familyName: fname, familySession: true, localAccount: true });
+    var loginUser = { id: phone, phone: phone, name: fname, familyName: fname, familySession: true, localAccount: true };
+    // V289: 预置的三仁佳欢账号携带超管邮箱，沿用既有 isSuperAdmin() 邮箱判定
+    if (account.email) loginUser.email = account.email;
+    if (account.superAdmin) loginUser.superAdmin = true;
+    setLoginUser(loginUser);
     setFamilyId(fid);   // 依赖 jj_login_user.id，必须在 setLoginUser 之后
     setLoginFamily({ id: fid, name: fname, owner_id: phone, ownerPhone: phone });
     try { localStorage.setItem('familyName_' + fid, fname); } catch (e) {}
@@ -73073,6 +73077,50 @@ setTimeout(function () { try { _maybeGenerateDailyLesson(); } catch (e) {} }, 80
             try { if (typeof showAppRootGuest === 'function') showAppRootGuest(); } catch (e2) {}
         }
     }, 15000);
+})();
+
+// ====== V289: 旧账号数据迁移（邮箱/家庭密码 → 手机号登录） ======
+// 一次性执行：清空旧登录态 + 预置四家测试账号的手机号（手机号唯一，按 familyId 绑定原家庭）
+(function migrateLegacyAccountsV289() {
+    try {
+        var FLAG = '_migrationV289';
+        if (localStorage.getItem(FLAG)) return;
+        // 一、清空原有登录态（旧邮箱会话 / currentAccount）
+        localStorage.removeItem('currentAccount');
+        localStorage.removeItem('jj_login_user');
+        localStorage.removeItem('jj_login_family');
+        // 二、预置四家手机号 → 原 familyId
+        var PRESET = [
+            { phone: '13800138001', familyId: 'BHDVWN36', familyName: '三仁佳欢', superAdmin: true, email: '69390597@qq.com' },
+            { phone: '13800138002', familyId: 'V2C8WRFR', familyName: '小高之家' },
+            { phone: '13800138003', familyId: 'NJQSFVA5', familyName: '非英中义' },
+            { phone: '13800138004', familyId: 'KWL47P39', familyName: '铁岭之家' }
+        ];
+        var list = [];
+        try {
+            list = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
+            if (!Array.isArray(list)) list = [];
+        } catch (e) { list = []; }
+        PRESET.forEach(function (p) {
+            var rec = null;
+            for (var i = 0; i < list.length; i++) {
+                if (list[i] && String(list[i].phone) === p.phone) { rec = list[i]; break; }
+            }
+            if (!rec) {
+                rec = { phone: p.phone, password: '', familyId: p.familyId, familyName: p.familyName, createdAt: Date.now() };
+                list.push(rec);
+            }
+            rec.phone = p.phone;
+            rec.familyId = p.familyId;
+            rec.familyName = p.familyName;
+            rec.role = 'owner';
+            if (p.superAdmin) { rec.superAdmin = true; rec.email = p.email; }
+            try { localStorage.setItem('familyName_' + p.familyId, p.familyName); } catch (e) {}
+        });
+        localStorage.setItem('registeredUsers', JSON.stringify(list));
+        localStorage.setItem(FLAG, String(Date.now()));
+        console.log('[V289 迁移] 已完成：预置 4 个手机号账号，旧登录态已清空');
+    } catch (e) { console.warn('[V289 迁移] 失败', e); }
 })();
 
 // ====== 登录系统初始化：页面加载完成后判断登录状态 ======
