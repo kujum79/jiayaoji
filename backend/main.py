@@ -2849,6 +2849,91 @@ _SUBSCRIPTION_USER_REQUIREMENTS = {
 }
 
 
+# ========== V295: 手机号 + 短信验证码登录（双轨制，预留真实短信网关） ==========
+import random as _sms_random
+
+_SMS_TTL_SECONDS = 300          # 验证码有效期 5 分钟
+_SMS_TOKEN_TTL_SECONDS = 7 * 86400
+_SMS_CODES: Dict[str, Dict[str, Any]] = {}    # phone -> {code, expireAt, sentAt}
+_SMS_LAST_SENT: Dict[str, int] = {}            # phone -> 上次发送时间戳（独立记录，校验通过后仍保留冷却）
+_SMS_TOKENS: Dict[str, Dict[str, Any]] = {}   # token -> {phone, expireAt}
+_SMS_SEND_INTERVAL = 60         # 同号重发间隔（秒）
+
+
+class SendSmsRequest(BaseModel):
+    phone: str
+
+
+class VerifySmsRequest(BaseModel):
+    phone: str
+    code: str
+
+
+def _sms_phone(phone: str) -> str:
+    """归一化手机号：仅保留数字。"""
+    return re.sub(r"\D", "", str(phone or ""))
+
+
+def _sms_send_via_provider(phone: str, code: str) -> bool:
+    """真实短信发送占位。
+
+    # TODO: 接入阿里云/云片网 API 发送短信
+    接入时在此实现（签名/模板/参数），成功返回 True、失败返回 False；
+    当前未接入，一律返回 False，由接口层回退为「模拟发送」并返回 mockCode。
+    """
+    return False
+
+
+@app.post("/api/auth/send-sms")
+async def send_sms(req: SendSmsRequest) -> Dict[str, Any]:
+    """发送短信验证码：生成 6 位随机码，内存暂存 5 分钟。"""
+    phone = _sms_phone(req.phone)
+    if not re.fullmatch(r"1\d{10}", phone):
+        return {"success": False, "message": "请输入正确的 11 位手机号"}
+
+    now = int(time.time())
+    last = int(_SMS_LAST_SENT.get(phone) or 0)
+    if last and now - last < _SMS_SEND_INTERVAL:
+        left = _SMS_SEND_INTERVAL - (now - last)
+        return {"success": False, "message": f"请 {left} 秒后再获取", "retryAfter": left}
+
+    code = f"{_sms_random.randint(0, 999999):06d}"
+    _SMS_CODES[phone] = {"code": code, "expireAt": now + _SMS_TTL_SECONDS, "sentAt": now}
+    _SMS_LAST_SENT[phone] = now
+
+    delivered = _sms_send_via_provider(phone, code)
+    # 清理过期验证码，避免内存无限增长
+    for p, v in list(_SMS_CODES.items()):
+        if int(v.get("expireAt") or 0) <= now:
+            _SMS_CODES.pop(p, None)
+
+    resp: Dict[str, Any] = {"success": True, "expiresIn": _SMS_TTL_SECONDS, "provider": "sms" if delivered else "mock"}
+    if not delivered:
+        resp["mockCode"] = code   # 未接短信网关时的测试用返回（接入真实短信后应删除）
+    return resp
+
+
+@app.post("/api/auth/verify-sms")
+async def verify_sms(req: VerifySmsRequest) -> Dict[str, Any]:
+    """校验短信验证码：匹配且未过期则发放登录 token。"""
+    phone = _sms_phone(req.phone)
+    code = re.sub(r"\D", "", str(req.code or ""))
+    now = int(time.time())
+    rec = _SMS_CODES.get(phone)
+    if not rec:
+        return {"success": False, "message": "请先获取验证码"}
+    if int(rec.get("expireAt") or 0) <= now:
+        _SMS_CODES.pop(phone, None)
+        return {"success": False, "message": "验证码已过期，请重新获取"}
+    if str(rec.get("code")) != code:
+        return {"success": False, "message": "验证码错误"}
+
+    _SMS_CODES.pop(phone, None)   # 一次性使用
+    token = uuid.uuid4().hex
+    _SMS_TOKENS[token] = {"phone": phone, "expireAt": now + _SMS_TOKEN_TTL_SECONDS}
+    return {"success": True, "token": token, "phone": phone}
+
+
 @app.post("/api/daily-tip")
 async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
     """食养堂每日一课：按 节气>天气>当季食材 优先级生成，同家庭同日仅生成一次。"""

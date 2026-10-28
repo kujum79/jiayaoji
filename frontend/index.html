@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V291-20261028';
+        var APP_VER = 'V295-20261028';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -3994,6 +3994,19 @@ body.demo-mode .phone-frame { height: 100%; }
             <button id="loginPhoneBtn" onclick="doPhoneLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录 / 注册</button>
             <div id="loginPhoneErr" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;line-height:1.6;"></div>
             <div style="font-size:12px;color:#9CA3AF;margin-top:10px;">登录即表示同意家肴记服务条款</div>
+            <div style="margin-top:12px;padding-top:12px;border-top:1px solid #F3F4F6;">
+                <button type="button" onclick="toggleFamilyLoginPanel(1)" style="width:100%;padding:10px;font-size:13px;font-weight:600;color:#9A3412;background:#fff;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;">🏠 用家庭名称 + 家庭密码登录</button>
+            </div>
+        </div>
+        <!-- V294: 家庭成员用「家庭名称 + 家庭密码」登录（无需手机号） -->
+        <div id="loginPanelFamily" style="display:none;">
+            <div style="font-size:13px;color:#9CA3AF;margin-bottom:14px;line-height:1.6;">家人无需手机号，输入家庭名称与家庭密码即可进入</div>
+            <input id="loginFamName" type="text" maxlength="20" placeholder="家庭名称" onkeydown="if(event.key==='Enter'){var p=document.getElementById('loginFamPass');if(p)p.focus();}" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;box-sizing:border-box;" />
+            <input id="loginFamPass" type="password" maxlength="40" placeholder="家庭密码" onkeydown="if(event.key==='Enter')doFamilyPassLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;box-sizing:border-box;" />
+            <button onclick="doFamilyPassLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录</button>
+            <div id="loginFamErr" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;line-height:1.6;"></div>
+            <div onclick="toggleFamilyLoginPanel(0)" style="font-size:13px;color:#9CA3AF;margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline;">← 返回手机号登录</div>
+            <div style="font-size:12px;color:#B45309;margin-top:8px;text-align:center;line-height:1.6;">忘记家庭密码？请用手机号登录后，在「我家 → 修改家庭名称」中重设</div>
         </div>
     </div>
 </div>
@@ -4035,8 +4048,13 @@ body.demo-mode .phone-frame { height: 100%; }
         <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:4px;">家庭住址</div>
         <input id="famInfoAddress" type="text" maxlength="60" placeholder="省市区街道（用于城市饮食匹配）" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:6px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
         <div id="famInfoAddrHint" style="display:none;font-size:11px;color:#9CA3AF;margin-bottom:10px;line-height:1.5;">🔒 家庭住址仅家庭创建者或超级管理员可修改</div>
+        <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:4px;">家庭密码 <span style="font-weight:400;color:#9CA3AF;">（家人凭「家庭名称 + 家庭密码」登录）</span></div>
+        <input id="famInfoPass" type="password" maxlength="40" placeholder="至少 6 位；留空表示不修改" onkeydown="if(event.key==='Enter')saveFamilyInfo()" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:6px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <div id="famInfoPassHint" style="font-size:11px;color:#9CA3AF;margin-bottom:10px;line-height:1.5;">当前已设置家庭密码，家人可直接用家庭名称 + 密码登录</div>
         <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:4px;">家庭 ID</div>
-        <div id="famInfoId" style="padding:10px 14px;font-size:13px;color:#6B7280;background:#F9FAFB;border:1px solid #F3F4F6;border-radius:10px;margin-bottom:14px;word-break:break-all;"></div>
+        <div id="famInfoId" style="padding:10px 14px;font-size:13px;color:#6B7280;background:#F9FAFB;border:1px solid #F3F4F6;border-radius:10px;margin-bottom:10px;word-break:break-all;"></div>
+        <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:4px;">家庭帐号</div>
+        <div id="famInfoAccounts" style="margin-bottom:12px;"></div>
         <button onclick="saveFamilyInfo()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">保存</button>
         <div id="famInfoErr" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;"></div>
         <div onclick="closeFamilyInfoModal()" style="font-size:13px;color:#9CA3AF;margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline;">关闭</div>
@@ -4048,7 +4066,7 @@ body.demo-mode .phone-frame { height: 100%; }
 <!-- ====== V288: 家庭成员账号（绑定手机号一览） ====== -->
 <div id="familyAccountsModal" style="position:fixed;inset:0;z-index:100015;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeFamilyAccountsModal()">
     <div style="background:#fff;border-radius:20px;padding:24px 20px;width:100%;max-width:360px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;max-height:86vh;overflow-y:auto;">
-        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">📱 家庭成员账号</div>
+        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">📱 家庭帐号</div>
         <div id="familyAccountsSub" style="font-size:12px;color:#9CA3AF;text-align:center;margin-bottom:14px;"></div>
         <div id="familyAccountsList"></div>
         <div onclick="closeFamilyAccountsModal()" style="font-size:13px;color:#9CA3AF;margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline;">关闭</div>
@@ -5907,10 +5925,43 @@ function showLoginPage() {
 // 显示创建家庭页（已移除 9/20，保留空实现防止调用报错）
 function showCreateFamilyPage() { return; }
 
-// ====== V287: 手机号 + 模拟验证码 登录/注册（替代邮箱登录） ======
-var MOCK_SMS_CODE = '110211';       // 模拟验证码（未接短信网关）
+// ====== V295: 手机号 + 短信验证码 双轨制登录（验证码由后端 /api/auth/* 下发） ======
 var _loginCodeTimer = null;         // 「获取验证码」倒计时定时器
 var _pendingRegisterPhone = '';     // 待创建家庭的新用户手机号
+var _lastSmsMockCode = '';          // 最近一次后端返回的测试验证码（仅 mock 模式）
+// 测试环境判定：本地调试时把验证码弹窗展示出来，生产环境只提示"已发送"
+var IS_SMS_TEST_ENV = (function () {
+    var h = String(location.hostname || '');
+    return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '';
+})();
+// ?test_mode=true：自动化测试后门（收到验证码后自动填入并登录）
+var SMS_TEST_MODE = /[?&]test_mode=true(?:&|$)/.test(String(location.search || ''));
+// 轻量 SweetAlert 兼容层（不依赖 CDN，离线也能弹窗）
+var Swal = {
+    fire: function (opts) {
+        opts = opts || {};
+        return new Promise(function (resolve) {
+            var old = document.getElementById('smsSwalOverlay');
+            if (old && old.parentNode) old.parentNode.removeChild(old);
+            var ov = document.createElement('div');
+            ov.id = 'smsSwalOverlay';
+            ov.style.cssText = 'position:fixed;inset:0;z-index:100060;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;';
+            var box = document.createElement('div');
+            box.style.cssText = 'background:#fff;border-radius:18px;padding:22px 20px 16px;width:100%;max-width:320px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;text-align:center;';
+            var iconHtml = opts.icon === 'info' || !opts.icon ? '<div style="font-size:38px;line-height:1;margin-bottom:10px;">💬</div>' : '';
+            box.innerHTML = iconHtml
+                + '<div style="font-size:17px;font-weight:800;color:#7A4A21;margin-bottom:8px;">' + escapeHtml(String(opts.title || '')) + '</div>'
+                + '<div style="font-size:14px;color:#4B5563;line-height:1.7;word-break:break-all;">' + escapeHtml(String(opts.text || '')) + '</div>';
+            var btn = document.createElement('button');
+            btn.textContent = '确定';
+            btn.style.cssText = 'width:100%;margin-top:16px;padding:12px;font-size:15px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:10px;cursor:pointer;';
+            btn.onclick = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); resolve({ isConfirmed: true }); };
+            box.appendChild(btn);
+            ov.appendChild(box);
+            document.body.appendChild(ov);
+        });
+    }
+};
 
 // 已注册账号列表（registeredUsers，手机号唯一）
 function getRegisteredUsers() {
@@ -5950,15 +6001,61 @@ function _loginPhoneClearErr() {
     var eb = document.getElementById('loginPhoneErr');
     if (eb) { eb.textContent = ''; eb.style.display = 'none'; }
 }
-// 获取验证码：校验手机号 → 60 秒倒计时 → Toast 提示模拟验证码
-function sendLoginCode() {
+// 获取验证码：校验手机号 → 调后端 /api/auth/send-sms → 60 秒倒计时
+async function sendLoginCode() {
     _loginPhoneClearErr();
     var phone = String(((document.getElementById('loginPhone') || {}).value) || '').replace(/\D/g, '');
     if (!/^1\d{10}$/.test(phone)) { showToast('请输入正确的 11 位手机号'); _loginPhoneErr('请输入正确的 11 位手机号'); return; }
     if (_loginCodeTimer) return;   // 倒计时中不重复发送
-    showToast('【模拟】验证码已发送：' + MOCK_SMS_CODE);
+    var btn = document.getElementById('loginCodeBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '发送中…'; btn.style.color = '#9CA3AF'; btn.style.cursor = 'not-allowed'; }
+    function resetBtn() {
+        if (btn) { btn.disabled = false; btn.textContent = '获取验证码'; btn.style.color = '#9A3412'; btn.style.cursor = 'pointer'; }
+    }
+    var data = null;
+    try {
+        var res = await fetch('/api/auth/send-sms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: phone })
+        });
+        data = await res.json();
+    } catch (e) {
+        resetBtn();
+        showToast('网络异常，验证码发送失败，请稍后重试');
+        _loginPhoneErr('网络异常，验证码发送失败');
+        return;
+    }
+    if (!data || !data.success) {
+        resetBtn();
+        var msg = (data && data.message) || '验证码发送失败，请稍后重试';
+        showToast(msg);
+        _loginPhoneErr(msg);
+        return;
+    }
+    _startLoginCodeCountdown();
+    _lastSmsMockCode = String(data.mockCode || '');
+    if (IS_SMS_TEST_ENV && _lastSmsMockCode) {
+        Swal.fire({ title: '【测试环境】', text: '您的验证码是：' + _lastSmsMockCode, icon: 'info' });
+    } else if (String(data.provider || '') === 'mock' && _lastSmsMockCode) {
+        // 兜底：后端尚未接入真实短信网关（provider=mock），若不展示验证码用户将无法登录
+        Swal.fire({ title: '【模拟短信】', text: '尚未接入短信网关，本次验证码：' + _lastSmsMockCode, icon: 'info' });
+    } else {
+        showToast('验证码已发送至您的手机');
+    }
+    // 自动化测试后门：?test_mode=true 时自动回填并登录
+    if (SMS_TEST_MODE && _lastSmsMockCode) {
+        var ci = document.getElementById('loginCode');
+        if (ci) ci.value = _lastSmsMockCode;
+        setTimeout(function () { doPhoneLogin(); }, 300);
+    }
+}
+// 60 秒重发倒计时
+function _startLoginCodeCountdown() {
+    if (_loginCodeTimer) { clearTimeout(_loginCodeTimer); _loginCodeTimer = null; }
     var btn = document.getElementById('loginCodeBtn');
     var left = 60;
+    if (btn) { btn.disabled = true; btn.textContent = left + ' 秒后重发'; btn.style.color = '#9CA3AF'; btn.style.cursor = 'not-allowed'; }
     function tick() {
         left--;
         if (left <= 0) {
@@ -5969,17 +6066,35 @@ function sendLoginCode() {
         if (btn) btn.textContent = left + ' 秒后重发';
         _loginCodeTimer = setTimeout(tick, 1000);
     }
-    if (btn) { btn.disabled = true; btn.textContent = '60 秒后重发'; btn.style.color = '#9CA3AF'; btn.style.cursor = 'not-allowed'; }
     _loginCodeTimer = setTimeout(tick, 1000);
 }
-// 登录/注册：校验验证码 → 已注册则登录，未注册则弹「创建家庭」
-function doPhoneLogin() {
+// 登录/注册：调后端 /api/auth/verify-sms 校验 → 已注册则登录，未注册则弹「创建家庭」
+async function doPhoneLogin() {
     _loginPhoneClearErr();
     var phone = String(((document.getElementById('loginPhone') || {}).value) || '').replace(/\D/g, '');
     var code = String(((document.getElementById('loginCode') || {}).value) || '').replace(/\D/g, '');
     if (!/^1\d{10}$/.test(phone)) { showToast('请输入正确的 11 位手机号'); _loginPhoneErr('请输入正确的 11 位手机号'); return; }
     if (code.length !== 6) { showToast('请输入 6 位验证码'); _loginPhoneErr('请输入 6 位验证码'); return; }
-    if (code !== MOCK_SMS_CODE) { showToast('验证码错误'); _loginPhoneErr('验证码错误，请重新输入'); return; }
+    var data = null;
+    try {
+        var res = await fetch('/api/auth/verify-sms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: phone, code: code })
+        });
+        data = await res.json();
+    } catch (e) {
+        showToast('网络异常，登录失败，请稍后重试');
+        _loginPhoneErr('网络异常，登录失败');
+        return;
+    }
+    if (!data || !data.success) {
+        var msg = (data && data.message) || '验证码错误';
+        showToast(msg);
+        _loginPhoneErr(msg);
+        return;
+    }
+    try { localStorage.setItem('smsToken', String(data.token || '')); } catch (e) {}
     var user = findRegisteredUser(phone);
     if (user) { _loginByAccount(user); return; }
     _pendingRegisterPhone = phone;
@@ -6011,6 +6126,101 @@ function _loginByAccount(account) {
     // 家庭命名空间变化 → 整页重载，按新家庭前缀重新加载本地数据
     if (getFamilyId() !== window.__bootFamilyId) {
         setTimeout(function() { try { location.reload(); } catch (e) {} }, 500);
+    }
+}
+// ====== V294: 家庭名称 + 家庭密码登录（家人免手机号） ======
+function _famNameKey(n) { return String(n || '').replace(/[\s\u3000]+/g, '').toLowerCase(); }
+function getFamilyCreds() {
+    try {
+        var a = JSON.parse(localStorage.getItem('familyCreds') || '[]');
+        return Array.isArray(a) ? a : [];
+    } catch (e) { return []; }
+}
+function _saveFamilyCreds(a) { try { localStorage.setItem('familyCreds', JSON.stringify(a)); } catch (e) {} }
+function findFamilyCredByName(name) {
+    var k = _famNameKey(name);
+    if (!k) return null;
+    var a = getFamilyCreds();
+    for (var i = 0; i < a.length; i++) {
+        if (a[i] && _famNameKey(a[i].familyName) === k) return a[i];
+    }
+    return null;
+}
+function findFamilyCredById(fid) {
+    var a = getFamilyCreds();
+    for (var i = 0; i < a.length; i++) {
+        if (a[i] && String(a[i].familyId) === String(fid)) return a[i];
+    }
+    return null;
+}
+// 设置/修改家庭密码（按 familyId upsert，并清理同名旧记录）
+function setFamilyPassword(fid, fname, pwd) {
+    var a = getFamilyCreds();
+    var hit = findFamilyCredById(fid);
+    if (!hit) { hit = { familyId: fid, familyName: fname, password: pwd, updatedAt: Date.now() }; a.push(hit); }
+    else { hit.familyName = fname; hit.password = pwd; hit.updatedAt = Date.now(); }
+    var k = _famNameKey(fname);
+    var out = [];
+    var seen = {};
+    a.forEach(function (x) {
+        if (!x) return;
+        var xk = _famNameKey(x.familyName);
+        if (x !== hit && (String(x.familyId) === String(fid) || xk === k)) return;   // 旧名/旧记录剔除
+        if (seen[xk]) return;
+        seen[xk] = 1;
+        out.push(x);
+    });
+    _saveFamilyCreds(out);
+}
+function toggleFamilyLoginPanel(show) {
+    var p = document.getElementById('loginPanelPhone');
+    var f = document.getElementById('loginPanelFamily');
+    if (!p || !f) return;
+    p.style.display = show ? 'none' : '';
+    f.style.display = show ? '' : 'none';
+    var err = document.getElementById('loginFamErr');
+    if (err) { err.textContent = ''; err.style.display = 'none'; }
+    if (show) { var i = document.getElementById('loginFamName'); if (i) i.focus(); }
+}
+function _loginFamErr(msg) {
+    var e = document.getElementById('loginFamErr');
+    if (e) { e.textContent = msg; e.style.display = 'block'; }
+}
+function doFamilyPassLogin() {
+    var e0 = document.getElementById('loginFamErr');
+    if (e0) { e0.textContent = ''; e0.style.display = 'none'; }
+    var name = String(((document.getElementById('loginFamName') || {}).value) || '').trim();
+    var pwd = String(((document.getElementById('loginFamPass') || {}).value) || '');
+    if (!name) { showToast('请输入家庭名称'); _loginFamErr('请输入家庭名称'); return; }
+    if (!pwd) { showToast('请输入家庭密码'); _loginFamErr('请输入家庭密码'); return; }
+    var rec = findFamilyCredByName(name);
+    if (!rec) { _loginFamErr('未找到该家庭，或该家庭尚未设置家庭密码'); return; }
+    if (String(rec.password) !== pwd) { _loginFamErr('家庭密码错误'); return; }
+    _applyFamilySession(rec);
+}
+function _applyFamilySession(rec) {
+    var fid = String(rec.familyId || '');
+    var fname = rec.familyName || '我家';
+    // 家庭创建者手机号（用于「家庭帐号」里标记创建者）
+    var ownerPhone = '';
+    try {
+        var us = getRegisteredUsers();
+        for (var i = 0; i < us.length; i++) {
+            if (us[i] && String(us[i].familyId) === fid && (us[i].role === 'owner' || !us[i].role)) { ownerPhone = String(us[i].phone); break; }
+        }
+    } catch (e) {}
+    setLoginUser({ id: 'family_' + fid, familyId: fid, name: fname, familyName: fname, familySession: true, localAccount: true, familyLogin: true });
+    setFamilyId(fid);
+    setLoginFamily({ id: fid, name: fname, owner_id: ownerPhone, ownerPhone: ownerPhone });
+    try { localStorage.setItem('familyName_' + fid, fname); } catch (e) {}
+    try {
+        localStorage.setItem('currentAccount', JSON.stringify({ phone: '', familyId: fid, familyName: fname, familyLogin: true, loginAt: Date.now() }));
+    } catch (e) {}
+    updateHomeAuthBtn();
+    showAppRoot();
+    showToast('欢迎回来，' + fname);
+    if (getFamilyId() !== window.__bootFamilyId) {
+        setTimeout(function () { try { location.reload(); } catch (e) {} }, 500);
     }
 }
 // 新用户创建家庭弹窗
@@ -6250,10 +6460,51 @@ function openFamilyInfoModal() {
     }
     var hint = document.getElementById('famInfoAddrHint');
     if (hint) hint.style.display = canAddr ? 'none' : 'block';
+    // V294: 家庭密码（创建者/超管可设置；用于家人「家庭名称 + 密码」登录）
+    var p = document.getElementById('famInfoPass');
+    var cred = findFamilyCredById(getFamilyId());
+    if (p) {
+        p.value = '';
+        p.disabled = !canAddr;
+        p.style.background = canAddr ? '#FFFBEB' : '#F3F4F6';
+        p.style.color = canAddr ? '#1F2937' : '#9CA3AF';
+        p.placeholder = canAddr ? '至少 6 位；留空表示不修改' : '仅家庭创建者或超级管理员可设置';
+    }
+    var ph = document.getElementById('famInfoPassHint');
+    if (ph) {
+        ph.textContent = cred && cred.password ? '当前已设置家庭密码，家人可直接用家庭名称 + 密码登录'
+            : (canAddr ? '尚未设置家庭密码，家人暂时只能用自己的手机号登录' : '🔒 仅家庭创建者或超级管理员可设置家庭密码');
+        ph.style.color = cred && cred.password ? '#059669' : '#9CA3AF';
+    }
     var i = document.getElementById('famInfoId');
     if (i) i.textContent = getFamilyId() || '未设置';
+    // V293: 家庭帐号直接内嵌展示，无需再点按钮
+    var ab = document.getElementById('famInfoAccounts');
+    if (ab) ab.innerHTML = _familyAccountsHtml();
     var eb = document.getElementById('famInfoErr');
     if (eb) { eb.textContent = ''; eb.style.display = 'none'; }
+}
+// V293: 家庭帐号卡片（家庭信息弹窗内直接渲染；超管文库「家庭帐号」弹窗复用同一渲染）
+function _familyAccountsHtml() {
+    var fid = getFamilyId();
+    var users = getRegisteredUsers().filter(function(u) { return u && String(u.familyId) === String(fid); });
+    if (!users.length) {
+        return '<div style="text-align:center;padding:14px;color:#9CA3AF;font-size:13px;">暂无绑定手机号<br><span style="font-size:12px;">点「🔗 邀请家人」生成邀请码，家人注册时输入即可加入</span></div>';
+    }
+    var curPhone = String(((getLoginUser() || {}).phone) || '');
+    return users.map(function(u) {
+        var owner = (String(u.phone) === curPhone);
+        var when = u.joinedAt || u.createdAt || 0;
+        var whenStr = when ? (new Date(when).getFullYear() + '-' + String(new Date(when).getMonth() + 1).padStart(2, '0') + '-' + String(new Date(when).getDate()).padStart(2, '0')) : '';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;margin-bottom:8px;">'
+            + '<span style="font-size:17px;">📱</span>'
+            + '<div style="flex:1;min-width:0;">'
+            + '<div style="font-size:14px;font-weight:700;color:#1F2937;letter-spacing:0.5px;">' + escapeHtml(String(u.phone)) + '</div>'
+            + '<div style="font-size:12px;color:#9CA3AF;">' + (u.role === 'member' ? '家庭成员' : '家庭创建者') + (whenStr ? ' · ' + whenStr + ' 加入' : '') + '</div>'
+            + '</div>'
+            + (owner ? '<span style="font-size:11px;color:#059669;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:999px;padding:2px 8px;">当前账号</span>' : '')
+            + '</div>';
+    }).join('');
 }
 function closeFamilyInfoModal() {
     var m = document.getElementById('familyInfoModal');
@@ -6265,8 +6516,10 @@ function saveFamilyInfo() {
     var name = String(((document.getElementById('famInfoName') || {}).value || '').trim());
     if (!name) { showErr('家庭名称不能为空'); return; }
     var addr = String(((document.getElementById('famInfoAddress') || {}).value || '').trim());
+    var newPass = String(((document.getElementById('famInfoPass') || {}).value || ''));
     var fid = getFamilyId();
     if (!fid) { showErr('当前家庭 ID 缺失，无法保存'); return; }
+    if (newPass && newPass.length < 6) { showErr('家庭密码至少 6 位'); return; }
     // 1) 家庭名缓存（首页右上角、超管判定均读这里）
     try {
         var fam = getLoginFamily() || {};
@@ -6297,6 +6550,15 @@ function saveFamilyInfo() {
         if (invites[code] && String(invites[code].familyId) === String(fid)) invites[code].familyName = name;
     }
     saveFamilyInvites(invites);
+    // 4) 家庭密码（家庭名称改名后同步更新凭据里的名字，保证家人用新名可登录）
+    if (newPass && _canEditFamilyAddress()) setFamilyPassword(fid, name, newPass);
+    else {
+        var arr = getFamilyCreds();
+        for (var ci = 0; ci < arr.length; ci++) {
+            if (arr[ci] && String(arr[ci].familyId) === String(fid)) arr[ci].familyName = name;
+        }
+        _saveFamilyCreds(arr);
+    }
     closeFamilyInfoModal();
     showToast('家庭信息已保存');
     try { updateHomeAuthBtn(); } catch (e) {}
@@ -36251,12 +36513,9 @@ function renderFamily() {
     // ============ V288: 邀请家人 / 家庭成员账号（登录后可见） ============
     // ============ V290: 新增「账号资料 / 家庭信息」，普通用户也可改昵称与家庭名称 ============
     familyList.insertAdjacentHTML('beforeend', `
-        <div style="display:flex;gap:8px;margin-bottom:8px;">
-            <button type="button" onclick="openInviteFamilyModal()" style="flex:1 1 0;min-width:0;padding:10px 8px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:13px;font-weight:700;color:#C2410C;cursor:pointer;white-space:nowrap;">🔗 邀请家人</button>
-            <button type="button" onclick="openFamilyAccountsModal()" style="flex:1 1 0;min-width:0;padding:10px 8px;background:#fff;border:1px solid #F3F4F6;border-radius:12px;font-size:13px;font-weight:700;color:#4B5563;cursor:pointer;white-space:nowrap;">📱 家庭成员账号</button>
-        </div>
         <div style="display:flex;gap:8px;margin-bottom:12px;">
-            <button type="button" onclick="openFamilyInfoModal()" style="flex:1 1 0;min-width:0;padding:10px 8px;background:#fff;border:1px solid #FED7AA;border-radius:12px;font-size:13px;font-weight:700;color:#C2410C;cursor:pointer;white-space:nowrap;">🏠 修改家庭名称</button>
+            <button type="button" onclick="openInviteFamilyModal()" style="flex:1 1 0;min-width:0;padding:10px 8px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:13px;font-weight:700;color:#C2410C;cursor:pointer;white-space:nowrap;">🔗 邀请家人</button>
+            <button type="button" onclick="openFamilyInfoModal()" style="flex:1 1 0;min-width:0;padding:10px 8px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:13px;font-weight:700;color:#C2410C;cursor:pointer;white-space:nowrap;">🏠 修改家庭名称</button>
         </div>
     `);
     // V162: 膳食日记/我的外食/我的复刻/我的创作 四大模块 2×2 一级入口卡
