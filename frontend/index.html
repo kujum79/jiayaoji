@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V287-20261028';
+        var APP_VER = 'V288-20261028';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4002,11 +4002,53 @@ body.demo-mode .phone-frame { height: 100%; }
 <div id="registerFamilyModal" style="position:fixed;inset:0;z-index:100014;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeRegisterFamilyModal()">
     <div style="background:#fff;border-radius:20px;padding:24px 20px;width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
         <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">🏠 创建家庭</div>
-        <div style="font-size:13px;color:#9CA3AF;margin-bottom:16px;text-align:center;">手机号 <span id="regFamilyPhone" style="color:#9A3412;font-weight:600;"></span> 尚未注册，请先创建家庭</div>
+        <div style="font-size:13px;color:#9CA3AF;margin-bottom:16px;text-align:center;">手机号 <span id="regFamilyPhone" style="color:#9A3412;font-weight:600;"></span> 尚未注册，请创建新家庭或加入已有家庭</div>
         <input id="regFamilyNameOnly" type="text" maxlength="20" placeholder="家庭名称（如：三仁佳欢）" onkeydown="if(event.key==='Enter')submitRegisterFamily()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;box-sizing:border-box;" />
         <button onclick="submitRegisterFamily()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">创建并进入</button>
+        <div style="display:flex;align-items:center;gap:8px;margin:16px 0 12px;"><span style="flex:1;height:1px;background:#F3F4F6;"></span><span style="font-size:12px;color:#C7C7CC;">或加入已有家庭</span><span style="flex:1;height:1px;background:#F3F4F6;"></span></div>
+        <input id="regInviteCode" type="text" maxlength="12" autocomplete="off" placeholder="输入家庭邀请码（如 F20231026）" oninput="this.value=String(this.value||'').toUpperCase().replace(/[^0-9A-Z]/g,'')" onkeydown="if(event.key==='Enter')submitJoinFamily()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;letter-spacing:1px;box-sizing:border-box;" />
+        <button onclick="submitJoinFamily()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#C2410C;background:#fff;border:1px solid #FED7AA;border-radius:12px;cursor:pointer;">输入邀请码加入已有家庭</button>
         <div id="regFamilyNameErr" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;line-height:1.6;"></div>
         <div onclick="closeRegisterFamilyModal()" style="font-size:13px;color:#9CA3AF;margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline;">返回</div>
+    </div>
+</div>
+
+<!-- ====== V288: 邀请家人（家庭邀请码） ====== -->
+<div id="inviteFamilyModal" style="position:fixed;inset:0;z-index:100015;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeInviteFamilyModal()">
+    <div style="background:#fff;border-radius:20px;padding:24px 20px;width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
+        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">🔗 邀请家人</div>
+        <div style="font-size:13px;color:#9CA3AF;margin-bottom:14px;text-align:center;">把邀请码发给家人，注册时输入即可加入本家庭</div>
+        <div id="inviteFamilyCode" style="font-size:26px;font-weight:800;letter-spacing:2px;color:#C2410C;background:#FFF7ED;border:1px dashed #FED7AA;border-radius:12px;padding:16px 8px;text-align:center;margin-bottom:10px;">—</div>
+        <div id="inviteFamilyName" style="font-size:12px;color:#9CA3AF;text-align:center;margin-bottom:14px;"></div>
+        <button onclick="copyInviteFamilyCode()" style="width:100%;padding:13px;font-size:15px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;margin-bottom:8px;">📋 复制邀请码</button>
+        <button onclick="regenerateInviteFamilyCode()" style="width:100%;padding:11px;font-size:13px;font-weight:600;color:#9A3412;background:#fff;border:1px solid #FED7AA;border-radius:12px;cursor:pointer;">🔄 重新生成（旧邀请码立即失效）</button>
+        <div onclick="closeInviteFamilyModal()" style="font-size:13px;color:#9CA3AF;margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline;">关闭</div>
+    </div>
+</div>
+
+<!-- ====== V288: 家庭信息（超级管理员编辑） ====== -->
+<div id="familyInfoModal" style="position:fixed;inset:0;z-index:100015;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeFamilyInfoModal()">
+    <div style="background:#fff;border-radius:20px;padding:24px 20px;width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
+        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:14px;text-align:center;">🏠 家庭信息</div>
+        <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:4px;">家庭名称</div>
+        <input id="famInfoName" type="text" maxlength="20" placeholder="家庭名称" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:4px;">家庭住址</div>
+        <input id="famInfoAddress" type="text" maxlength="60" placeholder="省市区街道（用于城市饮食匹配）" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
+        <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:4px;">家庭 ID</div>
+        <div id="famInfoId" style="padding:10px 14px;font-size:13px;color:#6B7280;background:#F9FAFB;border:1px solid #F3F4F6;border-radius:10px;margin-bottom:14px;word-break:break-all;"></div>
+        <button onclick="saveFamilyInfo()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">保存</button>
+        <div id="famInfoErr" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;"></div>
+        <div onclick="closeFamilyInfoModal()" style="font-size:13px;color:#9CA3AF;margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline;">关闭</div>
+    </div>
+</div>
+
+<!-- ====== V288: 家庭成员账号（绑定手机号一览） ====== -->
+<div id="familyAccountsModal" style="position:fixed;inset:0;z-index:100015;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeFamilyAccountsModal()">
+    <div style="background:#fff;border-radius:20px;padding:24px 20px;width:100%;max-width:360px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;max-height:86vh;overflow-y:auto;">
+        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">📱 家庭成员账号</div>
+        <div id="familyAccountsSub" style="font-size:12px;color:#9CA3AF;text-align:center;margin-bottom:14px;"></div>
+        <div id="familyAccountsList"></div>
+        <div onclick="closeFamilyAccountsModal()" style="font-size:13px;color:#9CA3AF;margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline;">关闭</div>
     </div>
 </div>
 
@@ -6017,6 +6059,246 @@ function submitRegisterFamily() {
     if (getFamilyId() !== window.__bootFamilyId) {
         setTimeout(function() { try { location.reload(); } catch (e) {} }, 500);
     }
+}
+
+// ====== V288: 家庭邀请码 / 加入已有家庭 / 家庭信息 ======
+// 邀请码表：{ "F20231026A": { familyId, familyName, createdAt, createdBy } }（全局，跨家庭共用一张表）
+function getFamilyInvites() {
+    try {
+        var o = JSON.parse(localStorage.getItem('familyInvites') || '{}');
+        return (o && typeof o === 'object') ? o : {};
+    } catch (e) { return {}; }
+}
+function saveFamilyInvites(o) {
+    try { localStorage.setItem('familyInvites', JSON.stringify(o || {})); } catch (e) {}
+}
+// 当前家庭显示名（与首页右上角、家庭缓存同口径）
+function _curFamilyName() {
+    try {
+        var fam = getLoginFamily();
+        if (fam && fam.name) return String(fam.name);
+    } catch (e) {}
+    try {
+        var fid = getFamilyId();
+        if (fid) {
+            var n = localStorage.getItem('familyName_' + fid);
+            if (n) return String(n);
+        }
+    } catch (e) {}
+    return '我家';
+}
+// 生成唯一邀请码：F + 年月日 + 2 位随机（如 F2026102837）
+function _genInviteCode() {
+    var invites = getFamilyInvites();
+    var d = new Date();
+    var base = 'F' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    for (var i = 0; i < 200; i++) {
+        var code = base + String(Math.floor(Math.random() * 90 + 10));
+        if (!invites[code]) return code;
+    }
+    return base + String(Date.now()).slice(-3);
+}
+function _findInviteByFamily(fid) {
+    var invites = getFamilyInvites();
+    for (var code in invites) {
+        if (invites[code] && String(invites[code].familyId) === String(fid)) return code;
+    }
+    return '';
+}
+// 确保当前家庭存在有效邀请码，返回 code
+function ensureFamilyInviteCode() {
+    var fid = getFamilyId();
+    if (!fid) return '';
+    var code = _findInviteByFamily(fid);
+    if (code) return code;
+    code = _genInviteCode();
+    var invites = getFamilyInvites();
+    invites[code] = { familyId: fid, familyName: _curFamilyName(), createdAt: Date.now(), createdBy: String(((getLoginUser() || {}).phone) || '') };
+    saveFamilyInvites(invites);
+    return code;
+}
+function openInviteFamilyModal() {
+    if (!isLogined() || !getFamilyId()) { showToast('请先登录'); return; }
+    var code = ensureFamilyInviteCode();
+    var m = document.getElementById('inviteFamilyModal');
+    if (m) m.style.display = 'flex';
+    var cEl = document.getElementById('inviteFamilyCode');
+    if (cEl) cEl.textContent = code || '—';
+    var nEl = document.getElementById('inviteFamilyName');
+    if (nEl) nEl.textContent = code ? ('家庭：' + _curFamilyName() + ' · 邀请码长期有效') : '当前家庭缺少 ID，无法生成邀请码';
+}
+function closeInviteFamilyModal() {
+    var m = document.getElementById('inviteFamilyModal');
+    if (m) m.style.display = 'none';
+}
+function _copyText(text) {
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch (e) {}
+    try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        return true;
+    } catch (e) { return false; }
+}
+function copyInviteFamilyCode() {
+    var el = document.getElementById('inviteFamilyCode');
+    var code = String((el && el.textContent) || '').trim();
+    if (!code || code === '—') { showToast('邀请码尚未生成'); return; }
+    _copyText(code);
+    showToast('邀请码已复制：' + code);
+}
+function regenerateInviteFamilyCode() {
+    var fid = getFamilyId();
+    if (!fid) return;
+    var invites = getFamilyInvites();
+    for (var code in invites) {
+        if (invites[code] && String(invites[code].familyId) === String(fid)) delete invites[code];
+    }
+    saveFamilyInvites(invites);
+    var newCode = ensureFamilyInviteCode();
+    var cEl = document.getElementById('inviteFamilyCode');
+    if (cEl) cEl.textContent = newCode || '—';
+    showToast('已重新生成邀请码');
+}
+// 注册弹窗里「输入邀请码加入已有家庭」
+function submitJoinFamily() {
+    var phone = _pendingRegisterPhone;
+    var eb = document.getElementById('regFamilyNameErr');
+    function showErr(msg) { showToast(msg); if (eb) { eb.textContent = msg; eb.style.display = 'block'; } }
+    if (!/^1\d{10}$/.test(String(phone || ''))) { closeRegisterFamilyModal(); showLoginPage(); return; }
+    var inp = document.getElementById('regInviteCode');
+    var code = String((inp && inp.value) || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+    if (!code) { showErr('请输入家庭邀请码'); return; }
+    var invites = getFamilyInvites();
+    var inv = invites[code];
+    if (!inv || !inv.familyId) { showErr('邀请码无效或已失效，请向家人确认'); return; }
+    // 同一手机号已有账号则改绑到目标家庭；否则新建并直接绑定（手机号唯一）
+    var account = findRegisteredUser(phone);
+    var list = getRegisteredUsers().filter(function(u) { return !u || String(u.phone) !== phone; });
+    if (!account) {
+        account = { phone: phone, password: '', familyId: inv.familyId, familyName: inv.familyName || '我家', createdAt: Date.now(), joinedAt: Date.now(), role: 'member' };
+    } else {
+        account.familyId = inv.familyId;
+        account.familyName = inv.familyName || account.familyName || '我家';
+        account.joinedAt = Date.now();
+        account.role = 'member';
+    }
+    list.push(account);
+    saveRegisteredUsers(list);
+    _pendingRegisterPhone = '';
+    closeRegisterFamilyModal();
+    _applyAccountSession(account);
+    updateHomeAuthBtn();
+    showAppRoot();
+    showToast('已加入「' + (inv.familyName || '家庭') + '」');
+    if (getFamilyId() !== window.__bootFamilyId) {
+        setTimeout(function() { try { location.reload(); } catch (e) {} }, 500);
+    }
+}
+
+// ====== V288: 家庭信息（超级管理员编辑家庭名称 / 家庭住址） ======
+function openFamilyInfoModal() {
+    var m = document.getElementById('familyInfoModal');
+    if (!m) return;
+    m.style.display = 'flex';
+    var n = document.getElementById('famInfoName');
+    if (n) n.value = _curFamilyName();
+    var a = document.getElementById('famInfoAddress');
+    if (a) a.value = (typeof familyHomeAddress !== 'undefined' ? familyHomeAddress : '') || lsGet('familyHomeAddress') || '';
+    var i = document.getElementById('famInfoId');
+    if (i) i.textContent = getFamilyId() || '未设置';
+    var eb = document.getElementById('famInfoErr');
+    if (eb) { eb.textContent = ''; eb.style.display = 'none'; }
+}
+function closeFamilyInfoModal() {
+    var m = document.getElementById('familyInfoModal');
+    if (m) m.style.display = 'none';
+}
+function saveFamilyInfo() {
+    var eb = document.getElementById('famInfoErr');
+    function showErr(msg) { showToast(msg); if (eb) { eb.textContent = msg; eb.style.display = 'block'; } }
+    var name = String(((document.getElementById('famInfoName') || {}).value || '').trim());
+    if (!name) { showErr('家庭名称不能为空'); return; }
+    var addr = String(((document.getElementById('famInfoAddress') || {}).value || '').trim());
+    var fid = getFamilyId();
+    if (!fid) { showErr('当前家庭 ID 缺失，无法保存'); return; }
+    // 1) 家庭名缓存（首页右上角、超管判定均读这里）
+    try {
+        var fam = getLoginFamily() || {};
+        fam.id = fam.id || fid;
+        fam.name = name;
+        setLoginFamily(fam);
+    } catch (e) {}
+    try { localStorage.setItem('familyName_' + fid, name); } catch (e) {}
+    try {
+        var ca = JSON.parse(localStorage.getItem('currentAccount') || 'null');
+        if (ca) { ca.familyName = name; localStorage.setItem('currentAccount', JSON.stringify(ca)); }
+    } catch (e) {}
+    try {
+        var lu = getLoginUser();
+        if (lu) { lu.name = name; lu.familyName = name; setLoginUser(lu); }
+    } catch (e) {}
+    // 2) 家庭住址（同步内存 + 本地键，供城市饮食匹配）
+    familyHomeAddress = addr;
+    try { lsSet('familyHomeAddress', addr); } catch (e) {}
+    // 3) 本家庭所有账号与邀请码记录的名称同步
+    var users = getRegisteredUsers();
+    users.forEach(function(u) { if (u && String(u.familyId) === String(fid)) u.familyName = name; });
+    saveRegisteredUsers(users);
+    var invites = getFamilyInvites();
+    for (var code in invites) {
+        if (invites[code] && String(invites[code].familyId) === String(fid)) invites[code].familyName = name;
+    }
+    saveFamilyInvites(invites);
+    closeFamilyInfoModal();
+    showToast('家庭信息已保存');
+    try { updateHomeAuthBtn(); } catch (e) {}
+    try { renderFamily(); } catch (e) {}
+}
+
+// ====== V288: 家庭成员账号（本 familyId 下绑定的手机号） ======
+function openFamilyAccountsModal() {
+    var m = document.getElementById('familyAccountsModal');
+    if (!m) return;
+    m.style.display = 'flex';
+    var fid = getFamilyId();
+    var users = getRegisteredUsers().filter(function(u) { return u && String(u.familyId) === String(fid); });
+    var sub = document.getElementById('familyAccountsSub');
+    if (sub) sub.textContent = _curFamilyName() + ' · 已绑定 ' + users.length + ' 个手机号';
+    var box = document.getElementById('familyAccountsList');
+    if (!box) return;
+    if (!users.length) {
+        box.innerHTML = '<div style="text-align:center;padding:18px;color:#9CA3AF;font-size:13px;">暂无绑定手机号<br><span style="font-size:12px;">点「🔗 邀请家人」生成邀请码，家人注册时输入即可加入</span></div>';
+        return;
+    }
+    var curPhone = String(((getLoginUser() || {}).phone) || '');
+    box.innerHTML = users.map(function(u) {
+        var owner = (String(u.phone) === curPhone);
+        var when = u.joinedAt || u.createdAt || 0;
+        var whenStr = when ? (new Date(when).getFullYear() + '-' + String(new Date(when).getMonth() + 1).padStart(2, '0') + '-' + String(new Date(when).getDate()).padStart(2, '0')) : '';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:11px 12px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;margin-bottom:8px;">'
+            + '<span style="font-size:18px;">📱</span>'
+            + '<div style="flex:1;min-width:0;">'
+            + '<div style="font-size:15px;font-weight:700;color:#1F2937;letter-spacing:0.5px;">' + escapeHtml(String(u.phone)) + '</div>'
+            + '<div style="font-size:12px;color:#9CA3AF;">' + (u.role === 'member' ? '家庭成员' : '家庭创建者') + (whenStr ? ' · ' + whenStr + ' 加入' : '') + '</div>'
+            + '</div>'
+            + (owner ? '<span style="font-size:11px;color:#059669;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:999px;padding:2px 8px;">当前账号</span>' : '')
+            + '</div>';
+    }).join('');
+}
+function closeFamilyAccountsModal() {
+    var m = document.getElementById('familyAccountsModal');
+    if (m) m.style.display = 'none';
 }
 
 // ====== 合并注册弹窗（邮箱注册 + 创建家庭 一次完成） ======
@@ -35929,6 +36211,13 @@ function renderFamily() {
         var dgAddBtn = document.getElementById('addDiningGroupBtn');
         if (dgAddBtn) dgAddBtn.addEventListener('click', function() { _openAddSubGroupModal(); });
     })();
+    // ============ V288: 邀请家人 / 家庭成员账号（登录后可见） ============
+    familyList.insertAdjacentHTML('beforeend', `
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <button type="button" onclick="openInviteFamilyModal()" style="flex:1 1 0;min-width:0;padding:10px 8px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:13px;font-weight:700;color:#C2410C;cursor:pointer;white-space:nowrap;">🔗 邀请家人</button>
+            <button type="button" onclick="openFamilyAccountsModal()" style="flex:1 1 0;min-width:0;padding:10px 8px;background:#fff;border:1px solid #F3F4F6;border-radius:12px;font-size:13px;font-weight:700;color:#4B5563;cursor:pointer;white-space:nowrap;">📱 家庭成员账号</button>
+        </div>
+    `);
     // V162: 膳食日记/我的外食/我的复刻/我的创作 四大模块 2×2 一级入口卡
     function _renderDiaryTopCard() {
         var weekCnt = 0;
@@ -36040,6 +36329,7 @@ function renderFamily() {
             <div class="member-info">
                 <div class="detail"><span style="font-weight:500;color:#374151;">👪 小家</span> ${constitution ? '<span class="constitution-tag" style="margin-left:0;margin-right:6px;">' + escapeHtml(constitution) + '</span>' : ''}口味：${selMember.taste || ''}</div>
                 <div class="detail" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><select id="familyMemberSelector" style="padding:2px 5px;border:1px solid #FED7AA;border-radius:6px;font-size:12px;color:#C2410C;background:#FFFBEB;cursor:pointer;outline:none;max-width:58px;">${xiaojiaMembers.map(m => `<option value="${escapeHtml(m.name)}" ${m.name === selectedFamilyMemberName ? 'selected' : ''}>${escapeHtml(m.name)}${m.role === 'admin' ? ' 🛡️' : ''}</option>`).join('')}</select><span>饮食要求：${selMember.dietaryPreference || '未填写'}</span></div>
+                <div class="detail" style="font-size:12px;color:#6B7280;">📱 手机号：${selMember.phone ? escapeHtml(selMember.phone) : '<span style="color:#9CA3AF;">未绑定</span>'}</div>
                 ${_memberPreferenceSummary(selMember) ? '<div class="detail" style="font-size:12px;color:#9A3412;background:#FFF7ED;border-radius:6px;padding:3px 8px;margin-top:2px;">🍽️ ' + escapeHtml(_memberPreferenceSummary(selMember)) + '</div>' : ''}
             </div>
             <div style="display:flex;gap:6px;align-items:center;">
@@ -36097,6 +36387,8 @@ window.editMemberCard = function(id) {
                             ${diningGroups.filter(g => g.groupType === 'social').map(g => `<option value="${g.id}" ${g.members.includes(member.name) ? 'selected' : ''}>👫 社交组 · ${g.name}</option>`).join('')}
                         </select>
                     </div>
+                    <!-- V288: 绑定手机号（成员信息展示，超管可编辑） -->
+                    <input type="tel" id="editPhone_${id}" value="${escapeHtml(member.phone||'')}" maxlength="11" placeholder="绑定手机号（11 位，选填）" oninput="this.value=String(this.value||'').replace(/\D/g,'').slice(0,11)" style="width:100%; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px; box-sizing:border-box;">
                     <!-- 籍贯 | 现住地 | 职业 | 作息类型 -->
                     <div class="family-form-row" style="display:flex; gap:4px;">
                         <input type="text" id="editPlace_${id}" value="${escapeHtml(member.place||'')}" placeholder="籍贯" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
@@ -36216,6 +36508,8 @@ window.editMemberCard = function(id) {
                 if (!nameVal) { showToast('姓名不能为空'); return; }
                 const oldName = member.name;
                 member.name = nameVal;
+                // V288: 成员绑定手机号（仅数字，11 位）
+                member.phone = String((document.getElementById('editPhone_' + id) || {}).value || '').replace(/\D/g, '').slice(0, 11);
                 member.age = parseInt(document.getElementById('editAge_' + id).value) || 0;
                 // V151: 婴儿阶段
                 var _editInfantStage = document.getElementById('editInfantStage_' + id).value;
@@ -36481,6 +36775,13 @@ window.editMemberCard = function(id) {
                     </span>
                 </label>
             </div>
+            ${isSuper ? `
+            <div onclick="openFamilyInfoModal()" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
+                <span style="font-size:18px;flex:0 0 auto;line-height:1;">🏠</span>
+                <span style="font-size:14px;color:#4B5563;font-weight:500;flex:0 0 auto;">家庭信息</span>
+                <span style="font-size:12px;color:#9CA3AF;flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:right;">${escapeHtml(_curFamilyName())} · 超管可编辑</span>
+                <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
+            </div>` : ''}
             <div style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;">
                 <span style="font-size:18px;flex:0 0 auto;line-height:1;">🔑</span>
                 <span style="font-size:14px;color:#4B5563;font-weight:500;flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">家庭码 <span style="font-size:13px;color:#1F2937;font-weight:600;">${getFamilyId() || '未设置'}</span></span>
