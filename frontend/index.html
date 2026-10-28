@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V285-20261028';
+        var APP_VER = 'V286-20261028';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -31250,7 +31250,8 @@ function _ensureSubscriptionStatusShape() {
 function _subBtnMeta(state) {
     if (state === 'premium') {
         return {
-            text: '全订阅（剩余 ' + _subDaysLeft() + ' 天）',
+            // V286: 卡片按钮只表达订阅状态（剩余天数在订阅中心/详情页展示，避免在首页被误读）
+            text: '已订阅',
             style: 'background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;border:1px solid #EA580C;font-weight:600;'
         };
     }
