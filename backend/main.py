@@ -4584,6 +4584,195 @@ async def audit_content(req: AuditContentRequest) -> Dict[str, Any]:
     return {"passed": False, "reason": reason or "内容不符合社区规范"}
 
 
+# ========== V267: 超管 AI 批量生成公共知识（POST /api/admin/generate-batch-knowledge） ==========
+class GenerateBatchKnowledgeRequest(BaseModel):
+    category: str = Field(default="recipe", max_length=20)
+    topic: str = Field(default="", max_length=60)
+    count: int = Field(default=5, ge=1, le=10)
+
+
+# 主分类：前端 id → (中文名, 前端条目 type)；入参同时兼容中文分类名
+_KB_GEN_CATEGORIES = {
+    "recipe": ("食谱", "recipe"),
+    "ingredient": ("食材", "ingredient"),
+    "shiyang": ("食养", "shiyang"),
+    "shiwen": ("食文", "article"),
+}
+_KB_CATEGORY_ALIASES = {
+    "食谱": "recipe",
+    "食材": "ingredient",
+    "食养": "shiyang",
+    "食文": "shiwen",
+    "article": "shiwen",
+}
+
+# 合规校验：医疗功效类红线词（命中即整条剔除）
+_KB_BANNED_WORDS = [
+    "治疗", "治愈", "根治", "痊愈", "药到病除", "包治", "特效", "疗效", "药效",
+    "处方", "偏方", "药物", "用药", "服药", "疗程", "主治", "适应症",
+    "降三高", "降血压", "降血糖", "降血脂", "预防疾病", "防治", "抗癌", "消炎",
+    "壮阳", "丰胸", "排毒养颜",
+]
+
+
+def _kb_compliance_hits(text: str) -> List[str]:
+    """批量生成内容的合规校验：返回命中的违禁词（空表示通过）。"""
+    body = text or ""
+    hits = [w for w in _KB_BANNED_WORDS if w in body]
+    hits += _audit_post_banned_hits(body)
+    return list(dict.fromkeys(hits))
+
+
+_KB_GEN_PROMPT = """你是一位专业的家庭饮食知识库编辑。请根据以下要求，批量生成 {count} 条知识条目：
+【分类】{category}
+【主题】{topic}
+
+【格式要求】
+返回严格的 JSON 数组格式：
+[
+  {{
+    "title": "条目标题（必须精炼）",
+    "content": "正文内容（200字左右，逻辑清晰）",
+    "tags": ["标签1", "标签2"]
+  }}
+]
+
+【红线约束】
+1. 必须严格规避医疗词汇（治疗、治愈、降三高、预防疾病等）。
+2. 如果是食谱，请简要写出核心步骤；如果是食材，请写出其特点与烹饪建议。
+3. 确保每一条都有实用价值，不要凑数。"""
+
+
+def _parse_json_array_objects(raw: str) -> List[Dict[str, Any]]:
+    """从 AI 输出中提取 JSON 对象数组，允许被截断时逐个抢救完整对象。"""
+    text = (raw or "").strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*```$", "", text)
+    start, end = text.find("["), text.rfind("]")
+    if start >= 0 and end > start:
+        try:
+            arr = json.loads(text[start:end + 1])
+            if isinstance(arr, list):
+                return [x for x in arr if isinstance(x, dict)]
+        except json.JSONDecodeError:
+            pass
+    out: List[Dict[str, Any]] = []
+    depth, start, in_str, esc = 0, -1, False, False
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start >= 0:
+                    try:
+                        obj = json.loads(text[start:i + 1])
+                        if isinstance(obj, dict):
+                            out.append(obj)
+                    except json.JSONDecodeError:
+                        pass
+                    start = -1
+    return out
+
+
+@app.post("/api/admin/generate-batch-knowledge")
+async def generate_batch_knowledge(req: GenerateBatchKnowledgeRequest) -> Dict[str, Any]:
+    """超管批量生成公共知识：AI 生成 → 后端合规校验剔除违规条目 → 返回清洗结果。"""
+    raw_key = (req.category or "").strip()
+    key = _KB_CATEGORY_ALIASES.get(raw_key, raw_key)
+    if key not in _KB_GEN_CATEGORIES:
+        raise HTTPException(
+            status_code=400, detail="不支持的主分类，可选：食谱 / 食材 / 食养 / 食文"
+        )
+    label, item_type = _KB_GEN_CATEGORIES[key]
+    topic = (req.topic or "").strip() or "家庭日常饮食"
+    count = max(1, min(10, int(req.count or 5)))
+
+    # 长 JSON 数组一次性输出易被截断，按每批 2 条生成，不足再补单条
+    batch_size = 2
+    planned_rounds = (count + batch_size - 1) // batch_size
+    max_rounds = planned_rounds + 3
+    items: List[Dict[str, Any]] = []
+    seen_titles = set()
+    dropped = 0
+    rounds = 0
+
+    while len(items) < count and rounds < max_rounds:
+        need = min(batch_size, count - len(items)) if rounds < planned_rounds else 1
+        prompt = _KB_GEN_PROMPT.format(count=need, category=label, topic=topic)
+        try:
+            raw = await call_qwen(
+                [
+                    {"role": "system", "content": "你是家庭膳食知识库编辑，只输出 JSON 数组。"},
+                    {"role": "user", "content": prompt},
+                ],
+                json_mode=False,
+                max_tokens=1400,
+                task_type="batch_knowledge",
+                timeout=90.0,
+            )
+        except Exception as exc:
+            print(f"[batch-knowledge] AI failed: {exc}")
+            rounds += 1
+            continue
+        rounds += 1
+        parsed_items = _parse_json_array_objects(raw)
+        if not parsed_items:
+            print(f"[batch-knowledge] parse empty, raw len={len(raw)} head={raw[:160]!r}")
+        for obj in parsed_items:
+            title = str(obj.get("title") or obj.get("name") or "").strip()[:60]
+            content = str(obj.get("content") or "").strip()
+            if not title or not content or title in seen_titles:
+                continue
+            hits = _kb_compliance_hits(title + "\n" + content)
+            if hits:
+                dropped += 1
+                print(f"[batch-knowledge] dropped ({'、'.join(hits[:3])}): {title}")
+                continue
+            summary = str(obj.get("summary") or "").strip()
+            if not summary:
+                summary = content[:40] + ("…" if len(content) > 40 else "")
+            tags_raw = obj.get("tags") or []
+            if isinstance(tags_raw, str):
+                tags_raw = [t.strip() for t in re.split(r"[，,、\s]+", tags_raw) if t.strip()]
+            tags = [str(t).strip()[:12] for t in tags_raw if str(t).strip()][:6]
+            seen_titles.add(title)
+            items.append(
+                {
+                    "title": title,
+                    "summary": summary[:80],
+                    "content": content[:1200],
+                    "tags": tags,
+                    "type": item_type,
+                    "category": key,
+                    "categoryLabel": label,
+                }
+            )
+            if len(items) >= count:
+                break
+
+    if not items:
+        if dropped:
+            raise HTTPException(
+                status_code=502,
+                detail=f"生成内容未通过合规校验（已剔除 {dropped} 条），请调整主题后重试",
+            )
+        raise HTTPException(status_code=502, detail="AI 生成失败，请稍后重试")
+    return {"items": items, "requested": count, "dropped": dropped}
+
+
 # ========== V257: 分享朋友圈截图审核（POST /api/audit-share） ==========
 class AuditShareRequest(BaseModel):
     image: str = Field(default="", max_length=8000000)

@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V264-20261027';
+        var APP_VER = 'V283-20261028';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -1650,6 +1650,24 @@
             cursor: pointer;
             transition: all 0.2s;
             flex-shrink: 0;
+        }
+        /* V269: 超管「文库管理」精简视图——CSS 级兜底，避免视图重建后顶部按钮/分类胶囊重新出现 */
+        body.kb-admin-mode #knowledgeSearchRow,
+        body.kb-admin-mode #knowledgeFilterTabs,
+        body.kb-admin-mode #knowledgeTagCloud,
+        body.kb-admin-mode #knowledgeBreadcrumb,
+        body.kb-admin-mode #knowledgeSubGrid,
+        body.kb-admin-mode #knowledgeSubTitle,
+        body.kb-admin-mode #familyFilterLib,
+        body.kb-admin-mode #familyFilterCat,
+        body.kb-admin-mode #libraryLayerTabs,
+        body.kb-admin-mode #categoryLayerTabs,
+        body.kb-admin-mode #knowledgeSubHeader {
+            display: none !important;
+        }
+        /* V272: 文库管理内展开「饮食文库」时，只隐藏空子头部，其余内容正常显示 */
+        body.kb-admin-lib #knowledgeSubHeader {
+            display: none !important;
         }
         .knowledge-filter-tab.active {
             background: #FFF7ED;
@@ -4525,7 +4543,7 @@ async function _submitFeedback() {
                             <button class="family-vis-tab active" data-fvis="all" onclick="setFamilyVisibilityFilter('all')" style="padding:4px 12px;border:1px solid #F97316;border-radius:14px;background:#FFF7ED;color:#F97316;font-size:12px;font-weight:600;cursor:pointer;">全部</button>
                             <button class="family-vis-tab" data-fvis="private" onclick="setFamilyVisibilityFilter('private')" style="padding:4px 12px;border:1px solid #E5E7EB;border-radius:14px;background:white;color:#6B7280;font-size:12px;cursor:pointer;">🔒 仅自己可见</button>
                         </div>
-                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                        <div id="knowledgeSearchRow" style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
                             <div class="knowledge-search-box" style="flex:1; margin-bottom:0;">
                                 <input type="text" id="knowledgeSearchInput" placeholder="搜索知识..." />
                                 <button id="knowledgeSearchBtn">🔍</button>
@@ -35807,9 +35825,7 @@ function renderFamily() {
             `);
             var _libBtn = document.getElementById('superLibMgrBtn');
             if (_libBtn) _libBtn.addEventListener('click', function() {
-                switchTab('knowledge');
-                switchKnowledgeView('library');
-                switchKnowledgeVisibility('admin');
+                openSuperLibraryManager();
             });
             if (typeof _refreshMonitorBadge === 'function') _refreshMonitorBadge();
         }
@@ -41596,11 +41612,18 @@ function _sySecCount(libItems, sec) {
 function _syLeafCount(libItems, sec, leaf) {
     if (sec === '食养堂') return _fhArchiveAll().filter(function (a) { return (a.category || '') === leaf; }).length;
     if (sec === '食养收藏') return _fhFavAll().filter(function (a) { return (a.category || '') === leaf; }).length;
-    if (sec === '节气食养') {
-        var terms = SHIYANG_SEASON_TERMS[leaf] || [];
-        return libItems.filter(function (k) { return k.subCategory === '节气食养' && terms.indexOf(k.solarTerm) >= 0; }).length;
-    }
+    if (sec === '节气食养') return libItems.filter(function (k) { return _syMatchSeason(k, leaf); }).length;
     return libItems.filter(function (k) { return k.subCategory === sec && k.leafCategory === leaf; }).length;
+}
+// V281: 季节归属仅限「食养›节气食养」自身内容（食谱›食养›秋季 归食谱，不在此聚合）
+function _syMatchSeason(k, season) {
+    if (!k || k.subCategory !== '节气食养') return false;
+    var terms = SHIYANG_SEASON_TERMS[season] || [];
+    if (terms.indexOf(k.solarTerm) >= 0) return true;
+    if (k.leafCategory === season) return true;
+    if (k.season === season) return true;
+    if (k.tags && k.tags.indexOf(season) >= 0) return true;
+    return false;
 }
 function _syToggleTree() {
     var collapsed = false;
@@ -41738,8 +41761,7 @@ function _syPaneHtml(libItems, curTerm) {
     } else if (segs.length === 3 && segs[1] === '节气食养') {
         // 季节节点：该季全部节气内容
         var season = segs[2];
-        var terms = SHIYANG_SEASON_TERMS[season] || [];
-        items = libItems.filter(function (k) { return k.subCategory === '节气食养' && terms.indexOf(k.solarTerm) >= 0; });
+        items = libItems.filter(function (k) { return _syMatchSeason(k, season); });
         html += items.length ? items.map(_shiyangCardHtml).join('') : _shiyangEmptyHtml('暂无' + season + '食养内容');
     } else if (segs.length === 2) {
         // 板块节点：该板块全部内容
@@ -45920,6 +45942,12 @@ function switchKnowledgeView(view) {
     library.style.display = 'none';
     if (chatContent) chatContent.style.display = 'none';
     if (libraryContent) libraryContent.style.display = 'none';
+    // V270: 离开「饮食文库」时必须隐藏其 Tab 容器（食材/食谱/烹饪/食养/食文/就餐/食榜），
+    // 否则会残留在「文库管理」等页面顶部
+    if (view !== 'libtab') {
+        const libTabViewEl = document.getElementById('knowledgeLibTabView');
+        if (libTabViewEl) libTabViewEl.style.display = 'none';
+    }
 
     // 隐藏在外就餐专用筛选按钮（由 renderCategoryView 按需显示）
 
@@ -46003,11 +46031,31 @@ var LIB_VIEW_TABS = [
     { id: 'shibang', label: '食榜' }  // V134：食榜自首页顶部入口迁入文库
 ];
 function _onLibraryBtnClick() {
+    // V272/V282: 文库管理态下点 📚：展开/收回「饮食文库」内容（留在文库管理页内切换）
+    if (document.body.classList.contains('kb-admin-lib')) { _kbAdminLibClose(); return; }
+    if (currentTab === 'knowledge' && currentKnowledgeVisibility === 'admin') { _kbAdminLibOpen(); return; }
+    if (document.body.classList.contains('kb-admin-mode')) { _kbAdminLibOpen(); return; }
     if (currentKnowledgeViewMode === 'chat') {
         openKnowledgeLibrary();
     } else {
         backToKnowledgeChat();
     }
+}
+// 文库管理内展开饮食文库内容
+function _kbAdminLibOpen() {
+    document.body.classList.remove('kb-admin-mode');
+    document.body.classList.add('kb-admin-lib');
+    // V282: 展开文库时必须切到 public/家庭层数据源，否则 filterByVisibility('admin') 返回空，篇数与文章都不显示
+    currentKnowledgeVisibility = 'public';
+    switchKnowledgeView('libtab');
+    _applyAdminTopBarOnly();
+}
+// 收回饮食文库内容，回到文库管理面板
+function _kbAdminLibClose() {
+    document.body.classList.remove('kb-admin-lib');
+    currentKnowledgeVisibility = 'admin';
+    switchKnowledgeView('library');
+    renderAdminPanel();
 }
 function openKnowledgeLibrary() {
     switchKnowledgeView('libtab');
@@ -46144,6 +46192,8 @@ function _backGuideToHome() {
 function updateKnowledgeTopBarButtons() {
     const isKnowledge = (typeof currentTab !== 'undefined' && currentTab === 'knowledge');
     const isGuide = isKnowledge && currentKnowledgeViewMode === 'guide';
+    // V268: 超管「文库管理」态：不显示 💬历史/📚文库/🔄重新对话
+    const isKbAdmin = isKnowledge && (typeof currentKnowledgeVisibility !== 'undefined' && currentKnowledgeVisibility === 'admin');
     const menuB = document.getElementById('menuBtn');
     const libB = document.getElementById('knowledgeLibBtn');
     const backB = document.getElementById('knowledgeGuideBackBtn');
@@ -46151,9 +46201,9 @@ function updateKnowledgeTopBarButtons() {
     const clearB = document.getElementById('clearBtn');
     const titleEl = document.getElementById('topTitle');
     if (menuB) menuB.style.display = isGuide ? 'none' : '';
-    if (libB) libB.style.display = isKnowledge && !isGuide ? 'flex' : 'none';
+    if (libB) libB.style.display = (isKnowledge && !isGuide) ? 'flex' : 'none';
     if (backB) backB.style.display = isGuide ? 'flex' : 'none';
-    if (resetB) resetB.style.display = isKnowledge && !isGuide ? 'flex' : 'none';
+    if (resetB) resetB.style.display = (isKnowledge && !isGuide && !isKbAdmin) ? 'flex' : 'none';
     if (clearB && isKnowledge) clearB.style.display = isGuide ? 'none' : 'flex';
     if (titleEl) {
         if (isGuide) {
@@ -46231,8 +46281,10 @@ function updateKnowledgeSubHeader(mode) {
         }
     }
 
-    // 更新顶部栏标题
-    if (mode === 'guide') {
+    // 更新顶部栏标题（V268：超管「文库管理」态固定为「文库管理」）
+    if (currentTab === 'knowledge' && typeof currentKnowledgeVisibility !== 'undefined' && currentKnowledgeVisibility === 'admin') {
+        topTitle.textContent = '文库管理';
+    } else if (mode === 'guide') {
         topTitle.textContent = _guideTopTitle || '节气饮食指南';
     } else if (mode === 'libtab') {
         topTitle.textContent = '饮食文库';
@@ -48240,35 +48292,18 @@ function renderAdminPanel() {
     if (!isSuperAdmin() && !getSuperAdminSession().isLoggedIn) return;
     var container = document.getElementById('knowledgeCardList');
     if (!container) return;
-    // 隐藏搜索/分类选择器
-    document.getElementById('knowledgeSearchBox') && (document.getElementById('knowledgeSearchBox').style.display = 'none');
-    try { document.getElementById('knowledgeFilterBar').style.display = 'none'; } catch(e) {}
-    try { document.getElementById('knowledgeSubGrid').style.display = 'none'; } catch(e) {}
+    // V266: 超管视图精简——隐藏搜索框、他人分享 Tab 与分类胶囊
+    _applyAdminKnowledgeChrome();
 
     var dietData = JSON.parse(lsGet('dietKnowledge') || '[]');
     var sharedPool = JSON.parse(lsGet('sharedPool') || '[]');
     var publicItems = dietData.filter(function(k) { return (k.layer || 'family') === 'public'; });
     var pendingPool = sharedPool.filter(function(p) { return p.auditStatus === 'pending'; });
-    var totalPool = sharedPool.length;
 
-    // 统计块
-    var statsHtml = `<div style="display:flex;gap:10px;margin-bottom:14px;">
-        <div style="flex:1;padding:12px;background:#FEF2F2;border-radius:10px;border:1px solid #FECACA;">
-            <div style="font-size:12px;color:#991B1B;font-weight:600;">公共库条目</div>
-            <div style="font-size:24px;color:#DC2626;font-weight:700;margin-top:4px;">${publicItems.length}</div>
-        </div>
-        <div style="flex:1;padding:12px;background:#FFF7ED;border-radius:10px;border:1px solid #FED7AA;">
-            <div style="font-size:12px;color:#9A3412;font-weight:600;">共享池总数</div>
-            <div style="font-size:24px;color:#EA580C;font-weight:700;margin-top:4px;">${totalPool}</div>
-        </div>
-        <div style="flex:1;padding:12px;background:#FEF2F2;border-radius:10px;border:1px solid #FECACA;">
-            <div style="font-size:12px;color:#991B1B;font-weight:600;">待审核</div>
-            <div style="font-size:24px;color:#DC2626;font-weight:700;margin-top:4px;">${pendingPool.length}</div>
-        </div>
-    </div>
-    <div style="text-align:center;margin-bottom:14px;display:flex;gap:10px;justify-content:center;">
-        <button onclick="openAddKnowledgeModal()" style="padding:8px 20px;background:#F97316;border:none;border-radius:8px;font-size:14px;font-weight:600;color:white;cursor:pointer;">＋ 添加公共知识</button>
-        <button onclick="logoutSuperAdmin()" style="padding:8px 20px;background:#DC2626;border:none;border-radius:8px;font-size:14px;font-weight:600;color:white;cursor:pointer;">🚪 退出管理员模式</button>
+    // 操作按钮（V274：文库分类管理在左，AI 批量生成在右）
+    var statsHtml = `<div style="margin-bottom:12px;display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;">
+        <div id="saCatalogBox"></div>
+        <button onclick="openAiBulkKnowledgeModal()" style="padding:7px 14px;border:none;border-radius:8px;font-size:13px;font-weight:700;color:white;cursor:pointer;white-space:nowrap;background:linear-gradient(135deg,#8B5CF6 0%,#EC4899 55%,#F97316 100%);box-shadow:0 3px 10px rgba(139,92,246,0.35);">🤖 AI 批量生成</button>
     </div>`;
 
     // 共享池待审核
@@ -48288,32 +48323,358 @@ function renderAdminPanel() {
                     + '</div></div>';
             }).join('')}
         </div>`;
-    } else {
-        pendingHtml = `<div style="padding:16px;background:#F3F4F6;border-radius:10px;text-align:center;font-size:14px;color:#6B7280;margin-bottom:20px;">✅ 暂无待审核内容</div>`;
-    }
+    } 
 
-    // 公共库条目（超管可直接编辑/删除）
-    var publicHtml = `<div>
-        <div style="font-size:14px;font-weight:700;color:#1E293B;margin-bottom:10px;">📚 公共库（超管可编辑）</div>
-        ${publicItems.map(function(k) {
-            var title = k.title || '(未命名)';
-            return '<div style="padding:10px;background:white;border:1px solid #E5E7EB;border-radius:10px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">'
-                + '<div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:500;color:#1E293B;">' + escapeHtml(title) + '</div>'
-                + '<div style="display:flex;gap:6px;">'
-                + '<button onclick="openSuperAdminItemEditor(\'' + escapeHtml(String(k.id)) + '\')" style="padding:4px 10px;background:#F97316;border:none;border-radius:6px;font-size:12px;color:white;cursor:pointer;">✏️ 编辑</button>'
-                + '<button onclick="showKnowledgeDetail(\'' + escapeHtml(String(k.id)) + '\')" style="padding:4px 10px;background:#3B82F6;border:none;border-radius:6px;font-size:12px;color:white;cursor:pointer;">查看</button>'
-                + '<button onclick="superAdminDeletePublic(\'' + escapeHtml(String(k.id)) + '\')" style="padding:4px 10px;background:#DC2626;border:none;border-radius:6px;font-size:12px;color:white;cursor:pointer;">🗑️ 删除</button>'
-                + '</div></div>';
-        }).join('') || '<div style="padding:16px;background:#F3F4F6;border-radius:10px;text-align:center;font-size:14px;color:#6B7280;">公共库为空</div>'}
-    </div>`;
+    // 公共库条目区块（V274：用户要求从文库管理页移除「公共库（超管可编辑）」列表）
+    var publicHtml = '';
 
     container.innerHTML = statsHtml
-        + '<div id="saCatalogBox" style="margin-bottom:20px;"></div>'
         + pendingHtml + publicHtml
         + '<div id="saAuditLogBox" style="margin-top:20px;"></div>';
     renderCatalogManager();
     renderSaAuditLog();
     touchSuperAdmin();
+}
+
+// ============ V266/V268: 超管「文库管理」精简视图（隐藏搜索框 / 层级 Tab / 分类胶囊 / 顶栏历史与重新对话） ============
+var _ADMIN_CHROME_IDS = ['knowledgeSearchRow', 'knowledgeFilterTabs', 'knowledgeTagCloud', 'knowledgeBreadcrumb', 'knowledgeSubGrid', 'knowledgeSubTitle', 'familyFilterLib', 'familyFilterCat'];
+function _applyAdminKnowledgeChrome() {
+    document.body.classList.add('kb-admin-mode');
+    _ADMIN_CHROME_IDS.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        if (el.getAttribute('data-prev-display') === null) el.setAttribute('data-prev-display', el.style.display || '');
+        el.style.display = 'none';
+    });
+    _applyAdminTopBarOnly();
+}
+// V272: 只设置顶栏（标题 / < 返回 / 📚 饮食文库 / 隐藏 🔄），不动内容区显隐
+function _applyAdminTopBarOnly() {
+    var titleEl = document.getElementById('topTitle');
+    if (titleEl) titleEl.textContent = '文库管理';
+    var menuB = document.getElementById('menuBtn');
+    if (menuB) {
+        if (menuB.getAttribute('data-prev-text') === null) menuB.setAttribute('data-prev-text', menuB.textContent || '');
+        menuB.textContent = '<';
+        menuB.setAttribute('data-tip', '退出返回');
+        menuB.style.visibility = 'visible';
+        menuB.style.display = '';
+    }
+    // V269: 📚 饮食文库入口保留在 < 右侧
+    var libB = document.getElementById('knowledgeLibBtn');
+    if (libB) {
+        libB.style.display = 'flex';
+        libB.setAttribute('data-tip', '饮食文库');
+    }
+    var resetB = document.getElementById('knowledgeResetBtn');
+    if (resetB) resetB.style.display = 'none';
+}
+function _restoreKnowledgeChrome() {
+    document.body.classList.remove('kb-admin-mode');
+    document.body.classList.remove('kb-admin-lib');
+    _ADMIN_CHROME_IDS.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var prev = el.getAttribute('data-prev-display');
+        if (prev !== null) { el.style.display = prev; el.removeAttribute('data-prev-display'); }
+    });
+    var menuB = document.getElementById('menuBtn');
+    if (menuB) {
+        var prevText = menuB.getAttribute('data-prev-text');
+        if (prevText !== null) { menuB.textContent = prevText; menuB.removeAttribute('data-prev-text'); }
+    }
+}
+
+// ============ V266: AI 批量生成公共知识 ============
+var _AI_BULK_CATS = [
+    { id: 'recipe', label: '📖 食谱' },
+    { id: 'ingredient', label: '🥬 食材' },
+    { id: 'shiyang', label: '🍵 食养' },
+    { id: 'shiwen', label: '📜 食文' }
+];
+function _aiBulkCatLabel(id) {
+    for (var i = 0; i < _AI_BULK_CATS.length; i++) { if (_AI_BULK_CATS[i].id === id) return _AI_BULK_CATS[i].label; }
+    return id || '';
+}
+function _aiBulkTypeOf(cat) {
+    if (cat === 'ingredient') return 'ingredient';
+    if (cat === 'recipe') return 'recipe';
+    if (cat === 'shiyang') return 'shiyang';
+    return 'article';
+}
+var _aiBulkDrafts = [];
+function closeAiBulkModal() {
+    var ov = document.getElementById('aiBulkOverlay');
+    if (ov) ov.remove();
+    var det = document.getElementById('aiBulkDetailOverlay');
+    if (det) det.remove();
+    _aiBulkDrafts = [];
+}
+// V267: 预览行——复选框 + 标题 + 类型 + AI 摘要
+function _aiBulkStage(d, idx) {
+    return '<div style="background:white;border:1px solid #E5E7EB;border-radius:10px;padding:10px;margin-bottom:8px;">'
+        + '<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">'
+        + '<input type="checkbox" class="aiBulkChk" data-idx="' + idx + '" checked style="margin-top:3px;" />'
+        + '<div style="flex:1;min-width:0;" onclick="event.preventDefault();event.stopPropagation();_aiBulkShowDetail(' + idx + ')" title="点击查看详情">'
+        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">'
+        + '<span style="font-size:13px;font-weight:700;color:#7C3AED;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:underline;text-decoration-color:#DDD6FE;">' + escapeHtml(d.title) + '</span>'
+        + '<span style="flex:0 0 auto;font-size:10px;font-weight:600;color:#7C3AED;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:6px;padding:1px 6px;">' + escapeHtml(d.categoryLabel || _aiBulkCatLabel(d.category)) + '</span>'
+        + '</div>'
+        + '<div style="font-size:12px;color:#6B7280;line-height:1.65;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(d.summary || '') + '</div>'
+        + (d.tags && d.tags.length ? '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">' + escapeHtml(d.tags.join('、')) + '</div>' : '')
+        + '</div></label></div>';
+}
+// V277: 点击预览条目的标题/摘要，弹出详情（勾选状态不受影响）
+function _aiBulkShowDetail(idx) {
+    var d = _aiBulkDrafts[idx];
+    if (!d) return;
+    var old = document.getElementById('aiBulkDetailOverlay');
+    if (old) old.remove();
+    var p = _aiBulkSelPath();
+    var pathItems = [_aiBulkCatLabel(d.category || p.cat)];
+    if (p.subName) pathItems.push(p.subName);
+    if (p.leafName) pathItems.push(p.leafName);
+    var ov = document.createElement('div');
+    ov.id = 'aiBulkDetailOverlay';
+    ov.style.cssText = 'position:fixed;top:0;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;z-index:100008;background:rgba(17,24,39,0.55);display:flex;align-items:center;justify-content:center;padding:14px;box-sizing:border-box;';
+    ov.addEventListener('click', function(e) { if (e.target === this) this.remove(); });
+    ov.innerHTML = '<div style="background:white;border-radius:14px;width:100%;max-width:402px;max-height:84vh;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.3);">'
+        + '<div style="flex-shrink:0;display:flex;align-items:flex-start;gap:8px;padding:14px 14px 10px;border-bottom:1px solid #F3F4F6;">'
+        + '<div style="flex:1;min-width:0;font-size:15px;font-weight:700;color:#1F2937;line-height:1.4;">' + escapeHtml(d.title || '(未命名)') + '</div>'
+        + '<button onclick="document.getElementById(\'aiBulkDetailOverlay\').remove()" style="flex:0 0 auto;width:26px;height:26px;border:none;background:#F3F4F6;border-radius:13px;font-size:13px;color:#6B7280;cursor:pointer;">✕</button>'
+        + '</div>'
+        + '<div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 14px;">'
+        + '<div style="font-size:11px;color:#7C3AED;background:#F5F3FF;border-radius:6px;padding:4px 8px;display:inline-block;margin-bottom:8px;">' + escapeHtml(pathItems.join(' › ')) + '</div>'
+        + (d.tags && d.tags.length ? '<div style="font-size:11px;color:#9CA3AF;margin-bottom:8px;">🏷️ ' + escapeHtml(d.tags.join('、')) + '</div>' : '')
+        + '<div style="font-size:13px;color:#374151;line-height:1.85;white-space:pre-wrap;word-break:break-word;">' + escapeHtml(d.content || '') + '</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;margin-top:12px;">AI 生成内容仅供膳食参考，不含医疗诊断与治疗表述。</div>'
+        + '</div>'
+        + '<div style="flex-shrink:0;padding:10px 14px;border-top:1px solid #F3F4F6;"><button onclick="document.getElementById(\'aiBulkDetailOverlay\').remove()" style="width:100%;padding:10px;border:none;border-radius:10px;background:#F3F4F6;color:#374151;font-size:13px;font-weight:600;cursor:pointer;">关闭</button></div>'
+        + '</div>';
+    document.body.appendChild(ov);
+}
+function openAiBulkKnowledgeModal() {
+    if (!requireSuperAdmin()) return;
+    var old = document.getElementById('aiBulkOverlay');
+    if (old) old.remove();
+    _aiBulkDrafts = [];
+    var ov = document.createElement('div');
+    ov.id = 'aiBulkOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100006;background:rgba(31,41,55,0.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.addEventListener('click', function(e) { if (e.target === this) closeAiBulkModal(); });
+    var catOpts = _AI_BULK_CATS.map(function(c) {
+        return '<option value="' + c.id + '">' + c.label + '</option>';
+    }).join('');
+    ov.innerHTML = '<style>@keyframes aiBulkSpin{to{transform:rotate(360deg)}}</style>'
+        + '<div style="width:100%;max-width:430px;max-height:88vh;display:flex;flex-direction:column;background:#F9FAFB;border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.25);">'
+        + '<div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:13px 16px;background:linear-gradient(135deg,#8B5CF6 0%,#EC4899 55%,#F97316 100%);color:white;">'
+        + '<span style="font-size:15px;font-weight:700;">🤖 AI 批量生成公共知识</span>'
+        + '<button onclick="closeAiBulkModal()" style="margin-left:auto;border:none;background:rgba(255,255,255,0.22);color:white;width:26px;height:26px;border-radius:13px;font-size:14px;line-height:1;cursor:pointer;">✕</button></div>'
+        + '<div id="aiBulkBody" style="flex:1;overflow-y:auto;padding:14px 16px;">'
+        + '<div style="display:flex;gap:6px;margin-bottom:10px;">'
+        + '<div style="flex:1;min-width:0;"><div style="font-size:12px;color:#6B7280;margin-bottom:4px;font-weight:600;">主分类</div>'
+        + '<select id="aiBulkCat" onchange="_aiBulkOnCatChange()" style="width:100%;box-sizing:border-box;padding:8px 4px;border:1px solid #E5E7EB;border-radius:8px;font-size:12px;background:white;">' + catOpts + '</select></div>'
+        + '<div style="flex:1;min-width:0;"><div style="font-size:12px;color:#6B7280;margin-bottom:4px;font-weight:600;">子分类</div>'
+        + '<select id="aiBulkSub" onchange="_aiBulkOnSubChange()" style="width:100%;box-sizing:border-box;padding:8px 4px;border:1px solid #E5E7EB;border-radius:8px;font-size:12px;background:white;"></select></div>'
+        + '<div style="flex:1;min-width:0;"><div style="font-size:12px;color:#6B7280;margin-bottom:4px;font-weight:600;">细分类</div>'
+        + '<select id="aiBulkLeaf" style="width:100%;box-sizing:border-box;padding:8px 4px;border:1px solid #E5E7EB;border-radius:8px;font-size:12px;background:white;"></select></div>'
+        + '</div>'
+        + '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:flex-start;">'
+        + '<div style="flex:1;min-width:0;"><div style="font-size:12px;color:#6B7280;margin-bottom:4px;font-weight:600;">生成主题</div>'
+        + '<input id="aiBulkTopic" type="text" maxlength="60" placeholder="如：立冬养生汤" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;" /></div>'
+        + '<div style="width:86px;flex:0 0 auto;"><div style="font-size:12px;color:#6B7280;margin-bottom:4px;font-weight:600;">生成数量</div>'
+        + '<input id="aiBulkCount" type="number" min="1" max="10" step="1" value="5" style="width:100%;box-sizing:border-box;padding:9px 8px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;" /></div>'
+        + '</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;line-height:1.6;margin-bottom:10px;">生成数量默认 5 条、最多 10 条。生成内容将写入「公共文库」，AI 生成内容仅供膳食参考，不含医疗诊断与治疗表述。</div>'
+        + '<div id="aiBulkResult"></div>'
+        + '</div>'
+        + '<div style="flex-shrink:0;padding:12px 16px;background:white;border-top:1px solid #F3F4F6;">'
+        + '<button id="aiBulkGenBtn" onclick="_aiBulkGenerate()" style="width:100%;padding:10px;border:none;border-radius:10px;background:linear-gradient(135deg,#8B5CF6,#EC4899);color:white;font-size:13px;font-weight:700;cursor:pointer;">开始生成</button>'
+        + '<div id="aiBulkActions" style="display:none;gap:8px;margin-top:8px;">'
+        + '<button id="aiBulkToggleBtn" onclick="_aiBulkToggleAll()" style="flex:1;padding:10px;border:1px solid #E5E7EB;border-radius:10px;background:#F3F4F6;color:#374151;font-size:13px;font-weight:600;cursor:pointer;">取消全选</button>'
+        + '<button onclick="_aiBulkSaveSelected()" style="flex:1;padding:10px;border:none;border-radius:10px;background:#10B981;color:white;font-size:13px;font-weight:700;cursor:pointer;">确认入库</button>'
+        + '</div></div></div>';
+    document.body.appendChild(ov);
+    _aiBulkOnCatChange();
+}
+// V276: 子分类 / 细分类联动（数据源为公共文库分类树）
+function _aiBulkTreeMain(mainId) {
+    var kc = getKnowledgeCategories();
+    var tree = (kc.public && kc.public.tree) || [];
+    for (var i = 0; i < tree.length; i++) { if (tree[i].id === mainId) return tree[i]; }
+    return null;
+}
+function _aiBulkOnCatChange() {
+    var catEl = document.getElementById('aiBulkCat');
+    var subEl = document.getElementById('aiBulkSub');
+    if (!catEl || !subEl) return;
+    var main = _aiBulkTreeMain(catEl.value);
+    var subs = sortByOrder((main && main.children) || []);
+    subEl.innerHTML = '<option value="">（不指定）</option>' + subs.map(function(s) {
+        return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.name || s.id) + '</option>';
+    }).join('');
+    _aiBulkOnSubChange();
+}
+function _aiBulkOnSubChange() {
+    var catEl = document.getElementById('aiBulkCat');
+    var subEl = document.getElementById('aiBulkSub');
+    var leafEl = document.getElementById('aiBulkLeaf');
+    if (!leafEl) return;
+    var subId = subEl ? subEl.value : '';
+    var main = catEl ? _aiBulkTreeMain(catEl.value) : null;
+    var sub = null;
+    ((main && main.children) || []).forEach(function(s) { if (s.id === subId) sub = s; });
+    var leaves = sortByOrder((sub && sub.children) || []);
+    leafEl.innerHTML = '<option value="">（不指定）</option>' + leaves.map(function(l) {
+        return '<option value="' + escapeHtml(l.id) + '">' + escapeHtml(l.name || l.id) + '</option>';
+    }).join('');
+    leafEl.disabled = !leaves.length;
+    leafEl.style.background = leaves.length ? 'white' : '#F3F4F6';
+}
+// 读取当前选中的分类路径
+function _aiBulkSelPath() {
+    var catEl = document.getElementById('aiBulkCat');
+    var subEl = document.getElementById('aiBulkSub');
+    var leafEl = document.getElementById('aiBulkLeaf');
+    var cat = catEl ? catEl.value : 'recipe';
+    var subId = subEl ? subEl.value : '';
+    var leafId = leafEl ? leafEl.value : '';
+    var subName = '', leafName = '';
+    var main = _aiBulkTreeMain(cat);
+    ((main && main.children) || []).forEach(function(s) {
+        if (s.id === subId) {
+            subName = s.name || s.id;
+            (s.children || []).forEach(function(l) { if (l.id === leafId) leafName = l.name || l.id; });
+        }
+    });
+    return { cat: cat, subId: subId, subName: subName, leafId: leafId, leafName: leafName };
+}
+// V280: 从文本中识别二十四节气（命中即返回节气名，未命中返回空串）
+var _SOLAR_TERM_NAMES = ['立春','雨水','惊蛰','春分','清明','谷雨','立夏','小满','芒种','夏至','小暑','大暑',
+    '立秋','处暑','白露','秋分','寒露','霜降','立冬','小雪','大雪','冬至','小寒','大寒'];
+function _aiBulkDetectSolarTerm(text) {
+    var s = String(text || '');
+    for (var i = 0; i < _SOLAR_TERM_NAMES.length; i++) {
+        if (s.indexOf(_SOLAR_TERM_NAMES[i]) >= 0) return _SOLAR_TERM_NAMES[i];
+    }
+    return '';
+}
+async function _aiBulkGenerate() {
+    if (!requireSuperAdmin()) return;
+    var cat = (document.getElementById('aiBulkCat') || {}).value || 'recipe';
+    var topic = ((document.getElementById('aiBulkTopic') || {}).value || '').trim();
+    var countEl = document.getElementById('aiBulkCount');
+    var count = parseInt((countEl || {}).value || '5', 10) || 5;
+    if (count < 1) count = 1;
+    if (count > 10) count = 10;
+    if (countEl) countEl.value = count;
+    var genBtn = document.getElementById('aiBulkGenBtn');
+    var resBox = document.getElementById('aiBulkResult');
+    var actions = document.getElementById('aiBulkActions');
+    if (!resBox) return;
+    if (genBtn) { genBtn.disabled = true; genBtn.textContent = '生成中…'; }
+    if (actions) actions.style.display = 'none';
+    _aiBulkDrafts = [];
+    resBox.innerHTML = '<div style="padding:26px 14px;text-align:center;background:#F5F3FF;border-radius:12px;">'
+        + '<div style="width:34px;height:34px;margin:0 auto 10px;border:3px solid #DDD6FE;border-top-color:#8B5CF6;border-radius:50%;animation:aiBulkSpin 0.9s linear infinite;"></div>'
+        + '<div style="font-size:13px;color:#7C3AED;font-weight:700;">AI 正在奋笔疾书...</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">生成 ' + count + ' 条，预计 20-60 秒</div></div>';
+    try {
+        var resp = await fetch(API_BASE + '/api/admin/generate-batch-knowledge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category: cat, topic: topic, count: count })
+        });
+        var data = null;
+        try { data = await resp.json(); } catch (e) {}
+        if (!resp.ok) {
+            var msg = (data && (data.detail || data.message)) || ('HTTP ' + resp.status);
+            throw new Error(msg);
+        }
+        var items = (data && data.items) || [];
+        if (!items.length) throw new Error('未生成任何有效内容');
+        _aiBulkDrafts = items;
+        resBox.innerHTML = '<div style="font-size:12px;color:#374151;font-weight:700;margin-bottom:8px;">📋 预览列表（已生成 ' + items.length + ' 条，默认全选）</div>'
+            + items.map(_aiBulkStage).join('');
+        if (actions) actions.style.display = 'flex';
+        var toggleBtn = document.getElementById('aiBulkToggleBtn');
+        if (toggleBtn) toggleBtn.textContent = '取消全选';
+    } catch (e) {
+        resBox.innerHTML = '<div style="padding:16px;text-align:center;font-size:13px;color:#DC2626;background:#FEF2F2;border-radius:10px;">❌ 生成失败：' + escapeHtml(e.message || '网络错误') + '<br><span style="font-size:11px;color:#9CA3AF;">可修改配置后重新点击「开始生成」</span></div>';
+    }
+    if (genBtn) { genBtn.disabled = false; genBtn.textContent = '重新生成'; }
+}
+function _aiBulkToggleAll() {
+    var checks = document.querySelectorAll('.aiBulkChk');
+    if (!checks.length) return;
+    var allChecked = true;
+    checks.forEach(function(cb) { if (!cb.checked) allChecked = false; });
+    checks.forEach(function(cb) { cb.checked = !allChecked; });
+    var toggleBtn = document.getElementById('aiBulkToggleBtn');
+    if (toggleBtn) toggleBtn.textContent = allChecked ? '全选' : '取消全选';
+}
+function _aiBulkSaveSelected() {
+    if (!requireSuperAdmin()) return;
+    var checks = document.querySelectorAll('.aiBulkChk');
+    var picked = [];
+    checks.forEach(function(cb) { if (cb.checked) { var i = parseInt(cb.getAttribute('data-idx'), 10); if (_aiBulkDrafts[i]) picked.push(_aiBulkDrafts[i]); } });
+    if (!picked.length) { showToast('请至少勾选一条'); return; }
+    var selPath = _aiBulkSelPath();
+    var topicText = (document.getElementById('aiBulkTopic') || {}).value || '';
+    var ctx = getCurrentUserContext();
+    var saved = 0, skipped = 0;
+    picked.forEach(function(d) {
+        var cat = d.category || 'recipe';
+        var title = d.title, content = d.content, auditStatus = '';
+        if (cat === 'shiyang') {
+            var at = auditShiyangText(title), ac = auditShiyangText(content);
+            if (at.status === 'rejected' || ac.status === 'rejected') { skipped++; return; }
+            title = at.text; content = ac.text;
+            auditStatus = (at.status === 'transformed' || ac.status === 'transformed') ? 'transformed' : 'ok';
+        }
+        var item = {
+            id: nextKnowledgeId++,
+            type: d.type || _aiBulkTypeOf(cat),
+            title: title,
+            source: 'AI生成',
+            content: content,
+            summary: d.summary || '',
+            image: '',
+            images: [],
+            pairings: [],
+            categoryId: cat,
+            subCategoryId: selPath.subId,
+            leafCategoryId: selPath.leafId,
+            tags: d.tags || [],
+            sceneTags: [],
+            createdAt: Date.now(),
+            sourceType: 'ai',
+            sourceUrl: '',
+            mainCategory: cat,
+            auditStatus: auditStatus,
+            subCategory: selPath.subName,
+            leafCategory: selPath.leafName,
+            subCategory3: '',
+            visibility: 'family',
+            scope: 'family'
+        };
+        // V280: 从标题/正文/主题中识别节气，写入 solarTerm，便于节气层聚合与计数
+        var termHit = _aiBulkDetectSolarTerm(title + ' ' + (d.summary || '') + ' ' + content + ' ' + topicText);
+        if (termHit) item.solarTerm = termHit;
+        item.layer = 'public';
+        item.createdBy = ctx.id || 'superadmin';
+        item.shareScope = 'none';
+        stampKnowledgePermissions(item);
+        dietKnowledge.unshift(item);
+        saved++;
+    });
+    saveDietKnowledge();
+    logAdminAction('AI批量生成公共知识', picked[0].category + ' · ' + saved + ' 条' + (skipped ? '（拦截 ' + skipped + ' 条）' : ''));
+    closeAiBulkModal();
+    renderAdminPanel();
+    updateVisibilityCounts();
+    var pathLabel = [_aiBulkCatLabel(selPath.cat), selPath.subName, selPath.leafName].filter(function (s) { return !!s; }).join(' › ');
+    showToast('✅ 已入库 ' + saved + ' 条公共知识 → ' + pathLabel + (skipped ? '，' + skipped + ' 条含医疗表述已拦截' : ''));
 }
 
 // 超管审核共享池条目
@@ -48348,25 +48709,20 @@ function superAdminDeletePublic(itemId) {
 var catMgrExpand = {};   // 弹窗内展开/折叠状态
 var catMgrLayer = 'public';
 
-// 管理面板入口区块：两个入口 + 锁定按钮（家庭库锁定后入口隐藏）
+// 管理面板入口区块：两个入口（家庭库锁定后入口隐藏）
 function renderCatalogManager() {
     var box = document.getElementById('saCatalogBox');
     if (!box) return;
     // API 级防护：非超管不渲染任何入口（UI 层入口在"我家→设置"，由 refreshAdminTabVisibility 把关）
     if (!isSuperAdmin()) { box.innerHTML = ''; return; }
     var locked = isFamilyCategoryLocked();
-    var _btn = 'padding:7px 14px;border:none;border-radius:8px;font-size:13px;font-weight:600;color:white;cursor:pointer;';
-    box.innerHTML = '<div style="padding:12px;background:#FEFCE8;border:1px solid #FDE68A;border-radius:10px;">'
-        + '<div style="font-size:14px;font-weight:700;color:#854D0E;margin-bottom:10px;">📚 分类管理（主分类 › 子分类 › 细分类）</div>'
-        + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
-        + '<button onclick="openCategoryManager(\'public\')" style="' + _btn + 'background:#F59E0B;">📚 公共文库分类管理</button>'
-        + (locked ? '' : '<button onclick="openCategoryManager(\'family\')" style="' + _btn + 'background:#10B981;">🏠 家庭文库分类管理</button>')
-        + (!locked
-            ? '<button onclick="lockFamilyCategories()" style="padding:7px 14px;background:white;border:1px solid #FCA5A5;border-radius:8px;font-size:13px;color:#DC2626;cursor:pointer;">🔒 锁定家庭库分类</button>'
-            : '<span style="display:inline-flex;align-items:center;padding:7px 14px;background:#FEE2E2;border-radius:8px;font-size:13px;font-weight:600;color:#B91C1C;">🔒 家庭库分类已锁定</span>')
-        + '</div>'
-        + (locked ? '<div style="font-size:11px;color:#A16207;margin-top:8px;">家庭库分类已锁定（locked=true 或 APP_STAGE=' + APP_STAGE + '），任何身份均不可再编辑</div>' : '')
-        + '</div>';
+    var _btn = 'padding:7px 14px;border:none;border-radius:8px;font-size:13px;font-weight:700;color:white;cursor:pointer;white-space:nowrap;';
+    // V274：与「AI 批量生成」同一行，排列在其左侧
+    box.innerHTML = '<button onclick="openCategoryManager(\'public\')" style="' + _btn + 'background:#F59E0B;">📚 文库分类管理</button>'
+        + (locked
+            ? '<span style="display:inline-flex;align-items:center;padding:7px 12px;margin-left:8px;background:#FEE2E2;border-radius:8px;font-size:12.5px;font-weight:600;color:#B91C1C;white-space:nowrap;">🔒 家庭库分类已锁定</span>'
+                + (APP_STAGE === 'prod' ? '' : '<button onclick="unlockFamilyCategories()" style="' + _btn + 'margin-left:8px;background:#10B981;">🔓 解锁（超管）</button>')
+            : '');
 }
 
 // 锁定家庭库分类（二次确认）
@@ -48382,26 +48738,49 @@ function lockFamilyCategories() {
     renderCatalogManager();
 }
 
-// 打开分类管理弹窗（layer: public | family）
+// 解锁家庭库分类（超管专用，二次确认）
+function unlockFamilyCategories() {
+    if (!requireSuperAdmin()) return;
+    if (APP_STAGE === 'prod') return showToast('生产环境已强制锁定家庭库分类，无法解锁');
+    if (!isFamilyCategoryLocked()) return showToast('家庭库分类当前未锁定');
+    showConfirmDialog('解锁后将允许超管编辑家庭文库分类，可能影响已有知识条目的分类归属，确认解锁？', function() {
+        var kc = getKnowledgeCategories();
+        kc.family.locked = false;
+        saveKnowledgeCategories(kc);
+        logAdminAction('解锁家庭库分类', 'family.locked = false');
+        showToast('🔓 家庭库分类已解锁');
+        renderCatalogManager();
+    });
+}
+
+// 打开分类管理弹窗（统一入口，弹窗内切换 public / family）
 function openCategoryManager(layer) {
     if (!requireSuperAdmin()) return;
-    if (layer === 'family' && isFamilyCategoryLocked()) return showToast('家庭库分类已锁定，不可编辑');
-    catMgrLayer = layer;
+    catMgrLayer = (layer === 'family') ? 'family' : 'public';
     var old = document.getElementById('catMgrOverlay');
     if (old) old.remove();
     var ov = document.createElement('div');
     ov.id = 'catMgrOverlay';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(31,41,55,0.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.style.cssText = 'position:fixed;top:0;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;z-index:100002;background:rgba(31,41,55,0.55);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
     ov.addEventListener('click', function(e) { if (e.target === this) this.remove(); });
-    ov.innerHTML = '<div style="background:#FDF8F3;border-radius:16px;width:560px;max-width:100%;height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.25);">'
+    ov.innerHTML = '<div style="background:#FDF8F3;border-radius:16px;width:100%;max-width:400px;box-sizing:border-box;height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.25);">'
         + '<div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:white;border-bottom:1px solid #F3F4F6;">'
-        + '<div id="catMgrTitle" style="font-size:16px;font-weight:700;color:#1E293B;"></div>'
+        + '<div id="catMgrTitle" style="font-size:16px;font-weight:700;color:#1E293B;">📚 文库分类管理</div>'
         + '<div style="display:flex;gap:8px;align-items:center;">'
         + '<button onclick="catMgrAddMain()" style="padding:5px 12px;background:#F59E0B;border:none;border-radius:8px;font-size:12px;font-weight:600;color:white;cursor:pointer;">＋ 添加主分类</button>'
         + '<button onclick="document.getElementById(\'catMgrOverlay\').remove()" style="width:30px;height:30px;border:none;background:#F3F4F6;border-radius:8px;font-size:16px;color:#6B7280;cursor:pointer;">✕</button>'
         + '</div></div>'
-        + '<div id="catMgrBody" style="flex:1;overflow-y:auto;padding:12px 14px;"></div></div>';
+        + '<div id="catMgrTabs" style="flex-shrink:0;display:flex;gap:8px;padding:10px 14px 0;"></div>'
+        + '<div id="catMgrBody" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 14px;"></div></div>';
     document.body.appendChild(ov);
+    renderCategoryTree();
+}
+
+// 弹窗内切换：公共文库 / 家庭文库
+function catMgrSwitchLayer(layer) {
+    if (layer === catMgrLayer) return;
+    catMgrLayer = (layer === 'family') ? 'family' : 'public';
+    catMgrExpand = {};
     renderCategoryTree();
 }
 
@@ -48413,9 +48792,21 @@ function renderCategoryTree() {
     if (!body) return;
     var kc = getKnowledgeCategories();
     var tree = sortByOrder((kc[catMgrLayer] && kc[catMgrLayer].tree) || []);
-    document.getElementById('catMgrTitle').textContent = (catMgrLayer === 'public' ? '📚 公共文库分类管理' : '🏠 家庭文库分类管理');
+    // 弹窗内层级切换（V273：公共/家庭合并到一个「文库分类管理」）
+    var tabsEl = document.getElementById('catMgrTabs');
+    if (tabsEl) {
+        var _tabBase = 'padding:6px 14px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;';
+        tabsEl.innerHTML = '<button onclick="catMgrSwitchLayer(\'public\')" style="' + _tabBase + (catMgrLayer === 'public' ? 'background:#F59E0B;color:white;' : 'background:white;color:#92400E;border-color:#FDE68A;') + '">📚 公共文库</button>'
+            + '<button onclick="catMgrSwitchLayer(\'family\')" style="' + _tabBase + (catMgrLayer === 'family' ? 'background:#10B981;color:white;' : 'background:white;color:#047857;border-color:#A7F3D0;') + '">🏠 家庭文库</button>';
+    }
     var dietData = JSON.parse(lsGet('dietKnowledge') || '[]');
     var html = '';
+    if (catMgrLayer === 'family' && isFamilyCategoryLocked()) {
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:#FEE2E2;border:1px solid #FECACA;border-radius:10px;margin-bottom:8px;">'
+            + '<span style="font-size:12.5px;font-weight:600;color:#B91C1C;">🔒 家庭库分类已锁定，暂不可编辑</span>'
+            + (APP_STAGE === 'prod' ? '' : '<button onclick="unlockFamilyCategories();renderCategoryTree();" style="flex-shrink:0;padding:5px 12px;background:#10B981;border:none;border-radius:8px;font-size:12px;font-weight:600;color:white;cursor:pointer;">🔓 解锁（超管）</button>')
+            + '</div>';
+    }
     tree.forEach(function(m) {
         html += renderCatNodeRow(m, 'main', 0, dietData);
         if (catMgrExpand[m.id]) {
@@ -48545,10 +48936,20 @@ function catMgrSaveEdit() {
     showToast('✅ 已保存');
 }
 
-function catMgrAddMain() { openCatEditDialog({ mode: 'add-main', layer: catMgrLayer }); }
-function catMgrAddSub(mainId) { openCatEditDialog({ mode: 'add-sub', layer: catMgrLayer, mainId: mainId }); }
-function catMgrAddLeaf(mainId, subId) { openCatEditDialog({ mode: 'add-leaf', layer: catMgrLayer, mainId: mainId, subId: subId }); }
+function catMgrAddMain() {
+    if (catMgrLayer === 'family' && isFamilyCategoryLocked()) return showToast('家庭库分类已锁定，不可修改');
+    openCatEditDialog({ mode: 'add-main', layer: catMgrLayer });
+}
+function catMgrAddSub(mainId) {
+    if (catMgrLayer === 'family' && isFamilyCategoryLocked()) return showToast('家庭库分类已锁定，不可修改');
+    openCatEditDialog({ mode: 'add-sub', layer: catMgrLayer, mainId: mainId });
+}
+function catMgrAddLeaf(mainId, subId) {
+    if (catMgrLayer === 'family' && isFamilyCategoryLocked()) return showToast('家庭库分类已锁定，不可修改');
+    openCatEditDialog({ mode: 'add-leaf', layer: catMgrLayer, mainId: mainId, subId: subId });
+}
 function catMgrEdit(id) {
+    if (catMgrLayer === 'family' && isFamilyCategoryLocked()) return showToast('家庭库分类已锁定，不可修改');
     var kc = getKnowledgeCategories();
     var node = findCategoryNode(kc[catMgrLayer].tree, id);
     if (!node) return showToast('分类不存在');
@@ -48775,9 +49176,20 @@ function renderSaAuditLog() {
     if (!box) return;
     var log = [];
     try { log = JSON.parse(lsGet('adminAuditLog') || '[]'); } catch(e) {}
-    var rows = log.slice(0, 20).map(function(e) {
-        var d = new Date(e.ts);
-        var time = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    // V283: 只展示今日操作日志，标题显示 今日 / 共计 条数
+    var todayPrefix = (function () {
+        var n = new Date();
+        return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0');
+    })();
+    var _fmtTime = function (ts) {
+        var d = new Date(ts);
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    };
+    var todayLog = log.filter(function (e) {
+        try { return _fmtTime(e.ts).indexOf(todayPrefix) === 0; } catch (err) { return false; }
+    });
+    var rows = todayLog.slice(0, 20).map(function(e) {
+        var time = _fmtTime(e.ts);
         return '<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px dashed #F3F4F6;font-size:12px;">'
             + '<span style="color:#94A3B8;flex-shrink:0;">' + time + '</span>'
             + '<span style="color:#C2410C;font-weight:600;flex-shrink:0;">' + escapeHtml(e.action) + '</span>'
@@ -48785,8 +49197,8 @@ function renderSaAuditLog() {
             + '<span style="color:#94A3B8;flex-shrink:0;">' + escapeHtml(e.operator || '') + '</span></div>';
     }).join('');
     box.innerHTML = '<div style="padding:12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;">'
-        + '<div style="font-size:14px;font-weight:700;color:#334155;margin-bottom:8px;">📋 操作日志（最近 ' + Math.min(log.length, 20) + ' 条，共 ' + log.length + ' 条）</div>'
-        + (rows || '<div style="font-size:12.5px;color:#94A3B8;padding:6px 0;">暂无操作记录</div>')
+        + '<div style="font-size:14px;font-weight:700;color:#334155;margin-bottom:8px;">📋 操作日志（今日 ' + todayLog.length + ' 条，共 ' + log.length + ' 条）</div>'
+        + (rows || '<div style="font-size:12.5px;color:#94A3B8;padding:6px 0;">今日暂无操作记录</div>')
         + '</div>';
 }
 
@@ -48795,6 +49207,10 @@ function switchKnowledgeVisibility(vis) {
     // 兼容旧调用：'personal'/'private' → 'family'
     if (vis === 'personal' || vis === 'private') vis = 'family';
     currentKnowledgeVisibility = vis;
+
+    // V266: 超管管理态精简视图；离开管理态时恢复
+    if (vis === 'admin') { try { _applyAdminKnowledgeChrome(); } catch (e) {} }
+    else { try { _restoreKnowledgeChrome(); } catch (e) {} }
 
     // 刷新 Tab 可见性（超管登录态）
     refreshAdminTabVisibility();
@@ -48841,6 +49257,24 @@ function switchKnowledgeVisibility(vis) {
             if (breadcrumb) breadcrumb.style.display = 'none';
         }
     }
+}
+
+// V269: 进入超管「文库管理」统一入口（切换后二次确认视图状态，避免被后续渲染覆盖）
+function openSuperLibraryManager() {
+    switchTab('knowledge');
+    switchKnowledgeView('library');
+    switchKnowledgeVisibility('admin');
+    setTimeout(function() {
+        if (currentKnowledgeVisibility !== 'admin') return;
+        _applyAdminKnowledgeChrome();
+        try { renderAdminPanel(); } catch (e) {}
+    }, 80);
+}
+
+// V268: 退出超管「文库管理」（左上角 < 返回）——恢复到公共文库并回到「我家」
+function exitKnowledgeAdmin() {
+    try { switchKnowledgeVisibility('public'); } catch (e) {}
+    try { switchTab('family'); } catch (e) {}
 }
 
 // 按层级过滤知识列表（两层模型 + 家庭库内部筛选）
@@ -67014,6 +67448,13 @@ function switchTab(tab) {
     if (tab === 'family') {
         try { renderFamily(); } catch(e) { console.error('switchTab→renderFamily error:', e); }
     }
+    // V268: 底部点「食知」时若仍处于「文库管理」态，先退回普通文库视图（饮食问答）
+    if (tab === 'knowledge' && typeof currentKnowledgeVisibility !== 'undefined' && currentKnowledgeVisibility === 'admin') {
+        currentKnowledgeVisibility = 'public';
+        try { _restoreKnowledgeChrome(); } catch (e) {}
+        try { refreshAdminTabVisibility(); } catch (e) {}
+        document.querySelectorAll('.knowledge-layer-tab').forEach(function(b) { b.classList.toggle('active', b.dataset.layer === 'public'); });
+    }
     const titles = { chat:'AI对话', knowledge:'饮食问答', diary:'三餐计划、记录', fridge:'食材准备', family:'我家' };
     if (tab === 'knowledge' && currentKnowledgeViewMode === 'guide') {
         topTitle.textContent = (typeof _guideTopTitle !== 'undefined' && _guideTopTitle) ? _guideTopTitle : '节气饮食指南';
@@ -67505,6 +67946,11 @@ document.querySelectorAll('.tab-item').forEach(tab => {
 let menuOpen = false;
 menuBtn.addEventListener('click', function(e) {
     e.stopPropagation();
+    // V268: 超管「文库管理」页：左上角 < 退出返回
+    if (currentTab === 'knowledge' && currentKnowledgeVisibility === 'admin') {
+        exitKnowledgeAdmin();
+        return;
+    }
     if (currentTab === 'knowledge') {
         // 食知页面：打开AI对话历史
         openHistoryPanel();
