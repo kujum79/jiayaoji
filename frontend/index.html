@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V283-20261028';
+        var APP_VER = 'V284-20261028';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -11237,13 +11237,14 @@ async function _monitorFixResetCache() {
     }
     _closeMonitorFix();
     var sameFamily = (typeof getFamilyId === 'function' && getFamilyId() === fid);
-    if (sameFamily) _applyRemoteResetCache();
     var note = sameFamily ? '已开始清理本机缓存' : '指令已下发，下次打开 APP 自动生效';
+    // 先等标记「已修复」落库，再执行清缓存/刷新，避免刷新打断请求导致状态回滚
     if (row.id) {
-        _monitorResolve(row.id, note);
+        await _monitorResolve(row.id, note);
     } else {
         showToast((sameFamily ? '🛠 ' : '✅ ') + note);
     }
+    if (sameFamily) _applyRemoteResetCache();
 }
 
 async function _openAiProviderSheet() {
@@ -11482,6 +11483,7 @@ function _applyRemoteResetCache() {
             removed++;
         }
         try { sessionStorage.clear(); } catch (e) {}
+        try { sessionStorage.setItem('_remoteResetAppliedAt', String(Date.now())); } catch (e) {}
     } catch (e) {}
     showToast(removed > 0 ? ('🛠 已清理 ' + removed + ' 项本地缓存，正在刷新…') : '🛠 正在刷新页面以恢复状态…');
     setTimeout(function () {
@@ -11492,6 +11494,8 @@ function _applyRemoteResetCache() {
 async function _remoteCmdPoll() {
     var fid = (typeof getFamilyId === 'function') ? getFamilyId() : null;
     if (!fid) return;
+    // 本标签页已执行过重置缓存，轮询不再重复触发刷新（否则会反复重载页面、状态回滚）
+    try { if (sessionStorage.getItem('_remoteResetAppliedAt')) return; } catch (e) {}
     try {
         var res = await fetch('/api/system/commands', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ familyId: fid }), __noLog: true

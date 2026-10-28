@@ -5086,6 +5086,7 @@ async def admin_monitor() -> Dict[str, Any]:
         if ts_ms and _dt_cls.fromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d") == today:
             resolved_today += 1
     unresolved: List[Dict[str, Any]] = []
+    unresolved_count = 0
     for obj in entries:
         ts = int(obj.get("clientCreatedAt") or 0)
         ts_str = ""
@@ -5097,8 +5098,10 @@ async def admin_monitor() -> Dict[str, Any]:
             ts_str = str(obj.get("_logTime") or "")[:16]
             today_count += 1
         eid = str(obj.get("errorId") or "")
-        if eid and eid in resolved:
-            continue
+        # 已修复条目仍返回给前端（带 resolved 标记），刷新后继续显示「已修复」而不是变回「修复」
+        is_resolved = bool(eid and eid in resolved)
+        if not is_resolved:
+            unresolved_count += 1
         if len(unresolved) >= 100:
             continue
         unresolved.append({
@@ -5110,7 +5113,8 @@ async def admin_monitor() -> Dict[str, Any]:
             "source": str(obj.get("source") or "frontend"),
             "createdAt": ts,
             "timeText": ts_str,
-            "resolved": False,
+            "resolved": is_resolved,
+            "resolvedAt": int(resolved.get(eid) or 0) if is_resolved else 0,
         })
     return {
         "ok": True,
@@ -5119,7 +5123,7 @@ async def admin_monitor() -> Dict[str, Any]:
         "activePaidCount": _count_active_paid(),
         "resolvedTodayCount": resolved_today,
         "resolvedTotalCount": len(resolved),
-        "unresolvedCount": len(unresolved),
+        "unresolvedCount": unresolved_count,
         "unresolved": unresolved,
     }
 
