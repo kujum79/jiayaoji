@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V290-20261028';
+        var APP_VER = 'V291-20261028';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4043,21 +4043,7 @@ body.demo-mode .phone-frame { height: 100%; }
     </div>
 </div>
 
-<!-- ====== V290: 账号资料（昵称 + 绑定手机号） ====== -->
-<div id="accountProfileModal" style="position:fixed;inset:0;z-index:100015;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeAccountProfileModal()">
-    <div style="background:#fff;border-radius:20px;padding:24px 20px;width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
-        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:14px;text-align:center;">👤 账号资料</div>
-        <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:4px;">账号昵称</div>
-        <input id="accProfileNick" type="text" maxlength="16" placeholder="给自己起个昵称（选填）" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
-        <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:4px;">绑定手机号</div>
-        <div id="accProfilePhone" style="padding:10px 14px;font-size:15px;color:#4B5563;background:#F9FAFB;border:1px solid #F3F4F6;border-radius:10px;margin-bottom:10px;letter-spacing:0.5px;">—</div>
-        <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:4px;">所属家庭</div>
-        <div id="accProfileFamily" style="padding:10px 14px;font-size:14px;color:#4B5563;background:#F9FAFB;border:1px solid #F3F4F6;border-radius:10px;margin-bottom:14px;">—</div>
-        <button onclick="saveAccountProfile()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">保存</button>
-        <div id="accProfileErr" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;"></div>
-        <div onclick="closeAccountProfileModal()" style="font-size:13px;color:#9CA3AF;margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline;">关闭</div>
-    </div>
-</div>
+<!-- ====== V290: 账号资料弹窗已移除（V291 取消昵称） ====== -->
 
 <!-- ====== V288: 家庭成员账号（绑定手机号一览） ====== -->
 <div id="familyAccountsModal" style="position:fixed;inset:0;z-index:100015;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeFamilyAccountsModal()">
@@ -6227,58 +6213,11 @@ function submitJoinFamily() {
     }
 }
 
-// ====== V290: 账号资料（昵称可改，家庭名/手机号只读） ======
+// ====== V291: 账号资料已取消（不再提供昵称），家庭名称统一在「我家 → 家庭信息」修改 ======
 function _curAccountRecord() {
     var phone = String(((getLoginUser() || {}).phone) || ((getLoginUser() || {}).id) || '');
     if (!/^1\d{10}$/.test(phone)) return null;
     return findRegisteredUser(phone);
-}
-function openAccountProfileModal() {
-    if (!isLogined()) { showToast('请先登录'); return; }
-    var m = document.getElementById('accountProfileModal');
-    if (!m) return;
-    m.style.display = 'flex';
-    var u = getLoginUser() || {};
-    var rec = _curAccountRecord();
-    var nickEl = document.getElementById('accProfileNick');
-    if (nickEl) nickEl.value = String((rec && rec.nickname) || u.nickname || '');
-    var phoneEl = document.getElementById('accProfilePhone');
-    if (phoneEl) phoneEl.textContent = String(u.phone || u.id || '—');
-    var famEl = document.getElementById('accProfileFamily');
-    if (famEl) famEl.textContent = _curFamilyName() + (getFamilyId() ? '（' + getFamilyId() + '）' : '');
-    var eb = document.getElementById('accProfileErr');
-    if (eb) { eb.textContent = ''; eb.style.display = 'none'; }
-}
-function closeAccountProfileModal() {
-    var m = document.getElementById('accountProfileModal');
-    if (m) m.style.display = 'none';
-}
-function saveAccountProfile() {
-    var eb = document.getElementById('accProfileErr');
-    function showErr(msg) { showToast(msg); if (eb) { eb.textContent = msg; eb.style.display = 'block'; } }
-    var nick = String(((document.getElementById('accProfileNick') || {}).value || '').trim());
-    if (nick.length > 16) { showErr('昵称最多 16 个字'); return; }
-    var u = getLoginUser();
-    if (!u) { showErr('登录状态已失效，请重新登录'); return; }
-    var key = String(u.phone || u.id || '');
-    // 1) 账号字典（registeredUsers）写昵称
-    var users = getRegisteredUsers();
-    var hit = false;
-    users.forEach(function (rec) {
-        if (rec && String(rec.phone) === key) { rec.nickname = nick; hit = true; }
-    });
-    if (hit) saveRegisteredUsers(users);
-    // 2) 当前登录态写昵称
-    u.nickname = nick;
-    setLoginUser(u);
-    // 3) 同步 currentAccount
-    try {
-        var ca = JSON.parse(localStorage.getItem('currentAccount') || 'null');
-        if (ca) { ca.nickname = nick; localStorage.setItem('currentAccount', JSON.stringify(ca)); }
-    } catch (e) {}
-    closeAccountProfileModal();
-    updateHomeAuthBtn();
-    showToast(nick ? ('昵称已改为「' + nick + '」') : '昵称已清空');
 }
 
 // ====== V290: 家庭信息（家庭名称全员可改，住址仅创建者/超管可改） ======
@@ -6529,14 +6468,11 @@ function updateHomeAuthBtn() {
         // 注意：家庭名称+密码登录（doFamilyLogin）写入的会话无 familySession 标记，
         // 不能以它为前置条件，否则会错误回落到邮箱前缀
         var fam = getLoginFamily ? getLoginFamily() : null;
-        var name = (fam && fam.name) || u.familyName || u.family_name || u.name || u.nickname || (u.email ? String(u.email).split('@')[0] : '') || '我家';
-        // V290: 已设置账号昵称时优先显示昵称（家庭名保留在 title 提示里）
-        var nick = String((u && u.nickname) || '').trim();
-        var shownName = nick || name;
-        // 纯手机号/长邮箱名太长，会挤换行首页"白露饮食指南"横幅 → 显示"我家"（点击本就进入我家）
-        if (/^1\d{10}$/.test(shownName)) shownName = '我家';
+        var name = (fam && fam.name) || u.familyName || u.family_name || u.name || (u.email ? String(u.email).split('@')[0] : '') || '我家';
+        // V291: 首页右上角只显示家庭名称（已取消账号昵称，避免与「账号设置」里的家庭名不一致）
+        if (/^1\d{10}$/.test(name)) name = '我家';
         // V62: 已登录显示用户名全文（14px 加粗 #C2410C 暖棕红，最大 80px 超出省略），点击进入"我家"（账号设置）
-        btn.innerHTML = '<span style="display:inline-block;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:700;color:#C2410C;line-height:1;">' + escapeHtml(shownName) + '</span>';
+        btn.innerHTML = '<span style="display:inline-block;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:700;color:#C2410C;line-height:1;">' + escapeHtml(name) + '</span>';
         btn.style.background = 'none';
         btn.style.width = 'auto';
         btn.style.height = '40px';
@@ -6544,7 +6480,7 @@ function updateHomeAuthBtn() {
         btn.style.borderRadius = '0';
         btn.style.marginLeft = '0'; // V134: 行 justify-content:flex-end 已靠右，auto 会把 📚 与家庭名顶开
         btn.style.marginRight = '28px'; // V63: 用户名距壳右缘 32px（顶栏 padding4 + 28），与食材卡＋按钮右缘同线
-        btn.title = nick ? (nick + ' · ' + name) : '点击进入"我家"';
+        btn.title = '点击进入"我家"';
     } else {
         // V43: 未登录显示 SVG 人形 22px（currentColor 跟随 .home-nav-icon 的 #6B7280 灰）
         btn.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="display:block;"><circle cx="12" cy="7.5" r="4"/><path d="M4 20.5c0-4.4 3.6-7 8-7s8 2.6 8 7z"/></svg>';
@@ -36320,8 +36256,7 @@ function renderFamily() {
             <button type="button" onclick="openFamilyAccountsModal()" style="flex:1 1 0;min-width:0;padding:10px 8px;background:#fff;border:1px solid #F3F4F6;border-radius:12px;font-size:13px;font-weight:700;color:#4B5563;cursor:pointer;white-space:nowrap;">📱 家庭成员账号</button>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:12px;">
-            <button type="button" onclick="openAccountProfileModal()" style="flex:1 1 0;min-width:0;padding:10px 8px;background:#fff;border:1px solid #F3F4F6;border-radius:12px;font-size:13px;font-weight:700;color:#4B5563;cursor:pointer;white-space:nowrap;">👤 账号资料</button>
-            <button type="button" onclick="openFamilyInfoModal()" style="flex:1 1 0;min-width:0;padding:10px 8px;background:#fff;border:1px solid #F3F4F6;border-radius:12px;font-size:13px;font-weight:700;color:#4B5563;cursor:pointer;white-space:nowrap;">🏠 家庭信息</button>
+            <button type="button" onclick="openFamilyInfoModal()" style="flex:1 1 0;min-width:0;padding:10px 8px;background:#fff;border:1px solid #FED7AA;border-radius:12px;font-size:13px;font-weight:700;color:#C2410C;cursor:pointer;white-space:nowrap;">🏠 修改家庭名称</button>
         </div>
     `);
     // V162: 膳食日记/我的外食/我的复刻/我的创作 四大模块 2×2 一级入口卡
@@ -38261,7 +38196,7 @@ function _openAccountSettingsModal() {
     try { u = JSON.parse(localStorage.getItem('jj_login_user') || 'null'); } catch (e) {}
     var fam = (typeof getLoginFamily === 'function') ? getLoginFamily() : null;
     var famName = (fam && fam.name) || (u && (u.familyName || u.name)) || '我家';
-    var email = (u && u.email) || '—';
+    var email = (u && (u.email || u.phone)) || '—';
     var curOp = getCurrentMember();
     var opName = curOp ? curOp.name : '未选择';
     // V96: 按新规格重构——登录/登出、修改密码、关于家肴记、隐私政策
@@ -38273,6 +38208,7 @@ function _openAccountSettingsModal() {
         + '<button onclick="doLogout()" style="height:28px;padding:0 12px;border:1px solid #FECACA;border-radius:12px;background:white;color:#DC2626;font-size:12px;cursor:pointer;flex:0 0 auto;">退出登录</button>'
         + '</div></div>'
         + '<div style="background:white;border:1px solid #F3F4F6;border-radius:12px;overflow:hidden;margin-bottom:10px;">'
+        + '<div onclick="openFamilyInfoModal()" style="display:flex;align-items:center;gap:10px;padding:13px 14px;border-bottom:1px solid #F3F4F6;cursor:pointer;" onmouseover="this.style.background=\'#FFFBEB\'" onmouseout="this.style.background=\'\'"><span style="font-size:18px;flex:0 0 auto;">🏠</span><span style="font-size:14px;color:#4B5563;flex:1;">修改家庭名称</span><span style="font-size:12px;color:#9CA3AF;flex:0 0 auto;max-width:110px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + escapeHtml(famName) + '</span><span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;">›</span></div>'
         + '<div onclick="_acctChangePwd()" style="display:flex;align-items:center;gap:10px;padding:13px 14px;border-bottom:1px solid #F3F4F6;cursor:pointer;" onmouseover="this.style.background=\'#FFFBEB\'" onmouseout="this.style.background=\'\'"><span style="font-size:18px;flex:0 0 auto;">🔑</span><span style="font-size:14px;color:#4B5563;flex:1;">修改密码</span><span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;">›</span></div>'
         + '<div onclick="_acctAbout()" style="display:flex;align-items:center;gap:10px;padding:13px 14px;border-bottom:1px solid #F3F4F6;cursor:pointer;" onmouseover="this.style.background=\'#FFFBEB\'" onmouseout="this.style.background=\'\'"><span style="font-size:18px;flex:0 0 auto;">ℹ️</span><span style="font-size:14px;color:#4B5563;flex:1;">关于家肴记</span><span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;">›</span></div>'
         + '<div onclick="_acctPrivacy()" style="display:flex;align-items:center;gap:10px;padding:13px 14px;cursor:pointer;" onmouseover="this.style.background=\'#FFFBEB\'" onmouseout="this.style.background=\'\'"><span style="font-size:18px;flex:0 0 auto;">🛡️</span><span style="font-size:14px;color:#4B5563;flex:1;">隐私政策</span><span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;">›</span></div>'
