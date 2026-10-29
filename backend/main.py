@@ -787,6 +787,13 @@ _FOODHALL_DISEASES = ["高血压", "糖尿病", "癌症", "肿瘤", "肝炎", "�
                       "失眠", "感冒", "心脏病", "痛风", "贫血", "哮喘", "中风"]
 # 功效承诺短语（error 级）
 _FOODHALL_PHRASES = ["能治", "可改善", "有疗效", "包治", "药到病除", "保证治好"]
+# V296: 食养堂公开内容面向全国——出现城市名/局部天气即判为不合格（家庭专属内容不走此校验）
+_FH_CITY_HINTS = ["北京", "上海", "天津", "重庆", "杭州", "广州", "深圳", "成都", "南京", "武汉",
+                  "西安", "苏州", "长沙", "青岛", "大连", "宁波", "厦门", "福州", "哈尔滨", "沈阳",
+                  "长春", "昆明", "郑州", "济南", "合肥", "南昌", "太原", "石家庄", "兰州", "贵阳",
+                  "南宁", "海口", "呼和浩特", "乌鲁木齐", "拉萨", "西宁", "银川", "无锡", "温州",
+                  "东莞", "佛山", "珠海"]
+
 # 弱信号词：本地黑名单未命中但出现这些字眼时，触发 AI 语义二次确认（疑似风险）
 _FOODHALL_WEAK = ["功效", "偏方", "秘方", "古方", "神效", "疗效", "炎", "咳", "肿",
                   "痛", "症", "菌", "毒", "药", "虚", "补气", "上火", "去火", "下火"]
@@ -837,7 +844,8 @@ async def _foodhall_generate_core(
     system_prompt = _FOODHALL_SYSTEM.format(
         date=date, solar_term=solar_term or "无",
     )
-    user_prompt = f"日期：{date}；节气：{solar_term or '无'}。请生成 3 篇食养堂候选内容，主题必须全国通用。"
+    user_prompt = (f"日期：{date}；节气：{solar_term or '无'}。请生成 3 篇食养堂候选内容，主题必须全国通用。"
+                   "标题、摘要、正文一律不得出现任何城市/地区名称（如“杭州降温”），请用季节与节气表述。")
 
     drafts: List[Dict[str, Any]] = []
     violations: List[Dict[str, Any]] = []
@@ -868,6 +876,10 @@ async def _foodhall_generate_core(
             hits = _foodhall_banned_hits(blob)
             if hits:
                 violations.append({"index": i, "words": hits})
+            # V296: 全国通用把关——标题/摘要/正文出现城市名即判为不合格，触发重生成
+            city_hits = [w for w in _FH_CITY_HINTS if w in blob]
+            if city_hits:
+                violations.append({"index": i, "type": "city", "words": city_hits})
             drafts.append({
                 "id": f"fh_{ts}_{i}",
                 "category": str(item.get("category") or "节气食养"),
@@ -909,6 +921,11 @@ async def _foodhall_audit_core(
     for p in _FOODHALL_PHRASES:
         if p in blob:
             issues.append({"level": "error", "message": f"功效承诺'{p}'"})
+    # V296: 食养堂面向全国，公开内容不得绑定具体城市（家庭专属内容不走本审核）
+    city_hits = [w for w in _FH_CITY_HINTS if w in blob]
+    if city_hits:
+        issues.append({"level": "error",
+                       "message": f"含具体城市名'{city_hits[0]}'，面向全国的内容不应绑定城市，请改为全国通用表述"})
     if any(i["level"] == "error" for i in issues):
         return {"ok": True, "passed": False, "issues": issues, "suggestions": []}
 
@@ -2989,9 +3006,14 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
         f"【日期】{date_str}",
         f"【节气】{req.solarTerm.strip() or '不在节气当天'}",
         f"【天气】{weather_line}",
-        f"【城市】{(req.city or '').strip() or '未提供'}",
-        f"【家庭】{(req.familyBrief or '').strip()[:200] or '普通家庭'}",
     ]
+    if sub_plan:
+        # V296: 城市/天气仅用于家庭专属内容的口味与食材适配
+        user_lines.append(f"【城市】{(req.city or '').strip() or '未提供'}")
+    # V296: 全场景硬性要求——标题/摘要不绑定城市（家庭专属的信息只能落在正文里）
+    user_lines.append("【硬性要求】标题与摘要中不得出现任何城市/地区名称（如“杭州”）；"
+                      "如需体现当地天气，只能写在正文里，并使用季节、节气表述。")
+    user_lines.append(f"【家庭】{(req.familyBrief or '').strip()[:200] or '普通家庭'}")
     if req.variant > 0:
         user_lines.append(f"【要求】这是该家庭今天看到的第 {req.variant + 1} 条，请换一个与之前完全不同的选题角度（如不同食材、烹饪技巧、节气习俗），标题和内容都不要与之前重复。")
     if sub_plan in _SUBSCRIPTION_USER_REQUIREMENTS:
@@ -3004,6 +3026,10 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
         if not row:
             return None
         art = _fh_row_to_article(row)
+        # V296: 兜底文章同样不得在标题/摘要绑定城市（不满足则视为无兜底，前端继续回退）
+        _head = str(art.get("title") or "") + " " + str(art.get("summary") or "")
+        if any(w in _head for w in _FH_CITY_HINTS):
+            return None
         return art  # 不写缓存：下次请求仍会重试专属生成
 
     # V199.4: 订阅内容质量校验——模型偶发漏要求或输出截断，校验不达标自动重试一次
@@ -3018,6 +3044,11 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
             # premium 全家桶：至少要有 ⚠️ 提醒或一个实操建议
             return "⚠️" in c or any(k in c for k in ("建议", "适合", "推荐", "不宜"))
         return True
+
+    def _tip_title_national(t: Dict[str, Any]) -> bool:
+        # V296: 标题/摘要不得绑定城市（全国通用），城市信息只允许出现在正文
+        head = str(t.get("title") or "") + " " + str(t.get("summary") or "")
+        return not any(w in head for w in _FH_CITY_HINTS)
 
     tip = None
     # V285: 整条 AI 链路（含服务商逐个降级）共用 20s 截止时间——旧逻辑每家各自等满 60s，
@@ -3057,6 +3088,10 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
             continue
         cand = _clean_daily_tip(parsed)
         if not cand["title"] or not cand["content"]:
+            continue
+        if not _tip_title_national(cand):
+            # 标题/摘要带城市名：不对外展示为「今日一课」，改用已发布文章兜底
+            print(f"[daily-tip] 标题/摘要含城市名，放弃本条（{cand.get('title')}）")
             continue
         if not sub_plan or _sub_content_ok(cand):
             tip = cand
@@ -4409,7 +4444,7 @@ async def expert_assess(req: ExpertAssessRequest) -> Dict[str, Any]:
     return {"ok": True, "result": text, "usedVision": used_vision, "mode": "ai"}
 
 
-# ========== V226: 专项饮食计划生成（POST /api/special-plan） ==========
+# ========== V226: 专项健康饮食计划生成（POST /api/special-plan） ==========
 class SpecialPlanRequest(BaseModel):
     memberBrief: str = ""
     planType: str = ""       # illness / growth / athlete / fitness / pregnancy / infant
@@ -4427,7 +4462,7 @@ _SPECIAL_PLAN_LABELS = {
     "infant": "婴儿辅食",
 }
 
-_SPECIAL_PLAN_PROMPT = """你是一位专业的家庭营养师。请为家庭中的这位成员制定一个为期 7 天的专项饮食调理计划。
+_SPECIAL_PLAN_PROMPT = """你是一位专业的家庭营养师。请为家庭中的这位成员制定一个为期 7 天的专项健康饮食计划。
 【成员】{memberBrief}
 【家庭背景】{familyBrief}
 【计划类型】{planType}
@@ -4435,7 +4470,7 @@ _SPECIAL_PLAN_PROMPT = """你是一位专业的家庭营养师。请为家庭中
 【当前节气】{solarTerm}
 【要求】
 1. 输出一个包含 7 天一日三餐的 JSON 数据（早/中/晚餐的菜名）。
-2. 生成一段 200 字左右的【专项饮食报告】。
+2. 生成一段 200 字左右的【专项健康饮食报告】。
 3. 报告需结合节气（当前为{solarTerm}）。
 4. 严禁使用治疗、治愈等医疗词汇。生病调理需强调补水、易消化；增高/体育生需强调高蛋白高钙。
 5. 返回格式：{{ "weeklyPlan": {{ "day1": ["早餐...", "午餐...", "晚餐..."], "day2": ["早餐...", "午餐...", "晚餐..."] }}, "report": "..." }}
@@ -4444,11 +4479,11 @@ _SPECIAL_PLAN_PROMPT = """你是一位专业的家庭营养师。请为家庭中
 
 @app.post("/api/special-plan")
 async def special_plan(req: SpecialPlanRequest) -> Dict[str, Any]:
-    """V226: 生成 7 天专项食谱（day1~day7 三餐）与专项饮食报告。"""
+    """V226: 生成 7 天专项食谱（day1~day7 三餐）与专项健康饮食报告。"""
     plan_type = (req.planType or "").strip()
     label = _SPECIAL_PLAN_LABELS.get(plan_type)
     if not label:
-        return {"ok": False, "error": "不支持的专项计划类型"}
+        return {"ok": False, "error": "不支持的专项健康饮食计划类型"}
     description = (req.description or "").strip()[:600]
     if not description:
         return {"ok": False, "error": "请填写具体情况"}
@@ -4515,8 +4550,10 @@ async def special_plan(req: SpecialPlanRequest) -> Dict[str, Any]:
         report = report.replace(w, "")
     if not report:
         report = f"本周结合{solar_term}节气安排饮食，以新鲜当季食材为主，三餐规律、荤素搭配，按计划执行并留意身体反馈。"
-    if not report.startswith("【专项饮食报告】"):
-        report = "【专项饮食报告】" + report
+    # 统一报告标题（兼容模型残留的旧标题「专项饮食报告」）
+    report = report.replace("【专项饮食报告】", "").strip()
+    if not report.startswith("【专项健康饮食报告】"):
+        report = "【专项健康饮食报告】" + report
     if _EXPERT_DISCLAIMER not in report:
         report = report + "\n\n" + _EXPERT_DISCLAIMER
 

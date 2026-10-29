@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V295-20261028';
+        var APP_VER = 'V296-20261029';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4474,7 +4474,7 @@ async function _submitFeedback() {
             </div>
             <div style="display:flex;gap:4px;margin-left:auto;align-items:center;">
                 <button class="clear-btn" id="knowledgeResetBtn" style="display:none;" title="重新对话">🔄</button>
-                <!-- V227: 食记页右上角「专项计划」看板入口（在 ➕ 左侧） -->
+                <!-- V227: 食记页右上角「专项健康饮食计划」看板入口（在 ➕ 左侧） -->
                 <button class="clear-btn" id="diarySpecialPlanBtn" style="display:none;width:auto;height:24px;padding:0 8px;border:1px solid rgba(255,255,255,0.55);border-radius:12px;background:rgba(255,255,255,0.18);color:#fff;font-size:12px;font-weight:600;line-height:1;white-space:nowrap;" onclick="openSpecialPlanBoard()">健康管家</button>
                 <button class="clear-btn" id="clearBtn">➕</button>
             </div>
@@ -5875,7 +5875,10 @@ const SUPER_ADMIN = {
 // 与"密码超管会话"（getSuperAdminSession，长按版本号进入）相互独立、并存
 function isSuperAdmin() {
     var u = getLoginUser();
-    if (!u || !u.email) return false;
+    if (!u) return false;
+    // V296: 显式超管标记（预置账号 / 超管家庭继承）优先，避免邮箱缺失时被判为非超管
+    if (u.superAdmin === true) return true;
+    if (!u.email) return false;
     // 第一道门：邮箱精确匹配
     if (String(u.email).trim().toLowerCase() !== String(SUPER_ADMIN.email).toLowerCase()) return false;
     // 第二道门：用户名匹配（宽容）
@@ -6110,6 +6113,19 @@ function _applyAccountSession(account) {
     // V289: 预置的三仁佳欢账号携带超管邮箱，沿用既有 isSuperAdmin() 邮箱判定
     if (account.email) loginUser.email = account.email;
     if (account.superAdmin) loginUser.superAdmin = true;
+    // V296: 同家庭成员（含家庭名+密码登录）继承超管身份——以该家庭在 registeredUsers 中的超管标记为准
+    if (!loginUser.superAdmin) {
+        try {
+            var _us = getRegisteredUsers();
+            for (var _i = 0; _i < _us.length; _i++) {
+                if (_us[_i] && _us[_i].superAdmin && String(_us[_i].familyId) === String(fid)) {
+                    loginUser.superAdmin = true;
+                    if (_us[_i].email) loginUser.email = _us[_i].email;
+                    break;
+                }
+            }
+        } catch (e) {}
+    }
     setLoginUser(loginUser);
     setFamilyId(fid);   // 依赖 jj_login_user.id，必须在 setLoginUser 之后
     setLoginFamily({ id: fid, name: fname, owner_id: phone, ownerPhone: phone });
@@ -6203,13 +6219,20 @@ function _applyFamilySession(rec) {
     var fname = rec.familyName || '我家';
     // 家庭创建者手机号（用于「家庭帐号」里标记创建者）
     var ownerPhone = '';
+    var ownerRec = null;
     try {
         var us = getRegisteredUsers();
         for (var i = 0; i < us.length; i++) {
-            if (us[i] && String(us[i].familyId) === fid && (us[i].role === 'owner' || !us[i].role)) { ownerPhone = String(us[i].phone); break; }
+            if (us[i] && String(us[i].familyId) === fid && (us[i].role === 'owner' || !us[i].role)) { ownerPhone = String(us[i].phone); ownerRec = us[i]; break; }
         }
     } catch (e) {}
-    setLoginUser({ id: 'family_' + fid, familyId: fid, name: fname, familyName: fname, familySession: true, localAccount: true, familyLogin: true });
+    var lu = { id: 'family_' + fid, familyId: fid, name: fname, familyName: fname, familySession: true, localAccount: true, familyLogin: true };
+    // V296: 家庭名+密码登录同样继承该家庭的超管身份（三仁佳欢这类超管家庭）
+    if (ownerRec && ownerRec.superAdmin) {
+        lu.superAdmin = true;
+        if (ownerRec.email) lu.email = ownerRec.email;
+    }
+    setLoginUser(lu);
     setFamilyId(fid);
     setLoginFamily({ id: fid, name: fname, owner_id: ownerPhone, ownerPhone: ownerPhone });
     try { localStorage.setItem('familyName_' + fid, fname); } catch (e) {}
@@ -31628,13 +31651,21 @@ function _dtRenderDegraded(latestDate) {
         var d = String(latestDate).slice(5).replace('-', ' 月 ') + ' 日';
         sub = '今日内容暂未更新 · 最近更新 ' + d;
     }
-    el.innerHTML = '<div class="dt-head"><span>📚 食养堂</span>'
-        + '<span class="dt-head-btns" onclick="event.stopPropagation()">'
-        + '<button class="dt-btn" style="background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;" onclick="event.stopPropagation(); _openDailyTipArchive()">往期精选 ›</button>'
-        + '</span></div>'
-        + '<div onclick="_openDailyTipArchive()" style="cursor:pointer;">'
+    el.innerHTML = '<div class="dt-head"><span>📚 食养堂 · 今日一课</span></div>'
+        + '<div style="cursor:default;">'
         + '<div class="dt-degraded">' + sub + '</div>'
         + '</div>';
+}
+// V296: 公开食养内容的「全国通用」过滤——标题/摘要含城市名的内容不对外展示
+var _DT_CITY_WORDS = ['北京', '上海', '天津', '重庆', '杭州', '广州', '深圳', '成都', '南京', '武汉',
+    '西安', '苏州', '长沙', '青岛', '大连', '宁波', '厦门', '福州', '哈尔滨', '沈阳', '长春',
+    '昆明', '郑州', '济南', '合肥', '南昌', '太原', '石家庄', '兰州', '贵阳', '南宁', '海口',
+    '呼和浩特', '乌鲁木齐', '拉萨', '西宁', '银川', '无锡', '温州', '东莞', '佛山', '珠海'];
+function _dtIsNational(a) {
+    if (!a) return false;
+    var t = String(a.title || '') + ' ' + String(a.summary || '');
+    for (var i = 0; i < _DT_CITY_WORDS.length; i++) { if (t.indexOf(_DT_CITY_WORDS[i]) >= 0) return false; }
+    return true;
 }
 function _dtFamilyBrief() {
     try {
@@ -31709,12 +31740,13 @@ async function renderHomeDailyTipCard(force) {
     // 先秒出今天已发布的文章（本地缓存零延迟）
     var fast = null;
     try { fast = _fhPublishedToday(); } catch (e) {}
+    if (fast && !_dtIsNational(fast)) fast = null;   // V296: 含城市/局部天气的旧内容不对外展示
     if (!fast) {
         // V145: 服务端 confirmed 文章优先（pending 不展示）
         try {
             var resp = await fetch('/api/food-hall/published?date=' + encodeURIComponent(_dtTodayKey()), { cache: 'no-store' });
             var out = await resp.json();
-            if (out && out.published && out.article && out.article.title) fast = out.article;
+            if (out && out.published && out.article && out.article.title && _dtIsNational(out.article)) fast = out.article;
         } catch (e) {}
     }
     if (fast) {
@@ -31728,7 +31760,7 @@ async function renderHomeDailyTipCard(force) {
             var ydKey = yd.getFullYear() + '-' + String(yd.getMonth() + 1).padStart(2, '0') + '-' + String(yd.getDate()).padStart(2, '0');
             var resp2 = await fetch('/api/food-hall/published?date=' + encodeURIComponent(ydKey), { cache: 'no-store' });
             var out2 = await resp2.json();
-            if (out2 && out2.published && out2.article && out2.article.title) {
+            if (out2 && out2.published && out2.article && out2.article.title && _dtIsNational(out2.article)) {
                 _dtServerTip = out2.article;
                 _dtRenderCard(_dtServerTip);
             }
@@ -31736,21 +31768,34 @@ async function renderHomeDailyTipCard(force) {
     }
     if (!fast && _dtServerTip) fast = true; // 昨日文章已展示，避免下面重复渲染降级态
     if (!fast) {
-        // V223: 今日/昨日都没有 confirmed 文章时，不再把归档旧文冒充「今日一课」（旧文可能含其它城市的天气语境），
-        // 仅提示暂未更新，并给出「查看往期精选」入口
-        var _latestDate = '';
+        // V296: 今日/昨日都没有 confirmed 文章时，回落展示「最近一篇已发布文章」，
+        // 保证未登录游客也能看到食养堂内容（不再只显示"暂未更新"）。
+        var _latest = null;
         try {
             var resp3 = await fetch('/api/food-hall/published-list?days=120', { cache: 'no-store' });
             var out3 = await resp3.json();
-            if (out3 && Array.isArray(out3.articles) && out3.articles.length) {
-                var latest = null;
+            if (out3 && Array.isArray(out3.articles)) {
                 for (var li = 0; li < out3.articles.length; li++) {
-                    if (out3.articles[li] && out3.articles[li].title) { latest = out3.articles[li]; break; }
+                    if (out3.articles[li] && out3.articles[li].title && _dtIsNational(out3.articles[li])) { _latest = out3.articles[li]; break; }
                 }
-                if (latest) _latestDate = String(latest.date || latest.publishDate || latest.publish_date || '');
             }
         } catch (e) {}
-        _dtRenderDegraded(_latestDate);
+        if (_latest && _latest.title) {
+            _dtServerTip = _latest;
+            _dtRecordHistory(_latest);
+            _dtRenderCard(_latest);
+        } else {
+            // V296: 已发布文章都不满足全国通用要求时，兜底用 AI 生成一条全国通用内容（限时 12s）
+            var _natTip = null;
+            try { _natTip = await _fetchDailyTip(undefined, 12000); } catch (e) {}
+            if (_natTip && _natTip.title && !_natTip.error && _dtIsNational(_natTip)) {
+                _dtServerTip = _natTip;
+                _dtRecordHistory(_natTip);
+                _dtRenderCard(_natTip);
+            } else {
+                _dtRenderDegraded('');
+            }
+        }
     }
     // V285: 等待并应用 AI 专属结果（成功则替换当前卡片）
     if (aiPromise) {
@@ -33511,6 +33556,12 @@ function _fhEdCount() {
     if (s && sn) sn.textContent = '(' + (s.value || '').length + ')';
     if (c && cn) cn.textContent = '(' + (c.value || '').length + '字)';
 }
+function _fhNationalHits(title, summary, content) {
+    var t = String(title || '') + ' ' + String(summary || '') + ' ' + String(content || '');
+    var hits = [];
+    for (var i = 0; i < _DT_CITY_WORDS.length; i++) { if (t.indexOf(_DT_CITY_WORDS[i]) >= 0) hits.push(_DT_CITY_WORDS[i]); }
+    return hits;
+}
 function _fhEdSave() {
     var cat = (document.getElementById('fhEdCat') || {}).value || '节气食养';
     var title = ((document.getElementById('fhEdTitle') || {}).value || '').trim();
@@ -33519,6 +33570,12 @@ function _fhEdSave() {
     var tips = ((document.getElementById('fhEdTips') || {}).value || '').split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
     if (!title) { showToast && showToast('请填写标题'); return; }
     if (!content) { showToast && showToast('请填写正文'); return; }
+    // V296: 食养堂面向全国——城市名/局部天气词在编辑阶段直接拦截
+    var nh = _fhNationalHits(title, summary, content);
+    if (nh.length) {
+        showToast && showToast('面向全国的内容不能出现「' + nh[0] + '」等城市名或局部天气，请改为全国通用表述');
+        return;
+    }
     var author = 'admin';
     try { var m = getCurrentMember(); if (m && m.id) author = m.id; } catch (e) {}
     if (_fhEdId) {
@@ -36633,7 +36690,7 @@ function renderFamily() {
                 ${_memberPreferenceSummary(selMember) ? '<div class="detail" style="font-size:12px;color:#9A3412;background:#FFF7ED;border-radius:6px;padding:3px 8px;margin-top:2px;">🍽️ ' + escapeHtml(_memberPreferenceSummary(selMember)) + '</div>' : ''}
             </div>
             <div style="display:flex;gap:6px;align-items:center;">
-                <button type="button" onclick="window.openSpecialPlanModal('${selMember.id}')" style="padding:4px 10px;border:1px solid #F97316;border-radius:14px;background:#FFF7ED;color:#EA580C;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">发起专项计划</button>
+                <button type="button" onclick="window.openSpecialPlanModal('${selMember.id}')" style="padding:4px 10px;border:1px solid #F97316;border-radius:14px;background:#FFF7ED;color:#EA580C;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">发起专项健康饮食计划</button>
                 <button data-id="${selMember.id}" class="edit-member" onclick="window.editMemberCard('${selMember.id}')" style="background:none;border:none;color:#F97316;font-size:14px;cursor:pointer;">✎</button>
             </div>`;
         familyList.appendChild(div);
@@ -53250,12 +53307,12 @@ async function generateAiMealRecommendation() {
             var _needBrief1 = _subNeedTagsBrief();
             if (_needBrief1) userMessage += `【订阅特殊需求】\n${_needBrief1}\n`;
         }
-        // V234: 专项计划与全家三餐合并（单日推荐）
+        // V234: 专项健康饮食计划与全家三餐合并（单日推荐）
         var _spBrief1 = (typeof getActiveSpecialPlansBriefLines === 'function') ? getActiveSpecialPlansBriefLines() : [];
         var _hasSP1 = _spBrief1.length > 0;
         if (_hasSP1) {
-            userMessage += `【专项计划（强制优先）】\n`;
-            userMessage += `请注意，该家庭目前有成员的专项计划处于激活状态：${_spBrief1.join('；')}。\n`;
+            userMessage += `【专项健康饮食计划（强制优先）】\n`;
+            userMessage += `请注意，该家庭目前有成员的专项健康饮食计划处于激活状态：${_spBrief1.join('；')}。\n`;
             userMessage += `请在安排全家一日三餐时，优先满足这些特殊成员的需求。\n`;
             userMessage += `例如：如果儿子在感冒，全家菜单应尽量清淡，并专门为儿子提供易消化的流食/半流食。\n`;
             userMessage += `请在返回的 JSON 数据中，将专门为特殊成员准备的菜品，标注在 specialInterventions 字段中（每餐一个数组，没有专项干预的餐返回 []）。\n`;
@@ -54218,12 +54275,12 @@ function buildRecommendationPrompt(data, weekDatesStr) {
         var _needBriefWeek = _subNeedTagsBrief();
         if (_needBriefWeek) prompt += `【订阅特殊需求】\n${_needBriefWeek}\n\n`;
     }
-    // V234: 专项计划与全家三餐合并 —— 读取激活中的专项计划，强制优先满足，并在 JSON 中标注 specialInterventions
+    // V234: 专项健康饮食计划与全家三餐合并 —— 读取激活中的专项健康饮食计划，强制优先满足，并在 JSON 中标注 specialInterventions
     var activeSPBrief = (typeof getActiveSpecialPlansBriefLines === 'function') ? getActiveSpecialPlansBriefLines() : [];
     var hasActiveSP = activeSPBrief.length > 0;
     if (hasActiveSP) {
-        prompt += `【专项计划（强制优先）】\n`;
-        prompt += `请注意，该家庭目前有成员的专项计划处于激活状态：${activeSPBrief.join('；')}。\n`;
+        prompt += `【专项健康饮食计划（强制优先）】\n`;
+        prompt += `请注意，该家庭目前有成员的专项健康饮食计划处于激活状态：${activeSPBrief.join('；')}。\n`;
         prompt += `请在安排全家一日三餐时，优先满足这些特殊成员的需求。\n`;
         prompt += `例如：如果儿子在感冒，全家菜单应尽量清淡，并专门为儿子提供易消化的流食/半流食。\n`;
         prompt += `请在返回的 JSON 数据中，将专门为特殊成员准备的菜品，标注在 specialInterventions 字段中（每餐一个数组，没有专项干预的餐返回 []）。\n`;
@@ -54254,7 +54311,7 @@ function buildRecommendationPrompt(data, weekDatesStr) {
     prompt += `${startIdx + 4}. 同一餐中主食类最多1-2道（如同时有米饭+汤是允许的，但不能同时有米饭+面条+粥），主菜（蛋白质类）至少1道，素菜至少1道\n`;
     prompt += `【硬性规则·流质同餐互斥】粥/稀饭/汤/羹/豆浆/米糊/牛奶/酸奶/果汁/奶茶等流质与饮品，同一餐合计最多1道：早餐若已有粥，就不要再给酸奶/牛奶/豆浆/果汁；午餐/晚餐若已有汤，就不要再给粥/羹。早餐必须至少有1道固体主食（面包/馒头/包子/饼/蛋/饭团等），不能只给流食。\n`;
     prompt += `\n请严格按照以下JSON格式返回，不要添加任何其他文字：\n`;
-    // V234: 有激活专项计划时，每餐 JSON 追加 specialInterventions 字段
+    // V234: 有激活专项健康饮食计划时，每餐 JSON 追加 specialInterventions 字段
     var _spMealFrag = hasActiveSP ? ',"specialInterventions":[{"memberName":"儿子","planType":"illness","targetDish":"菜名","note":"低油少盐，易消化"}]' : '';
     prompt += `{"days":[{"date":"日期","weekDay":"周几","meals":{"breakfast":{"dishes":[{"name":"菜名","ingredients":[{"name":"食材","quantity":2,"unit":"个"}],"reason":"理由"}],"reason":"本餐理由"${_spMealFrag}},"lunch":{"dishes":[同上结构]${_spMealFrag}},"dinner":{"dishes":[同上结构]${_spMealFrag}}}}],"summary":"综合说明"}\n`;
     prompt += `reason 要求：含推荐依据；每道菜 reason 中显式引用《中国居民膳食指南》具体数值（如"蔬菜300-500g，深色占一半"）。参考每日量：${DAILY_GUIDE_CUE}`;
@@ -67361,7 +67418,7 @@ function openMealRecordModal(mealKey, opts) {
         if (!spItems.length || fEatingOut) { box.style.display = 'none'; box.innerHTML = ''; return; }
         box.style.display = 'block';
         box.innerHTML = '<div style="margin-bottom:8px;padding:9px 10px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;">'
-            + '<div style="font-size:12px;font-weight:700;color:#C2410C;margin-bottom:6px;">👑 专项计划完成情况</div>'
+            + '<div style="font-size:12px;font-weight:700;color:#C2410C;margin-bottom:6px;">👑 专项健康饮食计划完成情况</div>'
             + spItems.map(function (it) {
                 const key = _spInterventionKey(it);
                 const ans = fSpecialAnswers[key] || 'yes';
@@ -67590,7 +67647,7 @@ function openMealRecordModal(mealKey, opts) {
             dishComments: quick ? {} : fDishComments // 快速记录单菜评价留空（V178）
         });
         if (!res) return;
-        // V235: 回写专项计划进度（是=打勾，否=留痕待复盘纠偏）
+        // V235: 回写专项健康饮食计划进度（是=打勾，否=留痕待复盘纠偏）
         var spProgress = [];
         if (!fEatingOut && spItems.length && typeof recordSpecialInterventionProgress === 'function') {
             spProgress = recordSpecialInterventionProgress(dateKey, mealKey, fSpecialAnswers) || [];
@@ -68203,7 +68260,7 @@ function switchTab(tab) {
     // 子 Tab：顶栏 ➕ 与 ☰ 默认可见（首页隐藏的必须恢复）
     if (menuBtn && tab !== 'diary') { menuBtn.style.visibility = 'visible'; }
     if (clearBtn) clearBtn.style.visibility = 'visible';
-    // V227: 「专项计划」入口仅食记页显示
+    // V227: 「专项健康饮食计划」入口仅食记页显示
     var diarySpecialPlanBtn = document.getElementById('diarySpecialPlanBtn');
     if (diarySpecialPlanBtn) diarySpecialPlanBtn.style.display = (tab === 'diary') ? 'flex' : 'none';
     // 切到食记Tab时渲染
@@ -70509,12 +70566,12 @@ var SPECIAL_PLAN_TYPES = {
     infant:    { label: '婴儿',   quotaPeriod: 'lifetime' }
 };
 
-// 读取全部专项计划（返回数组，脏数据兜底）
+// 读取全部专项健康饮食计划（返回数组，脏数据兜底）
 function getSpecialPlans() {
     var list = lsGetJSON(SPECIAL_PLANS_KEY, []);
     return Array.isArray(list) ? list.filter(function (p) { return p && typeof p === 'object' && p.planType; }) : [];
 }
-// 写入全部专项计划
+// 写入全部专项健康饮食计划
 function saveSpecialPlans(list) {
     lsSetJSON(SPECIAL_PLANS_KEY, Array.isArray(list) ? list : []);
     // 数组键走 lsSetJSON 不会自动触发云备份，这里显式调度一次
@@ -70553,7 +70610,7 @@ function _nextSpecialPlanId(list) {
     return 'sp_' + next;
 }
 
-// 查询某类型专项计划的当年配额使用情况
+// 查询某类型专项健康饮食计划的当年配额使用情况
 // 返回 { planType, label, limit, used, remaining, reached, quotaPeriod, message }
 function getSpecialPlanQuota(planType) {
     if (!QUOTA_RULES.hasOwnProperty(planType) || !SPECIAL_PLAN_TYPES[planType]) return null;
@@ -70572,8 +70629,8 @@ function getSpecialPlanQuota(planType) {
     }
     var reached = used >= limit;
     var message = cfg.quotaPeriod === 'lifetime'
-        ? '「' + cfg.label + '」专项计划仅支持建档 ' + limit + ' 次，已达上限'
-        : '本年度「' + cfg.label + '」专项计划已达上限（' + used + '/' + limit + '）';
+        ? '「' + cfg.label + '」专项健康饮食计划仅支持建档 ' + limit + ' 次，已达上限'
+        : '本年度「' + cfg.label + '」专项健康饮食计划已达上限（' + used + '/' + limit + '）';
     return {
         planType: planType,
         label: cfg.label,
@@ -70596,16 +70653,16 @@ function getSpecialPlanQuotaSummary() {
     return out;
 }
 
-// 发起专项计划：先校验配额，达到上限直接拒绝并返回原因
+// 发起专项健康饮食计划：先校验配额，达到上限直接拒绝并返回原因
 // options: { memberName, planType, description, startDate, endDate, weeklyPlan, report }
 // 返回 { ok:true, plan, quota } 或 { ok:false, code, message, quota }
 function createSpecialPlan(options) {
     options = options || {};
     var planType = options.planType;
     var quota = getSpecialPlanQuota(planType);
-    if (!quota) return { ok: false, code: 'INVALID_TYPE', message: '不支持的专项计划类型' };
+    if (!quota) return { ok: false, code: 'INVALID_TYPE', message: '不支持的专项健康饮食计划类型' };
     var fid = getFamilyId();
-    if (!fid) return { ok: false, code: 'NO_FAMILY', message: '请先登录并加入家庭后再发起专项计划', quota: quota };
+    if (!fid) return { ok: false, code: 'NO_FAMILY', message: '请先登录并加入家庭后再发起专项健康饮食计划', quota: quota };
     if (quota.reached) return { ok: false, code: 'QUOTA_REACHED', message: quota.message, quota: quota };
 
     var list = getSpecialPlans();
@@ -70628,7 +70685,7 @@ function createSpecialPlan(options) {
     return { ok: true, plan: plan, quota: getSpecialPlanQuota(planType) };
 }
 
-// 更新专项计划（写入 AI 生成的 weeklyPlan / report 等）
+// 更新专项健康饮食计划（写入 AI 生成的 weeklyPlan / report 等）
 function updateSpecialPlan(planId, patch) {
     var list = getSpecialPlans();
     for (var i = 0; i < list.length; i++) {
@@ -70642,7 +70699,7 @@ function updateSpecialPlan(planId, patch) {
     }
     return null;
 }
-// 标记专项计划完成
+// 标记专项健康饮食计划完成
 function completeSpecialPlan(planId) {
     return updateSpecialPlan(planId, { status: 'completed' });
 }
@@ -70737,7 +70794,7 @@ function _specialPlanUiLabel(planType) {
     return planType;
 }
 
-// V234: 供「AI 生成三餐计划」读取 —— 当前真正处于激活期（active 且今天在起止日期内）的专项计划
+// V234: 供「AI 生成三餐计划」读取 —— 当前真正处于激活期（active 且今天在起止日期内）的专项健康饮食计划
 function getActiveSpecialPlans() {
     var today = (typeof _specialPlanToday === 'function') ? _specialPlanToday() : '';
     return getSpecialPlans().filter(function (p) {
@@ -70784,10 +70841,10 @@ function openSpecialPlanModal(memberId) {
     }).join('');
     panel.innerHTML = ''
         + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
-        +   '<div style="font-size:16px;font-weight:700;color:#1F2937;">🎯 发起专项计划</div>'
+        +   '<div style="font-size:16px;font-weight:700;color:#1F2937;">🎯 发起专项健康饮食计划</div>'
         +   '<button type="button" id="spCloseBtn" style="background:none;border:none;font-size:18px;color:#9CA3AF;cursor:pointer;line-height:1;">✕</button>'
         + '</div>'
-        + '<div style="font-size:13px;color:#6B7280;margin-bottom:12px;">为 <b style="color:#F97316;">' + escapeHtml(member.name || '家人') + '</b> 发起专项饮食计划</div>'
+        + '<div style="font-size:13px;color:#6B7280;margin-bottom:12px;">为 <b style="color:#F97316;">' + escapeHtml(member.name || '家人') + '</b> 发起专项健康饮食计划</div>'
         + '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">计划类型</div>'
         + '<div id="spTypeGroup" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">' + radios + '</div>'
         + '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">具体情况</div>'
@@ -70831,7 +70888,7 @@ function openSpecialPlanModal(memberId) {
         if (btn.getAttribute('aria-disabled') === 'true') return;
         var type = selectedType();
         var quota = getSpecialPlanQuota(type);
-        if (!quota) { showToast('不支持的专项计划类型'); return; }
+        if (!quota) { showToast('不支持的专项健康饮食计划类型'); return; }
         if (quota.reached) { showToast(quota.message); return; }
         var descEl = document.getElementById('spDescInput');
         var desc = descEl ? descEl.value.trim() : '';
@@ -70903,13 +70960,13 @@ function openSpecialPlanModal(memberId) {
             overlay.__busy = false;
             btn.textContent = '生成计划';
             refreshQuota();
-            showToast('网络异常，专项计划内容生成失败，请稍后重试');
+            showToast('网络异常，专项健康饮食计划内容生成失败，请稍后重试');
         });
     });
 }
 window.openSpecialPlanModal = openSpecialPlanModal;
 
-// ==================== V227: 食记页「专项计划」看板 ====================
+// ==================== V227: 食记页「专项健康饮食计划」看板 ====================
 function _spParseDate(str) {
     var d = new Date(String(str || '') + 'T00:00:00');
     return isNaN(d.getTime()) ? null : d;
@@ -70959,9 +71016,9 @@ function openSpecialPlanBoard() {
     if (!plan) {
         bodyHtml = '<div style="padding:52px 24px;text-align:center;">'
             + '<div style="font-size:44px;">🎯</div>'
-            + '<div style="font-size:16px;font-weight:700;color:#374151;margin:12px 0 8px;">暂无进行中的专项计划</div>'
-            + '<div style="font-size:13px;color:#9CA3AF;line-height:1.8;">去「我家 → 家庭成员」发起专项计划，开启全家融合饮食调理。</div>'
-            + '<button type="button" id="spBoardGoCreateBtn" style="margin-top:18px;padding:10px 18px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">去发起专项计划</button>'
+            + '<div style="font-size:16px;font-weight:700;color:#374151;margin:12px 0 8px;">暂无进行中的专项健康饮食计划</div>'
+            + '<div style="font-size:13px;color:#9CA3AF;line-height:1.8;">去「我家 → 家庭成员」发起专项健康饮食计划，开启全家融合饮食调理。</div>'
+            + '<button type="button" id="spBoardGoCreateBtn" style="margin-top:18px;padding:10px 18px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">去发起专项健康饮食计划</button>'
             + '</div>';
     } else {
         var start = _spParseDate(plan.startDate) || new Date();
@@ -70982,7 +71039,7 @@ function openSpecialPlanBoard() {
         var title = '👑 ' + escapeHtml(plan.memberName || '家人') + '的' + escapeHtml(_spPlanDisplayName(plan));
 
         var reportRaw = String(plan.report || '').trim();
-        var reportText = reportRaw ? reportRaw.replace(/^【专项饮食报告】\s*/, '') : '暂无专项饮食报告。';
+        var reportText = reportRaw ? reportRaw.replace(/^【(?:专项饮食|专项健康饮食)报告】\s*/, '') : '暂无专项健康饮食报告。';
         var reportHtml = escapeHtml(reportText).replace(/\n/g, '<br>');
 
         // V237: 今日专项完成情况（记录后即回写，这里实时展示）
@@ -71019,7 +71076,7 @@ function openSpecialPlanBoard() {
             + '</div>'
             + '<div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
             +   '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">'
-            +     '<span style="font-size:13px;font-weight:700;color:#92400E;">🍲 专项饮食报告</span>'
+            +     '<span style="font-size:13px;font-weight:700;color:#92400E;">🍲 专项健康饮食报告</span>'
             +     '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">AI 生成</span>'
             +   '</div>'
             +   '<div style="font-size:13px;color:#4B5563;line-height:1.9;">' + reportHtml + '</div>'
@@ -72723,7 +72780,7 @@ function _confirmEndSpecialPlan(plan) {
     ov.id = 'specialPlanEndConfirm';
     ov.style.cssText = 'position:fixed;inset:0;z-index:10020;background:rgba(17,24,39,0.55);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
     ov.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:320px;padding:18px;box-sizing:border-box;box-shadow:0 12px 32px rgba(0,0,0,0.2);">'
-        + '<div style="font-size:16px;font-weight:700;color:#1F2937;margin-bottom:8px;">结束专项计划</div>'
+        + '<div style="font-size:16px;font-weight:700;color:#1F2937;margin-bottom:8px;">结束专项健康饮食计划</div>'
         + '<div style="font-size:13px;color:#6B7280;line-height:1.7;margin-bottom:16px;">确定结束「' + escapeHtml(_spPlanDisplayName(plan)) + '」吗？结束后看板将不再显示，计划记录仍会保留。</div>'
         + '<div style="display:flex;gap:8px;">'
         +   '<button type="button" id="spEndCancelBtn" style="flex:1;padding:10px;border:1px solid #E5E7EB;border-radius:10px;background:#fff;color:#6B7280;font-size:14px;cursor:pointer;">取消</button>'
@@ -72737,7 +72794,7 @@ function _confirmEndSpecialPlan(plan) {
         completeSpecialPlan(plan.planId);
         ov.remove();
         closeSpecialPlanBoard();
-        showToast('已结束专项计划');
+        showToast('已结束专项健康饮食计划');
     };
 }
 
@@ -73411,6 +73468,31 @@ setTimeout(function () { try { _maybeGenerateDailyLesson(); } catch (e) {} }, 80
         localStorage.setItem(FLAG, String(Date.now()));
         console.log('[V289 迁移] 已完成：预置 4 个手机号账号，旧登录态已清空');
     } catch (e) { console.warn('[V289 迁移] 失败', e); }
+})();
+
+// ====== V296: 超管账号自愈（迁移已跑过 / 记录被重建时同样生效） ======
+(function ensurePresetSuperAccount() {
+    try {
+        var list = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
+        if (!Array.isArray(list)) return;
+        var changed = false;
+        list.forEach(function (r) {
+            if (r && String(r.phone) === '13800138001' && (!r.superAdmin || !r.email)) {
+                r.superAdmin = true;
+                r.email = '69390597@qq.com';
+                if (r.role !== 'owner') r.role = 'owner';
+                changed = true;
+            }
+        });
+        if (changed) localStorage.setItem('registeredUsers', JSON.stringify(list));
+        // 已登录但会话里丢了超管标记 → 立即补齐，避免本次会话所有超管入口消失
+        var u = getLoginUser();
+        if (u && String(u.phone) === '13800138001' && u.superAdmin !== true) {
+            u.superAdmin = true;
+            if (!u.email) u.email = '69390597@qq.com';
+            setLoginUser(u);
+        }
+    } catch (e) { console.warn('[V296 超管自愈] 失败', e); }
 })();
 
 // ====== 登录系统初始化：页面加载完成后判断登录状态 ======
