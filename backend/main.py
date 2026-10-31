@@ -26,7 +26,7 @@ import re
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urljoin
 
 import httpx
@@ -4414,16 +4414,49 @@ _EXPERT_SYSTEM = """你是高级临床营养师。请分析用户上传的体检
 4. 不得承诺疗效，不得推荐药品、保健品或替代治疗方案。
 5. 只从膳食结构、烹饪方式、食材选择、作息与运动等生活方式角度给建议。
 6. 涉及指标异常时，用“提示关注”“建议复查”“遵医嘱”等表述。
+7. 正文中严禁出现任何具体疾病名称（如高血压、糖尿病、脂肪肝、高尿酸血症、痛风、冠心病等）。体检单或用户描述里出现病名时，一律改写为中性描述：“血压指标高于参考范围”“肝脏超声提示回声增强”“尿酸指标高于参考范围”“血脂指标高于参考范围”，并提示遵医嘱复查。
 
 【输出要求】
 输出结构清晰的中文报告，依次包含：
-一、报告要点解读（只描述指标与饮食的关联，不下结论）
+一、报告要点解读（只描述指标与饮食的关联，不下结论，不出现疾病名称）
 二、饮食原则
 三、一日三餐搭配建议
 四、需要留意的提醒
 全文控制在 700 字以内，不使用 Markdown 表格。"""
 
 _EXPERT_BAD_WORDS = ["治疗", "治愈", "导致疾病", "远离疾病", "包治", "药到病除", "吃药", "处方药", "停药"]
+
+# D5-07: 疾病名中性化词典（按长词优先替换，确保「中度脂肪肝」先于「脂肪肝」命中）
+_EXPERT_DISEASE_MAP: List[Tuple[str, str]] = [
+    ("重度脂肪肝", "肝脏影像学提示需关注"),
+    ("中度脂肪肝", "肝脏超声提示回声增强"),
+    ("轻度脂肪肝", "肝脏超声提示回声稍增强"),
+    ("脂肪性肝炎", "肝脏相关指标需关注"),
+    ("脂肪肝", "肝脏超声提示回声增强"),
+    ("高血压病", "血压指标高于参考范围"),
+    ("高血压", "血压指标高于参考范围"),
+    ("糖尿病", "血糖指标高于参考范围"),
+    ("高尿酸血症", "尿酸指标高于参考范围"),
+    ("高脂血症", "血脂指标高于参考范围"),
+    ("高胆固醇血症", "胆固醇指标高于参考范围"),
+    ("血脂异常", "血脂指标高于参考范围"),
+    ("痛风", "尿酸相关指标需关注"),
+    ("冠心病", "心血管相关指标需关注"),
+    ("动脉粥样硬化", "血管健康相关指标需关注"),
+    ("慢性肾病", "肾脏相关指标需关注"),
+    ("肾功能不全", "肾脏相关指标需关注"),
+    ("甲状腺功能减退", "甲状腺功能指标需关注"),
+    ("甲减", "甲状腺功能指标需关注"),
+]
+
+
+def _expert_neutralize_disease(text: str) -> str:
+    """D5-07: 把 AI 正文里的具体疾病名称改写为中性指标描述，避免医疗表述风险。"""
+    out = text or ""
+    for name, neutral in _EXPERT_DISEASE_MAP:
+        if name and name in out:
+            out = out.replace(name, neutral)
+    return out
 
 
 @app.post("/api/expert-assess")
@@ -4475,6 +4508,8 @@ async def expert_assess(req: ExpertAssessRequest) -> Dict[str, Any]:
     for w in _EXPERT_BAD_WORDS:
         if w in text:
             text = text.replace(w, "")
+    # D5-07: 疾病名中性化（模型可能复述体检单结论，这里做兜底改写）
+    text = _expert_neutralize_disease(text)
     text = text.replace("**", "").strip()
     if not text.startswith(_EXPERT_DISCLAIMER):
         text = _EXPERT_DISCLAIMER + "\n\n" + text
