@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V332-20261031';
+        var APP_VER = 'V333-20261031';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -12607,6 +12607,35 @@ function _errClassify(url) {
             }
             var url = typeof input === 'string' ? input : ((input && input.url) || '');
             var started = Date.now();
+            // D5-05: 同源 API 请求统一附带家庭标识（请求头），后端据此把 5xx/429 错误归到具体家庭，
+            // 避免系统监控里出现「未知家庭」而无法定位受影响用户
+            if (!noLog && typeof input === 'string') {
+                try {
+                    var _fid = (typeof getFamilyId === 'function') ? (getFamilyId() || '') : '';
+                    var _sameOrigin = url.charAt(0) === '/' || (API_BASE && url.indexOf(API_BASE) === 0);
+                    if (_fid && _sameOrigin) {
+                        var _hdrs = (opts && opts.headers) || {};
+                        var _hasFam = false;
+                        if (typeof _hdrs.get === 'function') { _hasFam = !!_hdrs.get('X-Family-Id'); }
+                        else { for (var _hk in _hdrs) { if (String(_hk).toLowerCase() === 'x-family-id') { _hasFam = true; } } }
+                        if (!_hasFam) {
+                            var _famName = '';
+                            try { _famName = _errFamilyName(); } catch (e) {}
+                            if (typeof _hdrs.get === 'function') {
+                                _hdrs.set('X-Family-Id', _fid);
+                                if (_famName) _hdrs.set('X-Family-Name', encodeURIComponent(_famName));
+                            } else {
+                                var _h2 = {};
+                                for (var _hk2 in _hdrs) { _h2[_hk2] = _hdrs[_hk2]; }
+                                _h2['X-Family-Id'] = _fid;
+                                if (_famName) _h2['X-Family-Name'] = encodeURIComponent(_famName);
+                                opts = Object.assign({}, opts || {});
+                                opts.headers = _h2;
+                            }
+                        }
+                    }
+                } catch (e) {}
+            }
             return window.__nativeFetch(input, opts).then(function (res) {
                 try {
                     if (!noLog && res && res.status >= 400) {

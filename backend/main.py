@@ -27,7 +27,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import quote, urljoin
+from urllib.parse import quote, unquote, urljoin
 
 import httpx
 import requests
@@ -5140,6 +5140,7 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
         "path": request.url.path,
         "method": request.method,
         "detail": _tb.format_exc()[:3000],
+        **_err_family_of(request),
     }
     _err_write_line(payload)
     return JSONResponse(
@@ -5158,6 +5159,9 @@ async def _error_status_middleware(request: Request, call_next):
         # 交给 exception_handler（此处不吞异常，重新抛出）
         raise
     if response.status_code >= 500 or response.status_code == 429:
+        # D5-05: 前端同源请求已带 X-Family-Id / X-Family-Name，据此把服务端错误归到具体家庭，
+        # 避免系统监控里大量「未知家庭」无法定位受影响用户
+        fam = _err_family_of(request)
         _err_write_line({
             "source": "backend",
             "type": "ai_error" if "ai" in request.url.path else "api_timeout",
@@ -5166,8 +5170,26 @@ async def _error_status_middleware(request: Request, call_next):
             "method": request.method,
             "status": response.status_code,
             "elapsedMs": int((time.time() - started) * 1000),
+            **fam,
         })
     return response
+
+
+def _err_family_of(request: Request) -> Dict[str, str]:
+    """D5-05: 从请求头解析家庭归属（前端 fetch 统一注入，中文家庭名按 URL 编码传输）。"""
+    out: Dict[str, str] = {}
+    fid = (request.headers.get("x-family-id") or "").strip()[:64]
+    if fid:
+        out["familyId"] = fid
+    raw_name = (request.headers.get("x-family-name") or "").strip()[:256]
+    if raw_name:
+        try:
+            name = unquote(raw_name).strip()[:64]
+        except Exception:
+            name = raw_name[:64]
+        if name:
+            out["familyName"] = name
+    return out
 
 
 # ========== V227: 超管「系统监控」（错误总览 + 活跃付费客户数） ==========
