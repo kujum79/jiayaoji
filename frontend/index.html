@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V296-20261029';
+        var APP_VER = 'V331-20261031';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -4842,6 +4842,7 @@ async function _submitFeedback() {
                                     <option value="">中医体质</option>
                                     <option value="平和质">平和质 - 均衡健康</option>
                                     <option value="气虚质">气虚质 - 气短乏力</option>
+                                    <option value="血虚质">血虚质 - 气血不足/面色萎黄</option>
                                     <option value="阳虚质">阳虚质 - 畏寒怕冷</option>
                                     <option value="阴虚质">阴虚质 - 口干舌燥</option>
                                     <option value="痰湿质">痰湿质 - 体胖痰多</option>
@@ -5808,12 +5809,12 @@ function withTimeout(promise, ms, label) {
     });
 }
 
-// V130: 统一 AI 调用助手——优先后端 /plan（多服务商自动降级：Agnes→硅基流动→阿里百炼→DeepSeek），失败回退直连阿里云
+// V331: 统一 AI 调用助手——仅走后端 /plan（多服务商自动降级：Agnes→硅基流动→阿里百炼→DeepSeek）
+// D5-02: 移除前端硬编码阿里云 API Key 与浏览器直连第三方 AI，全部 AI 请求统一经后端代理
 // 返回 OpenAI 兼容结构 { choices: [{ message: { content } }] }；API 报错时返回体含 error 字段
 async function aiChatMultiProvider(systemContent, userPrompt, opts) {
     opts = opts || {};
     var maxTokens = opts.maxTokens || 2000;
-    var temperature = (opts.temperature !== undefined) ? opts.temperature : 0.7;
     var taskType = (opts.taskType && /^[a-z_]{1,24}$/.test(opts.taskType)) ? opts.taskType : 'plan';
     // V199/V202: 订阅用户的 plan 类请求，把 subscriptionPlan 带给后端追加专属 Prompt
     var subPlan = null;
@@ -5830,24 +5831,8 @@ async function aiChatMultiProvider(systemContent, userPrompt, opts) {
             var proxyData = await proxyRes.json();
             if (proxyData && proxyData.response) return { choices: [{ message: { content: proxyData.response } }] };
         }
-    } catch (e) { console.warn('后端/plan失败，回退直连阿里云:', e); }
-    try {
-        var resp = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer sk-d59f96e872d54e23ba692fd7d09eee1c' },
-            body: JSON.stringify({
-                model: 'qwen-turbo',
-                messages: [ { role: 'system', content: systemContent }, { role: 'user', content: userPrompt } ],
-                temperature: temperature,
-                max_tokens: maxTokens
-            })
-        });
-        if (!resp.ok) return {};
-        return await resp.json();
-    } catch (e) {
-        console.warn('AI 直连备用通道失败:', e);
-        return {};
-    }
+    } catch (e) { console.warn('后端/plan调用失败:', e); }
+    return {};
 }
 
 // 当前登录用户与家庭信息（缓存在 localStorage）
@@ -5939,6 +5924,64 @@ var IS_SMS_TEST_ENV = (function () {
 })();
 // ?test_mode=true：自动化测试后门（收到验证码后自动填入并登录）
 var SMS_TEST_MODE = /[?&]test_mode=true(?:&|$)/.test(String(location.search || ''));
+// ===== V313: 第三次测试环境准备（一次性脚本） =====
+// 用法：浏览器打开 /app?test_prep3=1 —— 清空本地测试数据、预置 4 个手机号、预置 3 条邻聚 NPC 信息
+var TEST3_ACCOUNTS = [
+    { phone: '13800000001', familyName: '三仁佳欢', superAdmin: true },
+    { phone: '13800000002', familyName: '小高之家' },
+    { phone: '13800000003', familyName: '非英中义' },
+    { phone: '13800000004', familyName: '铁岭之家' }
+];
+function runTestPrep3() {
+    var now = Math.floor(Date.now() / 1000);
+    // 1) 清空本地所有测试数据（含 familyData / homeItems 等），并清掉登录态
+    try { localStorage.clear(); } catch (e) {}
+    // 2) 预置 4 个手机号账号（验证码统一 123456，由后端测试号白名单保证）
+    var users = TEST3_ACCOUNTS.map(function (a) {
+        var u = {
+            phone: a.phone, password: '',
+            familyId: 'family_' + a.phone, familyName: a.familyName,
+            createdAt: Date.now()
+        };
+        if (a.superAdmin) u.superAdmin = true;
+        return u;
+    });
+    localStorage.setItem('registeredUsers', JSON.stringify(users));
+    // 阻止 V289 一次性迁移再次补入旧测试号（13800138001~04），保证只剩本次预置的 4 个账号
+    localStorage.setItem('_migrationV289', String(Date.now()));
+    users.forEach(function (u) {
+        localStorage.setItem('familyName_' + u.familyId, u.familyName);
+    });
+    // 3) 预置食邦邻聚 NPC 信息（communityPosts 为全局键，三家小区均可下拉切换查看）
+    var posts = [
+        { id: 'npc_zhangjie', type: 'mutual', community: '武汉光谷现代森林小镇',
+          authorName: '张姐', title: '代包手工韭菜猪肉饺子',
+          content: '20元/盒（20个），纯手工现包，小区门口自提，可提前一天预订。',
+          contactPhone: '13900000001', contactWechat: 'zhangjie_v',
+          contactInfo: '电话：13900000001 微信：zhangjie_v',
+          images: [], buyLink: '', auditStatus: 'passed', rejectReason: '', createdAt: now - 3600 * 5 },
+        { id: 'npc_gudage', type: 'mutual', community: '武汉光谷现代森林小镇',
+          authorName: '顾大哥', title: '周末为社区孤寡老人免费上门做饭',
+          content: '我今年 55 岁，退休在家，周末可为小区孤寡老人免费上门做一顿家常饭，食材我来准备，提前一天联系即可。',
+          contactPhone: '13900000002', contactWechat: 'gu55',
+          contactInfo: '电话：13900000002 微信：gu55',
+          images: [], buyLink: '', volunteer: true,
+          auditStatus: 'passed', rejectReason: '', createdAt: now - 3600 * 26 },
+        { id: 'npc_qindama', type: 'group_buy', community: '上海黄浦区长江公寓',
+          authorName: '秦大妈', title: '小区3号楼底层设立多多买菜自提点',
+          content: '小区 3 号楼底层设了多多买菜自提点，欢迎邻居一起拼购，到点自提免运费。',
+          contactPhone: '13900000003', contactWechat: 'qin_dama',
+          contactInfo: '电话：13900000003 微信：qin_dama',
+          images: [], buyLink: '', auditStatus: 'passed', rejectReason: '', createdAt: now - 86400 * 2 }
+    ];
+    localStorage.setItem('communityPosts', JSON.stringify(posts));
+    // 4) 回到干净 URL（去掉 test_prep3 参数），避免重复执行；清空后处于未登录状态
+    try { location.replace(String(location.pathname || '/app')); } catch (e) {}
+}
+window.runTestPrep3 = runTestPrep3;
+if (/[?&]test_prep3=1(?:&|$)/.test(String(location.search || ''))) {
+    try { runTestPrep3(); } catch (e) { console.error('[test_prep3] 执行失败', e); }
+}
 // 轻量 SweetAlert 兼容层（不依赖 CDN，离线也能弹窗）
 var Swal = {
     fire: function (opts) {
@@ -7812,15 +7855,11 @@ function migrateFamilyRoles() {
         var data = JSON.parse(lsGet('familyData') || '[]');
         if (!Array.isArray(data)) data = [];
 
-        // 1) 空数组 → 默认四口人（"我"为 admin）
+        // 1) 空数组 → V315: 不再生成「我/爸爸62/妈妈60/孩子10」四口示例
+        // （真实建家用户会看到"凭空多出 4 个人"还得分次删除）。空家庭交给启动兜底只建「我」一人
         if (data.length === 0) {
-            var now = Date.now();
-            data = [
-                { id: 'm_' + now + 'a',  name: '我',   role: 'admin',  isCurrentUser: true,  age: 30, relationship: '家人' },
-                { id: 'm_' + now + 'b',  name: '爸爸', role: 'member', isCurrentUser: false, age: 62, relationship: '家人' },
-                { id: 'm_' + now + 'c',  name: '妈妈', role: 'member', isCurrentUser: false, age: 60, relationship: '家人' },
-                { id: 'm_' + now + 'd',  name: '孩子', role: 'member', isCurrentUser: false, age: 10, relationship: '家人' }
-            ];
+            lsSet('familyRolesMigrated', 'true');
+            return;
         }
 
         // 2) 每个成员补缺失字段
@@ -8133,7 +8172,8 @@ function openSuperAdminLoginModal() {
     // 已有会话 → 直接弹退出确认
     var cur = getSuperAdminSession();
     if (cur.isLoggedIn) {
-        if (confirm('已登录超级管理员模式，是否退出？')) logoutSuperAdmin();
+        // V317: 原生 confirm 在 webview 会黑屏，改用页面内确认弹层
+        showConfirmDialog('已登录超级管理员模式，是否退出？', function() { logoutSuperAdmin(); });
         return;
     }
     // 输错次数
@@ -8280,14 +8320,16 @@ function removeMember(memberId) {
             return;
         }
     }
-    if (!confirm('确定移除 ' + m.name + ' 吗？此操作不可恢复。')) return;
-    members = members.filter(function(x) { return String(x.id) !== String(memberId); });
-    saveFamilyMembers(members);
-    familyData = members;
-    emitPermissionChanged();
-    showToast('✅ 已移除 ' + m.name);
-    renderFamily();
-    renderDietKnowledge();
+    // V316: 原生 confirm 在 webview 会黑屏，统一改用页面内确认弹层
+    showConfirmDialog('确定移除 ' + m.name + ' 吗？此操作不可恢复。', function() {
+        var list = members.filter(function(x) { return String(x.id) !== String(memberId); });
+        saveFamilyMembers(list);
+        familyData = list;
+        emitPermissionChanged();
+        showToast('✅ 已移除 ' + m.name);
+        renderFamily();
+        renderDietKnowledge();
+    });
 }
 
 // ============ permissionChanged 事件监听（各页面重渲染） ============
@@ -8447,15 +8489,17 @@ function toggleShareFromCard(id) {
     // 当前已处于待审核/已通过/已拒绝 → 关闭共享
     if (item.auditStatus === 'pending' || item.auditStatus === 'passed' || item.auditStatus === 'rejected') {
         // 关闭 → 从共享池除名，清除审核状态
-        if (!confirm('关闭分享后，已下载的副本无法收回。\n确定关闭吗？')) return;
-        item.isPublic = false;
-        item.shareScope = 'none';
-        item.auditStatus = null;
-        item.auditReason = null;
-        removeFromSharedPool(String(item.id));
-        saveDietKnowledge();
-        showToast('🔒 已关闭共享');
-        renderDietKnowledge();
+        // V317: 不可逆操作，改用页面内二次确认
+        showConfirmDialogTwice('关闭分享后，已下载的副本无法收回。\n确定关闭吗？', '再次确认：确定关闭该条目的共享吗？', function() {
+            item.isPublic = false;
+            item.shareScope = 'none';
+            item.auditStatus = null;
+            item.auditReason = null;
+            removeFromSharedPool(String(item.id));
+            saveDietKnowledge();
+            showToast('🔒 已关闭共享');
+            renderDietKnowledge();
+        });
         return;
     }
     // 当前未开启 → 弹开启确认框
@@ -8976,6 +9020,7 @@ function familyKey(key) {
         'reviewRiskAI',
         'expertAssessments',
         'specialPlans',
+        'foodDiaries',
         'userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits',
         'systemErrorLogs',
         'shoppingAlert_'];
@@ -10301,6 +10346,25 @@ function _myClassroomFolderCard(group) {
         '</div>';
 }
 
+// V324: 我的定制课卡片——已审核发布的家庭专属课程（D3-04，避免定制内容与推荐体系割裂）
+function _myClassroomCustomCard(c) {
+    var m = c.member || {};
+    var who = String(m.name || '家人');
+    var tags = (Array.isArray(c.targetAudience) ? c.targetAudience : (Array.isArray(m.healthTags) ? m.healthTags : []))
+        .filter(function (t) { return t && t !== 'all'; }).slice(0, 3);
+    _CLASSROOM_CACHE[c.id] = { course: c, kind: 'custom' };
+    return '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
+        '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;line-height:1.4;">🎯 ' + escapeHtml(c.title || '专属定制课') + '</div>' +
+        '<span style="flex-shrink:0;font-size:11px;background:#FEF3C7;color:#B45309;border-radius:999px;padding:3px 10px;">专属定制</span>' +
+        '</div>' +
+        '<div style="font-size:12px;color:#EA580C;line-height:1.7;margin-bottom:4px;">为「' + escapeHtml(who) + '」定制</div>' +
+        '<div style="font-size:12px;color:#9CA3AF;line-height:1.7;margin-bottom:8px;">⏱ ' + (Number(c.duration) || 3) + ' 分钟' +
+        (tags.length ? '　·　🏷 ' + escapeHtml(tags.join(' / ')) : '') + '</div>' +
+        '<button type="button" onclick="_openClassroomCourse(\'' + escapeAttr(c.id) + '\',\'custom\')" style="width:100%;padding:9px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">开始阅读</button>' +
+        '</div>';
+}
+
 // 文章行（系列内层）
 function _myClassroomArticleRow(folder, a, subscribed) {
     var premium = !!a.isPremium;
@@ -10390,6 +10454,22 @@ function _renderMyClassroom() {
                 catch (e) { html += '<div style="padding:10px;font-size:12px;color:#B91C1C;">系列渲染异常</div>'; }
             });
         }
+        // V324: 我的定制课——已审核发布的家庭专属课程（D3-04）
+        var _customPublished = [];
+        try {
+            _customPublished = getCustomCourses().filter(function (c) {
+                return c && c.status === 'published' && c.title;
+            });
+        } catch (e) { _customPublished = []; }
+        if (_customPublished.length) {
+            html += '<div style="display:flex;align-items:baseline;gap:8px;margin:16px 2px 10px;">' +
+                '<span style="font-size:15px;font-weight:700;color:#1F2937;">我的定制课</span>' +
+                '<span style="font-size:12px;color:#9CA3AF;">按家庭档案定制 · ' + _customPublished.length + ' 篇</span></div>';
+            _customPublished.forEach(function (c) {
+                try { html += _myClassroomCustomCard(c); }
+                catch (e) { html += '<div style="padding:10px;font-size:12px;color:#B91C1C;">定制课渲染异常</div>'; }
+            });
+        }
         html += '<div style="text-align:center;font-size:11px;color:#B0AAA2;line-height:1.7;padding:8px 12px;">课程内容为日常饮食参考，不替代医疗建议。如有持续不适请及时就医。</div>';
     }
     body.innerHTML = html;
@@ -10448,13 +10528,33 @@ function _myClassroomOpenArticle(folderId, articleId) {
 var _DAILY_LESSON_TTL = 365 * 24 * 3600 * 1000;
 var _dailyLessonBusy = false;
 
+// V325: 今日微课全国通用——去除城市名，避免「武汉气温渐凉」这类地域绑定（D3-05）
+function _lessonStripCity(s) {
+    var t = String(s == null ? '' : s);
+    var words = (typeof _DT_CITY_WORDS !== 'undefined' && Array.isArray(_DT_CITY_WORDS)) ? _DT_CITY_WORDS : [];
+    for (var i = 0; i < words.length; i++) {
+        var w = words[i];
+        if (t.indexOf(w) < 0) continue;
+        t = t.split(w + '市').join('').split(w).join('');
+    }
+    return t.replace(/\s{2,}/g, ' ').trim();
+}
+
 function _getDailyLessons() {
     try {
         var raw = lsGet('dailyLessons');
         var obj = raw ? JSON.parse(raw) : null;
         var items = (obj && Array.isArray(obj.items)) ? obj.items : (Array.isArray(obj) ? obj : []);
         var floor = Date.now() - _DAILY_LESSON_TTL;
-        return items.filter(function (x) { return x && x.date && (Number(x.createdAt) || 0) >= floor; });
+        return items
+            .filter(function (x) { return x && x.date && (Number(x.createdAt) || 0) >= floor; })
+            .map(function (x) {
+                return Object.assign({}, x, {
+                    title: _lessonStripCity(x.title),
+                    content: _lessonStripCity(x.content),
+                    weather: _lessonStripCity(x.weather)
+                });
+            });
     } catch (e) { return []; }
 }
 
@@ -10495,8 +10595,9 @@ async function _lessonWeatherText() {
         if (!wx) return '天气未知';
         var key = dateToKey(new Date());
         var d = (wx.daily || []).filter(function (x) { return x && x.date === key; })[0];
-        if (d) return (wx.city ? wx.city + ' ' : '') + (d.textDay || '') + ' ' + d.tempMin + '~' + d.tempMax + '°C';
-        return wx.summary || '天气未知';
+        // V325: 只给通用天气，不带城市名，避免 AI 把城市写进正文（D3-05）
+        if (d) return _lessonStripCity((d.textDay || '') + ' ' + d.tempMin + '~' + d.tempMax + '°C');
+        return _lessonStripCity(wx.summary || '天气未知');
     } catch (e) { return '天气未知'; }
 }
 
@@ -10527,6 +10628,7 @@ async function _generateDailyLesson(force) {
         var sys = '你是一位家庭营养师，擅长写简短、可执行的家庭饮食微课。只讲营养搭配与日常饮食安排，严禁使用任何医疗词汇（治疗、治愈、改善、降低、预防、缓解、调理、疗效等一律不用），也不使用中医功效词（如健脾、养胃、益气、补血、祛湿、活血、降火）。只返回 JSON，不要多余文字。';
         var usr = '今天是' + today + '，节气是' + termName + '，天气' + weatherText + '。该家庭有：' + brief + '。\n' +
             '请写一篇 300 字左右的今日微课，标题引人入胜（不超过 16 字）。内容要提醒他们在今天的饮食中注意什么，给出具体可执行的食材与搭配建议。不要医疗词汇，只讲营养搭配。\n' +
+            '这篇微课会展示给全国各地用户，标题与正文不得出现任何城市/地区名称（如「武汉」「杭州」「北方某地」），天气一律用「此时节」「最近降温」这类通用表述。\n' +
             '严格返回 JSON：{"title":"标题","content":"正文"}';
         var resp = await aiChatMultiProvider(sys, usr, { maxTokens: 800, temperature: 0.7, taskType: 'knowledge' });
         var text = (resp && resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || '';
@@ -10536,6 +10638,9 @@ async function _generateDailyLesson(force) {
             parsed.title = _eduMedicalSanitize(parsed.title);
             parsed.content = _eduMedicalSanitize(parsed.content);
         }
+        // V325: 输出兜底去城市名（AI 仍可能写到城市，如「霜降至，武汉气温渐凉」）
+        parsed.title = _lessonStripCity(parsed.title);
+        parsed.content = _lessonStripCity(parsed.content);
         var rec = {
             id: 'dl_' + today,
             date: today,
@@ -11183,11 +11288,12 @@ function setModulePref(key, enabled) {
     window.dispatchEvent(new CustomEvent('modulePrefsChanged'));
 }
 function confirmResetModulePrefs() {
-    if (window.confirm('确定恢复默认模块设置？\n所有模块将重置为出厂状态。')) {
+    // V317: 改用页面内二次确认，避免原生 confirm 在 webview 黑屏
+    showConfirmDialogTwice('确定恢复默认模块设置？\n所有模块将重置为出厂状态。', '再次确认：恢复默认后当前模块设置将全部清除，继续吗？', function() {
         resetModulePreferences();
         renderModulePrefsTree();
         showToast('✅ 已恢复默认');
-    }
+    });
 }
 
 // ============ 儿童模式 / 青少年模式 ============
@@ -11786,7 +11892,8 @@ async function _refreshMonitorBadge() {
     var data = await _fetchMonitorData();
     var badge = document.getElementById('monitorBadge');
     if (!badge) return;
-    var n = (data && Number(data.unresolvedCount)) || 0;
+    // V311: 徽标只提示「需要动手」的条数，偶发报错不再打扰超管
+    var n = _monitorNeedsActionCount(data);
     badge.textContent = n > 99 ? '99+' : String(n);
     badge.style.display = n > 0 ? 'block' : 'none';
 }
@@ -11795,6 +11902,47 @@ function _monitorTypeMeta(t) {
     return _MONITOR_TYPE_META[String(t || '')] || { label: '接口异常', color: '#D97706' };
 }
 
+// V311: 只显示「需要动手」的报警——同一天同一类错误重复出现（>=3 次），
+// 或消息里命中了用户可感知的现象（卡住/白屏/生成失败等）；其余偶发报错折叠起来
+var _MONITOR_REPEAT_MIN = 3;
+var _MONITOR_USER_HINT = /卡住|白屏|黑屏|闪退|崩溃|无响应|打不开|生成失败|加载失败|保存失败|登录失败|付款失败/;
+function _monitorRowDate(r) {
+    var ms = Number((r && r.createdAt) || 0);
+    if (ms > 0) { try { return dateToKey(new Date(ms)); } catch (e) {} }
+    return String((r && r.timeText) || '').slice(0, 10);
+}
+function _monitorSig(r) {
+    var msg = String((r && r.message) || '');
+    msg = msg.replace(/\b(GET|POST|PUT|DELETE|PATCH)\b/gi, ' ')
+        .replace(/https?:\/\/[^\s]+/g, '/#')
+        .replace(/\/\S*/g, '/#')
+        .replace(/[0-9]+/g, '#')
+        .replace(/\s+/g, ' ').trim();
+    // 同一次故障常被同时记成「AI 异常」和「接口异常」，签名不看 type，只按错误内容归一，避免漏判
+    return msg;
+}
+function _monitorSplit(list) {
+    var todayK = '';
+    try { todayK = dateToKey(new Date()); } catch (e) {}
+    var counts = {};
+    (list || []).forEach(function (r) {
+        if (!r || r.resolved) return;
+        if (_monitorRowDate(r) !== todayK) return; // 只统计今天的重复次数
+        var k = _monitorSig(r);
+        counts[k] = (counts[k] || 0) + 1;
+    });
+    var need = [], fold = [];
+    (list || []).forEach(function (r) {
+        if (!r) return;
+        var hitUser = _MONITOR_USER_HINT.test(String(r.message || ''));
+        var repeat = (counts[_monitorSig(r)] || 0) >= _MONITOR_REPEAT_MIN;
+        if (hitUser || repeat) need.push(r); else fold.push(r);
+    });
+    return { need: need, fold: fold };
+}
+function _monitorNeedsActionCount(d) {
+    try { return _monitorSplit((d && d.unresolved) || []).need.filter(function (r) { return !r.resolved; }).length; } catch (e) { return (d && Number(d.unresolvedCount)) || 0; }
+}
 function _monitorRowHtml(r) {
     var m = _monitorTypeMeta(r.type);
     var fam = r.familyName || (r.familyId ? r.familyId : '未知家庭');
@@ -11821,8 +11969,9 @@ function _monitorBodyHtml(d) {
             '<div style="font-size:11px;color:#6B7280;margin-top:4px;">' + label + '</div></div>';
     };
     var list = (d && Array.isArray(d.unresolved)) ? d.unresolved : [];
-    var pending = 0;
-    for (var i = 0; i < list.length; i++) { if (!list[i].resolved) pending++; }
+    var split = _monitorSplit(list);
+    var need = split.need, fold = split.fold;
+    var needPending = need.filter(function (r) { return !r.resolved; }).length;
     return '<div style="padding:12px 16px 24px;">' +
         '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
         stat('今日报错总数', (d && d.todayErrorCount) || 0, '#DC2626') +
@@ -11834,11 +11983,16 @@ function _monitorBodyHtml(d) {
         '<button type="button" onclick="openAiUsagePanel()" style="flex:1;border:1px solid #FED7AA;border-radius:12px;background:#FFF7ED;color:#9A3412;font-size:12px;font-weight:700;padding:10px 6px;cursor:pointer;">🤖 AI 用量</button>' +
         '</div>' +
         '<div style="display:flex;align-items:center;margin-bottom:8px;">' +
-        '<div style="font-size:13px;font-weight:700;color:#1F2937;">🚨 未处理报警</div>' +
-        '<span style="margin-left:8px;font-size:11px;color:#9CA3AF;">待处理 ' + pending + ' 条 · 今日已修复 ' + ((d && d.resolvedTodayCount) || 0) + ' 条</span>' +
+        '<div style="font-size:13px;font-weight:700;color:#1F2937;">🚨 需要动手</div>' +
+        '<span style="margin-left:8px;font-size:11px;color:#9CA3AF;">' + needPending + ' 条 · 今日已修复 ' + ((d && d.resolvedTodayCount) || 0) + ' 条</span>' +
         '</div>' +
-        (list.length ? list.map(_monitorRowHtml).join('') :
-            '<div style="background:#fff;border-radius:12px;padding:20px;text-align:center;font-size:12px;color:#6B7280;">✅ 暂无未处理报警</div>') +
+        (need.length ? need.map(_monitorRowHtml).join('') :
+            '<div style="background:#fff;border-radius:12px;padding:20px;text-align:center;font-size:12px;color:#6B7280;">✅ 暂无需要动手的报警</div>') +
+        (fold.length ? ('<div style="margin-top:8px;display:flex;align-items:center;gap:8px;background:#F9FAFB;border:1px dashed #E5E7EB;border-radius:10px;padding:10px 12px;">' +
+            '<span style="font-size:11px;color:#6B7280;">🙈 已折叠 ' + fold.length + ' 条偶发报错（单次出现、不影响使用）</span>' +
+            '<button type="button" onclick="var b=document.getElementById(\'monitorFoldBox\');b.style.display=(b.style.display===\'block\'?\'none\':\'block\');" style="margin-left:auto;border:1px solid #E5E7EB;background:#fff;color:#6B7280;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;">展开</button>' +
+            '</div>' +
+            '<div id="monitorFoldBox" style="display:none;margin-top:8px;">' + fold.map(_monitorRowHtml).join('') + '</div>') : '') +
         '</div>';
 }
 
@@ -12627,17 +12781,22 @@ function resetFamilyData() {
     var fid = getFamilyId();
     if (!fid) { showToast('请先创建或加入家庭'); return; }
     var familyName = localStorage.getItem('familyName_' + fid) || '未命名家庭';
-    if (!confirm('将清空「' + familyName + '」的全部数据（成员、文库、冰箱、食记、采购清单等），且不可恢复。\n\n建议先点「导出家庭数据」备份。确定继续吗？')) return;
-    if (!confirm('再次确认：真的要清空「' + familyName + '」的全部数据吗？')) return;
-    var prefix = fid + '_';
-    var toRemove = [];
-    for (var i = 0; i < localStorage.length; i++) {
-        var k = localStorage.key(i);
-        if (k && k.indexOf(prefix) === 0) toRemove.push(k);
-    }
-    for (var j = 0; j < toRemove.length; j++) localStorage.removeItem(toRemove[j]);
-    showToast('🗑️ 「' + familyName + '」数据已清空');
-    setTimeout(function() { location.reload(); }, 600);
+    // V317: 改为页面内二次确认（第一步 → 第二步 → 执行）
+    showConfirmDialogTwice(
+        '将清空「' + familyName + '」的全部数据（成员、文库、冰箱、食记、采购清单等），且不可恢复。\n\n建议先点「导出家庭数据」备份。确定继续吗？',
+        '再次确认：真的要清空「' + familyName + '」的全部数据吗？',
+        function() {
+            var prefix = fid + '_';
+            var toRemove = [];
+            for (var i = 0; i < localStorage.length; i++) {
+                var k = localStorage.key(i);
+                if (k && k.indexOf(prefix) === 0) toRemove.push(k);
+            }
+            for (var j = 0; j < toRemove.length; j++) localStorage.removeItem(toRemove[j]);
+            showToast('🗑️ 「' + familyName + '」数据已清空');
+            setTimeout(function() { location.reload(); }, 600);
+        }
+    );
 }
 
 // 家庭选择 overlay 控制
@@ -14308,6 +14467,7 @@ const DIET_KNOWLEDGE_BASE = {
 const CONSTITUTION_DIET_RULES = {
     '平和质': { principle: '均衡营养，五谷杂粮、时令蔬果，无特别忌口。', suitable: ['五谷杂粮', '时令蔬果', '鸡蛋', '牛奶', '适量肉蛋'], avoid: [], recommend: ['小米粥', '清蒸鱼', '时蔬'] },
     '气虚质': { principle: '补气健脾，宜食山药、鸡肉、黄芪等。忌生冷、油腻。', suitable: ['山药', '鸡肉', '黄芪', '党参', '大枣', '小米', '牛肉'], avoid: ['生冷食物', '油腻食物', '萝卜'], recommend: ['山药排骨汤', '红枣小米粥', '黄芪炖鸡'] },
+    '血虚质': { principle: '补血养血，宜食红枣、桂圆、猪肝、黑芝麻等。忌生冷、过度节食。', suitable: ['红枣', '桂圆', '猪肝', '黑芝麻', '菠菜', '牛肉', '黑木耳'], avoid: ['生冷食物', '过度节食', '浓茶'], recommend: ['红枣桂圆粥', '猪肝菠菜汤', '黑芝麻糊'] },
     '阳虚质': { principle: '温阳散寒，宜食羊肉、生姜、韭菜等。忌生冷、寒凉。', suitable: ['羊肉', '生姜', '韭菜', '桂圆', '核桃'], avoid: ['生冷食物', '寒凉食物', '冰饮'], recommend: ['当归生姜羊肉汤', '桂圆红枣茶', '韭菜炒蛋'] },
     '阴虚质': { principle: '滋阴润燥，宜食百合、银耳、梨等。忌辛辣、燥热。', suitable: ['百合', '银耳', '梨', '枸杞', '鸭肉'], avoid: ['辛辣食物', '燥热食物', '羊肉'], recommend: ['银耳百合羹', '雪梨炖冰糖', '老鸭汤'] },
     '痰湿质': { principle: '健脾祛湿，宜食薏米、赤小豆、冬瓜等。忌甜食、油腻。', suitable: ['薏米', '赤小豆', '冬瓜', '陈皮', '荷叶', '白萝卜'], avoid: ['甜食', '油腻食物', '糯米', '肥肉'], recommend: ['薏米红豆粥', '冬瓜排骨汤', '白萝卜炖牛肉'] },
@@ -30718,20 +30878,38 @@ function showConfirmDialog(msg, onYes, onNo) {
     document.getElementById('fridgeConfirmMsg').textContent = msg;
     _confirmYesCallback = onYes;
     _confirmNoCallback = onNo || null;
-    document.getElementById('fridgeConfirmOverlay').classList.add('show');
+    var ov = document.getElementById('fridgeConfirmOverlay');
+    // 提到最上层，保证在食养管理等高层弹层（z-index 10002）之上一并可见
+    if (ov) ov.style.zIndex = '10010';
+    if (ov) ov.classList.add('show');
+}
+// V317: 危险操作二次确认（第一步确认 → 第二步确认 → 执行）
+function showConfirmDialogTwice(msg, twiceMsg, onYes) {
+    showConfirmDialog(msg, function() {
+        showConfirmDialog(twiceMsg, onYes, null);
+    }, null);
+}
+// V317: async 函数内可 await 的页面内确认（替代原生 confirm，避免 webview 黑屏）
+function uiConfirmAsync(msg) {
+    return new Promise(function(resolve) {
+        showConfirmDialog(msg, function() { resolve(true); }, function() { resolve(false); });
+    });
 }
 document.addEventListener('DOMContentLoaded', function() {
     const yesBtn = document.getElementById('fridgeConfirmYes');
     const noBtn = document.getElementById('fridgeConfirmNo');
     if (yesBtn) yesBtn.onclick = function() {
-        document.getElementById('fridgeConfirmOverlay').classList.remove('show');
-        if (_confirmYesCallback) _confirmYesCallback();
+        // V317: 先取走回调并清空，避免回调内再次弹确认时被本次清空（支持二次确认串联）
+        var _yes = _confirmYesCallback;
         _confirmYesCallback = null; _confirmNoCallback = null;
+        document.getElementById('fridgeConfirmOverlay').classList.remove('show');
+        if (_yes) _yes();
     };
     if (noBtn) noBtn.onclick = function() {
-        document.getElementById('fridgeConfirmOverlay').classList.remove('show');
-        if (_confirmNoCallback) _confirmNoCallback();
+        var _no = _confirmNoCallback;
         _confirmYesCallback = null; _confirmNoCallback = null;
+        document.getElementById('fridgeConfirmOverlay').classList.remove('show');
+        if (_no) _no();
     };
 });
 
@@ -31586,6 +31764,9 @@ function renderHomeCards() {
     try { renderHomeCommunityBar(); } catch (e) {} // V246: 食邦邻聚·公告栏
     // V140: 食养堂每日草稿——每天首次打开自动生成（错峰 4s 后台跑，当天已有批次则幂等跳过）
     setTimeout(function () { _fhEnsureDailyDrafts(false); }, 4000);
+    // V307: AI 兜底自动发布——6:50 后若无今日精选，自动从草稿箱捞一篇顶上（只改 isTodayPick/status）
+    setTimeout(function () { try { _fhAutoFallback(); } catch (e) {} }, 9000);
+    try { _fhStartFallbackTimer(); } catch (e) {}
 }
 
 // ====== V139: 食养堂·今日一课（缓存 daily_tip_${familyId}_${date}） ======
@@ -31635,6 +31816,8 @@ function _dtRenderCard(tip) {
     el.innerHTML = '<div class="dt-head"><span>📚 食养堂 · 今日一课' + exclusiveBadge + '</span>'
         + '<span class="dt-head-btns" onclick="event.stopPropagation()">'
         + adminCtl
+        // V305: 恢复「往期回顾」入口（V296 去掉往期精选后该页失去入口）
+        + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" style="border:none;background:none;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;color:#6B7280;" title="往期回顾">📅</button>'
         + '<button id="dtCardSpeakBtn" onclick="event.stopPropagation(); _dtSpeakTip(\'card\')" style="border:none;background:none;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;color:#6B7280;" title="语音播报">🔊</button>'
         + subBtnHtml
         + '</span></div>'
@@ -31737,10 +31920,13 @@ async function renderHomeDailyTipCard(force) {
             return null;
         });
     }
-    // 先秒出今天已发布的文章（本地缓存零延迟）
+    // V299: 首页「食养堂」卡片只展示「今日精选」——在食养分类下全部已发布文章里取 isTodayPick === true 的那篇，
+    // 没有精选时回落第一篇（allArticles[0]，按日期倒序）；不做任何底层数据改动
     var fast = null;
-    try { fast = _fhPublishedToday(); } catch (e) {}
-    if (fast && !_dtIsNational(fast)) fast = null;   // V296: 含城市/局部天气的旧内容不对外展示
+    var _isTodayPick = false;
+    try { fast = _fhTodayPickArticle(); } catch (e) {}
+    if (fast) _isTodayPick = true;
+    if (fast && !_dtIsNational(fast)) { fast = null; _isTodayPick = false; }   // V296: 含城市/局部天气的旧内容不对外展示
     if (!fast) {
         // V145: 服务端 confirmed 文章优先（pending 不展示）
         try {
@@ -31798,7 +31984,8 @@ async function renderHomeDailyTipCard(force) {
         }
     }
     // V285: 等待并应用 AI 专属结果（成功则替换当前卡片）
-    if (aiPromise) {
+    // V299: 有「今日精选」时，卡片固定展示精选文章，AI 专属结果不再覆盖
+    if (aiPromise && !_isTodayPick) {
         var subTip = await aiPromise;
         if (subTip && subTip.title && !subTip.error) {
             _dtServerTip = subTip;
@@ -31810,7 +31997,17 @@ async function renderHomeDailyTipCard(force) {
 // V143: 超管复核 AI 预选篇（confirm 保留 / withdraw 撤回换篇）
 async function _fhReviewAuto(date, action) {
     if (!date) return;
-    if (action === 'withdraw' && !confirm('撤回后首页将不再展示这篇 AI 预选内容。\n确定撤回、改用其他篇目吗？')) return;
+    // V304: 原生 confirm 在 webview 下会整页黑屏，改用页面内自定义确认弹层
+    if (action === 'withdraw') {
+        showConfirmDialog('撤回后首页将不再展示这篇 AI 预选内容，确定撤回、改用其他篇目吗？', function () {
+            _fhReviewAutoDo(date, action);
+        });
+        return;
+    }
+    return _fhReviewAutoDo(date, action);
+}
+async function _fhReviewAutoDo(date, action) {
+    if (!date) return;
     try {
         var resp = await fetch('/api/food-hall/review', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -32054,7 +32251,7 @@ function openSubscriptionModal(mode) {
     _openSubscribeGuide();
 }
 window.openSubscriptionModal = openSubscriptionModal;
-// V202: 订阅一个月（默认 30 天）；选基础服务时先给 60 天体验期
+// V202: 订阅有效期——基础服务走体验期（60 天），其余按年计费（365 天）
 function _applySubscription(tierKey, needsArr) {
     var now = Math.floor(Date.now() / 1000);
     var tier = tierKey;
@@ -32065,7 +32262,7 @@ function _applySubscription(tierKey, needsArr) {
     var tierDef = null;
     for (var i = 0; i < _SUBSCRIPTION_TIERS.length; i++) { if (_SUBSCRIPTION_TIERS[i].key === tier) { tierDef = _SUBSCRIPTION_TIERS[i]; break; } }
     if (!tierDef) tierDef = _SUBSCRIPTION_TIERS[1];
-    var days = tierDef.trialDays || 30; // 基础服务 60 天体验期
+    var days = tierDef.trialDays || 365; // 基础服务 60 天体验期；全家桶按年付给满 365 天
     var needs = Array.isArray(needsArr) ? needsArr.slice() : (_subSelectedNeeds || []).slice();
     _setSubscriptionStatus({
         isSubscribed: true,
@@ -32418,6 +32615,12 @@ function _openSubscribeModal(preferTier) {
     var sheet = document.createElement('div');
     sheet.style.cssText = 'margin-top:auto;background:white;border-radius:18px 18px 0 0;transform:translateY(100%);transition:transform .25s ease;max-width:430px;width:100%;align-self:center;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;';
     sheet.id = 'subscribeSheet';
+    // V322: 积分>0 但不足 1000 时，明确提示可抵扣门槛（避免用户误以为积分没用）
+    var _ptsInfoSheet = _subDiscountInfo(selectedPlan);
+    var _ptsHintHtml = '';
+    if (_ptsInfoSheet && _ptsInfoSheet.units === 0 && _ptsInfoSheet.points > 0 && _ptsInfoSheet.points < 1000) {
+        _ptsHintHtml = '<div style="font-size:11px;color:#C2410C;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:6px 8px;margin-bottom:8px;text-align:center;">当前 ' + _ptsInfoSheet.points + ' 分，攒到 1000 分可抵 10 元（单笔最多抵 30%）</div>';
+    }
     sheet.innerHTML = '<div style="flex-shrink:0;padding:14px 18px 10px;border-bottom:1px solid #F3F4F6;">'
         + '<div style="display:flex;align-items:center;gap:8px;">'
         + '<div style="width:4px;height:18px;background:#F97316;border-radius:2px;"></div>'
@@ -32432,6 +32635,7 @@ function _openSubscribeModal(preferTier) {
         + (_subTierState() === 'basic'
             ? '<button onclick="_mockSubscribePay(\'upgrade\')" style="width:100%;height:38px;border-radius:10px;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:8px;">升级全订阅（补差价 ¥200）</button>'
             : '')
+        + _ptsHintHtml
         + '<button id="subPayBtn" onclick="_subscribePay()" style="width:100%;height:42px;border-radius:12px;border:none;background:#F97316;color:white;font-size:15px;font-weight:600;cursor:pointer;">' + _subPayBtnText() + '</button>'
         + '<div style="font-size:10px;color:#9CA3AF;margin-top:8px;text-align:center;">基础服务体验期 60 天全免，订阅期满后自动续费或可随时取消</div>'
         + '</div>';
@@ -33054,7 +33258,20 @@ var _FH_FLOW = {
 function _fhRead() {
     try { var a = JSON.parse(lsGet('foodHallArticles') || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
 }
-function _fhWrite(list) { lsSet('foodHallArticles', JSON.stringify(list)); }
+// V310: 草稿箱已归档稿上限——超过 120 篇时自动清最老的（草稿 draft 与已发布 published 一律不删）
+var _FH_ARCHIVE_MAX = 120;
+function _fhPruneArchive(list) {
+    var arc = list.filter(function (x) { return x && x.status === 'archived'; });
+    if (arc.length <= _FH_ARCHIVE_MAX) return list;
+    arc.sort(function (a, b) { return (a.createdAt || a.updatedAt || 0) - (b.createdAt || b.updatedAt || 0); });
+    var drop = {};
+    arc.slice(0, arc.length - _FH_ARCHIVE_MAX).forEach(function (x) { drop[x.id] = 1; });
+    return list.filter(function (x) { return !x || !drop[x.id]; });
+}
+function _fhWrite(list) {
+    try { list = _fhPruneArchive(list); } catch (e) {}
+    lsSet('foodHallArticles', JSON.stringify(list));
+}
 function _fhMake(fields) {
     var now = Date.now();
     var base = {
@@ -33101,8 +33318,95 @@ function _fhPublishedToday() {
     pubs.sort(function (a, b) { return (b.publishedAt || 0) - (a.publishedAt || 0); });
     return pubs[0];
 }
+// V299: 今日精选——食养分类下所有文章里 isTodayPick === true 的那篇（不限状态），
+// 没有精选时回落最新一篇已发布文章（allArticles[0]）
+function _fhTodayPickArticle() {
+    var allArticles = _fhRead().filter(function (x) { return x && x.title; });
+    try { (allArticles = allArticles.concat((_fhServerArchive || []).filter(function (a) { return a && a.title; }))); } catch (e) {}
+    for (var i = 0; i < allArticles.length; i++) {
+        if (allArticles[i] && allArticles[i].isTodayPick === true) return allArticles[i];
+    }
+    var archive = _fhArchiveAll();
+    return archive.length ? archive[0] : null;
+}
+// V299/V300: 超管「设为今日精选」——被选中的 1 篇转为 published（草稿箱其余保持 draft），
+// 其他文章的 isTodayPick 置 false；只改本地数据，不做历史迁移
+function _fhSetTodayPick(id) {
+    var now = Date.now();
+    var list = _fhRead(), hit = false;
+    list.forEach(function (x) {
+        if (!x) return;
+        var want = (x.id === id);
+        if (want) {
+            hit = true;
+            x.isTodayPick = true;
+            x.status = 'published';
+            x.auditStatus = 'passed';
+            if (!x.publishedAt) x.publishedAt = now;
+            if (!x.date) x.date = _dtTodayKey();
+            x.updatedAt = now;
+        } else if (x.isTodayPick) {
+            x.isTodayPick = false;
+            x.updatedAt = now;
+        }
+    });
+    if (!hit) { showToast && showToast('文章不存在'); return; }
+    _fhWrite(list);
+    // 服务端归档（会话内缓存）也取消标记，避免旧精选抢占
+    try { (_fhServerArchive || []).forEach(function (a) { a.isTodayPick = false; }); } catch (e) {}
+    showToast && showToast('已设为今日精选');
+    try { _dtLoadedKey = ''; renderHomeDailyTipCard(true); } catch (e) {}
+    try { _fhMgrRender(); } catch (e) {}
+}
 
-// ====== V144: 公共文库·食养堂归档 / 家庭文库·食养收藏 ======
+// V307: AI 兜底自动发布——6:50 之后若「食养」当天还没有 isTodayPick === true 的文章，
+// 自动从草稿箱（status === 'draft'）挑一篇（评分最高，其次最新）设为今日精选并发布。
+// 只写 isTodayPick / status 两个已有字段，不动数据结构。
+var _fhFallbackTimer = null;
+function _fhStartFallbackTimer() {
+    if (_fhFallbackTimer) return;
+    // 1 分钟轮询一次：等超管过了 6:50 仍没选，就及时兜底
+    _fhFallbackTimer = setInterval(function () { try { _fhAutoFallback(); } catch (e) {} }, 60 * 1000);
+}
+function _fhAutoFallback(force) {
+    var now = new Date();
+    // 早晨 6:50 之前不跑
+    if (!force && (now.getHours() * 60 + now.getMinutes()) < (6 * 60 + 50)) return false;
+    var all = _fhRead().filter(function (x) { return x && x.title; });
+    var today = _dtTodayKey();
+    // V323: 「今日已有精选」必须按当天判断——前一天的人工精选不能算作今天的精选，
+    // 否则跨天后 6:50 永远不兜底，当天首页没有任何内容
+    var done = all.some(function (x) {
+        if (!(x.isTodayPick === true && x.status === 'published' && x.title)) return false;
+        if (x.date === today) return true;
+        var ts = Math.max(Number(x.publishedAt || 0), Number(x.updatedAt || 0));
+        return ts > 0 && dateToKey(new Date(ts)) === today;
+    });
+    if (done) return false;
+    // 从草稿箱挑：优先今天的草稿，其次任意草稿
+    var drafts = all.filter(function (x) { return x.status === 'draft' && x.title; });
+    var todayDrafts = drafts.filter(function (x) { return x.date === today; });
+    var pool = todayDrafts.length ? todayDrafts : drafts;
+    if (!pool.length) return false;
+    pool.sort(function (a, b) {
+        var sa = Number(a.score || 0), sb = Number(b.score || 0);
+        if (sb !== sa) return sb - sa;
+        return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+    var pickId = pool[0].id;
+    _fhSetTodayPick(pickId);
+    // 兜底选出的文章日期归到今天（否则次日会重复兜底）
+    try {
+        var l2 = _fhRead();
+        l2.forEach(function (x) {
+            if (x && x.id === pickId) { x.date = today; x.publishedAt = x.publishedAt || Date.now(); }
+        });
+        _fhWrite(l2);
+    } catch (e) {}
+    setTimeout(function () { try { showToast && showToast('已触发 AI 兜底发布机制'); } catch (e) {} }, 400);
+    return true;
+}
+
 // 食养堂树状子分类（与生成端 category 一致）；食养收藏沿用同一套，仅内容=用户收藏
 var _FH_TREE_CATS = ['节气食养', '天气食养', '当季食材', '烹饪技巧', '饮食文化'];
 var _fhServerArchive = [];          // 服务端自动发布归档（会话内缓存）
@@ -33231,6 +33535,7 @@ async function _fhEnsureDailyDrafts(force) {
             if (!d || !d.title) return;
             var art = _fhAdd({
                 id: d.id, date: out.date || today, source: 'ai', authorId: 'ai',
+                status: 'draft', isTodayPick: false,   // V300: 新生成的 3 篇默认进草稿箱，等超管挑 1 篇设为今日精选
                 category: d.category || '节气食养', title: d.title, summary: d.summary || '',
                 content: d.content || '', tips: d.tips || [],
                 auditStatus: vio.length ? 'pending' : 'pending',
@@ -33259,9 +33564,8 @@ async function _fhManualGen(btn) {
 var _fhMgrTab = 'draft';
 var _FH_MGR_TABS = [
     { k: 'draft', n: '今日草稿' },
-    { k: 'pending_review', n: '待审' },
-    { k: 'ai_pending', n: 'AI 待审' },
-    { k: 'archived', n: '素材库' }
+    { k: 'draftbox', n: '📥 草稿箱' },
+    { k: 'ai_pending', n: 'AI 待审' }
 ];
 var _fhMgrAiPending = []; var _fhMgrAiPendingAt = 0;
 async function _fhMgrLoadAiPending(force) {
@@ -33282,8 +33586,10 @@ function _openFoodHallMgr() {
     _fhMgrTab = 'draft';
     var ov = document.createElement('div');
     ov.id = 'fhMgrOv';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:10002;background:#F7F4EF;display:flex;flex-direction:column;';
-    ov.innerHTML = '<div style="flex-shrink:0;background:white;border-bottom:1px solid #F3E9DC;padding:10px 16px;display:flex;align-items:center;gap:8px;">'
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(31,41,55,0.35);display:flex;justify-content:center;';
+    // V303: 与 APP 一致，管理页固定 430px 居中，外层灰色背景
+    ov.innerHTML = '<div style="width:100%;max-width:430px;height:100%;background:#F7F4EF;display:flex;flex-direction:column;box-shadow:0 0 24px rgba(0,0,0,0.14);overflow:hidden;">'
+        + '<div style="flex-shrink:0;background:white;border-bottom:1px solid #F3E9DC;padding:10px 16px;display:flex;align-items:center;gap:8px;">'
         + '<button type="button" onclick="_closeFoodHallMgr()" style="border:none;background:none;font-size:18px;color:#6B7280;cursor:pointer;padding:2px 6px;line-height:1;">←</button>'
         + '<span style="font-size:15px;font-weight:700;color:#1F2937;">食养堂管理</span></div>'
         + '<div id="fhMgrTabs" style="flex-shrink:0;display:flex;background:white;padding:0 8px 0;border-bottom:1px solid #F3E9DC;"></div>'
@@ -33293,7 +33599,7 @@ function _openFoodHallMgr() {
         + '<button type="button" onclick="_fhMgrEdit(null)" style="flex:1 1 45%;border:none;background:#FFF3E2;color:#9A3412;font-size:13px;font-weight:600;border-radius:10px;padding:9px 6px;cursor:pointer;">✏️ 新编一篇</button>'
         + '<button type="button" onclick="_fhMgrUpload()" style="flex:1 1 45%;border:none;background:#FFF3E2;color:#9A3412;font-size:13px;font-weight:600;border-radius:10px;padding:9px 6px;cursor:pointer;">📤 上传文件</button>'
         + '<input type="file" id="fhMgrFile" accept=".md,.txt" style="display:none" onchange="_fhMgrFileChosen(this)">'
-        + '</div>';
+        + '</div></div>';
     document.body.appendChild(ov);
     _fhMgrRender();
     // V145: 进入管理页时拉取服务端 AI 待审列表
@@ -33309,7 +33615,17 @@ function _fhMgrSetTab(t) { _fhMgrTab = t; _fhMgrRender(); }
 // V145: 超管在 AI 待审 tab 直接确认/撤回（复用 /api/food-hall/review）
 async function _fhMgrAiReview(date, action, btn) {
     if (!date) return;
-    if (action === 'withdraw' && !confirm('撤回后首页将不再展示这篇 AI 自动备稿。\n确定撤回换篇吗？')) return;
+    // V304: 原生 confirm 在 webview 下会整页黑屏，改用页面内自定义确认弹层
+    if (action === 'withdraw') {
+        showConfirmDialog('撤回后首页将不再展示这篇 AI 自动备稿，确定撤回换篇吗？', function () {
+            _fhMgrAiReviewDo(date, action, btn);
+        });
+        return;
+    }
+    return _fhMgrAiReviewDo(date, action, btn);
+}
+async function _fhMgrAiReviewDo(date, action, btn) {
+    if (!date) return;
     if (btn) { btn.disabled = true; btn.textContent = '处理中…'; }
     try {
         var resp = await fetch('/api/food-hall/review', {
@@ -33341,8 +33657,8 @@ function _fhMgrRender() {
     // V145: AI 待审数量取服务端
     var aiPendingN = _fhMgrAiPending.length;
     tabsEl.innerHTML = _FH_MGR_TABS.map(function (t) {
-        var n = t.k === 'archived' ? arts.filter(function (x) { return x && inLibrary(x); }).length
-            : t.k === 'draft' ? arts.filter(function (x) { return x && inWorkbench(x); }).length
+        var n = t.k === 'draft' ? arts.filter(function (x) { return x && inWorkbench(x); }).length
+            : t.k === 'draftbox' ? arts.filter(function (x) { return x && ['draft', 'archived', 'pending_review'].indexOf(x.status) >= 0; }).length
             : t.k === 'ai_pending' ? aiPendingN
             : arts.filter(function (x) { return x && x.status === t.k; }).length;
         var on = _fhMgrTab === t.k;
@@ -33373,17 +33689,24 @@ function _fhMgrRender() {
     }
     var list = arts.filter(function (x) {
         if (!x) return false;
-        if (_fhMgrTab === 'archived') return inLibrary(x);
         if (_fhMgrTab === 'draft') return inWorkbench(x);
+        // V302: 草稿箱 = 草稿 + 素材库（已归档）+ 极少数残留的审核中
+        if (_fhMgrTab === 'draftbox') return ['draft', 'archived', 'pending_review'].indexOf(x.status) >= 0;
         return x.status === _fhMgrTab;
     });
-    if (_fhMgrTab === 'archived') list.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    if (_fhMgrTab === 'draftbox') list.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
     var btns = {
         draft: function (a) {
             return _fhMgrBtn('预览', '_fhMgrPreview(\'' + a.id + '\')', '#6B7280')
                 + _fhMgrBtn('发布', '_fhMgrPublish(\'' + a.id + '\',this)', '#16A34A')
                 + _fhMgrBtn('编辑', '_fhMgrEdit(\'' + a.id + '\')', '#C2410C')
                 + _fhMgrBtn('删', '_fhMgrDelete(\'' + a.id + '\')', '#DC2626');
+        },
+        draftbox: function (a) {
+            // V302: 草稿箱按文章实际状态给按钮——已归档可「采用发布」，草稿走「发布」，审核中可重试
+            if (a.status === 'archived') return btns.archived(a);
+            if (a.status === 'pending_review') return btns.pending_review(a);
+            return btns.draft(a);
         },
         pending_review: function (a) {
             return _fhMgrBtn('预览', '_fhMgrPreview(\'' + a.id + '\')', '#6B7280')
@@ -33392,12 +33715,12 @@ function _fhMgrRender() {
         },
         published: function (a) {
             return _fhMgrBtn('预览', '_fhMgrPreview(\'' + a.id + '\')', '#6B7280')
-                + _fhMgrBtn('存入素材库', '_fhMgrArchive(\'' + a.id + '\')', '#6B7280');
+                + _fhMgrBtn('下架到草稿箱', '_fhMgrArchive(\'' + a.id + '\')', '#6B7280');
         },
         rejected: function (a) {
             return _fhMgrBtn('预览', '_fhMgrPreview(\'' + a.id + '\')', '#6B7280')
                 + _fhMgrBtn('重新编辑', '_fhMgrEdit(\'' + a.id + '\')', '#C2410C')
-                + _fhMgrBtn('存入素材库', '_fhMgrArchive(\'' + a.id + '\')', '#6B7280')
+                + _fhMgrBtn('下架到草稿箱', '_fhMgrArchive(\'' + a.id + '\')', '#6B7280')
                 + _fhMgrBtn('删', '_fhMgrDelete(\'' + a.id + '\')', '#DC2626');
         },
         archived: function (a) {
@@ -33415,18 +33738,23 @@ function _fhMgrRender() {
         var badge = _fhMgrTab === 'draft'
             ? (a.status === 'published' ? '<span style="font-size:11px;color:#16A34A;">✅ 已发布</span>'
                 : a.status === 'rejected' ? '<span style="font-size:11px;color:#DC2626;">❌ 已驳回</span>' : '')
-            : _fhMgrTab === 'pending_review' ? '<span style="font-size:11px;color:#D97706;">⏳ 审核中</span>'
-            : _fhMgrTab === 'archived' ? '<span style="font-size:11px;color:#9CA3AF;">' + (a.publishedAt > 0 ? '📚 已归档（曾发布）' : '📚 落选草稿') + '</span>'
+            : _fhMgrTab === 'draftbox' ? (a.status === 'archived'
+                ? '<span style="font-size:11px;color:#9CA3AF;">' + (a.publishedAt > 0 ? '📚 已归档（曾发布）' : '📚 落选草稿') + '</span>'
+                : a.status === 'pending_review' ? '<span style="font-size:11px;color:#D97706;">⏳ 审核中</span>'
+                    : '<span style="font-size:11px;color:#C2410C;">📝 草稿</span>')
             : '';
         var noteHtml = (a.auditNote && a.status === 'rejected')
             ? '<div style="margin-top:4px;font-size:11px;color:#DC2626;line-height:1.5;">驳回原因：' + a.auditNote + '</div>' : '';
         var dateHtml = _fhMgrTab !== 'draft' ? '<span style="margin-left:6px;">' + (a.date || '') + '</span>' : '';
+        var pickBadge = a.isTodayPick === true ? '<span style="font-size:11px;color:#C2410C;margin-left:6px;">⭐ 今日精选</span>' : '';
         return '<div style="background:white;border:1px solid #F3E9DC;border-radius:12px;padding:12px 14px;margin:10px 14px 0;">'
             + '<div style="display:flex;align-items:baseline;gap:6px;"><span style="font-size:13px;font-weight:700;color:#9CA3AF;">' + (i + 1) + '.</span>'
-            + '<span style="flex:1;font-size:14px;font-weight:600;color:#1F2937;line-height:1.5;">' + (a.title || '(无标题)') + '</span>' + badge + '</div>'
+            + '<span style="flex:1;font-size:14px;font-weight:600;color:#1F2937;line-height:1.5;">' + (a.title || '(无标题)') + '</span>' + pickBadge + badge + '</div>'
             + '<div style="margin-top:4px;font-size:11px;color:#9CA3AF;">' + (a.category || '') + dateHtml + '</div>'
             + noteHtml
-            + '<div style="margin-top:10px;display:flex;gap:8px;">' + btns[_fhMgrTab === 'draft' ? a.status : _fhMgrTab](a) + '</div></div>';
+            + '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">' + btns[_fhMgrTab === 'draft' ? a.status : _fhMgrTab](a)
+            + _fhMgrBtn(a.isTodayPick === true ? '⭐ 已是今日精选' : '设为今日精选', '_fhSetTodayPick(\'' + a.id + '\')', '#C2410C')
+            + '</div></div>';
     }).join('') + '<div style="height:14px;"></div>';
 }
 function _fhMgrBtn(txt, fn, color) {
@@ -33473,28 +33801,32 @@ async function _fhMgrPublish(id, btn) {
     _fhMgrRender();
 }
 function _fhMgrBack(id) { _fhTransition(id, 'draft'); _fhMgrRender(); }
-// 下架/落选 → 存入素材库（保留备用，明年或以后可"采用发布"）
+// 下架/落选 → 下架到草稿箱（保留备用，随时可"采用发布"）
 function _fhMgrArchive(id) {
-    if (!confirm('存入素材库后可随时再采用发布，确认？')) return;
-    _fhTransition(id, 'archived');
-    _fhMgrRender();
-    try { renderHomeDailyTipCard(true); } catch (e) {}
+    // 改用自定义确认弹层（原生 confirm 在部分 webview 下会导致整页黑屏）
+    showConfirmDialog('下架后可在草稿箱随时「采用发布」重新上架，确认下架？', function () {
+        _fhTransition(id, 'archived');
+        _fhMgrRender();
+        try { renderHomeDailyTipCard(true); } catch (e) {}
+    });
 }
 // 采用发布：素材库文章 date 刷新为今天，再走正常 AI 审核发布
 async function _fhMgrAdopt(id, btn) {
     var a = _fhGet(id);
     if (!a) return;
-    if (!confirm('将「' + (a.title || '无标题') + '」采用为今日内容并发布？（发布前会再次 AI 审核）')) return;
-    _fhUpdate(id, { date: _dtTodayKey() });
-    await _fhMgrPublish(id, btn);
+    showConfirmDialog('将「' + (a.title || '无标题') + '」采用为今日内容并发布？（发布前会再次 AI 审核）', function () {
+        _fhUpdate(id, { date: _dtTodayKey() });
+        _fhMgrPublish(id, btn);
+    });
 }
 function _fhMgrDelete(id) {
     var a = _fhGet(id);
     if (!a) return;
-    if (!confirm('确定删除「' + (a.title || '无标题') + '」吗？删除后不可恢复。')) return;
-    _fhRemove(id);
-    _fhMgrRender();
-    showToast && showToast('已删除');
+    showConfirmDialog('确定删除「' + (a.title || '无标题') + '」吗？删除后不可恢复。', function () {
+        _fhRemove(id);
+        _fhMgrRender();
+        showToast && showToast('已删除');
+    });
 }
 function _fhMgrRejectModal(reason) {
     var old = document.getElementById('fhRejOv');
@@ -33520,8 +33852,10 @@ function _fhMgrEdit(id) {
     if (old) old.remove();
     var ov = document.createElement('div');
     ov.id = 'fhEdOv';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:10004;background:#F7F4EF;display:flex;flex-direction:column;';
-    ov.innerHTML = '<div style="flex-shrink:0;background:white;border-bottom:1px solid #F3E9DC;padding:10px 16px;display:flex;align-items:center;gap:8px;">'
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10004;background:rgba(31,41,55,0.35);display:flex;justify-content:center;';
+    // V303: 与 APP 一致，编辑页固定 430px 居中
+    ov.innerHTML = '<div style="width:100%;max-width:430px;height:100%;background:#F7F4EF;display:flex;flex-direction:column;box-shadow:0 0 24px rgba(0,0,0,0.14);overflow:hidden;">'
+        + '<div style="flex-shrink:0;background:white;border-bottom:1px solid #F3E9DC;padding:10px 16px;display:flex;align-items:center;gap:8px;">'
         + '<button type="button" onclick="document.getElementById(\'fhEdOv\').remove()" style="border:none;background:none;font-size:18px;color:#6B7280;cursor:pointer;padding:2px 6px;line-height:1;">←</button>'
         + '<span style="font-size:15px;font-weight:700;color:#1F2937;">' + (a ? '编辑文章' : '新编文章') + '</span>'
         + '<button type="button" onclick="_fhEdSave()" style="margin-left:auto;border:none;background:#F97316;color:white;font-size:13px;font-weight:600;border-radius:999px;padding:6px 16px;cursor:pointer;">保存</button></div>'
@@ -33537,7 +33871,7 @@ function _fhMgrEdit(id) {
         + '<textarea id="fhEdCnt" rows="10" placeholder="口语化，像和朋友聊天" style="width:100%;border:1px solid #E5E7EB;border-radius:8px;padding:9px;font-size:14px;color:#1F2937;line-height:1.7;resize:vertical;">' + (a && a.content ? String(a.content) : '') + '</textarea>'
         + '<div style="font-size:12px;color:#6B7280;margin:10px 0 4px;">小贴士（每行一条）</div>'
         + '<textarea id="fhEdTips" rows="3" placeholder="如：炖汤先大火烧开再转小火" style="width:100%;border:1px solid #E5E7EB;border-radius:8px;padding:9px;font-size:13px;color:#1F2937;resize:vertical;">' + (a && a.tips ? String(a.tips.join('\n')) : '') + '</textarea>'
-        + '</div>';
+        + '</div></div>';
     document.body.appendChild(ov);
     _fhEdCount();
     ['fhEdTitle', 'fhEdSum', 'fhEdCnt'].forEach(function (fid) {
@@ -34173,38 +34507,38 @@ function _nutritionAdoptPlan(planId) {
     var plan = plans.find(function(p) { return p.id === planId; });
     if (!plan) return;
 
-    // 免责声明弹窗
-    if (!confirm('本功能仅提供营养搭配建议，不涉及疾病诊断和治疗。如您有慢性疾病或特殊健康状况，请先咨询医生。\n\n点击"确定"继续采纳。')) return;
+    // 免责声明弹窗（V317: 改用页面内确认弹层）
+    showConfirmDialog('本功能仅提供营养搭配建议，不涉及疾病诊断和治疗。如您有慢性疾病或特殊健康状况，请先咨询医生。\n\n点击"确定"继续采纳。', function() {
+        // 选择日期 + 餐次
+        var today = new Date();
+        var dateStr = prompt('采纳到哪一天？(格式 YYYY-MM-DD，留空默认今天)', today.getFullYear() + '-' + (today.getMonth()+1) + '-' + today.getDate());
+        if (!dateStr) return;
+        var meal = prompt('哪一餐？(breakfast / lunch / dinner)', 'lunch');
+        if (!meal) return;
 
-    // 选择日期 + 餐次
-    var today = new Date();
-    var dateStr = prompt('采纳到哪一天？(格式 YYYY-MM-DD，留空默认今天)', today.getFullYear() + '-' + (today.getMonth()+1) + '-' + today.getDate());
-    if (!dateStr) return;
-    var meal = prompt('哪一餐？(breakfast / lunch / dinner)', 'lunch');
-    if (!meal) return;
+        // 更新 adoptCount
+        plan.adoptCount = (plan.adoptCount || 0) + 1;
+        saveNutritionPlans(plans);
 
-    // 更新 adoptCount
-    plan.adoptCount = (plan.adoptCount || 0) + 1;
-    saveNutritionPlans(plans);
+        // 写入食记（简化：追加到 localStorage dietDiary 或 dietCalendar 计划）
+        try {
+            var diary = JSON.parse(localStorage.getItem('dietDiary') || '[]');
+            diary.push({
+                id: 'np_adopt_' + Date.now(),
+                type: 'nutrition_plan',
+                date: dateStr,
+                meal: meal,
+                planId: planId,
+                planTitle: plan.title,
+                dishes: (plan.dishes || []).map(function(d) { return typeof d === 'string' ? d : d.name; }),
+                source: '营养配餐助手',
+                createdAt: Date.now()
+            });
+            localStorage.setItem('dietDiary', JSON.stringify(diary));
+        } catch(e) {}
 
-    // 写入食记（简化：追加到 localStorage dietDiary 或 dietCalendar 计划）
-    try {
-        var diary = JSON.parse(localStorage.getItem('dietDiary') || '[]');
-        diary.push({
-            id: 'np_adopt_' + Date.now(),
-            type: 'nutrition_plan',
-            date: dateStr,
-            meal: meal,
-            planId: planId,
-            planTitle: plan.title,
-            dishes: (plan.dishes || []).map(function(d) { return typeof d === 'string' ? d : d.name; }),
-            source: '营养配餐助手',
-            createdAt: Date.now()
-        });
-        localStorage.setItem('dietDiary', JSON.stringify(diary));
-    } catch(e) {}
-
-    showToast('已采纳到 ' + dateStr + ' ' + meal + ' 餐');
+        showToast('已采纳到 ' + dateStr + ' ' + meal + ' 餐');
+    });
 }
 
 function _nutritionFavorite(planId) {
@@ -34482,17 +34816,19 @@ function _helpAdoptDish(dishId) {
     var dishes = getHelpData('dishes') || [];
     var d = dishes.find(function(x) { return x.id === dishId; });
     if (!d) return;
-    if (!confirm('采纳 "' + d.name + '" 到食记？')) return;
-    var dateStr = prompt('采纳到哪一天？(YYYY-MM-DD)', new Date().getFullYear() + '-' + (new Date().getMonth()+1) + '-' + new Date().getDate());
-    if (!dateStr) return;
-    var meal = prompt('哪一餐？(breakfast / lunch / dinner)', 'lunch');
-    if (!meal) return;
-    try {
-        var diary = JSON.parse(localStorage.getItem('dietDiary') || '[]');
-        diary.push({ id: 'hp_adopt_' + Date.now(), type: 'help_rank', date: dateStr, meal: meal, dish: d.name, source: '食榜·菜品榜', createdAt: Date.now() });
-        localStorage.setItem('dietDiary', JSON.stringify(diary));
-    } catch(e) {}
-    showToast('已采纳：' + d.name + ' → ' + dateStr + ' ' + meal);
+    // V317: 改用页面内确认弹层，替代原生 confirm
+    showConfirmDialog('采纳 "' + d.name + '" 到食记？', function() {
+        var dateStr = prompt('采纳到哪一天？(YYYY-MM-DD)', new Date().getFullYear() + '-' + (new Date().getMonth()+1) + '-' + new Date().getDate());
+        if (!dateStr) return;
+        var meal = prompt('哪一餐？(breakfast / lunch / dinner)', 'lunch');
+        if (!meal) return;
+        try {
+            var diary = JSON.parse(localStorage.getItem('dietDiary') || '[]');
+            diary.push({ id: 'hp_adopt_' + Date.now(), type: 'help_rank', date: dateStr, meal: meal, dish: d.name, source: '食榜·菜品榜', createdAt: Date.now() });
+            localStorage.setItem('dietDiary', JSON.stringify(diary));
+        } catch(e) {}
+        showToast('已采纳：' + d.name + ' → ' + dateStr + ' ' + meal);
+    });
 }
 
 // ---------- 看做法（弹窗 + 幻灯片） ----------
@@ -35041,10 +35377,19 @@ const MOODS = [
     { key: "funny", icon: "🥳", label: "有趣" }
 ];
 function getFoodDiaries() {
-    try { return JSON.parse(localStorage.getItem('foodDiaries') || '[]'); } catch(e) { return []; }
+    try {
+        // V326: 日记按家庭码隔离（D4-01）——游客态一律返回空，且不回退全局遗留数据
+        var fid = (typeof getFamilyId === 'function') ? getFamilyId() : '';
+        if (!fid) return [];
+        return JSON.parse(localStorage.getItem(fid + '_foodDiaries') || '[]');
+    } catch (e) { return []; }
 }
 function saveFoodDiaries(arr) {
-    localStorage.setItem('foodDiaries', JSON.stringify(arr));
+    try {
+        var fid = (typeof getFamilyId === 'function') ? getFamilyId() : '';
+        if (!fid) return;
+        localStorage.setItem(fid + '_foodDiaries', JSON.stringify(arr || []));
+    } catch (e) {}
 }
 function getMealDiary(dateStr, mealKey) {
     var list = getFoodDiaries();
@@ -35354,10 +35699,12 @@ function _dtEntryCard(d) {
         + '</div>';
 }
 function _dtDelEntry(id) {
-    if (!window.confirm('删除这条记录？')) return;
-    saveFoodDiaries(getFoodDiaries().filter(function(d) { return String(d.id) !== String(id); }));
-    renderDiaryTimelineList();
-    showToast('已删除');
+    // V317: 改用页面内确认弹层
+    showConfirmDialog('删除这条记录？', function() {
+        saveFoodDiaries(getFoodDiaries().filter(function(d) { return String(d.id) !== String(id); }));
+        renderDiaryTimelineList();
+        showToast('已删除');
+    });
 }
 /** ＋ 快捷入口弹层（4 项）——V85 改名 openDiaryQuickMenu，避开旧 openDiaryQuickAdd（早餐快捷记录）撞名 */
 function openDiaryQuickMenu() {
@@ -35432,6 +35779,7 @@ function _dtCompressImg(file, cb) {
     reader.readAsDataURL(file);
 }
 var dtMomPhotos = [];
+var dtDailyPhotos = [];
 /** 「随时感记」模态框（图片优先、文字可选）；autoPhoto=true 时自动拉起相机 */
 function openMomentDiaryModal(autoPhoto) {
     var old = document.getElementById('dtMomentOv');
@@ -35549,6 +35897,7 @@ function _dtMomSave() {
 function openDailyDiaryModal() {
     var old = document.getElementById('dtDailyOv');
     if (old) old.remove();
+    dtDailyPhotos = [];
     var ov = document.createElement('div');
     ov.id = 'dtDailyOv';
     ov.style.cssText = 'position:fixed;inset:0;z-index:100007;background:rgba(31,41,55,0.6);display:flex;align-items:flex-end;justify-content:center;';
@@ -35566,6 +35915,18 @@ function openDailyDiaryModal() {
         + '<div style="flex:1;overflow-y:auto;padding:16px;">'
         + '<div style="font-size:12px;color:#9CA3AF;margin-bottom:8px;">📅 ' + _dtTodayKey() + ' · 今天的饮食整体怎么样？</div>'
         + '<textarea id="dtDailyContent" rows="4" placeholder="总结今天的饮食，比如：三餐都按时吃了，晚上少吃了主食…" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #FED7AA;border-radius:12px;font-size:14px;line-height:1.6;resize:none;"></textarea>'
+        // V328/D4-04: 今日总结支持配图
+        + '<div style="margin-top:10px;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;">'
+        + '<div style="font-size:13px;color:#374151;font-weight:600;">📷 配图（可选）</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;">最多 6 张</div></div>'
+        + '<div id="dtDailyImgZone" onclick="document.getElementById(\'dtDailyImgInput\').click()" style="border:2px dashed #FDBA74;background:#FFFBEB;border-radius:12px;padding:14px 10px;text-align:center;cursor:pointer;margin-top:6px;">'
+        + '<div style="font-size:22px;">📷</div>'
+        + '<div style="font-size:12px;color:#C2410C;font-weight:600;margin-top:2px;">点击添加今天的照片</div>'
+        + '</div>'
+        + '<div id="dtDailyImgs" style="display:none;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>'
+        + '<input type="file" id="dtDailyImgInput" accept="image/*" multiple style="display:none;">'
+        + '</div>'
         + '<div style="font-size:13px;color:#374151;font-weight:600;margin:12px 0 6px;">今天的心情</div>'
         + '<div id="dtDailyMoods" style="display:flex;gap:6px;flex-wrap:wrap;">' + moodsHtml + '</div>'
         + '<input type="hidden" id="dtDailyMood" value="">'
@@ -35579,7 +35940,32 @@ function openDailyDiaryModal() {
         + '<button onclick="_dtDailySave()" style="flex:1;padding:10px;background:#F97316;color:white;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">保存</button>'
         + '</div></div>';
     document.body.appendChild(ov);
+    document.getElementById('dtDailyImgInput').addEventListener('change', function(e) {
+        _dtDailyImgAdd(e.target.files);
+        e.target.value = '';
+    });
 }
+function _dtDailyImgAdd(files) {
+    Array.from(files || []).forEach(function(file) {
+        if (!file || file.type.indexOf('image') !== 0) return;
+        if (dtDailyPhotos.length >= 6) { showToast('最多 6 张图片'); return; }
+        _dtCompressImg(file, function(dataUrl) {
+            dtDailyPhotos.push(dataUrl);
+            _dtDailyRenderImgs();
+        });
+    });
+}
+function _dtDailyRenderImgs() {
+    var box = document.getElementById('dtDailyImgs');
+    if (!box) return;
+    if (!dtDailyPhotos.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    box.style.display = 'flex';
+    box.innerHTML = dtDailyPhotos.map(function(src, i) {
+        return '<div style="position:relative;width:72px;height:72px;"><img src="' + src + '" style="width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid #F3F4F6;">'
+            + '<button type="button" onclick="_dtDailyImgDel(' + i + ')" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;background:#EF4444;color:white;border:none;border-radius:50%;font-size:12px;cursor:pointer;line-height:1;">✕</button></div>';
+    }).join('');
+}
+function _dtDailyImgDel(i) { dtDailyPhotos.splice(i, 1); _dtDailyRenderImgs(); }
 function _dtDailySetMood(key) {
     var hidden = document.getElementById('dtDailyMood');
     if (!hidden) return;
@@ -35594,17 +35980,19 @@ function _dtDailySave() {
     var content = (document.getElementById('dtDailyContent').value || '').trim();
     var mood = document.getElementById('dtDailyMood').value || '';
     var weather = (document.getElementById('dtDailyWeather').value || '').trim();
-    if (!content && !mood) { showToast('写点总结或选个心情吧～'); return; }
+    if (!content && !mood && !dtDailyPhotos.length) { showToast('写点总结、选个心情或加张照片吧～'); return; }
+    // V329/D4-05: 每日总结是家庭整体总结，署名取登录账号，而不是当前选中的成员
+    var loginUser = (typeof getLoginUser === 'function') ? (getLoginUser() || {}) : {};
     var cur = {};
     try { cur = getCurrentMember() || {}; } catch (e) {}
     var entry = {
         id: 'diary_' + Date.now(),
         type: 'daily',
-        authorId: cur.id || cur.name || '',
-        authorName: cur.name || '我',
+        authorId: loginUser.id || cur.id || cur.name || '',
+        authorName: loginUser.name || loginUser.nickname || cur.name || '我',
         content: content,
         mood: mood,
-        images: [],
+        images: dtDailyPhotos.slice(),
         relatedDate: _dtTodayKey(),
         createdAt: Date.now(),
         weather: weather,
@@ -36070,11 +36458,13 @@ function _mealDiarySave(dateKey, mealKey) {
     try { checkBadges(false); } catch(e) {}
 }
 function _mealDiaryDelete(dateKey, mealKey) {
-    if (!confirm('删除这条餐后感想？')) return;
-    deleteMealDiary(dateKey, mealKey);
-    document.getElementById('mealDiaryOverlay').remove();
-    if (typeof renderDiary === 'function') renderDiary();
-    showToast('已删除');
+    // V317: 改用页面内确认弹层
+    showConfirmDialog('删除这条餐后感想？', function() {
+        deleteMealDiary(dateKey, mealKey);
+        document.getElementById('mealDiaryOverlay').remove();
+        if (typeof renderDiary === 'function') renderDiary();
+        showToast('已删除');
+    });
 }
 /** 渲染某餐的日记摘要（html 片段） */
 function _renderMealDiarySummary(dateKey, mealKey) {
@@ -36579,7 +36969,7 @@ function renderFamily() {
     function _renderDiaryTopCard() {
         var weekCnt = 0;
         try {
-            var diaries = JSON.parse(lsGet('foodDiaries') || '[]');
+            var diaries = (typeof getFoodDiaries === 'function') ? getFoodDiaries() : JSON.parse(localStorage.getItem((getFamilyId() || '') + '_foodDiaries') || '[]');
             var now78 = new Date();
             var dow78 = now78.getDay() || 7; // 周一=1 … 周日=7
             var mon78 = new Date(now78.getFullYear(), now78.getMonth(), now78.getDate() - dow78 + 1);
@@ -36669,41 +37059,49 @@ function renderFamily() {
     const relColors = { '家人': '#F97316', '亲戚': '#10B981', '朋友': '#3B82F6', '同事': '#8B5CF6' };
     // 成员选择器 + 单成员展示（xiaojiaMembers 已在上方"小家成员区"处计算）
     if (xiaojiaMembers.length > 0) {
-    // V135: 「家人」下拉选中值跟随「当前操作人」，单一数据源 = 当前身份
-    const curOpName = (curOp && curOp.name && xiaojiaNames.includes(curOp.name)) ? curOp.name : null;
-    if (curOpName) {
-        selectedFamilyMemberName = curOpName;
-    } else if (!selectedFamilyMemberName || !xiaojiaNames.includes(selectedFamilyMemberName)) {
-        selectedFamilyMemberName = xiaojiaNames.includes('我') ? '我' : xiaojiaMembers[0].name;
-    }
-        const selMember = xiaojiaMembers.find(m => m.name === selectedFamilyMemberName) || xiaojiaMembers[0];
-        const constitution = selMember.constitution || '';
-        // V135: 「👪 小家」并入行首；家人下拉移到「平和质」左边；「当前操作」「家人」标签删除
-        var div = document.createElement('div');
-        div.className = 'member-card';
-        div.id = 'familyMembersAnchor';
-        div.innerHTML = `
-            <div class="member-info">
-                <div class="detail"><span style="font-weight:500;color:#374151;">👪 小家</span> ${constitution ? '<span class="constitution-tag" style="margin-left:0;margin-right:6px;">' + escapeHtml(constitution) + '</span>' : ''}口味：${selMember.taste || ''}</div>
-                <div class="detail" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><select id="familyMemberSelector" style="padding:2px 5px;border:1px solid #FED7AA;border-radius:6px;font-size:12px;color:#C2410C;background:#FFFBEB;cursor:pointer;outline:none;max-width:58px;">${xiaojiaMembers.map(m => `<option value="${escapeHtml(m.name)}" ${m.name === selectedFamilyMemberName ? 'selected' : ''}>${escapeHtml(m.name)}${m.role === 'admin' ? ' 🛡️' : ''}</option>`).join('')}</select><span>饮食要求：${selMember.dietaryPreference || '未填写'}</span></div>
-                <div class="detail" style="font-size:12px;color:#6B7280;">📱 手机号：${selMember.phone ? escapeHtml(selMember.phone) : '<span style="color:#9CA3AF;">未绑定</span>'}</div>
-                ${_memberPreferenceSummary(selMember) ? '<div class="detail" style="font-size:12px;color:#9A3412;background:#FFF7ED;border-radius:6px;padding:3px 8px;margin-top:2px;">🍽️ ' + escapeHtml(_memberPreferenceSummary(selMember)) + '</div>' : ''}
+        // V314: 小家成员全部平铺展示（原 V135 只渲染「当前操作人」一人，其余成员在「我家」页不可见也改不了，容易误改别人）
+        var _curOpName = (curOp && curOp.name) ? curOp.name : '';
+        selectedFamilyMemberName = (_curOpName && xiaojiaNames.includes(_curOpName)) ? _curOpName : (xiaojiaNames.includes('我') ? '我' : xiaojiaMembers[0].name);
+        var _xjWrap = document.createElement('div');
+        _xjWrap.id = 'familyMembersAnchor';
+        _xjWrap.style.cssText = 'margin-bottom:10px;';
+        _xjWrap.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px 6px;">
+                <span style="font-weight:600;color:#374151;font-size:13px;">👪 小家 · ${xiaojiaMembers.length} 人</span>
+                <span style="font-size:12px;color:#9CA3AF;">点击卡片切换当前操作人</span>
             </div>
-            <div style="display:flex;gap:6px;align-items:center;">
-                <button type="button" onclick="window.openSpecialPlanModal('${selMember.id}')" style="padding:4px 10px;border:1px solid #F97316;border-radius:14px;background:#FFF7ED;color:#EA580C;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">发起专项健康饮食计划</button>
-                <button data-id="${selMember.id}" class="edit-member" onclick="window.editMemberCard('${selMember.id}')" style="background:none;border:none;color:#F97316;font-size:14px;cursor:pointer;">✎</button>
-            </div>`;
-        familyList.appendChild(div);
-        // 绑定选择器变化（V135: 切下拉 = 切当前身份，renderFamily 会同步选中值）
-        const memberSelector = document.getElementById('familyMemberSelector');
-        if (memberSelector) {
-            memberSelector.addEventListener('change', function() {
-                const m = xiaojiaMembers.find(mm => mm.name === this.value);
-                if (m) { switchCurrentMember(m.id); return; }
-                selectedFamilyMemberName = this.value;
-                renderFamily();
+            ${xiaojiaMembers.map(function(m) {
+                var _isCur = _curOpName ? (m.name === _curOpName) : false;
+                var _cst = m.constitution ? '<span class="constitution-tag" style="margin-left:0;margin-right:6px;">' + escapeHtml(m.constitution) + '</span>' : '';
+                var _sum = _memberPreferenceSummary(m);
+                return `
+                <div class="member-card" data-member-id="${m.id}" style="cursor:pointer;${_isCur ? 'border:1px solid #FDBA74;background:#FFF7ED;' : ''}">
+                    <div class="member-info" style="min-width:0;flex:1;">
+                        <div class="detail" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                            <span style="font-weight:600;color:#1F2937;">${escapeHtml(m.name)}</span>
+                            ${m.age ? '<span style="font-size:12px;color:#6B7280;">' + m.age + '岁</span>' : ''}
+                            ${_cst}
+                            ${_isCur ? '<span style="font-size:11px;color:#C2410C;background:#FED7AA;border-radius:8px;padding:1px 6px;">当前操作人</span>' : ''}
+                        </div>
+                        <div class="detail" style="font-size:12px;color:#4B5563;">口味：${escapeHtml(m.taste || '未填')} ｜ 饮食要求：${escapeHtml(m.dietaryPreference || '未填写')}</div>
+                        ${_sum ? '<div class="detail" style="font-size:12px;color:#9A3412;background:#FFF7ED;border-radius:6px;padding:3px 8px;margin-top:2px;">🍽️ ' + escapeHtml(_sum) + '</div>' : ''}
+                        <div class="detail" style="font-size:12px;color:#6B7280;">📱 手机号：${m.phone ? escapeHtml(m.phone) : '<span style="color:#9CA3AF;">未绑定</span>'}</div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;">
+                        <button type="button" onclick="event.stopPropagation();window.openSpecialPlanModal('${m.id}')" style="padding:4px 10px;border:1px solid #F97316;border-radius:14px;background:#FFF7ED;color:#EA580C;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">发起专项健康饮食计划</button>
+                        <button type="button" data-id="${m.id}" class="edit-member" onclick="event.stopPropagation();window.editMemberCard('${m.id}')" style="background:none;border:none;color:#F97316;font-size:14px;cursor:pointer;">✎ 编辑</button>
+                    </div>
+                </div>`;
+            }).join('')}
+        `;
+        familyList.appendChild(_xjWrap);
+        // 点卡片切换当前操作人（按钮已 stopPropagation，不会误触）
+        _xjWrap.querySelectorAll('.member-card[data-member-id]').forEach(function(card) {
+            card.addEventListener('click', function() {
+                var _id = card.getAttribute('data-member-id');
+                if (_id) switchCurrentMember(_id);
             });
-        }
+        });
     } else {
         familyList.insertAdjacentHTML('beforeend', `<div style="text-align:center;padding:20px;color:#9CA3AF;font-size:14px;">暂无小家成员，请添加</div>`);
     }
@@ -36779,6 +37177,7 @@ window.editMemberCard = function(id) {
                             <option value="">中医体质</option>
                             <option value="平和质"${member.constitution==='平和质'?' selected':''}>平和质 - 均衡健康</option>
                             <option value="气虚质"${member.constitution==='气虚质'?' selected':''}>气虚质 - 气短乏力</option>
+                            <option value="血虚质"${member.constitution==='血虚质'?' selected':''}>血虚质 - 气血不足/面色萎黄</option>
                             <option value="阳虚质"${member.constitution==='阳虚质'?' selected':''}>阳虚质 - 畏寒怕冷</option>
                             <option value="阴虚质"${member.constitution==='阴虚质'?' selected':''}>阴虚质 - 口干舌燥</option>
                             <option value="痰湿质"${member.constitution==='痰湿质'?' selected':''}>痰湿质 - 体胖痰多</option>
@@ -36874,7 +37273,7 @@ window.editMemberCard = function(id) {
                 else { member.isInfant = false; delete member.infantStage; }
                 // 根据选择的就餐组推导关系类型
                 const newGroupId = parseInt(document.getElementById('editDiningGroup_' + id).value);
-                const newGroup = diningGroups.find(g => g.id === newGroupId);
+                const newGroup = findDiningGroupByFormId(newGroupId);
                 const familyGroupIds = [1, 2, 3];
                 if (familyGroupIds.includes(newGroupId)) member.relationship = '家人';
                 else member.relationship = '朋友'; // 社交子组默认为朋友
@@ -36941,10 +37340,12 @@ window.editMemberCard = function(id) {
                 form.remove();
             });
             document.getElementById('deleteEdit_' + id).addEventListener('click', function() {
-                if (confirm('确定删除该成员吗？')) {
-                    const memberToDelete = familyData.find(m => m.id === id);
+                // V316: 原生 confirm 在 webview 会黑屏，改用页面内确认弹层（z-index 10010，可盖住编辑表单）
+                showConfirmDialog('确定删除该成员吗？', function() {
+                    // V319: 成员 id 可能是数字型，严格相等会匹配失败导致「提示已删除但成员仍在」，统一按字符串比较
+                    const memberToDelete = familyData.find(m => String(m.id) === String(id));
                     const memberName = memberToDelete ? memberToDelete.name : '';
-                    const idx = familyData.findIndex(m => m.id === id);
+                    const idx = familyData.findIndex(m => String(m.id) === String(id));
                     if (idx > -1) familyData.splice(idx, 1);
                     lsSet('familyData', JSON.stringify(familyData));
                     // 从所有就餐组中移除该成员
@@ -36978,7 +37379,7 @@ window.editMemberCard = function(id) {
                         } catch(e2) {}
                     }
                     showToast('已删除');
-                }
+                });
             });
 }
 
@@ -38078,7 +38479,9 @@ async function _mwAiSteps(ev) {
     var ings = (document.getElementById('mwEditIngredients').value || '').trim();
     var stepsEl = document.getElementById('mwEditSteps');
     if (stepsEl && stepsEl.value.trim()) {
-        if (!window.confirm('已有步骤内容，AI 补全会覆盖当前步骤，继续吗？')) return;
+        // V317: 原生 confirm 在 webview 会黑屏，改用可 await 的页面内确认
+        var _okSteps = await uiConfirmAsync('已有步骤内容，AI 补全会覆盖当前步骤，继续吗？');
+        if (!_okSteps) return;
     }
     _mwAiBtnSet(btn, true, '✨ AI 补全步骤中…');
     var sys = '你是严谨的家常菜菜谱作者，步骤必须具体可操作（含火候、时间、关键动作），只输出 JSON，不要解释。';
@@ -38102,7 +38505,8 @@ async function _mwAiImage(ev) {
     var btn = ev && ev.currentTarget;
     var name = (document.getElementById('mwEditName').value || '').trim();
     if (!name) { showToast('请先填写菜名'); return; }
-    if (mwEditImage && !window.confirm('当前已有图片，AI 配图会替换它，继续吗？')) return;
+    // V317: 原生 confirm 在 webview 会黑屏，改用可 await 的页面内确认
+    if (mwEditImage && !(await uiConfirmAsync('当前已有图片，AI 配图会替换它，继续吗？'))) return;
     _mwAiBtnSet(btn, true, '🎨 AI 绘图中，约 10~30 秒…');
     try {
         var ings = (document.getElementById('mwEditIngredients').value || '').split('\n').map(function(s) { return s.trim(); }).filter(Boolean).slice(0, 5).join('、');
@@ -38243,12 +38647,13 @@ function _mwSaveWorkEdit(id) {
     showToast('✅ 已保存修改');
 }
 function _mwDelWork(id) {
-    // V87: 用户指定二次确认文案
-    if (!window.confirm('删除后不可恢复，是否确认？')) return;
-    lsSet('chefWorks', JSON.stringify(_getChefWorks().filter(function(x) { return String(x.id) !== String(id); })));
-    if (window.__mwExpandId === String(id)) window.__mwExpandId = '';
-    renderMyWorksPage();
-    showToast('已删除');
+    // V317: 不可逆删除，改用页面内二次确认
+    showConfirmDialogTwice('删除后不可恢复，是否确认？', '再次确认：确定删除这个作品吗？', function() {
+        lsSet('chefWorks', JSON.stringify(_getChefWorks().filter(function(x) { return String(x.id) !== String(id); })));
+        if (window.__mwExpandId === String(id)) window.__mwExpandId = '';
+        renderMyWorksPage();
+        showToast('已删除');
+    });
 }
 
 // ============ V88: 我的复刻记录（cloneRecords：三状态+评分+查看详情/再次复刻/删除） ============
@@ -38326,11 +38731,13 @@ function _crRecClone(recordId) {
 }
 /** [删除] 二次确认后移除 */
 function _crDelRecord(recordId) {
-    if (!window.confirm('删除后不可恢复，是否确认？')) return;
-    lsSet('cloneRecords', JSON.stringify(_getCloneRecordsRaw().filter(function(x) { return String(x.id) !== String(recordId); })));
-    renderMyWorksList();
-    renderMyWorksPage();
-    showToast('已删除');
+    // V317: 不可逆删除，改用页面内二次确认
+    showConfirmDialogTwice('删除后不可恢复，是否确认？', '再次确认：确定删除这条复刻记录吗？', function() {
+        lsSet('cloneRecords', JSON.stringify(_getCloneRecordsRaw().filter(function(x) { return String(x.id) !== String(recordId); })));
+        renderMyWorksList();
+        renderMyWorksPage();
+        showToast('已删除');
+    });
 }
 /** 原作品详情页（公开视角：图/菜名/作者/简介/数据/标签/食材/步骤） */
 function openWorkDetailPage(workId) {
@@ -38665,6 +39072,16 @@ function getAllPeople() {
     return [...familyData, ...contactsData.map(c => ({ ...c, age: null, taste: '亲友', place: '', currentCity: '', isContact: true }))];
 }
 
+// V320: 就餐组表单里的 1/2/3 是语义值（小家/女方家族/男方家族），但历史数据的组 id 可能是时间戳或缺失，
+// 直接按 id 匹配会失败，导致新成员被加入家庭但没进任何就餐组（页面上看不到、也不计入份量）
+var DINNER_GROUP_FORM_NAMES = { 1: '小家', 2: '女方家族', 3: '男方家族' };
+function findDiningGroupByFormId(formId) {
+    var g = diningGroups.find(function (x) { return String(x.id) === String(formId); });
+    if (g) return g;
+    var nm = DINNER_GROUP_FORM_NAMES[formId];
+    return nm ? diningGroups.find(function (x) { return x.name === nm; }) : null;
+}
+
 function getFallbackDiningGroup() {
     let group = diningGroups.find(g => g.isDefault);
     if (!group) {
@@ -38851,6 +39268,7 @@ function _openAddSubGroupModal() {
                         <option value="">中医体质（不确定/跳过）</option>
                         <option value="平和质">平和质 - 均衡健康</option>
                         <option value="气虚质">气虚质 - 气短乏力</option>
+                        <option value="血虚质">血虚质 - 气血不足/面色萎黄</option>
                         <option value="阳虚质">阳虚质 - 畏寒怕冷</option>
                         <option value="阴虚质">阴虚质 - 口干舌燥</option>
                         <option value="痰湿质">痰湿质 - 体胖痰多</option>
@@ -39076,7 +39494,8 @@ function deleteDiningGroup(id) {
         alert('默认就餐组不能删除');
         return;
     }
-    if (confirm(`确定删除「${group.name}」吗？`)) {
+    // V317: 不可逆删除，改用页面内二次确认
+    showConfirmDialogTwice('确定删除「' + group.name + '」吗？', '再次确认：删除后不可恢复，确定删除「' + group.name + '」吗？', function() {
         const wasCurrent = lsGet('currentDiningGroup') === group.name;
         diningGroups = diningGroups.filter(g => g.id !== id);
         lsSet('diningGroups', JSON.stringify(diningGroups));
@@ -39086,7 +39505,7 @@ function deleteDiningGroup(id) {
         }
         renderFamily();
         renderPlan();
-    }
+    });
 }
 
 function addSocialDiningGroup(section) {
@@ -41380,7 +41799,7 @@ function renderFamilyGroupPanel() {
                         <input type="text" class="fgp-edit-name" value="${escapeHtml(m.name)}" placeholder="姓名 *" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
                         <input type="number" class="fgp-edit-age" value="${m.age||''}" placeholder="年龄" style="width:48px; min-width:48px; padding:6px 4px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
                         <select class="fgp-edit-group" style="flex:1; min-width:0; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
-                            ${diningGroups.filter(g => g.name !== '小家').map(g => `<option value="${escapeHtml(g.name)}" ${g.name === groupName ? 'selected' : ''}>${escapeHtml(g.name)}</option>`).join('')}
+                            ${(function(){ var _gs = diningGroups.filter(function(g){ return g && !g.isContainer && g.name; }); if (!_gs.length) return '<option value="小家">小家</option>'; var _has = _gs.some(function(g){ return g.name === groupName; }); return _gs.map(function(g, _i){ var _sel = _has ? (g.name === groupName) : (g.name === '小家' || _i === 0); return '<option value="' + escapeHtml(g.name) + '"' + (_sel ? ' selected' : '') + '>' + escapeHtml(g.name) + '</option>'; }).join(''); })()}
                         </select>
                     </div>
                     <!-- 籍贯 | 现住地 | 职业 | 作息类型 -->
@@ -41416,6 +41835,7 @@ function renderFamilyGroupPanel() {
                             <option value="">中医体质</option>
                             <option value="平和质"${m.constitution==='平和质'?' selected':''}>平和质 - 均衡健康</option>
                             <option value="气虚质"${m.constitution==='气虚质'?' selected':''}>气虚质 - 气短乏力</option>
+                            <option value="血虚质"${m.constitution==='血虚质'?' selected':''}>血虚质 - 气血不足/面色萎黄</option>
                             <option value="阳虚质"${m.constitution==='阳虚质'?' selected':''}>阳虚质 - 畏寒怕冷</option>
                             <option value="阴虚质"${m.constitution==='阴虚质'?' selected':''}>阴虚质 - 口干舌燥</option>
                             <option value="痰湿质"${m.constitution==='痰湿质'?' selected':''}>痰湿质 - 体胖痰多</option>
@@ -41476,10 +41896,11 @@ function renderFamilyGroupPanel() {
 
     let html = '';
 
-    // 女方家族、男方家族（过滤掉小家成员）
-    familyGroups.forEach(group => {
-        if (group.name === '小家') return;
-        const members = (group.members || []).filter(n => n && !xiaojiaNames.includes(n));
+    // 小家 + 女方家族 + 男方家族（V314: 小家成员也要在此列出并可编辑——原逻辑跳过小家的成员，
+    // 导致在这里改名/改就餐组时 oldGroupName 不是「小家」，保存后成员被移出小家而"消失"）
+    familyGroups.slice().sort(function(a, b){ return (a.name === '小家' ? 0 : 1) - (b.name === '小家' ? 0 : 1); }).forEach(group => {
+        const isXiaojia = group.name === '小家';
+        const members = isXiaojia ? (group.members || []).filter(n => n) : (group.members || []).filter(n => n && !xiaojiaNames.includes(n));
         html += `
             <div style="margin-bottom:14px;">
                 <div style="font-size:14px;font-weight:600;color:#9A3412;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #FED7AA;">
@@ -41590,12 +42011,14 @@ function renderFamilyGroupPanel() {
             e.stopPropagation();
             const newName = editForm.querySelector('.fgp-edit-name').value.trim();
             if (!newName) { showToast('姓名不能为空'); return; }
-            const newGroupName = editForm.querySelector('.fgp-edit-group').value;
+            const _newGroupRaw = editForm.querySelector('.fgp-edit-group').value;
             // 获取原始成员名和组名
             const cardKey = fgpEditCardId || '';
             const parts = cardKey.split('::');
             const oldName = parts[1] || '';
             const oldGroupName = parts[0] || '';
+            // V314: 下拉为空/组已被删除时保持原组，避免成员被从所有组里移除后"消失"
+            const newGroupName = (diningGroups.some(g => g.name === _newGroupRaw) ? _newGroupRaw : '') || oldGroupName || '小家';
             // 查找或创建familyData记录
             let member = familyData.find(m => m.name === oldName);
             if (!member) {
@@ -41940,7 +42363,10 @@ const CATEGORY_TREE_DATA = {
         { icon: '⚖️', label: '体质食养', sub: '体质食养' },
         { icon: '🥣', label: '日常食养', sub: '日常食养' },
         { icon: '🧭', label: '食养原则', sub: '食养原则' },
-        { icon: '📖', label: '食养食谱', sub: '食养食谱' }
+        { icon: '📖', label: '食养食谱', sub: '食养食谱' },
+        { icon: '🥬', label: '当季食材', sub: '当季食材' },
+        { icon: '🍳', label: '烹饪技巧', sub: '烹饪技巧' },
+        { icon: '📚', label: '饮食文化', sub: '饮食文化' }
     ],
     cooking: [
         { icon: '🥢', label: '烹饪技巧', sub: '烹饪技巧' },
@@ -41989,10 +42415,13 @@ const KNOWLEDGE_TREE = {
     '食养': {
         '节气食养': ['春季', '夏季', '秋季', '冬季'],
         '特殊人群配餐': ['孕妇营养', '婴儿辅食', '青少年营养', '健身餐', '职场营养', '老年食养'],
-        '体质食养': ['平和质', '气虚质', '阳虚质', '阴虚质', '痰湿质', '湿热质', '血瘀质', '气郁质'],
+        '体质食养': ['平和质', '气虚质', '血虚质', '阳虚质', '阴虚质', '痰湿质', '湿热质', '血瘀质', '气郁质'],
         '日常食养': ['茶饮', '汤羹', '粥品', '水果搭配', '轻食'],
         '食养原则': ['低盐', '低糖', '低脂', '高纤维', '易消化'],
-        '食养食谱': ['家常', '家宴', '中式']
+        '食养食谱': ['家常', '家宴', '中式'],
+        '当季食材': [],
+        '烹饪技巧': [],
+        '饮食文化': []
     },
     '烹饪': {
         '烹饪技巧': ['刀工', '火候', '调味', '炒', '蒸', '炖', '煮', '炸'],
@@ -42151,7 +42580,7 @@ var SHIYANG_TERM_SEASON = (function () {
     return m;
 })();
 var SHIYANG_POPULATIONS = ['孕妇营养', '婴儿辅食', '青少年营养', '健身餐', '职场营养', '老年食养'];
-var SHIYANG_CONSTITUTIONS = ['平和质', '气虚质', '阳虚质', '阴虚质', '痰湿质', '湿热质', '血瘀质', '气郁质'];
+var SHIYANG_CONSTITUTIONS = ['平和质', '气虚质', '血虚质', '阳虚质', '阴虚质', '痰湿质', '湿热质', '血瘀质', '气郁质'];
 var SHIYANG_DAILY = ['茶饮', '汤羹', '粥品', '水果搭配', '轻食'];
 var SHIYANG_PRINCIPLES = ['低盐', '低糖', '低脂', '高纤维', '易消化'];
 // 常见药材名（药膳→体质食养时从标题去除）
@@ -42222,6 +42651,8 @@ function _shiyangDetectPrinciple(title) {
 }
 function _shiyangDetectConstitution(title) {
     var t = String(title || '');
+    // V318: 血虚/气血不足先判定，避免被下方的"气血"规则误归到气虚质
+    if (t.indexOf('血虚') >= 0 || t.indexOf('补血') >= 0 || t.indexOf('气血不足') >= 0) return '血虚质';
     if (t.indexOf('气虚') >= 0 || t.indexOf('补气') >= 0 || t.indexOf('气血') >= 0) return '气虚质';
     if (t.indexOf('阳虚') >= 0 || t.indexOf('温补') >= 0 || t.indexOf('怕冷') >= 0) return '阳虚质';
     if (t.indexOf('阴虚') >= 0 || t.indexOf('滋阴') >= 0 || t.indexOf('润肺') >= 0) return '阴虚质';
@@ -42320,6 +42751,16 @@ function _shiyangItems() {
     });
 }
 function _shiyangCardHtml(k) {
+    // V306: 食养堂已发布文章并入食养分类展示，点击走食养堂阅读器
+    if (k && k._fhArc) {
+        var fa = k._fhArc;
+        var fs = String(fa.summary || fa.content || '').replace(/\[图片[^\]]*\]/g, '').replace(/<[^>]+>/g, '').trim();
+        var fb = fs.substring(0, 60) + (fs.length > 60 ? '...' : '');
+        return '<div class="cat-search-item" onclick="_fhOpenArchiveId(\'' + fa.id + '\')">'
+            + '<div class="cat-search-item-title">' + escapeHtml(fa.title || '无标题') + '</div>'
+            + '<div class="cat-search-item-summary">' + escapeHtml(fb) + '</div>'
+            + '</div>';
+    }
     var summary = String(k.content || '').replace(/\[图片[^\]]*\]/g, '').replace(/<[^>]+>/g, '').trim();
     var brief = summary.substring(0, 60) + (summary.length > 60 ? '...' : '');
     return '<div class="cat-search-item" onclick="showKnowledgeDetail(' + k.id + ')">'
@@ -42350,8 +42791,8 @@ function _shiyangPillRow(arr, activeVal, fnName) {
 }
 function _shiyangSetTab(t) { _shiyangTab = t; _shiyangTermOpen = ''; renderShiyangContent(); }
 
-// 食养分类页顶部下拉：六个子分类选择（定位到对应 Tab）——V138 首项改为"特殊人群配餐"
-var SHIYANG_TABS = ['特殊人群配餐', '节气食养', '体质食养', '日常食养', '食养原则', '食养食谱'];
+// 食养分类页顶部下拉：子分类选择（定位到对应 Tab）——V138 首项改为"特殊人群配餐"
+var SHIYANG_TABS = ['特殊人群配餐', '节气食养', '体质食养', '日常食养', '食养原则', '食养食谱', '当季食材', '烹饪技巧', '饮食文化'];
 function toggleShiyangSubCatMenu(e) {
     if (e) e.stopPropagation();
     var menu = document.getElementById('shiyangSubCatMenu');
@@ -42388,7 +42829,7 @@ function _shiyangSetPrinciple(p) { _shiyangPrinciple = p; renderShiyangContent()
 var _syTreeLib = '';      // 当前文库层：public | family | shared
 var _syTreeOpen = {};     // 展开的分支 key
 var _syTreeSel = '';      // 当前选中节点 key
-var _SY_SECTIONS = ['人群配餐', '节气食养', '体质食养', '日常食养'];
+var _SY_SECTIONS = ['人群配餐', '节气食养', '天气食养', '体质食养', '日常食养', '当季食材', '烹饪技巧', '饮食文化'];
 function _syLibName(lib) { return lib === 'public' ? '公共文库' : (lib === 'family' ? '家庭文库' : '他人分享'); }
 function _syParentKey(key) { var i = key.lastIndexOf('|'); return i < 0 ? '' : key.substring(0, i); }
 // 同级互斥展开：清除同级兄弟的展开状态
@@ -42407,12 +42848,31 @@ function _syItemsForLayer(lib) {
             return k && k.mainCategory === 'shiyang' && k.auditStatus !== 'rejected' && !_kbIsHidden(k.id);
         }).map(function (k) { k.subCategory = _norm(k.subCategory); return k; });
     }
-    return dietKnowledge.filter(function (k) {
+    var out = dietKnowledge.filter(function (k) {
         if (k.mainCategory !== 'shiyang' || k.auditStatus === 'rejected') return false;
         if (_kbIsHidden(k.id)) return false;
         if ((k.layer || 'family') !== lib) return false;
         try { return can('view', k); } catch (e) { return true; }
     }).map(function (k) { k.subCategory = _norm(k.subCategory); return k; });
+    // V306: 公共层并入「食养堂」已发布文章，按文章的 category 归到食养对应细分类
+    // V296 铁律：面向全国，含城市名的旧内容不进文库
+    if (lib === 'public') {
+        try {
+            _fhArchiveAll().forEach(function (a) {
+                try {
+                    if (!a || !a.title || !_dtIsNational(a)) return;
+                    var c = String(a.category || '').trim();
+                    out.push({
+                        id: 'fharc:' + a.id, _fhArc: a, mainCategory: 'shiyang',
+                        subCategory: (_SY_SECTIONS.indexOf(c) >= 0 ? c : '节气食养'),
+                        layer: 'public', auditStatus: 'passed',
+                        title: a.title, content: a.summary || a.content || ''
+                    });
+                } catch (e) {}
+            });
+        } catch (e) {}
+    }
+    return out;
 }
 // 板块下级：节气食养→四季；其余→常量 ∪ 数据里实际用过的 leafCategory
 function _sySectionChildren(lib, sec, libItems) {
@@ -42423,7 +42883,8 @@ function _sySectionChildren(lib, sec, libItems) {
     if (sec === '人群配餐') base = SHIYANG_POPULATIONS.slice();
     else if (sec === '体质食养') base = SHIYANG_CONSTITUTIONS.slice();
     else if (sec === '日常食养') { base = SHIYANG_DAILY.slice(); if (base.indexOf('食养原则') < 0) base.push('食养原则'); }
-    else base = SHIYANG_PRINCIPLES.slice();
+    else if (sec === '食养原则' || sec === '食养食谱') base = SHIYANG_PRINCIPLES.slice();
+    else base = []; // 当季食材 / 烹饪技巧 / 饮食文化：无固定叶子，按已有数据动态生成
     libItems.forEach(function (k) {
         if (k.subCategory === sec && k.leafCategory && base.indexOf(k.leafCategory) < 0) base.push(k.leafCategory);
     });
@@ -42600,6 +43061,14 @@ function _syPaneHtml(libItems, curTerm) {
             items = libItems.filter(function (k) { return k.subCategory === sec; });
         }
         html += items.length ? items.map(_shiyangCardHtml).join('') : _shiyangEmptyHtml('暂无' + sec + '内容');
+    } else if (segs.length === 3 && segs[2] === '婴儿辅食' && getYoungestInfantStage() === '0-6m') {
+        // V321: 婴儿辅食安全拦截——家庭中有 0-6 个月婴儿时不展示任何辅食内容
+        html += '<div style="background:#EFF6FF;border:2px solid #93C5FD;border-radius:14px;padding:20px 16px;margin-bottom:12px;text-align:center;">'
+            + '<div style="font-size:40px;margin-bottom:10px;">🍼</div>'
+            + '<div style="font-size:15px;font-weight:700;color:#1E40AF;line-height:1.7;margin-bottom:8px;">宝宝还小，6 个月以下建议纯母乳/配方奶喂养</div>'
+            + '<div style="font-size:13px;color:#1D4ED8;line-height:1.7;">辅食添加请遵医嘱，通常在 6 个月后开始。<br>本页面不为 6 个月以下婴儿推荐任何辅食。</div>'
+            + '</div>'
+            + '<div style="margin-top:10px;padding:8px;background:#FEF3C7;border-radius:8px;font-size:12px;color:#92400E;text-align:center;line-height:1.6;">⛔ 6 个月以下不提供任何辅食推荐</div>';
     } else {
         // 叶子节点：板块 + leafCategory
         var sec2 = segs[1], leaf2 = segs[2];
@@ -42702,7 +43171,8 @@ function renderShiyangContent() {
                 }
             });
             // V144: 食养堂（公共·全部已发布归档）/ 食养收藏（家庭·仅用户收藏），位置在「日常食养」之下
-            var extraSec = lib === 'public' ? '食养堂' : (lib === 'family' ? '食养收藏' : '');
+            // 旧「食养堂」节点不再展示（数据与已发布文章全部保留，仅隐藏该入口）
+            var extraSec = lib === 'family' ? '食养收藏' : '';
             if (extraSec) {
                 var fk = lib + '|' + extraSec;
                 html += rowHtml(fk, '🍂 ' + extraSec, { branch: true, count: _sySecCount(libItems, extraSec) });
@@ -46311,9 +46781,10 @@ function generateRuleBasedTip(member, termName, guide, seasonalFoods) {
 function switchToDiaryForAiRecommend() {
     switchTab('diary');
     setTimeout(() => {
-        if (confirm('是否立即生成AI一周食谱推荐？\n\n将融合以下五维信息：\n① AI大模型推理\n② 就餐人情况（我家）\n③ 饮食知识库（食知）\n④ 家中食材（食材）\n⑤ 历史记录（食记）')) {
+        // V317: 改用页面内确认弹层
+        showConfirmDialog('是否立即生成AI一周食谱推荐？\n\n将融合以下五维信息：\n① AI大模型推理\n② 就餐人情况（我家）\n③ 饮食知识库（食知）\n④ 家中食材（食材）\n⑤ 历史记录（食记）', function() {
             generateWeeklyAiMealRecommendation();
-        }
+        });
     }, 300);
 }
 
@@ -47420,10 +47891,13 @@ var DEFAULT_CATEGORY_TREE = [
     { id: 'shiyang', name: '食养', icon: '🍵', order: 3, type: 'knowledge', children: [
         { id: '特殊人群配餐', name: '特殊人群配餐', type: 'knowledge', order: 1, children: [{ id: '孕妇营养', name: '孕妇营养', order: 1 }, { id: '婴儿辅食', name: '婴儿辅食', order: 2 }, { id: '青少年营养', name: '青少年营养', order: 3 }, { id: '健身餐', name: '健身餐', order: 4 }, { id: '职场营养', name: '职场营养', order: 5 }, { id: '老年食养', name: '老年食养', order: 6 }] },
         { id: '节气食养', name: '节气食养', type: 'knowledge', order: 2, children: [{ id: '春季', name: '春季', order: 1 }, { id: '夏季', name: '夏季', order: 2 }, { id: '秋季', name: '秋季', order: 3 }, { id: '冬季', name: '冬季', order: 4 }] },
-        { id: '体质食养', name: '体质食养', type: 'knowledge', order: 3, children: [{ id: '平和质', name: '平和质', order: 1 }, { id: '气虚质', name: '气虚质', order: 2 }, { id: '阳虚质', name: '阳虚质', order: 3 }, { id: '阴虚质', name: '阴虚质', order: 4 }, { id: '痰湿质', name: '痰湿质', order: 5 }, { id: '湿热质', name: '湿热质', order: 6 }, { id: '血瘀质', name: '血瘀质', order: 7 }, { id: '气郁质', name: '气郁质', order: 8 }] },
+        { id: '体质食养', name: '体质食养', type: 'knowledge', order: 3, children: [{ id: '平和质', name: '平和质', order: 1 }, { id: '气虚质', name: '气虚质', order: 2 }, { id: '血虚质', name: '血虚质', order: 9 }, { id: '阳虚质', name: '阳虚质', order: 3 }, { id: '阴虚质', name: '阴虚质', order: 4 }, { id: '痰湿质', name: '痰湿质', order: 5 }, { id: '湿热质', name: '湿热质', order: 6 }, { id: '血瘀质', name: '血瘀质', order: 7 }, { id: '气郁质', name: '气郁质', order: 8 }] },
         { id: '日常食养', name: '日常食养', type: 'knowledge', order: 4, children: [{ id: '茶饮', name: '茶饮', order: 1 }, { id: '汤羹', name: '汤羹', order: 2 }, { id: '粥品', name: '粥品', order: 3 }, { id: '水果搭配', name: '水果搭配', order: 4 }, { id: '轻食', name: '轻食', order: 5 }] },
         { id: '食养原则', name: '食养原则', type: 'knowledge', order: 5, children: [{ id: '低盐', name: '低盐', order: 1 }, { id: '低糖', name: '低糖', order: 2 }, { id: '低脂', name: '低脂', order: 3 }, { id: '高纤维', name: '高纤维', order: 4 }, { id: '易消化', name: '易消化', order: 5 }] },
-        { id: '食养食谱', name: '食养食谱', type: 'knowledge', order: 6, children: [{ id: '家常', name: '家常', order: 1 }, { id: '家宴', name: '家宴', order: 2 }, { id: '中式', name: '中式', order: 3 }] }
+        { id: '食养食谱', name: '食养食谱', type: 'knowledge', order: 6, children: [{ id: '家常', name: '家常', order: 1 }, { id: '家宴', name: '家宴', order: 2 }, { id: '中式', name: '中式', order: 3 }] },
+        { id: '当季食材', name: '当季食材', type: 'knowledge', order: 7, children: [] },
+        { id: '烹饪技巧', name: '烹饪技巧', type: 'knowledge', order: 8, children: [] },
+        { id: '饮食文化', name: '饮食文化', type: 'knowledge', order: 9, children: [] }
     ] },
     { id: 'cooking', name: '烹饪', icon: '🍳', order: 4, children: [
         { id: '烹饪技巧', name: '烹饪技巧', order: 1, children: [] },
@@ -47757,6 +48231,37 @@ function migrateShiyangTreeV138() {
     } catch(e) { console.warn('食养树迁移失败（不阻塞）', e); }
 }
 try { migrateShiyangTreeV138(); } catch(e) { console.error('migrateShiyangTreeV138 error:', e); }
+
+// V298: 食养分类树补入「当季食材 / 烹饪技巧 / 饮食文化」三个缺失子分类（只增不减，不动旧数据）
+function migrateShiyangTreeV298() {
+    if (lsGet('migrated_shiyang_v298')) return;
+    var ADD = [
+        { id: '当季食材', name: '当季食材', type: 'knowledge', order: 7, children: [] },
+        { id: '烹饪技巧', name: '烹饪技巧', type: 'knowledge', order: 8, children: [] },
+        { id: '饮食文化', name: '饮食文化', type: 'knowledge', order: 9, children: [] }
+    ];
+    try {
+        var raw = lsGet('knowledgeCategories');
+        if (raw) {
+            var kc = JSON.parse(raw), hit = false;
+            ['public', 'family'].forEach(function (layerKey) {
+                var tree = kc[layerKey] && kc[layerKey].tree;
+                if (!Array.isArray(tree)) return;
+                var sy = null;
+                for (var i = 0; i < tree.length; i++) { if (tree[i] && tree[i].id === 'shiyang') { sy = tree[i]; break; } }
+                if (!sy) return;
+                if (!Array.isArray(sy.children)) sy.children = [];
+                ADD.forEach(function (n) {
+                    var exists = sy.children.some(function (c) { return c && c.id === n.id; });
+                    if (!exists) { sy.children.push(JSON.parse(JSON.stringify(n))); hit = true; }
+                });
+            });
+            if (hit) { lsSet('knowledgeCategories', JSON.stringify(kc)); console.log('[食养树迁移V298] 当季食材/烹饪技巧/饮食文化 已补入'); }
+        }
+    } catch (e) { console.warn('V298 食养分类树补入失败（不阻塞）', e); }
+    lsSet('migrated_shiyang_v298', 'true');
+}
+try { migrateShiyangTreeV298(); } catch(e) { console.error('migrateShiyangTreeV298 error:', e); }
 
 // 管理操作审计日志（目录增删改 / 条目增删改均记录）
 function logAdminAction(action, detail) {
@@ -49520,14 +50025,16 @@ function superAdminAuditPool(itemId, action) {
 function superAdminDeletePublic(itemId) {
     if (!requireSuperAdmin()) return;
     touchSuperAdmin();
-    if (!confirm('超管确认删除公共库条目？此操作不可恢复')) return;
-    var dietData = JSON.parse(lsGet('dietKnowledge') || '[]');
-    var del = dietData.find(function(k) { return String(k.id) === String(itemId); });
-    dietData = dietData.filter(function(k) { return String(k.id) !== String(itemId); });
-    lsSet('dietKnowledge', JSON.stringify(dietData));
-    logAdminAction('删除条目', (del && del.title) || itemId);
-    showToast('✅ 已删除');
-    renderAdminPanel();
+    // V317: 不可逆删除，改用页面内二次确认
+    showConfirmDialogTwice('超管确认删除公共库条目？此操作不可恢复', '再次确认：删除后所有用户将无法查看该条目，确定删除吗？', function() {
+        var dietData = JSON.parse(lsGet('dietKnowledge') || '[]');
+        var del = dietData.find(function(k) { return String(k.id) === String(itemId); });
+        dietData = dietData.filter(function(k) { return String(k.id) !== String(itemId); });
+        lsSet('dietKnowledge', JSON.stringify(dietData));
+        logAdminAction('删除条目', (del && del.title) || itemId);
+        showToast('✅ 已删除');
+        renderAdminPanel();
+    });
 }
 
 // ==================== 分类管理（仅超管）：公共/家庭库 三层树增删改排序 ====================
@@ -49554,13 +50061,15 @@ function renderCatalogManager() {
 function lockFamilyCategories() {
     if (!requireSuperAdmin()) return;
     if (isFamilyCategoryLocked()) return showToast('家庭库分类已是锁定状态');
-    if (!confirm('锁定后不可再编辑家庭库分类，确认？')) return;
-    var kc = getKnowledgeCategories();
-    kc.family.locked = true;
-    saveKnowledgeCategories(kc);
-    logAdminAction('锁定家庭库分类', 'family.locked = true');
-    showToast('🔒 家庭库分类已锁定');
-    renderCatalogManager();
+    // V317: 改用页面内二次确认
+    showConfirmDialogTwice('锁定后不可再编辑家庭库分类，确认？', '再次确认：锁定家庭库分类后需超管解锁才能编辑，继续吗？', function() {
+        var kc = getKnowledgeCategories();
+        kc.family.locked = true;
+        saveKnowledgeCategories(kc);
+        logAdminAction('锁定家庭库分类', 'family.locked = true');
+        showToast('🔒 家庭库分类已锁定');
+        renderCatalogManager();
+    });
 }
 
 // 解锁家庭库分类（超管专用，二次确认）
@@ -49818,30 +50327,32 @@ function catMgrDelete(id) {
     if (catMgrLayer === 'family' && isFamilyCategoryLocked()) return showToast('家庭库分类已锁定，不可修改');
     var chk = canDeleteCategory(id, catMgrLayer);
     if (!chk.ok) return showToast('❌ ' + chk.msg);
-    if (!confirm('确认删除该分类？')) return;
-    var kc = getKnowledgeCategories();
-    var tree = kc[catMgrLayer].tree;
-    var removed = false;
-    for (var i = 0; i < tree.length && !removed; i++) {
-        if (tree[i].id === id) { tree.splice(i, 1); removed = true; break; }
-        var t = tree[i];
-        var subs = t.children || [];
-        for (var j = 0; j < subs.length && !removed; j++) {
-            if (subs[j].id === id) { subs.splice(j, 1); removed = true; break; }
-            var leaves = subs[j].children || [];
-            for (var k2 = 0; k2 < leaves.length; k2++) {
-                if (leaves[k2].id === id) { leaves.splice(k2, 1); removed = true; break; }
+    // V317: 不可逆删除，改用页面内二次确认
+    showConfirmDialogTwice('确认删除该分类？', '再次确认：删除后不可恢复，确定删除该分类吗？', function() {
+        var kc = getKnowledgeCategories();
+        var tree = kc[catMgrLayer].tree;
+        var removed = false;
+        for (var i = 0; i < tree.length && !removed; i++) {
+            if (tree[i].id === id) { tree.splice(i, 1); removed = true; break; }
+            var t = tree[i];
+            var subs = t.children || [];
+            for (var j = 0; j < subs.length && !removed; j++) {
+                if (subs[j].id === id) { subs.splice(j, 1); removed = true; break; }
+                var leaves = subs[j].children || [];
+                for (var k2 = 0; k2 < leaves.length; k2++) {
+                    if (leaves[k2].id === id) { leaves.splice(k2, 1); removed = true; break; }
+                }
             }
         }
-    }
-    if (!removed) return showToast('分类不存在');
-    saveKnowledgeCategories(kc);
-    logAdminAction('删除分类', catMgrLayer + ' › ' + id);
-    showToast('✅ 已删除');
-    renderCategoryTree();
-    renderCatalogManager();
-    // 通知相关页面刷新
-    try { document.dispatchEvent(new CustomEvent('permissionChanged')); } catch(e) {}
+        if (!removed) return showToast('分类不存在');
+        saveKnowledgeCategories(kc);
+        logAdminAction('删除分类', catMgrLayer + ' › ' + id);
+        showToast('✅ 已删除');
+        renderCategoryTree();
+        renderCatalogManager();
+        // 通知相关页面刷新
+        try { document.dispatchEvent(new CustomEvent('permissionChanged')); } catch(e) {}
+    });
 }
 
 // 上下箭头排序：与相邻兄弟交换 order（order 相同时自动错开）
@@ -53570,12 +54081,11 @@ async function callAliyunQwenApi(systemPrompt, userMessage, opts) {
 }
 
 async function _callAliyunQwenApiCore(systemPrompt, userMessage, opts) {
-    // opts.mode：AI推荐模式（RECOMMEND_MODES 枚举值），随 /plan 后端代理下发；
-    // 直连阿里云的回退请求不携带该字段（第三方接口不识别自定义参数，避免被拒）
+    // opts.mode：AI推荐模式（RECOMMEND_MODES 枚举值），随 /plan 后端代理下发
     const recMode = (opts && opts.mode) ? opts.mode : null;
     // V119: opts.task 功能标识（audit=审核评分），随 /plan 下发用于后端场景路由（强档模型）与用量统计
     const recTask = (opts && opts.task) ? opts.task : null;
-    // 优先使用后端 /plan 代理（同源无 CORS），失败回退直连阿里云
+    // V331 / D5-02: 仅使用后端 /plan 代理（同源无 CORS 且统一计费风控），前端不再直连第三方 AI
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 150000); // V139: 与后端 /plan 超时对齐，7天长生成需 >60s
@@ -53605,39 +54115,9 @@ async function _callAliyunQwenApiCore(systemPrompt, userMessage, opts) {
         }
         return { rawText: content };
     } catch(proxyErr) {
-        console.warn('后端/plan失败，回退直连阿里云:', proxyErr);
+        console.warn('后端/plan调用失败:', proxyErr);
+        throw (proxyErr instanceof Error ? proxyErr : new Error('AI 服务暂不可用，请稍后重试'));
     }
-    // 回退：直连阿里云（可能遇 CORS）
-    const apiKey = 'sk-d59f96e872d54e23ba692fd7d09eee1c';
-    const apiUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-    const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + apiKey
-        },
-        body: JSON.stringify({
-            model: 'qwen-turbo',
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userMessage }
-            ],
-            temperature: 0.7,
-            max_tokens: 8192
-        })
-    });
-    if (!response.ok) {
-        const errText = await response.text();
-        throw new Error('API请求失败(' + response.status + '): ' + errText.substring(0, 500));
-    }
-    const data = await response.json();
-    const content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-    if (!content) throw new Error('API返回内容为空');
-    let jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-        try { return stripPlainRiceFromPlan(JSON.parse(jsonMatch[0])); } catch(e) {}
-    }
-    return { rawText: content };
 }
 
 // 显示AI推荐确认弹窗
@@ -54270,6 +54750,24 @@ function buildRecommendationPrompt(data, weekDatesStr) {
         prompt += `【人群食疗约束规则】\n${groupConstraints}\n\n`;
     }
 
+    // V322: 高龄/控盐硬约束——即使人群类型未处于激活周期，也按年龄与饮食要求强制生效
+    var _elderNameList = (data.members || []).map(function (x) { return (typeof x === 'string') ? x : (x && x.name); }).filter(Boolean);
+    var _elderHits = (typeof familyData !== 'undefined' ? (familyData || []) : []).filter(function (m) {
+        if (!m || !m.name) return false;
+        if (_elderNameList.length && _elderNameList.indexOf(m.name) < 0) return false;
+        var _dietTxt = String(m.dietaryPreference || '') + ' ' + String(m.taste || '') + ' ' + String(m.healthNote || '');
+        return (Number(m.age || 0) >= 75) || /少盐|低盐|低钠|软烂|控盐|控糖|控油/.test(_dietTxt);
+    });
+    if (_elderHits.length > 0) {
+        var _elderWho = _elderHits.map(function (m) { return m.name + '(' + (Number(m.age || 0) || '?') + '岁)'; }).join('、');
+        prompt += `【高龄/控盐硬约束（必须遵守）】\n`
+            + `家庭成员 ${_elderWho} 需要低盐软烂饮食：\n`
+            + `1) 每人每餐食盐≤2g（全天≤5g），酱油/豉油/蚝油等含钠调味料每道菜≤5ml，禁止"葱油""酱爆""重红烧""腊味"等高钠做法；\n`
+            + `2) 质地以蒸、炖、煮、软烂为主，避免带骨大块、整条带刺鱼、粗硬菜梗；肉类切小块或做成肉饼/肉茸，蔬菜选嫩叶或蒸软；\n`
+            + `3) 添加糖每餐≤5g，避免糖醋、拔丝、蜜汁、冰糖收汁；\n`
+            + `4) 每道菜的 reason 必须标注「👤 适合：${_elderWho} 🎯 低盐≤2g/餐、软烂易嚼」。\n\n`;
+    }
+
     // V245: 订阅勾选的特殊需求也加入一周配餐约束
     if (typeof _subNeedTagsBrief === 'function') {
         var _needBriefWeek = _subNeedTagsBrief();
@@ -54328,6 +54826,41 @@ function buildRecommendationPrompt(data, weekDatesStr) {
 // ============================================================
 
 let weeklyRecommendationCache = null;
+// V322: 快速方案（AI 尚未返回）状态——按钮始终可用，改用进度提示 AI 优化进度
+let _weeklyAiPending = false;
+let _weeklyAiFailed = false;
+let _weeklyAiTimer = null;
+let _weeklyAiStartTs = 0;
+function _setWeeklyAdoptBtn(mode) {
+    const btn = document.getElementById('weeklyAiRecommendConfirmBtn');
+    if (!btn) return;
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor = 'pointer';
+    btn.textContent = (mode === 'failed') ? '⚠️ 采用通用方案（未按画像优化）' : '✅ 采用并填入食记';
+}
+// V322: AI 生成进度（每秒刷新秒数），不阻塞用户操作
+function _weeklyProgressEl() {
+    return document.getElementById('weeklyAiProgress') || document.querySelector('.ai-plan-status');
+}
+function _startWeeklyAiProgress() {
+    _stopWeeklyAiProgress(null);
+    _weeklyAiStartTs = Date.now();
+    _weeklyAiTimer = setInterval(function () {
+        const tag = _weeklyProgressEl();
+        if (!tag) return;
+        const sec = Math.max(0, Math.round((Date.now() - _weeklyAiStartTs) / 1000));
+        tag.style.display = 'inline-block';
+        tag.textContent = '⏳ AI 正在按家人画像优化… ' + sec + 's（可先采用当前方案）';
+    }, 1000);
+}
+function _stopWeeklyAiProgress(finalText) {
+    if (_weeklyAiTimer) { clearInterval(_weeklyAiTimer); _weeklyAiTimer = null; }
+    const tag = _weeklyProgressEl();
+    if (!tag) return;
+    if (finalText) { tag.style.display = 'inline-block'; tag.textContent = finalText; }
+    else { tag.style.display = 'none'; tag.textContent = ''; }
+}
 
 async function generateWeeklyAiMealRecommendation(days) {
     days = days || 7;
@@ -54351,6 +54884,8 @@ async function generateWeeklyAiMealRecommendation(days) {
 
     if (WEEKLY_AI_CACHE.key === cacheKey && WEEKLY_AI_CACHE.expireAt > nowTs) {
         // 缓存命中：直接用缓存的AI方案
+        _weeklyAiPending = false;
+        _weeklyAiFailed = false;
         const cachedPlan = WEEKLY_AI_CACHE.data;
         cachedPlan._source = 'ai';
         _recordAiRecipeAuditHistory(days, weekDates, cachedPlan, cacheKey);
@@ -54362,8 +54897,11 @@ async function generateWeeklyAiMealRecommendation(days) {
     // ========== Step 1：立即用内置方案显示（0.1秒内出内容） ==========
     const quickPlan = _buildQuickWeeklyPlan(weekDates, days);
     quickPlan._source = 'quick';
+    _weeklyAiPending = true;   // V322: AI 返回前标记为通用方案状态
+    _weeklyAiFailed = false;
     showToast('📆 ' + days + '天食谱方案已就绪');
     showWeeklyAiRecommendationModal(quickPlan, weekDates, days);
+    _startWeeklyAiProgress();  // V322: 进度提示，不锁按钮
 
     // ========== Step 2：后台异步调AI（不阻塞UI） ==========
     // 九维数据收集与Prompt构建（与原来一致）
@@ -54384,6 +54922,9 @@ async function generateWeeklyAiMealRecommendation(days) {
     (async () => {
         try {
             const aiResponse = await callAliyunQwenApi(systemPrompt, userMessage, { mode: getCurrentRecommendMode(), jsonMode: true }); // V140: 返回结构被 JSON.parse 解析，显式开启
+            _weeklyAiPending = false;
+            _weeklyAiFailed = false;
+            _stopWeeklyAiProgress(null);
             // 缓存5分钟
             WEEKLY_AI_CACHE.key = cacheKey;
             WEEKLY_AI_CACHE.data = aiResponse;
@@ -54394,11 +54935,11 @@ async function generateWeeklyAiMealRecommendation(days) {
             // V120: 写入 AI 食谱审核历史（复盘「实际记录→AI食谱审核」用）
             _recordAiRecipeAuditHistory(days, weekDates, aiResponse, cacheKey);
         } catch (err) {
+            _weeklyAiPending = false;  // V322: AI 失败后仍可采用通用方案，但需明确标注
+            _weeklyAiFailed = true;
             console.warn('AI后台优化失败，继续使用快速方案：', err);
-            const statusEl = document.querySelector('.ai-plan-status');
-            if (statusEl) {
-                statusEl.innerHTML = '食谱方案';
-            }
+            _stopWeeklyAiProgress('⚠️ 通用方案（AI 未个性化）');
+            _setWeeklyAdoptBtn('failed');
         }
     })();
 }
@@ -54670,6 +55211,7 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
                     <div>
                         <div style="font-size:16px;font-weight:700;" class="ai-plan-title">${dayCount === 7 ? '📆 一周食谱计划' : '📆 ' + dayCount + '天食谱计划'} ${sourceTag}</div>
                         <div style="font-size:13px;opacity:0.9;margin-top:2px;">共${dayCount}天</div>
+                        <div id="weeklyAiProgress" style="font-size:12px;margin-top:4px;display:none;background:rgba(255,255,255,0.22);border-radius:8px;padding:2px 8px;"></div>
                     </div>
                     <button onclick="closeWeeklyAiRecommendationModal()" style="background:rgba(255,255,255,0.2);border:none;color:white;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer;">✕</button>
                 </div>
@@ -54698,6 +55240,8 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
     overlay.dataset.isAi = (recommendation._source === 'ai') ? 'true' : 'false';
 
     document.body.appendChild(overlay);
+    // V322: 采用按钮始终可用；AI 进度由 #weeklyAiProgress 展示，AI 返回后自动替换内容
+    _setWeeklyAdoptBtn('ready');
     // V190: 首次查看AI食谱方案强制二次确认（已确认过则不弹）
     try { ensureDietDisclaimer(); } catch(e) {}
 }
@@ -54843,12 +55387,15 @@ async function fetchAllWeeklyDishIngredients(btnEl) {
 function closeWeeklyAiRecommendationModal() {
     const overlay = document.getElementById('weeklyAiRecommendOverlay');
     if (overlay) overlay.remove();
+    _stopWeeklyAiProgress(null);  // V322: 关闭弹窗停止进度刷新（后台 AI 继续，结果写入缓存）
 }
 
 // 确认AI一周推荐，自动填入食记
 function confirmWeeklyAiRecommendation() {
     const overlay = document.getElementById('weeklyAiRecommendOverlay');
     if (!overlay) return;
+    // V322: AI 未返回时也允许采用（不锁按钮），但记录状态以便提示
+    const _adoptWhileAiPending = _weeklyAiPending;
 
     const recommendation = JSON.parse(overlay.dataset.recommendation || '{}');
     const weekDateKeys = JSON.parse(overlay.dataset.weekDates || '[]');
@@ -54985,7 +55532,7 @@ function confirmWeeklyAiRecommendation() {
     renderDiary();
 
     if (totalAdded > 0) {
-        showToast(`✅ 已填入${filledDays}天共${totalAdded}道菜品到食记`);
+        showToast(`✅ 已填入${filledDays}天共${totalAdded}道菜品到食记` + (_adoptWhileAiPending ? '（AI 个性化方案仍在生成，完成后可重新生成替换）' : ''));
     } else {
         showToast('推荐菜品已存在，无需重复添加');
     }
@@ -55056,7 +55603,11 @@ async function _autoFetchMissingIngredients(weekDateKeys, dishNames) {
     console.log('[食材用量调试] 获取结果:', Object.keys(allResults).length, '道菜有用量');
     if (Object.keys(allResults).length === 0) {
         console.log('[食材用量调试] 未获取到任何用量，退出');
+        if (typeof showToast === 'function') showToast('⚠️ 部分菜品暂未获取到食材用量，可稍后在「食材准备」中手动补充');
         return;
+    }
+    if (Object.keys(allResults).length < dishNames.length && typeof showToast === 'function') {
+        showToast('⚠️ 有 ' + (dishNames.length - Object.keys(allResults).length) + ' 道菜未获取到用量，可稍后手动补充');
     }
     const calendar = getDietCalendar();
     let updated = false;
@@ -55340,10 +55891,12 @@ function saveManualCustom() {
 }
 function resetManualCustom() {
     if (!isSuperAdmin()) return;
-    if (!confirm('恢复为系统默认使用说明？当前自定义内容将清除。')) return;
-    lsSet('usageGuideCustom', '');
-    showToast('已恢复默认说明');
-    openManualOverlay();
+    // V317: 改用页面内二次确认
+    showConfirmDialogTwice('恢复为系统默认使用说明？当前自定义内容将清除。', '再次确认：清除自定义内容并恢复默认说明？', function() {
+        lsSet('usageGuideCustom', '');
+        showToast('已恢复默认说明');
+        openManualOverlay();
+    });
 }
 function showToast(msg) {
     const existing = document.querySelector('.toast-msg');
@@ -56631,12 +57184,14 @@ function submitDiarySnackRecord(editId) {
 }
 
 function deleteDiarySnack(id) {
-    if (!confirm('确定删除此加餐记录？')) return;
-    deleteSnackItem(id);
-    var o = document.getElementById('diarySnackRecordOverlay');
-    if (o) o.remove();
-    if (typeof renderDiary === 'function') renderDiary();
-    showToast('已删除');
+    // V317: 改用页面内确认弹层
+    showConfirmDialog('确定删除此加餐记录？', function() {
+        deleteSnackItem(id);
+        var o = document.getElementById('diarySnackRecordOverlay');
+        if (o) o.remove();
+        if (typeof renderDiary === 'function') renderDiary();
+        showToast('已删除');
+    });
 }
 
 // 手动修改/规划餐次食谱
@@ -59045,9 +59600,9 @@ function _exploreSaveThought(name, emoji) {
     var input = document.getElementById('exploreThoughtInput');
     if (!input || !input.value.trim()) { showToast('请先写点什么～'); return; }
     var entry = { id: Date.now(), type: 'explore', ingredient: name, emoji: emoji, content: input.value.trim(), createdAt: Date.now() };
-    var arr = JSON.parse(localStorage.getItem('foodDiaries') || '[]');
+    var arr = getFoodDiaries();
     arr.unshift(entry);
-    localStorage.setItem('foodDiaries', JSON.stringify(arr));
+    saveFoodDiaries(arr);
     input.value = '';
     var box = document.getElementById('exploreThoughtSaved');
     if (box) box.style.display = 'block';
@@ -60015,11 +60570,8 @@ async function aiRecommendFromKnowledge() {
     prompt += '3. 每条推荐需说明推荐理由，指出匹配的具体维度\n';
     prompt += '4. 返回JSON格式：{"recommendations":[{"index":条目序号(从1开始),"reason":"推荐理由（说明匹配维度）"}]}';
 
-    var apiKey = 'sk-d59f96e872d54e23ba692fd7d09eee1c';
-    var apiUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-
     try {
-        // V128: 优先走后端 /plan（多服务商自动降级），失败回退直连阿里云
+        // V331 / D5-02: 仅走后端 /plan（多服务商自动降级），前端不再直连第三方 AI
         var result = null;
         try {
             var proxyRes = await fetch(API_BASE + '/plan', {
@@ -60037,23 +60589,13 @@ async function aiRecommendFromKnowledge() {
                 if (proxyData && proxyData.response) result = { choices: [{ message: { content: proxyData.response } }] };
             }
         } catch (proxyErr) {
-            console.warn('后端/plan失败，回退直连阿里云:', proxyErr);
+            console.warn('后端/plan调用失败:', proxyErr);
         }
         if (!result) {
-            var response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-                body: JSON.stringify({
-                    model: 'qwen-turbo',
-                    messages: [
-                        { role: 'system', content: '你是家庭膳食顾问，擅长从知识库中匹配最合适的餐厅和烹饪知识。回答必须返回JSON格式。' },
-                        { role: 'user', content: prompt }
-                    ],
-                    temperature: 0.5,
-                    max_tokens: 2000
-                })
-            });
-            result = await response.json();
+            list.innerHTML = '<div style="font-size:12px;color:#EF4444;text-align:center;padding:8px;">❌ AI服务暂不可用，请稍后重试</div>';
+            btn.disabled = false;
+            btn.textContent = 'AI推荐';
+            return;
         }
         // V127: 先识别 API 层错误（欠费/限流等），显示真实原因
         if (result.error) {
@@ -62170,38 +62712,17 @@ async function _generateMealPlanStyles(planDate) {
     // 检查是否已有该日期的计划，若有则作为"家常风"方案
     var existingStyle = _loadExistingPlanAsStyle(dateKey);
     var prompt = _buildMealPlanPrompt(dateStr, ctx, existingStyle ? 2 : 3);
-    var ALIYUN_API_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-    var ALIYUN_API_KEY = 'sk-d59f96e872d54e23ba692fd7d09eee1c';
     var SYSTEM_PROMPT = '你是家肴记的AI膳食助手，擅长根据家庭成员情况、家中食材、时节因素、历史偏好等综合推荐家庭三餐食谱。请严格返回JSON格式，不要包含markdown代码块标记。';
     try {
-        // 优先使用后端 /plan 接口（同源无 CORS 问题），失败则回退直连阿里云
+        // V331 / D5-02: 仅使用后端 /plan 代理（同源无 CORS），前端不再直连第三方 AI，不再内置 API Key
         var controller = new AbortController();
         var timeoutId = setTimeout(function() { controller.abort(); }, 20000);
-        var response = null;
-        try {
-            response = await fetch(API_BASE + '/plan', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ system_prompt: SYSTEM_PROMPT, user_prompt: prompt, max_tokens: 3000 }),
-                signal: controller.signal
-            });
-        } catch(proxyErr) {
-            // 后端代理失败，回退直连阿里云（可能遇 CORS）
-            console.warn('后端/plan失败，回退直连:', proxyErr);
-            response = await fetch(ALIYUN_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + ALIYUN_API_KEY },
-                body: JSON.stringify({
-                    model: 'qwen-turbo',
-                    messages: [
-                        { role: 'system', content: SYSTEM_PROMPT },
-                        { role: 'user', content: prompt }
-                    ],
-                    max_tokens: 3000
-                }),
-                signal: controller.signal
-            });
-        }
+        var response = await fetch(API_BASE + '/plan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ system_prompt: SYSTEM_PROMPT, user_prompt: prompt, max_tokens: 3000 }),
+            signal: controller.signal
+        });
         clearTimeout(timeoutId);
         var result = await response.json();
         // 兼容后端 {response: "..."} 和阿里云 {choices: [...]} 两种格式
@@ -62915,6 +63436,7 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
     if (headerTitle) headerTitle.innerHTML = `✨ AI${dayCount}天智能推荐 <span style="font-size:12px;font-weight:400;opacity:0.9;">已融合九维数据</span>`;
     const aiStatusEl = overlay.querySelector('.ai-plan-status');
     if (aiStatusEl) aiStatusEl.style.display = 'none';
+    _setWeeklyAdoptBtn('ready');  // V322: AI 已返回，恢复采用按钮
 }
 
 function _getFallbackStyles() {
@@ -67933,15 +68455,19 @@ function openGroupRecordModal(mealKey, _hooks) {
         if (m.dishes.some(d => d === name)) { showToast('该菜已添加'); return; }
         // V161: 输入的是已点菜/计划菜的食材时二次确认，防止"水煮蛋"+"鸡蛋"这种语义重复
         const dupHits = _grpFindDishContainingIngredient(name);
-        if (dupHits.length > 0) {
-            const ok = window.confirm('「' + name + '」是已点菜品「' + dupHits.slice(0, 3).join('、')
-                + '」的食材（例如"水煮蛋"就是鸡蛋做的），可能是同一道菜重复记录。\n\n确定要作为独立菜品再添加吗？');
-            if (!ok) return;
+        function _doAddDish() {
+            m.dishes.push(name);
+            renderGroupMembers();
+            const row = memberListEl().querySelector('.grp-add-row[data-mi="' + mi + '"]');
+            if (row) { row.style.display = 'block'; const ni = row.querySelector('.grp-add-input'); if (ni) ni.focus(); }
         }
-        m.dishes.push(name);
-        renderGroupMembers();
-        const row = memberListEl().querySelector('.grp-add-row[data-mi="' + mi + '"]');
-        if (row) { row.style.display = 'block'; const ni = row.querySelector('.grp-add-input'); if (ni) ni.focus(); }
+        if (dupHits.length > 0) {
+            // V317: 改用页面内确认弹层，避免原生 confirm 在 webview 黑屏
+            showConfirmDialog('「' + name + '」是已点菜品「' + dupHits.slice(0, 3).join('、')
+                + '」的食材（例如"水煮蛋"就是鸡蛋做的），可能是同一道菜重复记录。\n\n确定要作为独立菜品再添加吗？', _doAddDish);
+            return;
+        }
+        _doAddDish();
     }
 
     function bindGroupMemberEvents() {
@@ -69466,7 +69992,7 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
         if (!subGroup.members.includes(name)) subGroup.members.push(name);
         targetGroupName = subGroupName;
     } else {
-        const diningGroup = diningGroups.find(g => g.id === diningGroupId);
+        const diningGroup = findDiningGroupByFormId(diningGroupId);
         if (diningGroup && !diningGroup.members.includes(name)) diningGroup.members.push(name);
         targetGroupName = diningGroup ? diningGroup.name : '';
     }
@@ -69641,7 +70167,20 @@ try { migrateXiaojiaThree(); } catch (e) { console.error('migrateXiaojiaThree er
     // DEFAULT_FAMILY 写入：仅当已登录且 fid_familyData 不存在时才写；
     // 游客态绝不写任何默认值到全局键（防污染后续登录的回退链）
     if (_fid && !_hasFidData && !_hasGlobalData) {
-        lsSet('familyData', JSON.stringify(DEFAULT_FAMILY));
+        // V315: 新注册/新登录家庭不再预置「我/爸爸62/妈妈60」三名示例成员
+        // （真实建家用户会看到"凭空多出 3 个人"，还得分三次删除）。只预置账号本人一个成员，其余由用户自己添加
+        var _phone = '';
+        try { _phone = (getLoginUser() || {}).phone || ''; } catch (e) {}
+        var _seedFamily = [{
+            id: Date.now(), name: '我', age: null, place: '', currentCity: '', taste: '',
+            dietaryPreference: '', relationship: '家人', isFamily: true, role: 'admin',
+            healthConcerns: '', constitution: '平和质', constitutionDetail: '',
+            phone: _phone, isCurrentUser: true
+        }];
+        lsSet('familyData', JSON.stringify(_seedFamily));
+        familyData = _seedFamily.slice();
+        // 标记：本家庭是刚建的空家庭，禁止下方「小家成员自愈」从别的家庭/遗留全局键里捞人补进来
+        window.__freshFamilySeeded = true;
     } else if (!_fid && !_hasGlobalData) {
         // 游客态不写全局键，仅保证内存变量有默认值供未登录浏览态使用
         familyData = DEFAULT_FAMILY.slice();
@@ -69714,6 +70253,7 @@ diningGroups = JSON.parse(lsGet('diningGroups')) || JSON.parse(JSON.stringify(DE
 // 小家成员自愈（跨源）：小家组成员名单（当前前缀 + 遗留无前缀键）里出现、但成员库缺失的成员自动补回。
 // 资料来源优先级：自动备份 → 遗留无前缀 familyData → 其他家庭前缀 familyData → 空壳。防止"小家只剩我"。
 (function healXiaojiaMembers() {
+    if (window.__freshFamilySeeded) return; // V315: 刚建的空家庭不做跨源补人
     function __parseArr(raw) { try { const a = JSON.parse(raw); return Array.isArray(a) ? a : null; } catch(e) { return null; } }
     // 1) 汇总各处"小家"组成员名：内存（当前前缀）+ 遗留无前缀 diningGroups
     const __names = new Set();
@@ -70130,13 +70670,11 @@ async function recognizeFlyer(base64Image) {
     // V138: fetch 超时保护（后端内部90s超时+降级，这里120s兜底）
     var _ocrCtrl = new AbortController();
     var _ocrTimeout = setTimeout(function() { _ocrCtrl.abort(); }, 120000);
-    var ALIYUN_API_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-    var ALIYUN_API_KEY = 'sk-d59f96e872d54e23ba692fd7d09eee1c';
     var prompt = '请识别这张餐厅宣传单/菜单图片，提取以下信息，严格返回JSON格式，不要包含markdown标记：\n' +
         '{"name":"餐厅名称（含分店）","address":"地址","phone":"电话","leafCategory":"餐厅类型（从以下选择：面食早点/快餐简餐/家常菜馆/中餐厅（含8大菜系）/火锅烧烤特色/日韩料理/东南亚风味/西餐自助/融合其他，无法判断为空）","subCategory3":"菜系（如川菜/粤菜等，无法判断为空）","priceLevel":"人均消费区间（0-50/50-100/100-200/200-500/500+，无法判断为空）","sceneTags":"场景标签数组（从以下多选：亲子餐/家庭聚餐/生日宴/朋友聚会/情侣约会/婚宴/寿宴/商务宴请，无法判断为空数组）","description":"简短描述","dishes":[{"name":"菜名","price":"价格数字","dishType":"类型（凉菜/热菜/汤品/主食/甜点/饮品）","dishFlavor":"口味（酸/甜/辣/咸/鲜）","dishCooking":"做法（炒/炖/蒸/煮/炸/烤/拌）","remark":"点菜提示备注"}]}\n' +
         '注意：1.只返回JSON 2.无法识别的字段返回空字符串，sceneTags返回空数组[] 3.dishes为菜品数组，尽量提取所有菜品 4.价格只填数字 5.leafCategory和sceneTags根据餐厅名称、菜品、装修风格等综合判断';
     try {
-        // V131: 优先后端 /ai/vision（Agnes免费视觉模型→qwen-vl-plus自动降级），失败回退直连
+        // V331 / D5-02: 仅走后端 /ai/vision（Agnes免费视觉模型→qwen-vl-plus自动降级），前端不再直连第三方 AI
         var result = null;
         var _lastErr = '';
         try {
@@ -70154,25 +70692,10 @@ async function recognizeFlyer(base64Image) {
             }
         } catch (vErr) {
             _lastErr = (vErr && vErr.name === 'AbortError') ? '请求超时' : 'AI服务不可达';
-            console.warn('后端/ai/vision失败，回退直连:', vErr);
+            console.warn('后端/ai/vision调用失败:', vErr);
         }
         if (!result) {
-            var response = await fetch(ALIYUN_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + ALIYUN_API_KEY },
-                body: JSON.stringify({
-                    model: 'qwen-vl-plus',
-                    messages: [
-                        { role: 'user', content: [
-                            { type: 'image_url', image_url: { url: base64Image } },
-                            { type: 'text', text: prompt }
-                        ]}
-                    ],
-                    max_tokens: 2000
-                }),
-                signal: _ocrCtrl.signal
-            });
-            result = await response.json();
+            throw new Error(_lastErr || 'AI服务暂不可用');
         }
         var reply = (result.choices && result.choices[0] && result.choices[0].message) ? result.choices[0].message.content : '';
         var match = reply.match(/\{[\s\S]*\}/);
@@ -71308,10 +71831,13 @@ function closeCommunityPage() {
     var ov = document.getElementById('communityPageOverlay');
     if (ov) ov.remove();
 }
-function _communityCopyText(txt, doneMsg) {
+function _communityCopyText(txt, doneMsg, afterDone) {
     var t = String(txt || '').trim();
     if (!t) return;
-    var done = function () { showToast && showToast(doneMsg || ('已复制：' + t)); };
+    var done = function () {
+        showToast && showToast(doneMsg || ('已复制：' + t));
+        if (typeof afterDone === 'function') { try { afterDone(); } catch (e) {} }
+    };
     try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(t).then(done, done);
@@ -71346,8 +71872,13 @@ function _communityParseContact(raw) {
 function _communityCallPhone(tel) {
     var t = String(tel || '').trim();
     if (!t) { showToast && showToast('该邻居未留下联系电话'); return; }
-    try { window.location.href = 'tel:' + t; } catch (e) {}
-    _communityCopyText(t, '已复制电话：' + t);
+    // V330/D4-02: 先复制并提示，再（仅移动端）延迟拨号，避免 tel: 跳转把提示吞掉
+    var isMobile = /Android|iPhone|iPad|iPod|HarmonyOS|Mobile/i.test(navigator.userAgent || '');
+    _communityCopyText(
+        t,
+        isMobile ? ('已复制电话：' + t + '，正在为你拨号…') : ('已复制电话：' + t + '，请在手机拨号盘粘贴拨打'),
+        isMobile ? function () { setTimeout(function () { try { window.location.href = 'tel:' + t; } catch (e) {} }, 900); } : null
+    );
 }
 function _communityAddWechat(wx) {
     var w = String(wx || '').trim();
@@ -71451,6 +71982,72 @@ function _communityPubPickImages(input) {
     });
     input.value = '';
 }
+// V312: 微信二维码专用上传位（独立于最多 3 张配图，单独 1 张，详情页大图+长按识别）
+var _communityPubQr = '';
+function _communityPubPickQr(input) {
+    var file = input && input.files && input.files[0];
+    if (!file || !/^image\//.test(file.type || '')) { if (input) input.value = ''; return; }
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+        var img = new Image();
+        img.onload = function () {
+            var data = '';
+            try {
+                var maxW = 640;
+                var scale = Math.min(1, maxW / (img.width || maxW));
+                var canvas = document.createElement('canvas');
+                canvas.width = Math.round((img.width || maxW) * scale);
+                canvas.height = Math.round((img.height || maxW) * scale);
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                data = canvas.toDataURL('image/jpeg', 0.8);
+            } catch (e) {
+                data = String(ev.target.result || '');
+            }
+            _communityPubQr = data;
+            _communityPubRenderQr();
+        };
+        img.src = String(ev.target.result || '');
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+}
+function _communityPubRenderQr() {
+    var box = document.getElementById('communityPubQrBox');
+    if (!box) return;
+    if (!_communityPubQr) {
+        box.innerHTML = '<label style="display:inline-flex;align-items:center;gap:6px;padding:12px 16px;border:1px dashed #BBF7D0;border-radius:10px;background:#ECFDF5;color:#047857;font-size:12px;font-weight:600;cursor:pointer;">'
+            + '<span>⬆️ 上传微信二维码</span>'
+            + '<input type="file" accept="image/*" onchange="_communityPubPickQr(this)" style="display:none;" />'
+            + '</label>';
+        return;
+    }
+    box.innerHTML = '<div style="position:relative;width:96px;height:96px;">'
+        + '<img src="' + escapeAttr(_communityPubQr) + '" alt="微信二维码" style="width:100%;height:100%;object-fit:contain;background:#fff;border-radius:10px;border:1px solid #BBF7D0;display:block;" />'
+        + '<button type="button" onclick="_communityPubRemoveQr()" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border:none;border-radius:50%;background:#EF4444;color:#fff;font-size:12px;line-height:1;cursor:pointer;">×</button>'
+        + '</div>';
+}
+function _communityPubRemoveQr() {
+    _communityPubQr = '';
+    _communityPubRenderQr();
+}
+window._communityPubPickQr = _communityPubPickQr;
+window._communityPubRemoveQr = _communityPubRemoveQr;
+// 二维码大图：长按可识别/保存后微信扫一扫
+function _communityShowQr(src) {
+    var old = document.getElementById('communityImgViewer');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'communityImgViewer';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10030;background:rgba(0,0,0,0.88);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:14px;padding:14px;text-align:center;">'
+        + '<img src="' + escapeAttr(src) + '" alt="微信二维码" style="width:min(70vw,260px);height:min(70vw,260px);object-fit:contain;display:block;border-radius:8px;-webkit-touch-callout:default;user-select:auto;" />'
+        + '<div style="font-size:12px;color:#6B7280;margin-top:10px;line-height:1.6;">长按图片识别二维码<br/>或保存图片后用微信「扫一扫」</div>'
+        + '</div>'
+        + '<div style="margin-top:14px;font-size:12px;color:#E5E7EB;">点击空白处关闭</div>';
+    ov.onclick = function (e) { if (e.target === ov) ov.remove(); };
+    document.body.appendChild(ov);
+}
+window._communityShowQr = _communityShowQr;
 function _communityPubRenderPreviews() {
     var box = document.getElementById('communityPubPreviews');
     if (!box) return;
@@ -72277,6 +72874,7 @@ function _renderCommunityPublishModal(verifiedPhone) {
     closeCommunityPublishModal();
     _communityPubType = 'mutual';
     _communityPubImages = [];
+    _communityPubQr = '';
     var typeBtns = _COMMUNITY_TYPES.map(function (t) {
         return '<button type="button" data-ptype="' + t.key + '" onclick="_communityPubSelectType(\'' + t.key + '\')" '
             + 'style="flex:1;padding:8px 4px;border-radius:10px;font-size:12px;cursor:pointer;border:1px solid #E5E7EB;background:#fff;color:#6B7280;">'
@@ -72307,6 +72905,9 @@ function _renderCommunityPublishModal(verifiedPhone) {
             : '<input id="communityPubPhone" type="tel" maxlength="20" value="' + escapeAttr(_communityDefaultPhone()) + '" placeholder="方便邻居电话联系（选填）" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />')
         + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">微信号</div>'
         + '<input id="communityPubWechat" type="text" maxlength="40" value="' + escapeAttr(_communityDefaultWechat()) + '" placeholder="方便邻居微信添加（选填）" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />'
+        + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">微信二维码（选填）</div>'
+        + '<div id="communityPubQrBox" style="margin-bottom:4px;"></div>'
+        + '<div style="font-size:11px;color:#9CA3AF;margin:0 0 12px;">单独放加好友二维码，邻居在详情页长按即可识别，不占用下面 3 张配图</div>'
         + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">图片上传（最多 3 张）</div>'
         + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;" id="communityPubPreviews"></div>'
         + '<label style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px dashed #FED7AA;border-radius:10px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;cursor:pointer;">'
@@ -72331,6 +72932,7 @@ function _renderCommunityPublishModal(verifiedPhone) {
     ov.addEventListener('click', function (e) { if (e.target === ov) closeCommunityPublishModal(); });
     document.body.appendChild(ov);
     _communityPubSelectType('mutual');
+    _communityPubRenderQr();
     document.getElementById('communityPubCancelBtn').onclick = closeCommunityPublishModal;
     document.getElementById('communityPubSubmitBtn').onclick = submitCommunityPost;
 }
@@ -72356,7 +72958,7 @@ async function submitCommunityPost() {
     if (!title) { showToast && showToast('请填写标题'); titleEl && titleEl.focus(); return; }
     if (!content) { showToast && showToast('请填写详细说明'); contentEl && contentEl.focus(); return; }
     if (phone && !/^[0-9+\-\s]{6,20}$/.test(phone)) { showToast && showToast('电话号码格式不正确'); phoneEl && phoneEl.focus(); return; }
-    if (!phone && !wechat) { showToast && showToast('请至少填写电话或微信号'); wechatEl && wechatEl.focus(); return; }
+    if (!phone && !wechat && !_communityPubQr) { showToast && showToast('请至少填写电话、微信号或上传二维码'); wechatEl && wechatEl.focus(); return; }
     // V251: 发布前先走 AI 审核，通过才入库
     var submitBtn = document.getElementById('communityPubSubmitBtn');
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '审核中…'; }
@@ -72394,6 +72996,7 @@ async function submitCommunityPost() {
         contactWechat: wechat,
         contactInfo: contactInfo.join(' '),
         images: _communityPubImages.slice(),
+        wechatQr: _communityPubQr || '',
         buyLink: buyLink,
         volunteer: !!(volEl && volEl.checked),
         auditStatus: 'passed',
@@ -72571,6 +73174,30 @@ function _communityPostCardHtml(p, opts) {
     if (!phone && !wechat) {
         contactBtns += '<button type="button" data-contact="' + escapeHtml(rawContact) + '" style="padding:6px 12px;border:1px solid #FED7AA;border-radius:9px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;cursor:pointer;">📞 联系Ta</button>';
     }
+    // V312: 微信二维码入口（详情弹层里长按识别）
+    var qrSrc = String(p.wechatQr || '').trim();
+    var qrHtml = qrSrc
+        ? '<button type="button" data-qr="' + escapeAttr(qrSrc) + '" style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px 5px 5px;border:1px solid #BBF7D0;border-radius:9px;background:#ECFDF5;color:#047857;font-size:12px;font-weight:600;cursor:pointer;margin-top:8px;">'
+            + '<img src="' + escapeAttr(qrSrc) + '" alt="微信二维码" style="width:36px;height:36px;object-fit:contain;background:#fff;border-radius:6px;display:block;" />'
+            + '扫我微信'
+            + '</button>'
+        : '';
+    // V327/D4-03: 拼购帖没有购买链接时，仍要给出明确的拼购行动入口（走团长联系方式）
+    var buyBtnHtml = '';
+    if (hasBuy) {
+        buyBtnHtml = '<button type="button" data-buy="' + escapeAttr(p.buyLink) + '" style="padding:6px 12px;border:none;border-radius:9px;background:#F97316;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">🔗 去拼购</button>';
+    } else if (p.type === 'group_buy') {
+        var buyStyle = 'padding:6px 12px;border:none;border-radius:9px;background:#F97316;color:#fff;font-size:12px;font-weight:600;cursor:pointer;';
+        if (phone) {
+            buyBtnHtml = '<button type="button" data-buy-phone="' + escapeHtml(phone) + '" style="' + buyStyle + '">🙋 联系团长拼购</button>';
+        } else if (wechat) {
+            buyBtnHtml = '<button type="button" data-wechat="' + escapeHtml(wechat) + '" style="' + buyStyle + '">🙋 加微信拼购</button>';
+        } else if (qrSrc) {
+            buyBtnHtml = '<button type="button" data-qr="' + escapeAttr(qrSrc) + '" style="' + buyStyle + '">🙋 扫码拼购</button>';
+        } else if (rawContact) {
+            buyBtnHtml = '<button type="button" data-contact="' + escapeHtml(rawContact) + '" style="' + buyStyle + '">🙋 联系团长拼购</button>';
+        }
+    }
     // 图片缩略图（最多 3 张）
     var images = Array.isArray(p.images) ? p.images.filter(Boolean).slice(0, 3) : [];
     var imagesHtml = '';
@@ -72623,10 +73250,11 @@ function _communityPostCardHtml(p, opts) {
         + '<div style="font-size:14px;font-weight:700;color:#1F2937;line-height:1.5;">' + escapeHtml(p.title || '') + '</div>'
         + '<div style="font-size:12px;color:#4B5563;line-height:1.8;margin-top:4px;">' + escapeHtml(p.content || '') + '</div>'
         + imagesHtml
+        + qrHtml
         + rejectHtml
         + '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;">'
         +   contactBtns
-        +   (hasBuy ? '<button type="button" data-buy="' + escapeAttr(p.buyLink) + '" style="padding:6px 12px;border:none;border-radius:9px;background:#F97316;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">🔗 去拼购</button>' : '')
+        +   buyBtnHtml
         +   '<button type="button" data-report="' + escapeHtml(String(p.id || '')) + '" title="举报这条信息" style="margin-left:auto;padding:2px 4px;border:none;background:transparent;color:#9CA3AF;font-size:11px;cursor:pointer;">🚩 举报</button>'
         + '</div>'
         + '</div>';
@@ -72752,11 +73380,20 @@ function renderCommunityList() {
     body.querySelectorAll('[data-contact]').forEach(function (btn) {
         btn.onclick = function () { _communityContactByText(btn.getAttribute('data-contact')); };
     });
+    body.querySelectorAll('[data-buy-phone]').forEach(function (btn) {
+        btn.onclick = function () {
+            var t = btn.getAttribute('data-buy-phone');
+            _communityCopyText(t, '已复制团长电话：' + t + '，打开拨号即可联系拼购');
+        };
+    });
     body.querySelectorAll('[data-buy]').forEach(function (btn) {
         btn.onclick = function () { _communityOpenBuy(btn.getAttribute('data-buy')); };
     });
     body.querySelectorAll('[data-img]').forEach(function (btn) {
         btn.onclick = function () { _communityShowImage(btn.getAttribute('data-img')); };
+    });
+    body.querySelectorAll('[data-qr]').forEach(function (btn) {
+        btn.onclick = function () { _communityShowQr(btn.getAttribute('data-qr')); };
     });
     body.querySelectorAll('[data-report]').forEach(function (btn) {
         btn.onclick = function () { openCommunityReportModal(btn.getAttribute('data-report')); };
