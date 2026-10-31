@@ -50,9 +50,9 @@ ALIYUN_MODEL = "qwen-turbo"  # 可选 qwen-plus, qwen-max, qwen-turbo（免费�
 # 换 Key / 加新服务商只需设置环境变量（DASHSCOPE_API_KEY 等）或改 model_config.py，无需动这里。
 os.environ.setdefault("ALIYUN_API_KEY", ALIYUN_API_KEY)
 try:
-    from backend.model_config import call_ai, route_vision  # 包形式导入（项目根目录启动 / Render 部署）
+    from backend.model_config import call_ai, route_vision, AIServiceBusy  # 包形式导入（项目根目录启动 / Render 部署）
 except ImportError:  # 直接从 backend 目录启动时按同级模块导入
-    from model_config import call_ai, route_vision  # noqa: E402  （需在 setdefault 之后导入，确保能读到内置 Key）
+    from model_config import call_ai, route_vision, AIServiceBusy  # noqa: E402  （需在 setdefault 之后导入，确保能读到内置 Key）
 # ===================================================
 
 app = FastAPI(
@@ -381,6 +381,9 @@ async def call_qwen(
             "timeout": timeout,
         })
         return result["content"].strip()
+    except AIServiceBusy as exc:
+        # D5-01: 并发闸门排队超时——返回 503 + 明确提示，前端据此展示「服务繁忙」而非笼统失败
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"AI 服务调用失败：{exc}") from exc
 
@@ -410,6 +413,8 @@ async def ai_vision(req: VisionRequest) -> ChatResponse:
     task_type = req.task_type if (req.task_type and re.fullmatch(r"[a-z_]{1,24}", req.task_type)) else "vision"
     try:
         content, _provider = await route_vision(messages, max_tokens=req.max_tokens, task_type=task_type)
+    except AIServiceBusy as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"AI 视觉服务调用失败：{exc}") from exc
     return ChatResponse(response=content.strip())
@@ -760,12 +765,17 @@ _FOODHALL_SYSTEM = (
     "【节气】{solar_term}\n"
     "\n"
     "生成要求：\n"
-    '1. 3 篇内容主题尽量分散：1 篇挂靠节气或时令（category 用"节气食养"）；'
-    '1 篇讲当季食材（category 用"当季食材"）；1 篇讲烹饪技巧或饮食文化（category 用"烹饪技巧"或"饮食文化"）\n'
-    "2. 每篇：标题 15 字内、摘要 60 字内、正文 200-300 字、小贴士 2 条（每条 25 字内）\n"
-    "3. 语言口语化，像和朋友聊天\n"
-    '4. 主题必须全国通用，不得指定或暗示某座城市/地区，不得绑定某地天气（如"杭州降温""北京下雪"等都被禁止）；'
-    '可结合近期全国性饮食话题（如"秋燥""进补"）\n'
+    '1. 3 篇必须全部围绕【节气】{solar_term}（节气为空时围绕当前当季）展开，只换角度、不换主题：\n'
+    '   - 1 篇讲该节气的饮食习俗与气候特点（category 用"节气食养"）；\n'
+    '   - 1 篇讲该节气当令的 1-2 种食材与挑选/处理（category 用"当季食材"）；\n'
+    '   - 1 篇讲家常做法或节气饮食文化（category 用"烹饪技巧"或"饮食文化"），同样必须落在该节气；\n'
+    '   禁止换成与本节气无关的泛季节话题（例如霜降批次不得写成"贴秋膘""立冬进补"），'
+    '标题与摘要不得出现其他节气名称；\n'
+    "2. 每篇摘要必须出现节气名（如「霜降」），让三篇一眼看出是同一批节气内容；\n"
+    "3. 每篇：标题 15 字内、摘要 60 字内、正文 200-300 字、小贴士 2 条（每条 25 字内）\n"
+    "4. 语言口语化，像和朋友聊天\n"
+    '5. 主题必须全国通用，不得指定或暗示某座城市/地区，不得绑定某地天气（如"杭州降温""北京下雪"等都被禁止）；'
+    '可结合该节气全国性的饮食话题（如霜降的"秋燥""吃柿子"）\n'
     "\n"
     "严格禁止出现这些词：治疗、治愈、改善、降低、预防、功效、食疗、润肺、止咳、降三高、祛湿、排毒。"
     "禁止提及疾病名称，禁止承诺任何功效。\n"
@@ -797,6 +807,11 @@ _FH_CITY_HINTS = ["北京", "上海", "天津", "重庆", "杭州", "广州", "�
 # 弱信号词：本地黑名单未命中但出现这些字眼时，触发 AI 语义二次确认（疑似风险）
 _FOODHALL_WEAK = ["功效", "偏方", "秘方", "古方", "神效", "疗效", "炎", "咳", "肿",
                   "痛", "症", "菌", "毒", "药", "虚", "补气", "上火", "去火", "下火"]
+
+# V323: 二十四节气列表——用于校验同一批草稿是否都挂在当天节气主题下（D3-01）
+_FH_SOLAR_TERMS = ["立春", "雨水", "惊蛰", "春分", "清明", "谷雨", "立夏", "小满", "芒种",
+                   "夏至", "小暑", "大暑", "立秋", "处暑", "白露", "秋分", "寒露", "霜降",
+                   "立冬", "小雪", "大雪", "冬至", "小寒", "大寒"]
 
 # 发布前 AI 合规审核员 Prompt（词表硬校验之后的第二道关）
 _FOODHALL_AUDIT_SYSTEM = (
@@ -880,8 +895,18 @@ async def _foodhall_generate_core(
             city_hits = [w for w in _FH_CITY_HINTS if w in blob]
             if city_hits:
                 violations.append({"index": i, "type": "city", "words": city_hits})
+            # V323: 同批主题一致性（D3-01）——标题或摘要必须挂在当天节气上，且不得混入其他节气
+            if solar_term:
+                title_txt = str(item.get("title") or "")
+                summary_txt = str(item.get("summary") or "")
+                if solar_term not in title_txt and solar_term not in summary_txt:
+                    violations.append({"index": i, "type": "theme", "words": [solar_term], "reason": "未挂靠当天节气"})
+                other_terms = [t for t in _FH_SOLAR_TERMS if t != solar_term and t in blob]
+                if other_terms:
+                    violations.append({"index": i, "type": "theme", "words": other_terms, "reason": "混入其他节气"})
             drafts.append({
                 "id": f"fh_{ts}_{i}",
+                "_idx": i,
                 "category": str(item.get("category") or "节气食养"),
                 "title": str(item.get("title") or "").strip(),
                 "summary": str(item.get("summary") or "").strip(),
@@ -889,7 +914,16 @@ async def _foodhall_generate_core(
                 "tips": [str(t).strip() for t in (item.get("tips") or []) if str(t).strip()][:2],
             })
         if drafts and not violations:
-            break  # 干净即返回；命中禁词则再生成一轮
+            break  # 干净即返回；命中禁词/跑题则再生成一轮
+
+    # V323: 重试后仍跑题的文章直接剔除，保证同一批 3 篇主题一致（全部跑题时保留原结果兜底）
+    if solar_term:
+        theme_bad = {v["index"] for v in violations if v.get("type") == "theme"}
+        kept = [d for d in drafts if d.get("_idx") not in theme_bad]
+        if kept and theme_bad:
+            drafts = kept
+    for d in drafts:
+        d.pop("_idx", None)
     return drafts, violations, attempt > 0
 
 
@@ -2875,6 +2909,8 @@ _SMS_CODES: Dict[str, Dict[str, Any]] = {}    # phone -> {code, expireAt, sentAt
 _SMS_LAST_SENT: Dict[str, int] = {}            # phone -> 上次发送时间戳（独立记录，校验通过后仍保留冷却）
 _SMS_TOKENS: Dict[str, Dict[str, Any]] = {}   # token -> {phone, expireAt}
 _SMS_SEND_INTERVAL = 60         # 同号重发间隔（秒）
+# V313: 第三次测试专用手机号——未接入真实短信网关（mock）时固定下发 123456，方便人工测试
+_SMS_TEST_PHONES = {"13800000001", "13800000002", "13800000003", "13800000004"}
 
 
 class SendSmsRequest(BaseModel):
@@ -2919,6 +2955,10 @@ async def send_sms(req: SendSmsRequest) -> Dict[str, Any]:
     _SMS_LAST_SENT[phone] = now
 
     delivered = _sms_send_via_provider(phone, code)
+    if not delivered and phone in _SMS_TEST_PHONES:
+        # V313: 测试号固定验证码 123456（仅 mock 模式下生效，接入真实网关后此逻辑自动失效）
+        code = "123456"
+        _SMS_CODES[phone] = {"code": code, "expireAt": now + _SMS_TTL_SECONDS, "sentAt": now}
     # 清理过期验证码，避免内存无限增长
     for p, v in list(_SMS_CODES.items()):
         if int(v.get("expireAt") or 0) <= now:

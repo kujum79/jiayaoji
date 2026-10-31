@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V331-20261031';
+        var APP_VER = 'V332-20261031';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -62724,6 +62724,15 @@ async function _generateMealPlanStyles(planDate) {
             signal: controller.signal
         });
         clearTimeout(timeoutId);
+        if (!response.ok) {
+            // D5-04: 不再静默——503 为下游并发繁忙，其余为生成失败，均保留内置方案并明确提示
+            if (typeof showToast === 'function') {
+                showToast(response.status === 503
+                    ? 'AI 服务繁忙，当前展示内置方案，请稍后再试'
+                    : 'AI 方案生成失败，已保留原有方案');
+            }
+            return;
+        }
         var result = await response.json();
         // 兼容后端 {response: "..."} 和阿里云 {choices: [...]} 两种格式
         var reply = '';
@@ -62753,11 +62762,17 @@ async function _generateMealPlanStyles(planDate) {
             }
         } else {
             // AI 返回无效：保持已有内置方案不变
+            // D5-04: 解析失败同样要给用户明确提示，不得静默
+            if (typeof showToast === 'function') showToast('AI 方案解析失败，已保留原有方案');
             return;
         }
     } catch(err) {
         console.error('AI生成方案失败（保持已有方案）:', err);
-        // 失败时不覆盖已有方案，直接返回
+        // D5-04: 超时/网络失败也要明确提示，不得仅打印日志
+        if (typeof showToast === 'function') {
+            var aborted = err && err.name === 'AbortError';
+            showToast(aborted ? 'AI 方案生成超时，当前展示内置方案' : 'AI 方案生成失败，已保留原有方案');
+        }
         return;
     }
     // 仅在 AI 成功时执行以下更新

@@ -12,8 +12,10 @@
     AGNES_API_KEY / SILICONFLOW_API_KEY / DASHSCOPE_API_KEY / DEEPSEEK_API_KEY
     可写在 backend/.env（无需 python-dotenv，启动时自动加载，已有环境变量优先）。
 """
+import asyncio
 import json
 import os
+import random
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -39,6 +41,32 @@ _load_env_file()
 
 # AI 调用日志文件（JSONL，每行一条）
 AI_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai_logs.jsonl")
+
+# ========== D5-01: 上游并发闸门与退避策略（环境变量可覆盖）==========
+# 同时在途的上游请求上限：超过则排队，而不是直接推给上游触发 429
+AI_MAX_CONCURRENCY = max(1, int(os.getenv("AI_MAX_CONCURRENCY", "4") or 4))
+# 排队等待上限（秒），超时抛 AIServiceBusy（对外 503），让用户快速感知而非干等
+AI_QUEUE_TIMEOUT = max(1.0, float(os.getenv("AI_QUEUE_TIMEOUT", "30") or 30))
+# 单模型调用的重试次数（仅对 429 / 5xx / 连接故障生效）
+AI_RETRY_MAX = max(0, int(os.getenv("AI_RETRY_MAX", "2") or 2))
+# 指数退避基准（秒）：1s → 2s → 4s，附加随机抖动避免惊群
+AI_RETRY_BASE = max(0.2, float(os.getenv("AI_RETRY_BASE", "1.0") or 1.0))
+
+_AI_GATE: Optional[asyncio.Semaphore] = None
+
+
+def _ai_gate() -> asyncio.Semaphore:
+    global _AI_GATE
+    if _AI_GATE is None:
+        _AI_GATE = asyncio.Semaphore(AI_MAX_CONCURRENCY)
+    return _AI_GATE
+
+
+class AIServiceBusy(Exception):
+    """D5-01: 并发闸门排队超时——上层统一映射为 HTTP 503 + 明确中文提示。"""
+
+    status_code = 503
+
 
 # 模型服务商配置（priority 越小越优先；cost 为每 token 单价，元）
 # V119: Agnes 免费模型为首选（apihub 域名），文本先 flash 后 pro；图像/视频端点与 OpenAI 风格有差异，用 *_path 覆盖。
@@ -205,6 +233,8 @@ async def route_vision(
     返回 (回复文本, 服务商名)。全部失败抛 RuntimeError。
     """
     errors: List[str] = []
+    # D5-01: 排队预算按「一次请求」计，跨服务商共享
+    _queue_deadline = time.monotonic() + AI_QUEUE_TIMEOUT
     for name, cfg in get_provider_order():
         vision_models = cfg.get("models", {}).get("vision")
         api_key = cfg.get("api_key") or ""
@@ -217,12 +247,18 @@ async def route_vision(
         last_err: Optional[str] = None
         for model in model_seq:
             try:
-                data = await _call_provider_chat(name, cfg, model, messages, max_tokens=max_tokens, timeout=timeout)
+                data = await _call_with_retry(
+                    name, cfg, model, messages,
+                    queue_timeout=max(0.5, _queue_deadline - time.monotonic()),
+                    max_tokens=max_tokens, timeout=timeout,
+                )
                 content = data["choices"][0]["message"]["content"]
                 if content:
                     log_ai_call(name, model, {"task_type": task_type}, data)
                     return content, name
                 last_err = "返回空内容"
+            except AIServiceBusy:
+                raise
             except (httpx.HTTPStatusError, httpx.RequestError, KeyError, IndexError) as exc:
                 last_err = f"{type(exc).__name__}: {exc}"
                 log_ai_error(name, model, {"task_type": task_type}, exc)
@@ -242,6 +278,7 @@ def _call_provider_chat(
     temperature: Optional[float] = None,
     timeout: float = 60.0,
     extra_body: Optional[Dict[str, Any]] = None,
+    queue_timeout: Optional[float] = None,
 ) -> Dict[str, Any]:
     """单服务商 chat/completions 调用（同步发起由调用方 await），返回完整响应 JSON。
 
@@ -268,7 +305,19 @@ def _call_provider_chat(
             resp.raise_for_status()
             return resp.json()
 
-    return _post()
+    async def _gated_post() -> Dict[str, Any]:
+        """D5-01: 全局并发闸门——同时在途的上游请求不超过 AI_MAX_CONCURRENCY。"""
+        wait_s = AI_QUEUE_TIMEOUT if queue_timeout is None else max(0.5, queue_timeout)
+        try:
+            await asyncio.wait_for(_ai_gate().acquire(), timeout=wait_s)
+        except asyncio.TimeoutError:
+            raise AIServiceBusy(f"AI 服务繁忙：排队超过 {int(AI_QUEUE_TIMEOUT)} 秒，请稍后重试") from None
+        try:
+            return await _post()
+        finally:
+            _ai_gate().release()
+
+    return _gated_post()
 
 
 def save_ai_log(log_entry: Dict[str, Any]) -> None:
@@ -464,6 +513,72 @@ def _mark_provider_ok(name: str) -> None:
     _PROVIDER_HEALTH.pop(name, None)
 
 
+# ========== D5-01: 429 / 5xx 指数退避重试 ==========
+def _is_rate_limited(exc: Exception) -> bool:
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429
+
+
+# 上游明确限流（429）后的短熔断时长：并发中的其他请求据此改走下一家，不再扎堆重试
+RATE_LIMIT_COOLDOWN_SEC = 30.0
+
+
+def _cool_down(name: str, seconds: float) -> None:
+    st = _PROVIDER_HEALTH.setdefault(name, {"fails": 0, "until": 0})
+    st["until"] = max(float(st.get("until") or 0), time.time() + seconds)
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """429 与 5xx 重试；连接层故障也重试。
+
+    读超时不重试：长生成（如 7 天计划 150s）超时多为上游确实慢，重试只会成倍拉长等待。
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code == 429 or exc.response.status_code >= 500
+    return isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadError))
+
+
+def _retry_after(exc: Exception, fallback: float) -> float:
+    """优先遵从上游 Retry-After，并限幅到 8s，避免被上游拖死。"""
+    if isinstance(exc, httpx.HTTPStatusError):
+        raw = exc.response.headers.get("retry-after")
+        if raw:
+            try:
+                return max(0.0, min(float(raw), 8.0))
+            except ValueError:
+                pass
+    return fallback
+
+
+async def _call_with_retry(
+    name: str,
+    cfg: Dict[str, Any],
+    model: str,
+    messages: List[Dict[str, Any]],
+    *,
+    queue_timeout: Optional[float] = None,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """D5-01: 单模型调用 + 指数退避重试（默认 2 次，1s/2s + 抖动）。
+
+    queue_timeout：本请求剩余可排队时长（跨服务商共享一个总预算），避免逐家等待叠加。
+    """
+    attempt = 0
+    while True:
+        try:
+            return await _call_provider_chat(name, cfg, model, messages, queue_timeout=queue_timeout, **kwargs)
+        except AIServiceBusy:
+            raise  # 闸门排队超时属系统级过载，换服务商无意义，直接上抛
+        except Exception as exc:
+            if attempt >= AI_RETRY_MAX or not _is_retryable(exc):
+                if _is_rate_limited(exc):
+                    _cool_down(name, RATE_LIMIT_COOLDOWN_SEC)
+                raise
+            wait = _retry_after(exc, AI_RETRY_BASE * (2 ** attempt) + random.uniform(0, 0.4))
+            print(f"retry {name}/{model} in {wait:.1f}s (attempt {attempt + 1}/{AI_RETRY_MAX}): {type(exc).__name__}")
+            await asyncio.sleep(wait)
+            attempt += 1
+
+
 def get_provider_health() -> Dict[str, Dict[str, Any]]:
     """调试用：各服务商当前熔断状态。"""
     now = time.time()
@@ -501,6 +616,8 @@ async def call_ai(task_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     # V285: 熔断中的服务商直接跳过（全部熔断时兜底按原顺序尝试，避免整体不可用）
     _order = get_provider_order()
     _active = [(n, c) for n, c in _order if not _provider_cooling(n)]
+    # D5-01: 排队预算按「一次请求」计，跨服务商共享，避免每家各等一次把响应拖到分钟级
+    _queue_deadline = time.monotonic() + AI_QUEUE_TIMEOUT
     for name, config in (_active or _order):
         # public 服务商（pollinations）无需 Key 也参与路由
         if not config.get("api_key") and not config.get("public"):
@@ -521,9 +638,10 @@ async def call_ai(task_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         for model in model_seq:
             try:
                 if task_type == "text":
-                    data = await _call_provider_chat(
+                    data = await _call_with_retry(
                         name, config, model,
                         payload.get("messages") or [],
+                        queue_timeout=max(0.5, _queue_deadline - time.monotonic()),
                         json_mode=bool(payload.get("json_mode")),
                         max_tokens=payload.get("max_tokens"),
                         temperature=payload.get("temperature"),
@@ -575,6 +693,8 @@ async def call_ai(task_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
                 log_ai_call(name, model, log_payload, result)
                 _mark_provider_ok(name)
                 return result
+            except AIServiceBusy:
+                raise
             except Exception as e:
                 print(f"{name}/{model} failed: {e}")
                 errors.append(f"{name}/{model}: {type(e).__name__}: {e}")
