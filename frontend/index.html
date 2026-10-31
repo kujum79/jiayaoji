@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V333-20261031';
+        var APP_VER = 'V334-20261031';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -11894,8 +11894,11 @@ async function _refreshMonitorBadge() {
     if (!badge) return;
     // V311: 徽标只提示「需要动手」的条数，偶发报错不再打扰超管
     var n = _monitorNeedsActionCount(data);
+    var nToday = _monitorNeedsActionTodayCount(data);
     badge.textContent = n > 99 ? '99+' : String(n);
     badge.style.display = n > 0 ? 'block' : 'none';
+    // D5-06: 徽标是「未处理累计」（含往期），用 tooltip 说明口径，避免与「今日新增」并列时被误读成今日条数
+    badge.title = '需要动手：未处理累计 ' + n + ' 条（含往期），其中今日 ' + nToday + ' 条';
 }
 
 function _monitorTypeMeta(t) {
@@ -11943,6 +11946,15 @@ function _monitorSplit(list) {
 function _monitorNeedsActionCount(d) {
     try { return _monitorSplit((d && d.unresolved) || []).need.filter(function (r) { return !r.resolved; }).length; } catch (e) { return (d && Number(d.unresolvedCount)) || 0; }
 }
+// D5-06: 「需要动手」里属于今天产生的未处理条数（徽标/统计口径说明用）
+function _monitorNeedsActionTodayCount(d) {
+    try {
+        var todayK = dateToKey(new Date());
+        return _monitorSplit((d && d.unresolved) || []).need.filter(function (r) {
+            return !r.resolved && _monitorRowDate(r) === todayK;
+        }).length;
+    } catch (e) { return 0; }
+}
 function _monitorRowHtml(r) {
     var m = _monitorTypeMeta(r.type);
     var fam = r.familyName || (r.familyId ? r.familyId : '未知家庭');
@@ -11972,19 +11984,24 @@ function _monitorBodyHtml(d) {
     var split = _monitorSplit(list);
     var need = split.need, fold = split.fold;
     var needPending = need.filter(function (r) { return !r.resolved; }).length;
+    // D5-06: 顶部统计按「今天」口径，列表的「需要动手」是未处理累计（含往期），这里单独列出今日未处理条数
+    var todayK = '';
+    try { todayK = dateToKey(new Date()); } catch (e) {}
+    var needPendingToday = need.filter(function (r) { return !r.resolved && _monitorRowDate(r) === todayK; }).length;
     return '<div style="padding:12px 16px 24px;">' +
-        '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
-        stat('今日报错总数', (d && d.todayErrorCount) || 0, '#DC2626') +
-        stat('已修复', (d && d.resolvedTodayCount) || 0, '#16A34A') +
+        '<div style="display:flex;gap:8px;margin-bottom:6px;">' +
+        stat('今日新增报错', (d && d.todayErrorCount) || 0, '#DC2626') +
+        stat('今日已修复', (d && d.resolvedTodayCount) || 0, '#16A34A') +
         stat('活跃付费客户', (d && d.activePaidCount) || 0, '#2563EB') +
         '</div>' +
+        '<div style="font-size:10px;color:#9CA3AF;margin:0 0 12px 2px;line-height:1.5;">上方三项均为今日口径；下方「需要动手」为未处理累计（含往期），其中今日 ' + needPendingToday + ' 条</div>' +
         '<div style="display:flex;gap:8px;margin-bottom:14px;">' +
         '<button type="button" onclick="_openAnnounceSheet()" style="flex:1;border:none;border-radius:12px;background:#DC2626;color:#fff;font-size:12px;font-weight:700;padding:10px 6px;cursor:pointer;box-shadow:0 2px 8px rgba(220,38,38,0.25);">📢 全局安抚公告</button>' +
         '<button type="button" onclick="openAiUsagePanel()" style="flex:1;border:1px solid #FED7AA;border-radius:12px;background:#FFF7ED;color:#9A3412;font-size:12px;font-weight:700;padding:10px 6px;cursor:pointer;">🤖 AI 用量</button>' +
         '</div>' +
         '<div style="display:flex;align-items:center;margin-bottom:8px;">' +
         '<div style="font-size:13px;font-weight:700;color:#1F2937;">🚨 需要动手</div>' +
-        '<span style="margin-left:8px;font-size:11px;color:#9CA3AF;">' + needPending + ' 条 · 今日已修复 ' + ((d && d.resolvedTodayCount) || 0) + ' 条</span>' +
+        '<span style="margin-left:8px;font-size:11px;color:#9CA3AF;">未处理累计 ' + needPending + ' 条 · 今日 ' + needPendingToday + ' 条 · 今日已修复 ' + ((d && d.resolvedTodayCount) || 0) + ' 条</span>' +
         '</div>' +
         (need.length ? need.map(_monitorRowHtml).join('') :
             '<div style="background:#fff;border-radius:12px;padding:20px;text-align:center;font-size:12px;color:#6B7280;">✅ 暂无需要动手的报警</div>') +
