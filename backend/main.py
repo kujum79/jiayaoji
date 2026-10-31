@@ -8,10 +8,10 @@
 3. 获取阿里云 DashScope API Key：
    - 登录 `https://dashscope.console.aliyun.com/`
    - 进入 API-KEY 管理，创建新 Key，复制保存。
-4. 将 Key 配置到环境变量（或直接写代码里）：
+4. 将 Key 配置到环境变量（禁止写进源码）：
    Windows PowerShell:
-   $env:ALIYUN_API_KEY="sk-你的阿里云Key"
-   或直接在下方 ALIYUN_API_KEY = "你的Key"
+   $env:DASHSCOPE_API_KEY="sk-你的阿里云Key"
+   或写入 backend/.env：DASHSCOPE_API_KEY=sk-你的阿里云Key（.env 已被 gitignore）
 5. 在项目根目录运行：
    uvicorn backend.main:app --reload
 6. 前端双击 frontend/index.html 或使用 Live Server 打开。
@@ -39,20 +39,21 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 # ========== 阿里云通义千问配置 ==========
-# 临时测试直接硬编码 API Key；正式发布建议改回环境变量配置
-ALIYUN_API_KEY = "sk-d59f96e872d54e23ba692fd7d09eee1c"
+# V335: 移除源码内置 Key，统一从环境变量 / backend/.env 读取（避免 Key 再次随代码泄露）
+# 轮换 Key：控制台创建新 Key → 写入 backend/.env 的 DASHSCOPE_API_KEY → 重启服务 → 禁用旧 Key
+ALIYUN_API_KEY = ""
 ALIYUN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
 ALIYUN_MODEL = "qwen-turbo"  # 可选 qwen-plus, qwen-max, qwen-turbo（免费额度多）
 # ========================================
 
 # ========== 多模型路由层（model_config.py） ==========
-# 未配置环境变量时，沿用上面的内置 Key，保证现有调用不断服；
-# 换 Key / 加新服务商只需设置环境变量（DASHSCOPE_API_KEY 等）或改 model_config.py，无需动这里。
-os.environ.setdefault("ALIYUN_API_KEY", ALIYUN_API_KEY)
 try:
     from backend.model_config import call_ai, route_vision, AIServiceBusy  # 包形式导入（项目根目录启动 / Render 部署）
 except ImportError:  # 直接从 backend 目录启动时按同级模块导入
-    from model_config import call_ai, route_vision, AIServiceBusy  # noqa: E402  （需在 setdefault 之后导入，确保能读到内置 Key）
+    from model_config import call_ai, route_vision, AIServiceBusy  # noqa: E402
+
+# model_config 导入时已加载 backend/.env（已有环境变量优先），这里再解析一次 Key
+ALIYUN_API_KEY = os.getenv("DASHSCOPE_API_KEY", "") or os.getenv("ALIYUN_API_KEY", "")
 # ===================================================
 
 app = FastAPI(
