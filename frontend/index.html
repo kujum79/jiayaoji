@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V336-20261101';
+        var APP_VER = 'V337-20261101';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -38055,7 +38055,8 @@ function _diningOutHistory() {
             Object.keys(day).forEach(function(mk) {
                 var md = day[mk];
                 var a = md && md.actual;
-                if (a && a.diningType === '外出就餐') {
+                // V337(D6-02): 仅统计已完成外食；规划中记录归入「规划中」，避免同一餐重复出现
+                if (a && a.diningType === '外出就餐' && a.outStatus !== 'planning') {
                     rows.push({ date: dk, meal: mk, actual: a });
                 }
             });
@@ -61208,8 +61209,8 @@ function clearSelectedRestaurant() {
     renderSelectedRestaurant();
 }
 
-// 确认规划
-function confirmDiningOutPlan() {
+// 确认规划（markCompleted=true 表示点菜后直接保存到食记，视为已完成，无需再回到「规划中」）
+function confirmDiningOutPlan(markCompleted) {
     if (!requireLogin('确认外出就餐规划')) return;
     var r = diningOutPlanData.selectedRestaurant;
     if (!r || !r.name) {
@@ -61259,11 +61260,13 @@ function confirmDiningOutPlan() {
         source: r.source || 'manual',
         reason: r.reason || '',
         restaurants: restaurants,
-        createdAt: existingPlan.createdAt || Date.now()
+        createdAt: existingPlan.createdAt || Date.now(),
+        // V337(D6-02): 点菜后保存到食记视为已完成，避免「我的外食」同时出现「已完成」与「规划中 待就餐」两条
+        completed: markCompleted === true
     };
     lsSet('diningOutPlans', JSON.stringify(allPlans));
 
-    // 同时保存到 dietCalendar（outStatus = 'planning'）
+    // 同时保存到 dietCalendar（点菜保存=completed；仅规划=planning）
     // V138: 统一用 dateToKey() 生成 key，与食记页 renderDiary 一致（带横线 2026-10-10，不是 20261010）
     var dateKey = (typeof dateToKey === 'function') ? dateToKey(new Date(dateStr)) : dateStr.replace(/-/g, '');
     var calendar = JSON.parse(lsGet('dietCalendar') || '{}');
@@ -61271,7 +61274,7 @@ function confirmDiningOutPlan() {
     var mealData = calendar[dateKey][mealType] || {};
     mealData.actual = mealData.actual || {};
     mealData.actual.diningType = '外出就餐';
-    mealData.actual.outStatus = 'planning';
+    mealData.actual.outStatus = markCompleted === true ? 'completed' : 'planning';
     mealData.actual.restaurantName = r.name;
     mealData.actual.restaurantAddress = r.address || '';
     // V138: 菜品带完整价格/合计，供食记页紧凑横排渲染
@@ -62264,8 +62267,8 @@ function saveOrderToDiary() {
     lsSet('mealRecords', JSON.stringify(records));
     // 3.5) V136: 点菜历史记录（供AI学习历史偏好）
     recordDiningHistory(dateStr, mealType);
-    // 4) 写 diningOutPlans + dietCalendar（复用规划确认链路）
-    confirmDiningOutPlan();
+    // 4) 写 diningOutPlans + dietCalendar（复用规划确认链路，标记为已完成）
+    confirmDiningOutPlan(true);
     // 4.5) V136: 从食记回写历史评分（含本次写入的实际记录）
     syncDiningHistoryRatings();
     // 5) 关闭点菜弹窗并返回首页
