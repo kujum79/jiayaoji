@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V338-20261101';
+        var APP_VER = 'V339-20261101';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -38071,9 +38071,10 @@ function _diningOutHistory() {
 }
 function _eatoutStars(rating) {
     var n = Math.max(0, Math.min(5, parseInt(rating, 10) || 0));
+    if (!n) return '<span style="color:#D1D5DB;font-size:11px;">未评分</span>';
     var s = '';
     for (var i = 0; i < 5; i++) s += i < n ? '★' : '☆';
-    return '<span style="color:' + (n ? '#F59E0B' : '#D1D5DB') + ';letter-spacing:1px;font-size:13px;">' + s + '</span>';
+    return '<span style="color:#F59E0B;letter-spacing:1px;font-size:13px;">' + s + '</span>';
 }
 function _eatoutMoodLabel(key) {
     if (!key) return '';
@@ -67864,6 +67865,7 @@ function saveFamilyMealRecord(o) {
                 id: Date.now() + i,
                 name: n,
                 userComment: ((o.dishComments && o.dishComments[n]) || '').trim(),
+                rating: parseInt(o.dishRatings && o.dishRatings[n], 10) || 0, // V339(D6-04): 逐道菜星级
                 aiFeedback: ''
             };
         }),
@@ -67933,6 +67935,7 @@ function openMealRecordModal(mealKey, opts) {
     let fRating = 0;
     let fLocation = '家';
     let fDishComments = {}; // V182: 每道菜的单独评价 {菜名: 评价}
+    let fDishRatings = {}; // V339(D6-04): 每道菜单独星级 {菜名: 1~5}，0/未设置=未评分
     // V183: 右上角「🍽️ 在外就餐」开关：接收当天外出就餐计划（餐厅/食谱/人数/预算）
     let fEatingOut = false;
     let fRestaurant = '', fTotalCost = 0, fPeople = 0;
@@ -68060,12 +68063,21 @@ function openMealRecordModal(mealKey, opts) {
             const _spHits = (typeof specialInterventionsForDish === 'function') ? specialInterventionsForDish(spItems, n) : [];
             const _isSp = _spHits.length > 0;
             const _spTag = (typeof specialInterventionBadgesHtml === 'function') ? specialInterventionBadgesHtml(spItems, n) : '';
-            return '<div style="display:flex;align-items:center;gap:6px;background:' + (_isSp ? '#FFF7ED' : '#F9FAFB') + ';border:1px solid ' + (_isSp ? '#FED7AA' : '#F3F4F6') + ';border-radius:10px;padding:6px 8px;margin-bottom:6px;">'
+            return '<div style="background:' + (_isSp ? '#FFF7ED' : '#F9FAFB') + ';border:1px solid ' + (_isSp ? '#FED7AA' : '#F3F4F6') + ';border-radius:10px;padding:6px 8px;margin-bottom:6px;">'
+                + '<div style="display:flex;align-items:center;gap:6px;">'
                 + '<input type="checkbox" class="umr-f-dish-cb" data-name="' + escapeAttr(n) + '"' + (checked ? ' checked' : '') + ' style="flex-shrink:0;width:14px;height:14px;margin:0;cursor:pointer;">'
                 + '<span title="' + escapeAttr(n) + '" style="font-size:14px;color:' + (checked ? (_isSp ? '#C2410C' : '#9A3412') : '#9CA3AF') + ';font-weight:' + (_isSp ? '700' : '600') + ';width:84px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' + (checked ? '' : 'text-decoration:line-through;') + '">' + escapeHtml(n) + '</span>'
                 + (_isSp ? '<span style="flex-shrink:0;">' + _spTag + '</span>' : '')
                 + '<input type="text" data-name="' + escapeAttr(n) + '" class="umr-f-dish-cmt" value="' + escapeAttr(cmt) + '" placeholder="对这道菜的评价" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #E5E7EB;border-radius:7px;font-size:13px;box-sizing:border-box;">'
                 + '<button type="button" data-i="' + i + '" class="umr-f-dish-del" title="删除" style="background:none;border:none;color:#FB923C;font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;">✕</button>'
+                + '</div>'
+                // V339(D6-04): 逐道菜星级（1~5 星，点击同星取消）
+                + '<div style="display:flex;align-items:center;gap:2px;margin-top:3px;padding-left:20px;">'
+                + [1, 2, 3, 4, 5].map(function (s) {
+                    return '<span class="umr-f-dish-star" data-name="' + escapeAttr(n) + '" data-s="' + s + '" style="font-size:14px;cursor:pointer;color:' + ((fDishRatings[n] || 0) >= s ? '#F59E0B' : '#E5E7EB') + ';">★</span>';
+                }).join('')
+                + '<span class="umr-f-dish-rating-label" style="font-size:11px;color:#9CA3AF;margin-left:4px;">' + (fDishRatings[n] ? fDishRatings[n] + ' 星' : '未评分') + '</span>'
+                + '</div>'
                 + '</div>';
         }).join('');
         box.querySelectorAll('.umr-f-dish-del').forEach(function (b) {
@@ -68073,7 +68085,7 @@ function openMealRecordModal(mealKey, opts) {
                 const idx = parseInt(this.dataset.i, 10);
                 const removed = fDishes[idx];
                 fDishes.splice(idx, 1);
-                if (removed) { delete fDishComments[removed]; delete fDishChecked[removed]; }
+                if (removed) { delete fDishComments[removed]; delete fDishChecked[removed]; delete fDishRatings[removed]; }
                 renderFDishTags();
                 renderFPlanHint(); // V181: 删除后提示条可变为"加回今日计划菜"
             });
@@ -68081,6 +68093,15 @@ function openMealRecordModal(mealKey, opts) {
         box.querySelectorAll('.umr-f-dish-cmt').forEach(function (inp) {
             inp.addEventListener('input', function () {
                 fDishComments[this.dataset.name] = this.value;
+            });
+        });
+        // V339(D6-04): 逐道菜星级点击（再次点击同一星取消）
+        box.querySelectorAll('.umr-f-dish-star').forEach(function (el) {
+            el.addEventListener('click', function () {
+                const nm = this.dataset.name;
+                const s = parseInt(this.dataset.s, 10);
+                fDishRatings[nm] = (fDishRatings[nm] === s) ? 0 : s;
+                renderFDishTags();
             });
         });
         // V235: 勾选状态同步（取消勾选 = 这顿没吃这道菜）
@@ -68250,7 +68271,8 @@ function openMealRecordModal(mealKey, opts) {
             date: dateKey, mealKey: mealKey, mealLabel: mealLabel,
             diningType: dining, location: location, restaurant: restaurant, totalCost: totalCost, people: people,
             dishes: dishes, rating: rating, comment: comment, source: opts.source || '',
-            dishComments: quick ? {} : fDishComments // 快速记录单菜评价留空（V178）
+            dishComments: quick ? {} : fDishComments, // 快速记录单菜评价留空（V178）
+            dishRatings: quick ? {} : fDishRatings // V339(D6-04): 逐道菜星级
         });
         if (!res) return;
         // V235: 回写专项健康饮食计划进度（是=打勾，否=留痕待复盘纠偏）
