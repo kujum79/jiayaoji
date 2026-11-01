@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V339-20261101';
+        var APP_VER = 'V342-20261101';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -17115,7 +17115,8 @@ function aggregateSavingExtended(start, end) {
     }
     // 估算用全月食材花费：周期内已记录食材花费（采购/做饭取大值）按已过天数外推到整个周期
     var periodFoodSpend = Math.max(purTotal, homeCost);
-    var periodTotalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+    // D6-07: 用 floor 计算周期天数（end 含 23:59:59，round 会多算 1 天，放大月度外推）
+    var periodTotalDays = Math.max(1, Math.floor((end.getTime() - start.getTime()) / 86400000) + 1);
     var elapsedDays = Math.min(periodTotalDays, Math.max(1, Math.floor((Date.now() - start.getTime()) / 86400000) + 1));
     var monthlySpendEst = periodFoodSpend > 0 ? periodFoodSpend / elapsedDays * periodTotalDays : 0;
     monthlySpendEst = Math.round(monthlySpendEst * 10) / 10;
@@ -17138,8 +17139,10 @@ function aggregateSavingExtended(start, end) {
         wasteSaving = monthlySpendEst * (INDUSTRY_WASTE_RATE - PLANNED_REF_WASTE_RATE);
         wasteSavingEstimated = true;
     }
-    var hasEstimatedPart = wasteSavingEstimated;
-    var totalSaving = base.saved + wasteSaving;
+    // D6-07: 合计只计入已证实的节省（真实外卖/浪费数据），行业平均估算的浪费节省单独展示、不进合计
+    var realizedWasteSaving = wasteSavingAvailable ? wasteSaving : 0;
+    var totalSaving = base.saved + realizedWasteSaving;
+    var estimatedSaving = wasteSavingEstimated ? wasteSaving : 0;
     return Object.assign({}, base, {
         purchaseTotal: Math.round(purTotal * 10) / 10,
         purchaseCount: purCount,
@@ -17156,12 +17159,13 @@ function aggregateSavingExtended(start, end) {
         industryWasteRatePct: 12,
         plannedRefWasteRatePct: 5,
         wasteSaving: Math.round(wasteSaving * 10) / 10,
+        realizedWasteSaving: Math.round(realizedWasteSaving * 10) / 10,
+        estimatedSaving: Math.round(estimatedSaving * 10) / 10,
         wasteSavingAvailable: wasteSavingAvailable,
         wasteSavingEstimated: wasteSavingEstimated,
         wasteRateAvailable: wasteRateAvailable,
         recordDays: recordDays,
         enoughRecordDays: enoughRecordDays,
-        hasEstimatedPart: hasEstimatedPart,
         hasEnoughHistory: enoughRecordDays,
         hasPurchaseData: hasPurchaseData,
         extDiningCount: extDiningCount,
@@ -17301,21 +17305,22 @@ function buildPeriodSavingHtml(range, periodLabel) {
             + '<div style="text-align:right;margin-top:5px;"><button onclick="document.getElementById(\'diarySummaryOverlay\').remove()" style="background:#FFFBEB;border:1px solid #FCD34D;color:#92400E;font-size:12px;border-radius:999px;padding:3px 10px;cursor:pointer;">继续记录，解锁精准报告</button></div>'
             + '</div>';
     }
-    // 合计
+    // 合计（D6-07: 只汇总已证实的节省；行业平均估算的浪费节省单列、不进合计）
     cmpHtml += '<div style="border-top:1px dashed #BBF7D0;margin:6px 0;"></div>';
     var totalParts = [];
     if (agg.meals > 0) totalParts.push('✅ 减少外卖 ¥' + agg.saved.toFixed(1).replace(/\.0$/, ''));
     if (agg.wasteSavingAvailable) totalParts.push('✅ 减少浪费 ¥' + agg.wasteSaving.toFixed(1).replace(/\.0$/, ''));
-    else if (agg.wasteSavingEstimated) totalParts.push('⏳ 减少浪费 ¥' + agg.wasteSaving.toFixed(1).replace(/\.0$/, '') + '（估）');
     cmpHtml += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;color:#166534;margin-bottom:4px;">'
-        + '<span style="font-weight:600;">💡 本月通过规划共省'
-        + (agg.hasEstimatedPart ? '<span style="background:#FEF3C7;color:#92400E;font-size:11px;padding:1px 6px;border-radius:999px;margin-left:4px;font-weight:400;">含估算部分</span>' : '')
-        + '</span>'
+        + '<span style="font-weight:600;">💡 本月通过规划共省 <small style="color:#9CA3AF;font-size:11px;font-weight:400;">（仅真实记录）</small></span>'
         + '<span style="font-weight:700;color:#16A34A;font-size:17px;">¥' + agg.totalSaving.toFixed(1).replace(/\.0$/, '') + '</span></div>';
     if (totalParts.length) {
         cmpHtml += '<div style="font-size:12px;color:#9CA3AF;text-align:right;margin-bottom:8px;">（' + totalParts.join(' + ') + '）</div>';
     } else {
         cmpHtml += '<div style="height:8px;"></div>';
+    }
+    if (agg.wasteSavingEstimated && agg.estimatedSaving > 0) {
+        cmpHtml += '<div style="font-size:11.5px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:6px 8px;margin-bottom:8px;line-height:1.5;">'
+            + '⏳ 另有「减少浪费」行业平均估算 <b>¥' + agg.estimatedSaving.toFixed(1).replace(/\.0$/, '') + '</b>，属于预测值，<b>未计入上方合计</b>；记录满 30 天后将按您的真实过期食材数据计算。</div>';
     }
     // 查看计算逻辑
     cmpHtml += '<div style="text-align:right;"><button onclick="showSavingCalcLogic()" style="background:none;border:none;color:#2563EB;font-size:12px;cursor:pointer;text-decoration:underline;padding:2px 4px;">查看计算逻辑</button></div>';
@@ -61388,22 +61393,59 @@ function getOrderBudgetInfo() {
     return { people: people, budget: budget, budgetLabel: sel };
 }
 
+// D6-05: 分类维度识别——把「凉/汤/主食/热」归为菜品形式，「荤/素」归为荤素性质
+function _orderCatDims(c) {
+    c = String(c || '');
+    return {
+        form: /凉|冷|汤|羹|煲|热|主食|饭|面|饼|粥|馒头|法棍/.test(c),
+        cold: /凉|冷/.test(c),
+        soup: /汤|羹|煲/.test(c),
+        staple: /主食|饭|面|饼|粥|馒头|法棍/.test(c),
+        meat: /荤|肉/.test(c),
+        veg: /素|蔬/.test(c)
+    };
+}
+
+// D6-05: 分类合并——原菜单分类（凉菜/主食/汤…）优先，AI 分类只补齐原分类缺失的维度
+function mergeDishCategory(origCat, aiCat) {
+    var o = String(origCat || '').trim();
+    var a = String(aiCat || '').trim();
+    if (!o) return a;
+    if (!a) return o;
+    var od = _orderCatDims(o), ad = _orderCatDims(a);
+    // 原分类缺「形式」(凉/汤/主食/热) 而 AI 有，或原分类缺「荤素」而 AI 有 → 追加 AI 分类补齐
+    if ((!od.form && ad.form) || (!(od.meat || od.veg) && (ad.meat || ad.veg))) return o + '·' + a;
+    return o;
+}
+
+// D6-05: 单道菜冷热/主食归类——分类缺失或不准时按菜名兜底推断
+function _orderDishKind(name, category) {
+    var n = String(name || ''), c = String(category || '');
+    if (/汤|羹|煲/.test(c) || /汤|羹|煲/.test(n)) return 'soup';
+    if (/凉|冷/.test(c) || /沙拉|凉拌|凉菜|冷盘|刺身|凉皮|拍黄瓜/.test(n)) return 'cold';
+    if (/主食/.test(c) || /饭|面|饼|粥|馒头|花卷|面包|吐司|法棍|米线|米粉/.test(n)) return 'staple';
+    return 'hot';
+}
+
 // 本地搭配分析（与后端口径一致）
 function computeOrderComb(dishes, budget) {
-    var total = dishes.length, cold = 0, soup = 0, meat = 0, veg = 0, sum = 0;
+    var total = dishes.length, cold = 0, soup = 0, staple = 0, meat = 0, veg = 0, sum = 0;
     dishes.forEach(function(d) {
-        var c = d.category || '';
+        var c = String(d.category || '');
         sum += parseFloat(d.price) || 0;
-        if (c.indexOf('凉') >= 0) cold++;
-        else if (c.indexOf('汤') >= 0) soup++;
+        var kind = _orderDishKind(d.name, c);
+        if (kind === 'cold') cold++;
+        else if (kind === 'soup') soup++;
+        else if (kind === 'staple') staple++;
         if (c.indexOf('荤') >= 0 || c.indexOf('肉') >= 0) meat++;
         if (c.indexOf('素') >= 0 || c.indexOf('蔬') >= 0) veg++;
     });
     return {
         totalDishes: total,
         coldDishes: cold,
-        hotDishes: Math.max(total - cold - soup, 0),
+        hotDishes: Math.max(total - cold - soup - staple, 0),
         soupDishes: soup,
+        stapleDishes: staple,
         meatVegRatio: (meat + veg) > 0 ? meat + ':' + veg : '—',
         estimatedTotal: Math.round(sum * 100) / 100,
         withinBudget: budget > 0 ? (sum <= budget) : null
@@ -61424,7 +61466,7 @@ function orderCombInner(dishes) {
     return '<div style="display:flex;flex-wrap:wrap;gap:5px 14px;font-size:12px;color:#374151;line-height:1.7;">' +
         '<span>菜品数量：<b>' + c.totalDishes + '</b> 道</span>' +
         '<span>荤素比例：<b>' + c.meatVegRatio + '</b></span>' +
-        '<span>冷热搭配：凉 <b>' + c.coldDishes + '</b> · 热 <b>' + c.hotDishes + '</b> · 汤 <b>' + c.soupDishes + '</b></span>' +
+        '<span>冷热搭配：凉 <b>' + c.coldDishes + '</b> · 热 <b>' + c.hotDishes + '</b> · 汤 <b>' + c.soupDishes + '</b>' + (c.stapleDishes > 0 ? ' · 主食 <b>' + c.stapleDishes + '</b>' : '') + '</span>' +
         '<span>预计总价：<b style="color:#F97316;">¥' + c.estimatedTotal + '</b></span>' +
         '<span>' + budgetLine + '</span>' +
     '</div>';
@@ -61432,7 +61474,8 @@ function orderCombInner(dishes) {
 
 function orderCatBadge(c) {
     if (!c) return '';
-    var map = { '荤': ['#FEE2E2', '#DC2626'], '肉': ['#FEE2E2', '#DC2626'], '素': ['#DCFCE7', '#16A34A'], '凉': ['#DBEAFE', '#2563EB'], '汤': ['#FEF3C7', '#D97706'], '热': ['#FFEDD5', '#EA580C'] };
+    // D6-05: 先按「冷热形式」着色，再按荤素，避免「凉菜·荤」被染成红色
+    var map = { '凉': ['#DBEAFE', '#2563EB'], '冷': ['#DBEAFE', '#2563EB'], '汤': ['#FEF3C7', '#D97706'], '羹': ['#FEF3C7', '#D97706'], '煲': ['#FEF3C7', '#D97706'], '主食': ['#EDE9FE', '#7C3AED'], '热': ['#FFEDD5', '#EA580C'], '荤': ['#FEE2E2', '#DC2626'], '肉': ['#FEE2E2', '#DC2626'], '素': ['#DCFCE7', '#16A34A'], '蔬': ['#DCFCE7', '#16A34A'] };
     var color = ['#F3F4F6', '#6B7280'];
     for (var k in map) { if (c.indexOf(k) >= 0) { color = map[k]; break; } }
     return '<span style="font-size:10px;color:' + color[1] + ';background:' + color[0] + ';border-radius:4px;padding:1px 5px;flex-shrink:0;white-space:nowrap;">' + escapeHtml(c) + '</span>';
@@ -61443,7 +61486,8 @@ function syncOrderMenuToLib() {
     if (!r) return;
     var mapped = diningOrderData.menu.map(function(d) {
         var merged = Object.assign({}, d._orig || {}, { name: d.name, price: parseFloat(d.price) || 0 });
-        if (d.category) merged.category = d.category;
+        // D6-05: 写入餐厅库时保留原菜单分类，AI 补充的「荤/素」仅用于本次点菜分析，不污染餐厅库
+        merged.category = (d._orig && d._orig.category) ? d._orig.category : (d.category || '');
         return merged;
     });
     r.dishes = mapped;
@@ -62064,15 +62108,20 @@ async function runOrderAI() {
         });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         var data = await res.json();
+        // D6-05: 原菜单分类优先（凉菜/热菜/汤/主食），AI 分类只补齐缺失维度；AI 原始分类另存用于说明
         diningOrderData.recommended = (data.recommendedDishes || []).map(function(d) {
-            return { name: d.name || '', category: d.category || '', reason: d.reason || '', price: parseFloat(d.price) || 0, portion: d.portion || '整份', checked: true };
+            var name = d.name || '';
+            var aiCat = String(d.category || '');
+            var m = diningOrderData.menu.find(function(x) { return x.name === name; });
+            var menuCat = m && m.category ? String(m.category) : '';
+            return { name: name, category: mergeDishCategory(menuCat, aiCat), menuCategory: menuCat, aiCategory: aiCat, reason: d.reason || '', price: parseFloat(d.price) || 0, portion: d.portion || '整份', checked: true };
         });
         diningOrderData.filteredOut = data.filteredOut || [];
         diningOrderData.tips = data.tips || [];
-        // AI 标注的分类回填菜单（供手动调整/保存使用）
+        // 回填菜单分类（供手动调整/保存使用）：原分类优先，缺失时才用 AI 分类
         diningOrderData.recommended.forEach(function(rd) {
             var m = diningOrderData.menu.find(function(x) { return x.name === rd.name; });
-            if (m && !m.category && rd.category) m.category = rd.category;
+            if (m) m.category = mergeDishCategory(m.category, rd.aiCategory);
         });
         if (!diningOrderData.recommended.length) showToast('AI 未能推荐菜品，请调整菜单或忌口后重试');
     } catch (e) {
@@ -71333,6 +71382,90 @@ function completeSpecialPlan(planId) {
     return updateSpecialPlan(planId, { status: 'completed' });
 }
 
+// D6-06: 把专项计划当天的三餐拆成菜名（去掉括号备注）
+function _spSplitDishNames(text) {
+    return String(text || '')
+        .replace(/（[^）]*）/g, '').replace(/\([^)]*\)/g, '')
+        .split(/[、,，;；\/＋+]+/)
+        .map(function (s) { return s.trim(); })
+        .filter(Boolean)
+        .slice(0, 8);
+}
+
+// D6-06: 专项计划创建/查看时，把当天食谱写入食记「剩余餐次」，并生成成员特供标记
+// - 已记录（actual 有菜）的餐次跳过
+// - 已有计划时合并，不覆盖原有菜品与确认状态；重复调用幂等
+function applySpecialPlanToToday(plan) {
+    var empty = { meals: 0, dishes: 0, dateKey: '', dayNo: 0 };
+    if (!plan || !plan.weeklyPlan) return empty;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var start = _spParseDate(plan.startDate) || today;
+    var dayNo = Math.min(Math.max(Math.round((today.getTime() - start.getTime()) / 86400000) + 1, 1), 7);
+    var week = plan.weeklyPlan;
+    var meals = Array.isArray(week['day' + dayNo]) ? week['day' + dayNo] : week.day1;
+    if (!Array.isArray(meals)) return empty;
+
+    var dateKey = dateToKey(today);
+    var calendar = getDietCalendar();
+    if (!calendar[dateKey]) calendar[dateKey] = {};
+    var label = (typeof _specialPlanUiLabel === 'function') ? _specialPlanUiLabel(plan.planType) : '专项';
+    var appliedMeals = 0, appliedDishes = 0;
+
+    ['breakfast', 'lunch', 'dinner'].forEach(function (mt, idx) {
+        var names = _spSplitDishNames(meals[idx]);
+        if (!names.length) return;
+        if (!calendar[dateKey][mt]) calendar[dateKey][mt] = { plan: null, actual: null };
+        var slot = calendar[dateKey][mt];
+        if (slot.actual && Array.isArray(slot.actual.dishes) && slot.actual.dishes.length) return; // 已记录，跳过
+
+        var oldPlan = slot.plan || null;
+        var oldDishes = Array.isArray(oldPlan && oldPlan.dishes) ? oldPlan.dishes : [];
+        var existingNames = {};
+        oldDishes.forEach(function (d) {
+            var n = typeof d === 'string' ? d.trim() : String((d && d.name) || '').trim();
+            if (n) existingNames[n] = 1;
+        });
+        var newNames = names.filter(function (n) { return !existingNames[n]; });
+        if (newNames.length) {
+            var mergedMeta = Object.assign({}, (oldPlan && oldPlan.dishMeta) || {});
+            var mergedDishes = oldDishes.slice();
+            newNames.forEach(function (n) {
+                mergedDishes.push(n);
+                mergedMeta[n] = { source: 'ai', confirmed: false, addedAt: Date.now() };
+            });
+            var note = String((oldPlan && oldPlan.note) || '');
+            var planData = Object.assign({}, oldPlan || {}, {
+                dishes: mergedDishes,
+                dishMeta: mergedMeta,
+                state: (oldPlan && oldPlan.state) ? oldPlan.state : 'pending',
+                note: (note ? note + '；' : '') + (plan.memberName || '家人') + label + '特供'
+            });
+            slot.plan = planData;
+            appliedDishes += newNames.length;
+        }
+
+        // 成员特供标记（同成员+同类型+同菜只留一条）
+        var list = _spInterventionList(slot.specialInterventions);
+        names.forEach(function (n) {
+            var item = normalizeSpecialIntervention({
+                memberName: plan.memberName || '', planType: plan.planType || '',
+                targetDish: n, note: '专项健康饮食计划'
+            });
+            if (!item) return;
+            var k = _spInterventionKey(item);
+            if (!list.some(function (x) { return _spInterventionKey(x) === k; })) list.push(item);
+        });
+        if (list.length) slot.specialInterventions = list;
+        if (slot.plan) delete slot.plan.specialInterventions;
+        if (slot.actual) delete slot.actual.specialInterventions;
+        appliedMeals++;
+    });
+
+    saveDietCalendar(calendar);
+    return { meals: appliedMeals, dishes: appliedDishes, dateKey: dateKey, dayNo: dayNo };
+}
+window.applySpecialPlanToToday = applySpecialPlanToToday;
+
 // V235: 记录实际时回写专项进度 —— 是=打勾，否=留痕（复盘时用作纠偏依据）
 // answers: { '成员|类型|菜名': 'yes' | 'no' }
 // 返回 [{ planId, memberName, targetDish, ok }]
@@ -71578,7 +71711,14 @@ function openSpecialPlanModal(memberId) {
                 }
                 overlay.__busy = false;
                 overlay.remove();
-                showToast('已为您加入食记计划');
+                // D6-06: 立即把计划当天三餐写入食记剩余餐次，并生成「成员特供」标记
+                var applied = {};
+                try { applied = applySpecialPlanToToday(created.plan); } catch (e) { applied = {}; }
+                if (applied && applied.dishes > 0) {
+                    showToast('专项计划已加入，今日三餐新增 ' + applied.dishes + ' 道专项食谱');
+                } else {
+                    showToast('已为您加入食记计划');
+                }
                 return;
             }
             overlay.__busy = false;
@@ -71735,7 +71875,13 @@ function openSpecialPlanBoard() {
     var todayBtn = document.getElementById('spBoardTodayBtn');
     if (todayBtn && plan) todayBtn.onclick = function () {
         closeSpecialPlanBoard();
+        // D6-06: 进看板前确保当天食谱已落入食记（幂等，已存在则不会重复）
+        var applied = {};
+        try { applied = applySpecialPlanToToday(plan); } catch (e) { applied = {}; }
         focusTodayDiaryMeals();
+        if (applied && applied.dishes > 0) {
+            setTimeout(function () { showToast('今日三餐已加入 ' + applied.dishes + ' 道专项食谱'); }, 400);
+        }
     };
     var endBtn = document.getElementById('spBoardEndBtn');
     if (endBtn && plan) endBtn.onclick = function () { _confirmEndSpecialPlan(plan); };
@@ -71750,18 +71896,24 @@ function focusTodayDiaryMeals() {
     setTimeout(function () {
         var cards = document.querySelectorAll('.diary-meal-card');
         if (!cards.length) return;
+        // D6-06: 优先定位含「成员特供」的今日餐卡，没有时才退化为全部餐卡
+        var targets = [];
+        for (var k = 0; k < cards.length; k++) {
+            if (String(cards[k].textContent || '').indexOf('特供') >= 0) targets.push(cards[k]);
+        }
+        if (!targets.length) targets = Array.prototype.slice.call(cards);
         // 即时滚动（不依赖 smooth，部分 webview 不支持）
-        try { cards[0].scrollIntoView({ block: 'start' }); } catch (e) { try { cards[0].scrollIntoView(); } catch (e2) {} }
-        for (var i = 0; i < cards.length; i++) {
-            cards[i].style.outline = '2px solid #F97316';
-            cards[i].style.outlineOffset = '2px';
-            cards[i].style.borderRadius = '12px';
+        try { targets[0].scrollIntoView({ block: 'start' }); } catch (e) { try { targets[0].scrollIntoView(); } catch (e2) {} }
+        for (var i = 0; i < targets.length; i++) {
+            targets[i].style.outline = '2px solid #F97316';
+            targets[i].style.outlineOffset = '2px';
+            targets[i].style.borderRadius = '12px';
         }
         setTimeout(function () {
-            for (var j = 0; j < cards.length; j++) {
-                cards[j].style.outline = '';
-                cards[j].style.outlineOffset = '';
-                cards[j].style.borderRadius = '';
+            for (var j = 0; j < targets.length; j++) {
+                targets[j].style.outline = '';
+                targets[j].style.outlineOffset = '';
+                targets[j].style.borderRadius = '';
             }
         }, 2000);
     }, 120);

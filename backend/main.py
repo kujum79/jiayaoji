@@ -1718,6 +1718,35 @@ async def extract_preference(req: ExtractPreferenceRequest) -> Dict[str, Any]:
     return _pref_sanitize(result)
 
 
+def _merge_dish_category(menu_cat: str, ai_cat: str) -> str:
+    """D6-05: 原菜单分类优先，AI 分类只补齐缺失维度（形式：凉/汤/主食/热；性质：荤/素）。"""
+    o = (menu_cat or "").strip()
+    a = (ai_cat or "").strip()
+    if not o:
+        return a
+    if not a:
+        return o
+    form_pat = r"凉|冷|汤|羹|煲|热|主食|饭|面|饼|粥|馒头|法棍"
+    nature_pat = r"荤|肉|素|蔬"
+    if (not re.search(form_pat, o) and re.search(form_pat, a)) or (
+        not re.search(nature_pat, o) and re.search(nature_pat, a)
+    ):
+        return f"{o}·{a}"
+    return o
+
+
+def _dish_kind(name: str, category: str) -> str:
+    """D6-05: 冷热归类——分类缺失或不准时按菜名兜底推断。"""
+    n, c = (name or ""), (category or "")
+    if re.search(r"汤|羹|煲", c) or re.search(r"汤|羹|煲", n):
+        return "soup"
+    if re.search(r"凉|冷", c) or re.search(r"沙拉|凉拌|凉菜|冷盘|刺身|凉皮|拍黄瓜", n):
+        return "cold"
+    if re.search(r"主食", c) or re.search(r"饭|面|饼|粥|馒头|花卷|面包|吐司|法棍|米线|米粉", n):
+        return "staple"
+    return "hot"
+
+
 @app.post("/recommend-dishes")
 async def recommend_dishes(req: RecommendDishesRequest) -> Dict[str, Any]:
     """V133: AI 点菜引擎——按人数/预算/口味/忌口推荐菜品组合。
@@ -1729,6 +1758,9 @@ async def recommend_dishes(req: RecommendDishesRequest) -> Dict[str, Any]:
     kept, removed = filter_menu_by_rules(req.menu, req.allergens, req.history.ratings)
     for r in removed:
         print(f"[recommend-dishes] 规则过滤: {r['name']} ({r['reason']})")
+
+    # D6-05: 菜单原分类（凉菜/主食/汤…）为准，AI 分类只补齐荤素维度
+    menu_cats = {(it.name or "").strip(): (it.category or "").strip() for it in req.menu}
 
     empty_combination = {
         "totalDishes": 0, "coldDishes": 0, "hotDishes": 0,
@@ -1792,11 +1824,12 @@ async def recommend_dishes(req: RecommendDishesRequest) -> Dict[str, Any]:
         "13. 参考历史偏好：这家餐厅历史评分高（≥4分）的菜优先推荐，历史评分低（≤2分）的菜必须避开\n\n"
         "### 输出要求\n"
         "- 每道菜说明推荐理由\n"
-        "- 标注菜品分类（荤/素/凉/汤）\n"
+        "- 标注菜品分类：必须保留菜单里给出的原分类（如凉菜/热菜/汤/主食），菜单未标注时按实际形式判定，\n"
+        "  并在其后用「·」补上荤素性质，例如「凉菜·素」「热菜·荤」「汤·荤」「主食·素」\n"
         "- 估算总价\n"
-        "- 给出上菜顺序建议\n"
+        "- 给出上菜顺序建议，且只能针对本次推荐（selected）的菜品，不得提及未推荐或未被选中的菜\n"
         "- 返回严格 JSON 格式，不要任何额外文字或 Markdown 包裹\n\n"
-        'JSON 格式：{"recommendedDishes":[{"name":"菜名","category":"荤/素/凉/汤","reason":"30字内推荐理由","price":价格数字,"portion":"整份或半份"}],'
+        'JSON 格式：{"recommendedDishes":[{"name":"菜名","category":"凉菜·素/热菜·荤/汤·荤/主食·素","reason":"30字内推荐理由","price":价格数字,"portion":"整份或半份"}],'
         '"combination":{"totalDishes":总道数,"coldDishes":凉菜数,"hotDishes":热菜数,"meatVegRatio":"荤素比如4:6","estimatedTotal":估算总价数字,"withinBudget":true或false},'
         '"tips":["上菜顺序建议","其他点菜提示"]}'
     )
@@ -1844,9 +1877,10 @@ async def recommend_dishes(req: RecommendDishesRequest) -> Dict[str, Any]:
         except (TypeError, ValueError):
             price = 0.0
         seen.add(name)
+        ai_cat = str(item.get("category") or "")
         result.append({
             "name": name,
-            "category": str(item.get("category") or ""),
+            "category": _merge_dish_category(menu_cats.get(name, ""), ai_cat),
             "reason": str(item.get("reason") or ""),
             "price": price,
             "portion": str(item.get("portion") or "整份"),
@@ -1857,20 +1891,15 @@ async def recommend_dishes(req: RecommendDishesRequest) -> Dict[str, Any]:
     # ---- combination：以 AI 结果为基底，重算总价与预算校验 ----
     comb = parsed.get("combination") if isinstance(parsed.get("combination"), dict) else {}
 
-    def _int(key, default):
-        try:
-            return int(comb.get(key, default))
-        except (TypeError, ValueError):
-            return default
-
     total_n = len(result)
-    cold_n = _int("coldDishes", sum(1 for d in result if "凉" in d["category"]))
-    soup_n = sum(1 for d in result if "汤" in d["category"])
-    hot_n = max(_int("hotDishes", total_n - cold_n - soup_n), 0)
+    cold_n = sum(1 for d in result if _dish_kind(d["name"], d["category"]) == "cold")
+    soup_n = sum(1 for d in result if _dish_kind(d["name"], d["category"]) == "soup")
+    staple_n = sum(1 for d in result if _dish_kind(d["name"], d["category"]) == "staple")
+    hot_n = max(total_n - cold_n - soup_n - staple_n, 0)
     meat_veg = str(comb.get("meatVegRatio") or "-")
     if meat_veg == "-":
         meat = sum(1 for d in result if "荤" in d["category"] or "肉" in d["category"])
-        veg = sum(1 for d in result if "素" in d["category"])
+        veg = sum(1 for d in result if "素" in d["category"] or "蔬" in d["category"])
         if meat + veg > 0:
             meat_veg = f"{meat}:{veg}"
     estimated_total = round(sum(d["price"] for d in result), 2)
@@ -1886,6 +1915,8 @@ async def recommend_dishes(req: RecommendDishesRequest) -> Dict[str, Any]:
         "totalDishes": total_n,
         "coldDishes": cold_n,
         "hotDishes": hot_n,
+        "soupDishes": soup_n,
+        "stapleDishes": staple_n,
         "meatVegRatio": meat_veg,
         "estimatedTotal": estimated_total,
         "withinBudget": bool(within) if within is not None else True,
