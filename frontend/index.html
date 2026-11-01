@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V337-20261101';
+        var APP_VER = 'V338-20261101';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -31742,7 +31742,8 @@ function renderHomeDiaryCard() {
             var _r = _a.restaurantName ? _a.restaurantName : '外出就餐';
             var _addr = _a.restaurantAddress ? ' · 📍 ' + _a.restaurantAddress : '';
             var _total = _a.totalCost ? ' · 总价¥' + _a.totalCost : '';
-            var _avg = _a.avgCost ? ' · 人均¥' + _a.avgCost : '';
+            var _ac = _a.avgCost || _a.price;
+            var _avg = _ac ? ' · 人均¥' + _ac : '';
             var _dishes = (_a.dishes || []).map(function(d) {
                 var _p = parseFloat(d.price) || 0;
                 var _q = parseInt(d.quantity) || 1;
@@ -38105,8 +38106,10 @@ function _openDiningOutListModal() {
         var avg = rated.length ? (rated.reduce(function(s, d) { return s + (d.rating | 0); }, 0) / rated.length) : 0;
         var dishTxt = dishes.map(function(d) { return d.name || ''; }).filter(Boolean).join('、');
         var info = [];
-        if (a.peopleCount) info.push(a.peopleCount + '人');
-        if (a.totalCost) info.push('¥' + a.totalCost + (a.avgCost ? '（人均¥' + a.avgCost + '）' : ''));
+        var _pc = a.peopleCount || a.people;
+        var _ac = a.avgCost || a.price;
+        if (_pc) info.push(_pc + '人');
+        if (a.totalCost) info.push('¥' + a.totalCost + (_ac ? '（人均¥' + _ac + '）' : ''));
         return '<div onclick="_openDiningOutDetail(' + idx + ')" style="background:white;border:1px solid #F3F4F6;border-radius:12px;margin-bottom:8px;padding:11px 12px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.04);">'
             + '<div style="display:flex;align-items:center;gap:8px;">'
             + '<span style="font-size:13px;font-weight:700;color:#92400E;flex-shrink:0;">' + r.date.slice(5).replace('-', '/') + ' ' + (_EATOUT_MEAL_NAMES[r.meal] || '外食') + '</span>'
@@ -38150,9 +38153,11 @@ function _openDiningOutDetail(idx) {
     var a = r.actual || {};
     var dishes = Array.isArray(a.dishes) ? a.dishes : [];
     var info = [];
-    if (a.peopleCount) info.push(a.peopleCount + '人就餐');
+    var _pc = a.peopleCount || a.people;
+    var _ac = a.avgCost || a.price;
+    if (_pc) info.push(_pc + '人就餐');
     if (a.totalCost) info.push('消费 ¥' + a.totalCost);
-    if (a.avgCost) info.push('人均 ¥' + a.avgCost);
+    if (_ac) info.push('人均 ¥' + _ac);
     var mood = _eatoutMoodLabel(a.mood);
 
     var head = '<div style="background:white;border:1px solid #F3F4F6;border-radius:14px;padding:14px;margin-bottom:10px;">'
@@ -51089,8 +51094,10 @@ function showKnowledgeDetail(id) {
                 var mealLabel = mealLabels[v.mealType] || v.mealType || '';
                 var dishStr = (v.dishes || []).join('、');
                 var metaParts = [];
-                if (v.peopleCount) metaParts.push(v.peopleCount + '人');
-                if (v.avgCost) metaParts.push('人均' + v.avgCost + '元');
+                var _pc = v.peopleCount || v.people;
+                var _ac = v.avgCost || v.price;
+                if (_pc) metaParts.push(_pc + '人');
+                if (_ac) metaParts.push('人均' + _ac + '元');
                 if (v.totalCost) metaParts.push('共' + v.totalCost + '元');
                 var metaStr = metaParts.join(' · ');
                 var commentStr = v.comment ? escapeHtml(v.comment) : '';
@@ -56927,7 +56934,8 @@ function renderDiary() {
                         var _dLabel = outStatus === 'planning' ? '规划中' : outStatus === 'confirmed' ? '已确定' : '已完成';
                         var _addr = _a.restaurantAddress ? ' · 📍 ' + escapeHtml(_a.restaurantAddress) : '';
                         var _total = _a.totalCost ? ' · 总价¥' + _a.totalCost : '';
-                        var _avg = _a.avgCost ? ' · 人均¥' + _a.avgCost : '';
+                        var _ac = _a.avgCost || _a.price;
+                        var _avg = _ac ? ' · 人均¥' + _ac : '';
                         var _dishes = (_a.dishes || []);
                         var _dishHtml = _dishes.length > 0 ? _dishes.map(function(d) {
                             var _p = parseFloat(d.price) || 0;
@@ -67842,6 +67850,13 @@ function saveFamilyMealRecord(o) {
             return parseFloat(o.price) || 0;
         })(),
         people: parseInt(o.people) || 0,
+        // V338(D6-03): 与餐饮规划记录字段统一，手动外食也写 peopleCount/avgCost，避免「我的外食」不显示人数与人均
+        peopleCount: parseInt(o.people) || 0,
+        avgCost: (function () {
+            const total = parseFloat(o.totalCost);
+            const pp = parseInt(o.people);
+            return (total > 0 && pp > 0) ? Math.round(total / pp) : 0;
+        })(),
         imageBase64: '',
         rating: parseInt(o.rating) || 0,
         dishes: names.map(function (n, i) {
@@ -67885,6 +67900,8 @@ function saveFamilyMealRecord(o) {
             totalCost: record.totalCost,
             restaurantName: record.restaurantName,
             people: record.people,
+            peopleCount: record.peopleCount,
+            avgCost: record.avgCost,
             imageBase64: null
         });
     } catch (e) { console.warn('同步日历实际记录失败：', e); }
