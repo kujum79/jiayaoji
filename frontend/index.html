@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V342-20261101';
+        var APP_VER = 'V343-20261101';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -61407,15 +61407,26 @@ function _orderCatDims(c) {
 }
 
 // D6-05: 分类合并——原菜单分类（凉菜/主食/汤…）优先，AI 分类只补齐原分类缺失的维度
+// 只追加缺失维度的词，避免 AI 也回「凉菜·素」时拼出「凉菜·凉菜·素」
 function mergeDishCategory(origCat, aiCat) {
     var o = String(origCat || '').trim();
     var a = String(aiCat || '').trim();
     if (!o) return a;
     if (!a) return o;
     var od = _orderCatDims(o), ad = _orderCatDims(a);
-    // 原分类缺「形式」(凉/汤/主食/热) 而 AI 有，或原分类缺「荤素」而 AI 有 → 追加 AI 分类补齐
-    if ((!od.form && ad.form) || (!(od.meat || od.veg) && (ad.meat || ad.veg))) return o + '·' + a;
-    return o;
+    var parts = [o];
+    var tokens = a.split('·');
+    if (!od.form && ad.form) {
+        for (var i = 0; i < tokens.length; i++) {
+            if (/凉|冷|汤|羹|煲|热|主食|饭|面|饼|粥|馒头|法棍/.test(tokens[i])) { parts.push(tokens[i].trim()); break; }
+        }
+    }
+    if (!(od.meat || od.veg) && (ad.meat || ad.veg)) {
+        for (var j = 0; j < tokens.length; j++) {
+            if (/荤|肉|素|蔬/.test(tokens[j])) { parts.push(tokens[j].trim()); break; }
+        }
+    }
+    return parts.filter(Boolean).join('·');
 }
 
 // D6-05: 单道菜冷热/主食归类——分类缺失或不准时按菜名兜底推断

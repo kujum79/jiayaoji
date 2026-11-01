@@ -1719,7 +1719,8 @@ async def extract_preference(req: ExtractPreferenceRequest) -> Dict[str, Any]:
 
 
 def _merge_dish_category(menu_cat: str, ai_cat: str) -> str:
-    """D6-05: 原菜单分类优先，AI 分类只补齐缺失维度（形式：凉/汤/主食/热；性质：荤/素）。"""
+    """D6-05: 原菜单分类优先，AI 分类只补齐缺失维度（形式：凉/汤/主食/热；性质：荤/素）。
+    只追加缺失维度的词，避免 AI 也回「凉菜·素」时拼出「凉菜·凉菜·素」。"""
     o = (menu_cat or "").strip()
     a = (ai_cat or "").strip()
     if not o:
@@ -1728,11 +1729,19 @@ def _merge_dish_category(menu_cat: str, ai_cat: str) -> str:
         return o
     form_pat = r"凉|冷|汤|羹|煲|热|主食|饭|面|饼|粥|馒头|法棍"
     nature_pat = r"荤|肉|素|蔬"
-    if (not re.search(form_pat, o) and re.search(form_pat, a)) or (
-        not re.search(nature_pat, o) and re.search(nature_pat, a)
-    ):
-        return f"{o}·{a}"
-    return o
+    parts = [o]
+    tokens = [t.strip() for t in re.split("·", a) if t.strip()]
+    if not re.search(form_pat, o) and re.search(form_pat, a):
+        for t in tokens:
+            if re.search(form_pat, t):
+                parts.append(t)
+                break
+    if not re.search(nature_pat, o) and re.search(nature_pat, a):
+        for t in tokens:
+            if re.search(nature_pat, t):
+                parts.append(t)
+                break
+    return "·".join(p for p in parts if p)
 
 
 def _dish_kind(name: str, category: str) -> str:
