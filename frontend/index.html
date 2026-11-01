@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V343-20261101';
+        var APP_VER = 'V344-20261101';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -7837,6 +7837,22 @@ const SUPER_ADMIN_PASS = 'jiayaoji_admin_2026';
 
 // familyCore 迁移（members 角色 / isCurrentUser 补齐）——启动时跑一次
 try { migrateFamilyRoles(); } catch(e) { console.error('migrateFamilyRoles error:', e); }
+// V344: 旧版全局 familyHomeAddress 在家庭前缀隔离（V336）后没有随迁，登录态下补写回当前家庭（D7-06）
+// 必须在 claimGlobalDataForFamily 之前执行：后者每次启动都会删除全局副本（"移动"语义），
+// 放在其后会因全局键已被清空而读不到任何历史地址
+// 仅在当前家庭还没有住址时补写，不覆盖用户新填的地址；全局键由 claimGlobalDataForFamily 正常清理
+function migrateLegacyGlobalAddress() {
+    try {
+        var legacy = localStorage.getItem('familyHomeAddress');
+        if (!legacy || !String(legacy).trim()) return;
+        var fid = (typeof getFamilyId === 'function') ? getFamilyId() : null;
+        if (!fid) return; // 游客态不写
+        if (localStorage.getItem(fid + '_familyHomeAddress')) return; // 已有家庭住址，不覆盖
+        localStorage.setItem(fid + '_familyHomeAddress', legacy);
+        console.log('[迁移] 旧版家庭住址已回写当前家庭：' + fid);
+    } catch (e) { console.error('migrateLegacyGlobalAddress error:', e); }
+}
+try { migrateLegacyGlobalAddress(); } catch(e) {}
 // V135: 启动时清理全局残留数据（认领改"移动"的存量修复，防多家庭串号；游客模式 fid=null 自动跳过）
 try { claimGlobalDataForFamily(); } catch(e) { console.error('claimGlobalDataForFamily error:', e); }
 // 初始化 superAdmin 键
@@ -19475,7 +19491,8 @@ function renderFridgeRecView() {
     const overviewCats = ['蔬菜', '肉蛋奶', '方便食品'];
     let tagsHtml = '';
     overviewCats.forEach((cat, ci) => {
-        const catItems = fridgeItems.filter(i => i.category === cat);
+        // V344: 排除已用完（usedUp / status 标记）的食材，避免概览把 0 库存当现有食材（D7-02）
+        const catItems = fridgeItems.filter(i => i.category === cat && !i.usedUp && i.status !== 'usedUp' && i.status !== 'used_up');
         tagsHtml += `<b style="color:#374151;margin-right:6px;">${cat}</b>`;
         if (!catItems.length) {
             tagsHtml += `<span style="color:#9CA3AF;font-size:13px;">无</span>`;
@@ -28054,8 +28071,9 @@ function generateFridgeMealPlan() {
     if (!window._existingServings) window._existingServings = defaultServings;
     if (!window._existingMeal) window._existingMeal = 'dinner';
 
-    // 如果用户勾选了食材，用勾选的；否则用全部冰箱食材
-    var ingNames = checkedNames.length > 0 ? checkedNames : fridgeItems.map(function(it) { return String(it.name||'').trim(); }).filter(Boolean);
+    // 如果用户勾选了食材，用勾选的；否则用冰箱里未用完的食材（V344: 0 库存/已用完的不能当现有食材，D7-02）
+    var availableItems = fridgeItems.filter(function(it) { return !(it.usedUp || it.status === 'usedUp' || it.status === 'used_up'); });
+    var ingNames = checkedNames.length > 0 ? checkedNames : availableItems.map(function(it) { return String(it.name||'').trim(); }).filter(Boolean);
 
     var t = document.getElementById('fridgeResultTitleText');
     if (t) t.textContent = checkedNames.length > 0 ? '基于勾选食材的菜谱' : '基于冰箱食材的菜谱';
@@ -35510,6 +35528,30 @@ function _normalizeRecordMeal(r) {
     if (/晚餐|dinner/i.test(s)) return '晚餐';
     return '加餐/其他';
 }
+// V344: 把 dietCalendar 里的 actual 记录转成 mealRecords 形状（供地点统计 / 历史迁移复用）
+function getDietCalendarActualRecords() {
+    var out = [];
+    var cal = {};
+    try { cal = getDietCalendar() || {}; } catch (e) { return out; }
+    var labels = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '加餐' };
+    Object.keys(cal).forEach(function (dk) {
+        var day = cal[dk] || {};
+        Object.keys(labels).forEach(function (mk) {
+            var a = (day[mk] || {}).actual;
+            if (!a) return;
+            var rec = {
+                date: dk, mealType: labels[mk], diningType: a.diningType || '',
+                location: a.location || '', price: a.price || 0
+            };
+            if (a.groupRecord && Array.isArray(a.members) && a.members.length) {
+                rec.kind = 'group';
+                rec.records = a.members.map(function (m) { return { location: (m && m.location) || '家' }; });
+            }
+            out.push(rec);
+        });
+    });
+    return out;
+}
 /**
  * 聚合 mealRecords 的就餐地点统计
  * @param {number|null} days 近 N 天（null/0=全部）
@@ -35519,6 +35561,15 @@ function _normalizeRecordMeal(r) {
 function getMealLocationStats(days) {
     var records = [];
     try { records = JSON.parse(lsGet('mealRecords')) || []; } catch (e) { records = []; }
+    // V344: 并入 dietCalendar 的实际记录（食记卡片同源），按 日期+餐次 去重，避免 mealRecords 为空时统计归零（D7-03）
+    try {
+        var seen = {};
+        records.forEach(function (r) { if (r && r.date) seen[String(r.date) + '|' + _normalizeRecordMeal(r)] = 1; });
+        getDietCalendarActualRecords().forEach(function (cr) {
+            var k = String(cr.date) + '|' + _normalizeRecordMeal(cr);
+            if (!seen[k]) { seen[k] = 1; records.push(cr); }
+        });
+    } catch (e) {}
     var cutoffKey = '';
     if (days) {
         var d0 = new Date(); d0.setHours(0, 0, 0, 0); d0.setDate(d0.getDate() - days + 1);
@@ -53389,8 +53440,19 @@ function filterKnPickList() {
     listEl.innerHTML = filtered.map(item => buildKnPickItemHtml(item)).join('');
 }
 
+// V344: 统一取菜品名——历史数据里 plan.dishes 存在 {name:"..."} 对象，
+// 直接当字符串用会抛 title.trim is not a function，并在界面渲染成 [object Object]
+function dishNameOf(dish) {
+    if (dish == null) return '';
+    if (typeof dish === 'string') return dish;
+    if (typeof dish === 'object') return String(dish.name || dish.dish || dish.title || '');
+    return String(dish);
+}
+
 // 清理知识库标题，提取纯菜品名
 function cleanDishName(title) {
+    if (!title) return '';
+    title = dishNameOf(title);
     if (!title) return '';
     let name = title.trim();
     // 去除末尾问号（中英文）
@@ -56629,22 +56691,26 @@ function migrateDishNamesFromKnowledge() {
                 const oldDishes = mealData.plan.dishes;
                 const newDishes = [];
                 const newMeta = {};
-                oldDishes.forEach(dishName => {
+                oldDishes.forEach(rawDish => {
+                    // V344: 历史数据可能是 {name:"菠菜猪肝面"} 对象，先统一取名字符串
+                    const dishName = dishNameOf(rawDish);
                     const cleaned = cleanDishName(dishName);
-                    if (cleaned !== dishName) {
+                    const finalName = cleaned || dishName;
+                    if (typeof rawDish !== 'string' || cleaned !== rawDish) {
                         updated = true;
-                        // 迁移dishMeta键
-                        const meta = dishMeta[dishName];
-                        if (meta) {
-                            newMeta[cleaned] = meta;
-                        }
-                        newDishes.push(cleaned);
-                    } else {
-                        newDishes.push(dishName);
-                        if (dishMeta[dishName]) {
-                            newMeta[dishName] = dishMeta[dishName];
-                        }
                     }
+                    if (!finalName) return;
+                    // dishMeta 键可能是原字符串，也可能是对象被强转出来的 "[object Object]"
+                    const meta = (typeof rawDish === 'string' ? dishMeta[rawDish] : null)
+                        || dishMeta[dishName] || dishMeta[cleaned]
+                        || (oldDishes.length === 1 ? dishMeta['[object Object]'] : null);
+                    newDishes.push(finalName);
+                    if (meta) newMeta[finalName] = meta;
+                });
+                // V344: 保留 dishMeta 中与当前菜品已不对应的历史键，避免迁移误删菜品信息
+                Object.keys(dishMeta).forEach(k => {
+                    if (k === '[object Object]') return;
+                    if (!(k in newMeta)) newMeta[k] = dishMeta[k];
                 });
                 mealData.plan.dishes = newDishes;
                 mealData.plan.dishMeta = newMeta;
@@ -56672,6 +56738,104 @@ function migrateDishNamesFromKnowledge() {
         saveDietCalendar(calendar);
         console.log('[迁移] 已清理知识库来源的菜品名');
     }
+}
+
+// V344: 食材「显示数量」与数值字段不同源时，以 quantityValue + quantityUnit 为唯一真值重算显示串（D7-05）
+// 只处理能解析出数字的旧串（「适量」等无法量化的保持原样），避免把 8盒/10 这类脏数据继续带进扣减
+function migrateFridgeQuantityDisplay() {
+    try {
+        var raw = lsGet('fridgeItems');
+        if (!raw) return;
+        var items = [];
+        try { items = JSON.parse(raw) || []; } catch (e) { items = []; }
+        if (!Array.isArray(items)) return;
+        var changed = 0;
+        items.forEach(function (it) {
+            if (!it || it.quantityValue === undefined) return;
+            var v = Number(it.quantityValue);
+            if (!isFinite(v) || v < 0) return;
+            var parsed = parseQuantity(it.quantity);
+            if (parsed.value <= 0) return;
+            var unit = it.quantityUnit || parsed.unit || '个';
+            var expect = formatQuantity(v, unit);
+            if (String(it.quantity || '') !== expect || String(it.quantityUnit || '') !== String(unit)) {
+                it.quantity = expect;
+                it.quantityUnit = unit;
+                changed++;
+            }
+        });
+        if (changed) {
+            lsSet('fridgeItems', JSON.stringify(items));
+            console.log('[迁移] 食材显示数量与数值字段对齐：' + changed + ' 条');
+        }
+    } catch (e) { console.error('migrateFridgeQuantityDisplay error:', e); }
+}
+
+// V344: 一次性把全局 mealRecords 按归属拆回家庭前缀键（D7-03）
+// - 归属判定：日期 + 餐次 相同的 dietCalendar.actual 记录，且菜品名至少一半重合；只有唯一家庭命中才迁移
+// - 空菜品 / 无归属的历史记录保持原样（全局键作为回滚档案，不做删除）
+function migrateGlobalMealRecords() {
+    try {
+        if (localStorage.getItem('_mealRecordsMigratedToFamily') === 'V344') return;
+        var gRaw = localStorage.getItem('mealRecords');
+        if (!gRaw) return;
+        var g = [];
+        try { g = JSON.parse(gRaw) || []; } catch (e) { return; }
+        if (!Array.isArray(g) || !g.length) return;
+        // 本机出现过的家庭码（按 `<fid>_dietCalendar` 键扫描）
+        var fids = {};
+        try {
+            Object.keys(localStorage).forEach(function (k) {
+                if (k && k.length > 13 && k.slice(-13) === '_dietCalendar') fids[k.slice(0, -13)] = 1;
+            });
+        } catch (e) {}
+        try { var curFid = getFamilyId(); if (curFid) fids[curFid] = 1; } catch (e) {}
+        // 建立 日期|餐次 → [{fid, names, diningType}] 归属索引
+        var idx = {};
+        Object.keys(fids).forEach(function (fid) {
+            var cal = {};
+            try { cal = JSON.parse(localStorage.getItem(fid + '_dietCalendar') || '{}') || {}; } catch (e) { return; }
+            Object.keys(cal).forEach(function (dk) {
+                var day = cal[dk] || {};
+                ['breakfast', 'lunch', 'dinner', 'snack'].forEach(function (mk) {
+                    var a = (day[mk] || {}).actual;
+                    if (!a) return;
+                    var names = (a.dishes || []).map(dishNameOf).filter(Boolean);
+                    var key = String(dk) + '|' + _normalizeRecordMeal({ mealType: mk });
+                    if (!idx[key]) idx[key] = [];
+                    idx[key].push({ fid: fid, names: names, diningType: String(a.diningType || '') });
+                });
+            });
+        });
+        var moved = 0, kept = 0;
+        g.forEach(function (r) {
+            if (!r || !r.date) { kept++; return; }
+            var rNames = (r.dishes || []).map(dishNameOf).filter(Boolean);
+            // 空菜品记录无法判定归属，保持归档
+            if (!rNames.length) { kept++; return; }
+            var cands = idx[String(r.date) + '|' + _normalizeRecordMeal(r)] || [];
+            var hitFids = {};
+            cands.forEach(function (c) {
+                var same = c.names.filter(function (n) { return rNames.indexOf(n) >= 0; }).length;
+                if (same > 0 && same >= Math.min(c.names.length, rNames.length) * 0.5) hitFids[c.fid] = 1;
+            });
+            var only = Object.keys(hitFids);
+            if (only.length !== 1) { kept++; return; }
+            var fid = only[0];
+            var list = [];
+            try { list = JSON.parse(localStorage.getItem(fid + '_mealRecords') || '[]') || []; } catch (e) { list = []; }
+            if (!Array.isArray(list)) list = [];
+            var exists = list.some(function (x) {
+                return x && (x.id === r.id || (String(x.date) === String(r.date) && _normalizeRecordMeal(x) === _normalizeRecordMeal(r)));
+            });
+            if (exists) return;
+            list.push(r);
+            localStorage.setItem(fid + '_mealRecords', JSON.stringify(list));
+            moved++;
+        });
+        localStorage.setItem('_mealRecordsMigratedToFamily', 'V344');
+        console.log('[迁移] 全局 mealRecords 按家庭拆分：迁移 ' + moved + ' 条，无归属归档 ' + kept + ' 条');
+    } catch (e) { console.error('migrateGlobalMealRecords error:', e); }
 }
 
 function renderDiary() {
@@ -67276,11 +67440,13 @@ function openDiaryRecordModal(mealKey) {
     const isInitialDelivery = (existingActual && existingActual.diningType === '外卖');
     if (initDishes.length > 0) {
         initDishes.forEach(d => {
-            recordFormDishes.push({ id: d.id || Date.now() + Math.random(), name: d.name, userComment: d.userComment || '', quantity: d.quantity || '', price: d.price || '' });
+            recordFormDishes.push({ id: d.id || Date.now() + Math.random(), name: dishNameOf(d), userComment: d.userComment || '', quantity: d.quantity || '', price: d.price || '' });
         });
     } else if (!isInitialDelivery) {
-        // 非外卖模式：从食谱计划加载
-        planDishes.forEach(name => {
+        // 非外卖模式：从食谱计划加载（V344: 兼容历史 {name} 对象，避免 [object Object]）
+        planDishes.forEach(dish => {
+            const name = dishNameOf(dish);
+            if (!name) return;
             recordFormDishes.push({ id: Date.now() + Math.random(), name: name, userComment: '', quantity: '', price: '' });
         });
         dishesFromPlan = true;
@@ -68332,7 +68498,8 @@ function openMealRecordModal(mealKey, opts) {
             diningType: dining, location: location, restaurant: restaurant, totalCost: totalCost, people: people,
             dishes: dishes, rating: rating, comment: comment, source: opts.source || '',
             dishComments: quick ? {} : fDishComments, // 快速记录单菜评价留空（V178）
-            dishRatings: quick ? {} : fDishRatings // V339(D6-04): 逐道菜星级
+            // V344(D7-04): 快速记录=整餐 4 星，逐道菜同步写 4 星，避免明细显示「未评分」、偏好画像拿不到单菜评分
+            dishRatings: quick ? (function () { var m = {}; dishes.forEach(function (n) { m[String(n || '').trim()] = 4; }); return m; })() : fDishRatings
         });
         if (!res) return;
         // V235: 回写专项健康饮食计划进度（是=打勾，否=留痕待复盘纠偏）
@@ -70669,6 +70836,12 @@ try { migrateDishMetaIngredients(); } catch(e) { console.error('migrateDishMetaI
 
 // 迁移：清理知识库来源的菜品名（去除问号和"怎么做"等后缀）
 try { migrateDishNamesFromKnowledge(); } catch(e) { console.error('migrateDishNamesFromKnowledge error:', e); }
+
+// 迁移：全局 mealRecords 按家庭归属拆回家庭前缀键（V344，修复 V336 隔离后的历史数据孤儿化）
+try { migrateGlobalMealRecords(); } catch(e) { console.error('migrateGlobalMealRecords error:', e); }
+
+// 迁移：食材显示数量与数值字段对齐（V344，修复扣减后显示反增）
+try { migrateFridgeQuantityDisplay(); } catch(e) { console.error('migrateFridgeQuantityDisplay error:', e); }
 
 // ==================== 餐厅添加/编辑功能 ====================
 var restaurantEditId = null;
