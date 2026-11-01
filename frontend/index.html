@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V334-20261031';
+        var APP_VER = 'V336-20261101';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -9023,6 +9023,7 @@ function familyKey(key) {
         'foodDiaries',
         'userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits',
         'systemErrorLogs',
+        'mealRecords',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
         if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
@@ -11824,7 +11825,9 @@ function lsGet(key) {
     // V133: 仅保留全局键回退（登录前存的数据，属同一设备同一用户可认领）。
     // 删除原 Fallback 2（跨家庭前缀兜底）——新家庭无数据时会读到其他家庭的数据，
     // 导致多个家庭首页"家中食材/食记"内容完全一样（家庭数据串号）。
-    if (prefixedKey !== key) {
+    // V336: mealRecords 历史为全局键，多家庭三餐记录混存同一键且无归属信息，禁止回退读取全局键
+    // （否则每个家庭都会读到其他家庭的记录＝串号）；历史全局 mealRecords 不做迁移，保持原样不读取
+    if (prefixedKey !== key && key !== 'mealRecords') {
         var gval = localStorage.getItem(key);
         if (gval !== null) return gval;
     }
