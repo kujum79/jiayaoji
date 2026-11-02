@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V353-20261102';
+        var APP_VER = 'V354-20261102';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -15727,18 +15727,76 @@ function escapeAttr(text) {
 
 // ====== 人群健康标签：从 AI 推荐理由/知识库标签解析并渲染 ======
 // 关键词 → 标签（顺序即优先级，命中即标记，互不冲突可多选）
+// V354(P1-4)：慢病标签必须限定具体病种，不再用泛化「慢病适宜」；长高标签按家庭成员年龄校验
 var HEALTH_TAG_RULES = [
     { key: 'grow',   emoji: '👦', label: '长高推荐', keywords: ['长高', '助长', '生长发育', '发育期', '青少年', '青春期', '补钙'] },
     { key: 'postop', emoji: '💊', label: '术后调理', keywords: ['术后', '伤口愈合', '愈合', '恢复期'] },
-    { key: 'chronic',emoji: '🫀', label: '慢病适宜', keywords: ['慢病', '低盐', '低脂', '低糖', '降压', '降糖', '控糖', '高血压', '糖尿病', 'DASH', '低GI'] },
+    { key: 'chronic_bp',    emoji: '🫀', label: '高血压适宜', keywords: ['高血压', '降压', 'DASH'] },
+    { key: 'chronic_dm',    emoji: '🩸', label: '糖尿病适宜', keywords: ['糖尿病', '降糖', '控糖', '低GI'] },
+    { key: 'chronic_lipid', emoji: '🫀', label: '血脂异常适宜', keywords: ['高血脂', '降脂', '血脂异常'] },
+    { key: 'chronic_gout',  emoji: '🦶', label: '痛风适宜', keywords: ['痛风', '低嘌呤'] },
+    { key: 'chronic',       emoji: '🫀', label: '慢病调理', keywords: ['慢病'] },
     { key: 'preg',   emoji: '🤰', label: '孕期营养', keywords: ['孕期', '孕妇', '孕早', '孕中', '孕晚', '叶酸', '胎儿', '安胎'] }
 ];
+
+// 标签必须与菜品本身相符：泛化「低盐/低脂/低糖」不再触发慢病标签
+var _CHRONIC_BAD_COMMON_RE = /五花|肥肉|板油|猪油|猪蹄|扣肉|东坡肉|牛腩|羊腩|肥牛|肥羊|内脏|猪肝|鸡肝|腰花|大肠|腊|腌|咸鱼|咸肉|咸菜|榨菜|酸菜|卤味|卤肉|油炸|炸|油煎|煎|油焖|干锅|香锅|烧烤|烤串|奶油|黄油|糖醋|拔丝|蜜汁|可乐|红烧肉|梅菜扣肉/;
+var _GROW_FOOD_RE = /牛奶|酸奶|奶酪|芝士|豆腐|豆干|豆浆|鱼|虾|鸡蛋|蛋羹|瘦肉|排骨|牛肉|鸡肉|虾皮|芝麻|海带|紫菜|西兰花|菠菜|芥蓝|骨头|骨汤/;
+var _GROW_BAD_RE = /辣|炸|煎|腌|腊|咸|糖|蜜|拔丝|油焖|干锅|烧烤|火锅|奶油|肥肉|五花/;
+
+function _familyHasGrowingMember() {
+    try {
+        var members = getFamilyMembers() || [];
+        for (var i = 0; i < members.length; i++) {
+            var m = members[i] || {};
+            var age = Number(m.age || 0);
+            var txt = [m.groupType, m.diseaseType, m.healthConcerns, m.healthNote, m.constitution, m.dietaryPreference, m.tags].join(' ');
+            if (age >= 3 && age <= 18) return true;
+            if (/长高|助长|生长发育|发育期|青春期|青少年/.test(txt)) return true;
+        }
+    } catch (e) {}
+    return false;
+}
+
+// 菜品名 + 主辅料（不含调味料）用于健康声称核验
+function _dishHealthBlob(dishName) {
+    var blob = String(dishName || '');
+    try {
+        var parts = _dishCookParts(dishName);
+        blob += ' ' + [parts.main].concat(parts.sides || []).join(' ');
+    } catch (e) {}
+    return blob;
+}
+
+function _sanitizeDishHealthTags(tags, dishName) {
+    if (!tags || !tags.length || !dishName) return tags || [];
+    var blob = _dishHealthBlob(dishName);
+    return tags.filter(function (t) {
+        if (!t) return false;
+        if (t.key === 'grow') {
+            if (!_familyHasGrowingMember()) return false;          // 无 3-18 岁成员不标「长高」
+            if (_GROW_BAD_RE.test(blob)) return false;
+            if (!_GROW_FOOD_RE.test(blob)) return false;           // 菜本身不含高钙高蛋白食材不标
+            return true;
+        }
+        if (String(t.key).indexOf('chronic') === 0) {
+            if (_CHRONIC_BAD_COMMON_RE.test(blob)) return false;   // 高脂/高盐/腌制/油炸一律不标慢病
+            if (t.key === 'chronic_bp' && /辣|剁椒|豆瓣|火锅|烧烤/.test(blob)) return false;
+            if (t.key === 'chronic_dm' && /粥|稀饭|糯米|白米饭|米饭|米粉|河粉|糖|蜜|拔丝|果汁|甜|果酱/.test(blob)) return false;
+            if (t.key === 'chronic_lipid' && /内脏|肝|腰|大肠|鱿鱼|蟹黄|鱼籽|蛋黄|肥/.test(blob)) return false;
+            if (t.key === 'chronic_gout' && /内脏|肝|腰|大肠|海鲜|虾|蟹|贝|沙丁鱼|浓汤|肉汤|火锅/.test(blob)) return false;
+            return true;
+        }
+        return true;
+    });
+}
 
 /**
  * 解析推荐理由文本（或标签数组），返回命中的人群标签数组 [{key,emoji,label}]
  * @param {string|string[]} source reason 文本 或 suitableFor/tags 数组
+ * @param {string=} dishName 菜品名（传入后会校验健康声称与菜品是否相符）
  */
-function parseHealthTags(source) {
+function parseHealthTags(source, dishName) {
     var text = '';
     if (Array.isArray(source)) {
         text = source.join(' ');
@@ -15752,13 +15810,13 @@ function parseHealthTags(source) {
             if (text.indexOf(rule.keywords[i]) >= 0) { out.push({ key: rule.key, emoji: rule.emoji, label: rule.label }); break; }
         }
     });
-    return out;
+    return _sanitizeDishHealthTags(out, dishName);
 }
 
 // 渲染人群标签 HTML（小色块，绿底暖字），可直接插入菜名旁
 // opts.plain = true 时不带前置图标（食记餐卡等纯文字场景）
 function renderHealthTagsHtml(source, opts) {
-    var tags = parseHealthTags(source);
+    var tags = parseHealthTags(source, opts && opts.dishName);
     if (!tags.length) return '';
     var _icon = (opts && opts.plain) ? '' : (tags[0].emoji + ' ');
     return tags.map(function(t) {
@@ -15783,6 +15841,7 @@ function healthTagObjsFromKeys(keys) {
 // 渲染已持久化的健康标签（meta.healthTags 为 key 数组）
 function renderHealthTagsFromKeys(keys, opts) {
     var tags = healthTagObjsFromKeys(keys);
+    if (opts && opts.dishName) tags = _sanitizeDishHealthTags(tags, opts.dishName);
     if (!tags.length) return '';
     var _icon = (opts && opts.plain) ? '' : (tags[0].emoji + ' ');
     return tags.map(function(t) {
@@ -22891,11 +22950,11 @@ async function generateIngredientPrefRecipes() {
                     list.forEach(function(dish, idx){
                         var did = 'sum2_' + di + '_' + meal + '_' + idx;
                         var srcCls = 'src-' + (dish.source || 'kb');
-                        var htagKeys = parseHealthTags(dish.reason || '').map(function(t){return t.key;}).join(',');
+                        var htagKeys = parseHealthTags(dish.reason || '', dish.name).map(function(t){return t.key;}).join(',');
                         html += '<label class="ingr-rec-day-dish">'
                             + '<input id="' + did + '" type="checkbox" data-day="' + di + '" data-meal="' + meal + '" data-dish="' + escapeHtml(dish.name) + '" data-htags="' + htagKeys + '" onchange="toggleIngrRecSummaryV2(this)">'
                             + '<span>' + escapeHtml(dish.name) + '</span>'
-                            + renderHealthTagsHtml(dish.reason || '')
+                            + renderHealthTagsHtml(dish.reason || '', { dishName: dish.name })
                             + (dish.sourceLabel ? '<span class="ingr-rec-source-tag ' + srcCls + '">' + escapeHtml(dish.sourceLabel) + '</span>' : '')
                             + '</label>';
                     });
@@ -25031,9 +25090,9 @@ function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra
     var hTagsHtml = '';
     var tagsToRender = healthTags.length ? healthTags : [];
     if (tagsToRender.length) {
-        hTagsHtml = '<div style="margin-bottom:6px;">' + renderHealthTagsFromKeys(tagsToRender) + '</div>';
+        hTagsHtml = '<div style="margin-bottom:6px;">' + renderHealthTagsFromKeys(tagsToRender, { dishName: dishName }) + '</div>';
     } else if (reason) {
-        hTagsHtml = '<div style="margin-bottom:6px;">' + renderHealthTagsHtml(reason) + '</div>';
+        hTagsHtml = '<div style="margin-bottom:6px;">' + renderHealthTagsHtml(reason, { dishName: dishName }) + '</div>';
     }
     // 推荐理由
     var reasonHtml = reason ? '<div style="font-size:13px;color:#7A4A21;background:#FEF3C7;border-radius:6px;padding:4px 8px;margin-bottom:6px;">💬 ' + escapeHtml(reason) + '</div>' : '';
@@ -30920,7 +30979,7 @@ function _renderDiaryRecipePickerSection(sourceKey, title, dishes, defaultChecke
                 + '<span class="dish-tag-clickable">' + escapeHtml(name) + '</span>'
                 + scoreBadge
                 + solarBadge
-                + renderHealthTagsHtml(d.reason || '')
+                + renderHealthTagsHtml(d.reason || '', { dishName: name })
                 + warnHtml
                 + '</div>';
         }).join('');
@@ -30964,7 +31023,7 @@ function confirmDiaryRecipePicker() {
     (st.ai || []).forEach(function(x){
         buckets.push({
             name: x.name, source: 'ai', confirmed: false,
-            healthTags: parseHealthTags(aiReasonMap[x.name] || '').map(function(t){return t.key;})
+            healthTags: parseHealthTags(aiReasonMap[x.name] || '', x.name).map(function(t){return t.key;})
         });
     });
     if (buckets.length === 0) { showToast('请至少选择 1 道菜'); return; }
@@ -40380,7 +40439,7 @@ function renderPlan() {
         var _solarTagInner = (typeof solarTermTagHtmlForDish === 'function') ? solarTermTagHtmlForDish(dishName, item.ingredients) : '';
         var _solarTagHtml = _solarTagInner ? `<div class="dish-solar" style="margin-top:4px;">${_solarTagInner.replace('class="solar-term-tag"', 'class="solar-term-tag" style="margin-left:0;"')}</div>` : '';
         html += `<div class="plan-dish-card">
-            <div class="dish-name">${escapeHtml(dishName)}${renderHealthTagsHtml(reason)}</div>
+            <div class="dish-name">${escapeHtml(dishName)}${renderHealthTagsHtml(reason, { dishName: dishName })}</div>
             <div class="dish-for-whom">${escapeHtml(forWhom)}</div>
             ${_consTagHtml}
             ${_solarTagHtml}
@@ -54204,7 +54263,7 @@ async function generateMultiDayRecommendation(days) {
     const systemPrompt = '你是家肴记饮食顾问。生成未来' + days + '天三餐方案，只返回 JSON，禁解释文字。\n'
         + '每道菜reason不超过35字（必须含一个膳食指南数值）。\n'
         + '每餐道数（' + (recData.servings || 3) + '人）：早' + _dc.breakfast + '、午' + _dc.lunch + '、晚' + _dc.dinner + '（上限' + _dc.breakNum + '/' + _dc.lunchNum + '/' + _dc.dinnerNum + '），不低于下限，控份量不控道数。\n'
-        + '每餐首道主食(禁白米饭)，次道汤类或蔬菜，余为主/副菜。\n'
+        + '每餐首道主食优先杂粮/全谷（糙米饭、杂粮饭、二米饭、玉米、红薯等），白米饭可少量搭配、不强制禁止；次道汤类或蔬菜，余为主/副菜。\n'
         + '菜名全局唯一(主食除外)；水果不足则三餐安排独立水果。';
 
     // 显示持续"生成中"横幅（替代一闪而过的toast）
@@ -54303,7 +54362,7 @@ async function generateMultiDayRecommendation(days) {
                 let dishMeta = {};
                 dishList.forEach(d => {
                     // 解析推荐理由中的人群健康标签（如"适合生长发育期"→['grow']）
-                    var hTags = (typeof parseHealthTags === 'function') ? parseHealthTags(d.reason || '').map(function(t){return t.key;}) : [];
+                    var hTags = (typeof parseHealthTags === 'function') ? parseHealthTags(d.reason || '', d.name).map(function(t){return t.key;}) : [];
                     var metaBase = {};
                     if (d.reason) metaBase.userComment = d.reason;
                     if (hTags.length) metaBase.healthTags = hTags;
@@ -54577,29 +54636,7 @@ function generateHistorySummary(history) {
 }
 
 // 调用阿里云通义千问API
-// 过滤 AI 方案中的纯白米饭类菜品（米饭/大米饭/白米饭/蒸米饭）
-// 历史决策：仅隐藏纯米饭类单调主食，粥、杂粮饭、糙米饭、炒饭等正常保留
-function stripPlainRiceFromPlan(plan) {
-    try {
-        var EX = { '米饭': 1, '大米饭': 1, '白米饭': 1, '蒸米饭': 1 };
-        if (plan && Array.isArray(plan.days)) {
-            plan.days.forEach(function(day) {
-                var meals = day && day.meals;
-                if (!meals) return;
-                Object.keys(meals).forEach(function(k) {
-                    var m = meals[k];
-                    if (m && Array.isArray(m.dishes)) {
-                        m.dishes = m.dishes.filter(function(d) {
-                            var nm = (typeof d === 'string') ? d : ((d && d.name) || '');
-                            return !EX[String(nm).trim()];
-                        });
-                    }
-                });
-            });
-        }
-    } catch(e) { console.warn('过滤米饭类菜品失败:', e); }
-    return plan;
-}
+// V354(P1-4)：删除「纯白米饭硬过滤」——改为提示词建议「主食优先杂粮/全谷，白米饭可少量搭配」，不再从 AI 方案中强行剔除米饭
 
 // ========== AI 结果缓存 V116：相同输入 1 期内直接复用，避免重复调用 ==========
 // 缓存键 = hash(taskType + systemPrompt + userPrompt)：家庭档案/反馈学习/推荐模式变化都会改变 prompt → 自动失效
@@ -54766,7 +54803,7 @@ async function _callAliyunQwenApiCore(systemPrompt, userMessage, opts) {
         // 尝试提取JSON
         let jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
-            try { return stripPlainRiceFromPlan(JSON.parse(jsonMatch[0])); } catch(e) {}
+            try { return JSON.parse(jsonMatch[0]); } catch(e) {}
         }
         return { rawText: content };
     } catch(proxyErr) {
@@ -55576,7 +55613,7 @@ async function generateWeeklyAiMealRecommendation(days) {
 
     // V117 精简（约 850 字 → ~111 字）：usr 已含九维/编号约束/JSON模板/ingredients每人份/膳食指南参考量/人群约束(👤🎯)，sys 只留 usr 未覆盖的独有硬约束
     const systemPrompt = '你是家肴记饮食顾问。生成未来' + days + '天三餐方案，只返回 JSON，禁解释文字。\n'
-        + '每餐首道主食(禁白米饭)，次道汤类或蔬菜，余为主/副菜；流质每餐≤1道，禁早餐饮+豆浆同现。\n'
+        + '每餐首道主食优先杂粮/全谷（糙米饭、杂粮饭、二米饭、玉米、红薯等），白米饭可少量搭配、不强制禁止；次道汤类或蔬菜，余为主/副菜；流质每餐≤1道，禁早餐饮+豆浆同现。\n'
         + '菜名全局唯一(主食除外)；水果不足则三餐安排独立水果。';
 
     // 后台跑AI，成功后自动替换弹窗内容；用户关闭弹窗则静默写入缓存
@@ -57567,9 +57604,9 @@ function renderDiary() {
                 // healthTags 优先用持久化的；为空则从 userComment 回退解析（兼容旧数据）
                 var hTagsHtml = '';
                 if (it.meta.healthTags && it.meta.healthTags.length) {
-                    hTagsHtml = renderHealthTagsFromKeys(it.meta.healthTags, { plain: true });
+                    hTagsHtml = renderHealthTagsFromKeys(it.meta.healthTags, { plain: true, dishName: it.name });
                 } else if (it.meta.userComment) {
-                    hTagsHtml = renderHealthTagsHtml(it.meta.userComment, { plain: true });
+                    hTagsHtml = renderHealthTagsHtml(it.meta.userComment, { plain: true, dishName: it.name });
                 }
                 return '<label class="diary-dish-row" style="display:inline-flex;align-items:center;gap:2px;'
                     + (_isSpecial
