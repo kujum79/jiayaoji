@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V351-20261102';
+        var APP_VER = 'V352-20261102';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -29949,6 +29949,122 @@ function _dishBlockedByFamily(name, tag, words) {
     for (var i = 0; i < words.length; i++) { if (hit(words[i].word)) return words[i]; }
     return null;
 }
+// ===== V352(P1-2)：高龄/慢病家庭——油煎/腌制主菜禁用 + 软烂低盐替代（不区分会员，未订阅同样生效）=====
+var _ELDER_HARD_RE = /煎|炸|油焖|油爆|干煸|爆炒|腌|腊味|腊肉|腊肠|咸鱼|咸肉|咸蛋|咸菜|榨菜|泡菜|酸菜|酱肉|酱鸭|酱爆|卤味|卤肉|卤蛋|熏鱼|熏肉|培根|火腿|香肠|午餐肉|烧烤|烤串|烤鱼|烤鸭|叉烧|葱油拌面|葱油饼|手抓饼|油饼|馅饼|锅贴|生煎|油条|锅包肉|辣子鸡|炸鸡|干锅|香锅/;
+var _ELDER_SOFT_RE = /蒸|炖|煮|汆|白灼|白切|清汤|羹|粥|汤|软烂|烩|焖/;
+var _ELDER_DIET_TXT_RE = /高龄|老人|老年|慢病|高血压|糖尿病|血糖|血脂|血压|冠心病|痛风|脂肪肝|肾病|控糖|控盐|控油|低盐|低钠|少盐|少油|低脂|软烂|易咀嚼|易消化|吞咽|咀嚼/;
+var _ELDER_STAPLE_RE = /米饭|粥|面|馒头|包子|饼|吐司|面包|三明治|麦片|玉米|红薯|紫薯|南瓜|饭|意面|馄饨|蒸饺|水饺/;
+var _ELDER_SOFT_POOL = {
+    staple: ['小米南瓜粥','小米山药粥','燕麦粥','蒸红薯','蒸南瓜','煮玉米','杂粮饭','米饭','馒头'],
+    main: ['清蒸鲈鱼','清蒸鳕鱼','蒸蛋羹','豆腐蒸蛋','山药炖排骨','清炖鸡汤','香菇蒸鸡','白切鸡','白灼菜心','蒜蓉西兰花','清炒时蔬','白灼秋葵','冬瓜汤','丝瓜蛋汤','番茄蛋汤','紫菜蛋花汤','蒸茄子']
+};
+var _ELDER_CHRONIC_CACHE = { raw: null, info: null };
+function _familyElderChronicInfo() {
+    var raw = '';
+    try { raw = lsGet('familyData') || ''; } catch (e) {}
+    if (_ELDER_CHRONIC_CACHE.info && _ELDER_CHRONIC_CACHE.raw === raw) return _ELDER_CHRONIC_CACHE.info;
+    var info = { active: false, elderly: [], chronic: [], names: [] };
+    try {
+        (typeof getFamilyMembers === 'function' ? getFamilyMembers() : []).forEach(function (m) {
+            if (!m) return;
+            var tags = Array.isArray(m.tags) ? m.tags.join(' ') : '';
+            var pref = (m.preference && typeof m.preference === 'object') ? String(m.preference.concerns || '') : '';
+            var txt = [m.groupType, m.diseaseType, m.healthConcerns, m.healthNote, m.constitution, m.constitutionDetail, m.dietaryPreference, m.taste, tags, pref].join(' ');
+            var isElder = (Number(m.age || 0) >= 75) || /高龄|老人|老年/.test(txt);
+            var isChronic = (String(m.groupType || '') === '慢病管理') || !!(m.diseaseType && String(m.diseaseType).trim()) || _ELDER_DIET_TXT_RE.test(txt);
+            if (!isElder && !isChronic) return;
+            var nm = String(m.name || '家人');
+            if (isElder && info.elderly.indexOf(nm) < 0) info.elderly.push(nm);
+            if (isChronic && info.chronic.indexOf(nm) < 0) info.chronic.push(nm);
+            if (info.names.indexOf(nm) < 0) info.names.push(nm);
+        });
+    } catch (e) {}
+    info.active = info.names.length > 0;
+    _ELDER_CHRONIC_CACHE.raw = raw;
+    _ELDER_CHRONIC_CACHE.info = info;
+    return info;
+}
+function _dishHardForElder(name, tag) {
+    var txt = String(name || '') + ' ' + String(tag || '');
+    return _ELDER_HARD_RE.test(txt);
+}
+function _dishSoftLowSalt(name) {
+    var n = String(name || '');
+    return _ELDER_SOFT_RE.test(n) && !_ELDER_HARD_RE.test(n);
+}
+// 把一餐里的油煎/腌制菜换成软烂低盐同类（主食换主食、保持道数），并保证午晚餐至少 1 道软烂低盐菜
+function _elderSoftFilterDishes(dishes, mealKey, isStapleFn, usedSet) {
+    var info = _familyElderChronicInfo();
+    if (!info.active || !Array.isArray(dishes)) return dishes;
+    var isSt = (typeof isStapleFn === 'function') ? isStapleFn : function (n) { return _ELDER_STAPLE_RE.test(String(n || '')); };
+    var who = info.names.slice(0, 3).join('、');
+    var out = [];
+    function taken(alt) {
+        if (out.some(function (o) { return o && o.name === alt; })) return true;
+        if (dishes.some(function (o) { return o && o.name === alt; })) return true;
+        if (usedSet && usedSet.has(alt) && !isSt(alt)) return true;
+        return false;
+    }
+    function breaksLiquid(alt, skipDish) {
+        if (typeof _LIQUID_DISH_RE === 'undefined' || !_LIQUID_DISH_RE.test(String(alt || ''))) return false;
+        return out.some(function (o) { return o !== skipDish && o && _LIQUID_DISH_RE.test(String(o.name || '')); });
+    }
+    function softReason(kind) {
+        return '👤 适合：' + (who || '高龄/慢病家人') + ' 🎯 低盐≤2g/餐、软烂易嚼' + (kind ? '（' + kind + '）' : '');
+    }
+    dishes.forEach(function (d) {
+        var nm = (d && d.name) || '';
+        if (!nm || !_dishHardForElder(nm, (d && d.reason) || '')) { out.push(d); return; }
+        var wantStaple = isSt(nm);
+        var p = wantStaple ? _ELDER_SOFT_POOL.staple : _ELDER_SOFT_POOL.main;
+        for (var i = 0; i < p.length; i++) {
+            var alt = p[i];
+            if (taken(alt)) continue;
+            if (breaksLiquid(alt, d)) continue;
+            if (typeof _dishBlockedByFamily === 'function' && _dishBlockedByFamily(alt, '')) continue;
+            if (usedSet && !isSt(alt)) usedSet.add(alt);
+            out.push({ name: alt, ingredients: (d && d.ingredients) || null, reason: softReason('替换油煎/腌制菜') });
+            return;
+        }
+        out.push(d);
+    });
+    if (mealKey !== 'breakfast') {
+        var hasSoft = out.some(function (d) { return _dishSoftLowSalt((d && d.name) || ''); });
+        if (!hasSoft) {
+            var idxs = [];
+            out.forEach(function (d, i) { if (!isSt((d && d.name) || '')) idxs.push(i); });
+            for (var ii = idxs.length - 1; ii >= 0; ii--) {
+                var replaced = false;
+                for (var j = 0; j < _ELDER_SOFT_POOL.main.length; j++) {
+                    var nm2 = _ELDER_SOFT_POOL.main[j];
+                    if (taken(nm2)) continue;
+                    if (breaksLiquid(nm2, out[idxs[ii]])) continue;
+                    if (typeof _dishBlockedByFamily === 'function' && _dishBlockedByFamily(nm2, '')) continue;
+                    if (usedSet && !isSt(nm2)) usedSet.add(nm2);
+                    out[idxs[ii]] = { name: nm2, ingredients: null, reason: softReason('本餐软烂低盐菜') };
+                    replaced = true;
+                    break;
+                }
+                if (replaced) break;
+            }
+        }
+    }
+    // 让每餐的软烂低盐菜在卡片上可见：给第 1 道软菜补一句「适合」，已标注则不重复
+    if (mealKey !== 'breakfast') {
+        var tagged = false;
+        for (var ti = 0; ti < out.length; ti++) {
+            if (out[ti] && String(out[ti].reason || '').indexOf('👤 适合') >= 0) { tagged = true; break; }
+        }
+        if (!tagged) {
+            for (var tj = 0; tj < out.length; tj++) {
+                if (!out[tj] || !_dishSoftLowSalt(out[tj].name)) continue;
+                out[tj] = { name: out[tj].name, ingredients: out[tj].ingredients || null, reason: (out[tj].reason ? out[tj].reason + '；' : '') + softReason('本餐软烂低盐菜') };
+                break;
+            }
+        }
+    }
+    return out;
+}
 // 辣味菜特征（「不吃辣」命中）
 function _vrIsSpicy(texts) {
     var joined = texts.join('|');
@@ -54972,20 +55088,25 @@ function buildRecommendationPrompt(data, weekDatesStr) {
 
     // V322: 高龄/控盐硬约束——即使人群类型未处于激活周期，也按年龄与饮食要求强制生效
     var _elderNameList = (data.members || []).map(function (x) { return (typeof x === 'string') ? x : (x && x.name); }).filter(Boolean);
+    // V352(P1-2): 统一用 _familyElderChronicInfo 识别高龄 + 慢病（高血压/糖尿病/控糖控油等），不再只看年龄和三个文本字段
+    var _elderInfoP = (typeof _familyElderChronicInfo === 'function') ? _familyElderChronicInfo() : { active: false, names: [] };
+    var _elderWhoNames = (_elderInfoP.names || []).filter(function (n) { return !_elderNameList.length || _elderNameList.indexOf(n) >= 0; });
     var _elderHits = (typeof familyData !== 'undefined' ? (familyData || []) : []).filter(function (m) {
         if (!m || !m.name) return false;
         if (_elderNameList.length && _elderNameList.indexOf(m.name) < 0) return false;
         var _dietTxt = String(m.dietaryPreference || '') + ' ' + String(m.taste || '') + ' ' + String(m.healthNote || '');
         return (Number(m.age || 0) >= 75) || /少盐|低盐|低钠|软烂|控盐|控糖|控油/.test(_dietTxt);
     });
-    if (_elderHits.length > 0) {
-        var _elderWho = _elderHits.map(function (m) { return m.name + '(' + (Number(m.age || 0) || '?') + '岁)'; }).join('、');
-        prompt += `【高龄/控盐硬约束（必须遵守）】\n`
+    _elderHits.forEach(function (m) { if (m.name && _elderWhoNames.indexOf(m.name) < 0) _elderWhoNames.push(m.name); });
+    if (_elderWhoNames.length > 0) {
+        var _elderWho = _elderWhoNames.join('、');
+        prompt += `【高龄/慢病硬约束（必须遵守）】\n`
             + `家庭成员 ${_elderWho} 需要低盐软烂饮食：\n`
-            + `1) 每人每餐食盐≤2g（全天≤5g），酱油/豉油/蚝油等含钠调味料每道菜≤5ml，禁止"葱油""酱爆""重红烧""腊味"等高钠做法；\n`
-            + `2) 质地以蒸、炖、煮、软烂为主，避免带骨大块、整条带刺鱼、粗硬菜梗；肉类切小块或做成肉饼/肉茸，蔬菜选嫩叶或蒸软；\n`
-            + `3) 添加糖每餐≤5g，避免糖醋、拔丝、蜜汁、冰糖收汁；\n`
-            + `4) 每道菜的 reason 必须标注「👤 适合：${_elderWho} 🎯 低盐≤2g/餐、软烂易嚼」。\n\n`;
+            + `1) 每人每餐食盐≤2g（全天≤5g），酱油/豉油/蚝油等含钠调味料每道菜≤5ml；【明令禁止】油煎、油炸、油焖、干煸、腌制、腊味、咸鱼/咸肉/咸菜、卤味、烧烤、叉烧类主菜；早餐不得出现葱油饼/手抓饼/油条/煎饼/煎蛋；\n`
+            + `2) 质地以蒸、炖、煮、汆、白灼、软烂为主，避免带骨大块、整条带刺鱼、粗硬菜梗；肉类切小块或做成肉饼/肉茸，蔬菜选嫩叶或蒸软；\n`
+            + `3) 午餐与晚餐必须至少有1道蒸/炖/煮/白灼/煲汤的软烂低盐菜，该菜 reason 以「软烂低盐」开头；\n`
+            + `4) 添加糖每餐≤5g，避免糖醋、拔丝、蜜汁、冰糖收汁；\n`
+            + `5) 每道菜的 reason 必须标注「👤 适合：${_elderWho} 🎯 低盐≤2g/餐、软烂易嚼」。\n\n`;
     }
 
     // V245: 订阅勾选的特殊需求也加入一周配餐约束
@@ -55357,6 +55478,19 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
         });
     });
     // ===== 菜品数量补充结束 =====
+
+    // V352(P1-2): 高龄/慢病——AI 方案同样禁用油煎/腌制菜，换软烂低盐并保证午晚餐有软菜（采用时沿用 _normalizedDishes）
+    if (typeof _familyElderChronicInfo === 'function' && _familyElderChronicInfo().active && typeof _elderSoftFilterDishes === 'function') {
+        days.forEach(day => {
+            const meals = day.meals || {};
+            ['breakfast','lunch','dinner'].forEach(mt => {
+                const meal = meals[mt];
+                if (meal && Array.isArray(meal._normalizedDishes)) {
+                    meal._normalizedDishes = _elderSoftFilterDishes(meal._normalizedDishes, mt, isPost2Staple, globalUsed2);
+                }
+            });
+        });
+    }
 
     // 补充后再排序一次（确保补充的菜品也按主食→汤/粥→其他排列）
     days.forEach(day => {
@@ -63404,6 +63538,22 @@ function _buildMealPlanPrompt(dateStr, ctx, styleCount) {
         p += '每个方案含早餐3道、午餐4道、晚餐4道。午餐和晚餐必须包含1道主食（如米饭），且主食外至少有3道菜品（荤素搭配，其中1道为汤或羹）。\n\n';
     }
     p += '请综合参考以下信息进行推荐：\n\n';
+    // V352(P1-2): 高龄/慢病硬约束——AI 单日三餐方案同样禁用油煎/腌制，强制软烂低盐
+    try {
+        var _elderInfoM = (typeof _familyElderChronicInfo === 'function') ? _familyElderChronicInfo() : null;
+        if (_elderInfoM && _elderInfoM.active) {
+            var _elNamesM = (_elderInfoM.names || []).filter(function(n){
+                if (!ctx.diningMembers.length) return true;
+                return ctx.diningMembers.some(function(m){ return ((typeof m === 'string') ? m : (m && m.name)) === n; });
+            });
+            if (_elNamesM.length) {
+                p += '【高龄/慢病硬约束·必须遵守】家庭成员 '+_elNamesM.join('、')+' 需低盐软烂饮食：\n'
+                  + '1) 禁用油煎、油炸、油焖、干煸、腌制、腊味、咸鱼咸肉、卤味、烧烤类主菜；早餐不得出现葱油饼/手抓饼/油条/煎饼/煎蛋；\n'
+                  + '2) 午餐、晚餐至少各有1道蒸/炖/煮/白灼/煲汤的软烂低盐菜，其 tag 写「软烂低盐」；\n'
+                  + '3) 每人每餐食盐≤2g，少用酱油/蚝油/豆瓣酱等高钠调料；\n\n';
+            }
+        }
+    } catch(e) {}
     if (ctx.userInput) p += '【用户指令】'+ctx.userInput+'\n\n';
     if (ctx.chatKeywords) p += '【近期关注】'+ctx.chatKeywords+'\n\n';
     p += '【用餐人数】'+ctx.diningCount+'人\n';
@@ -63459,6 +63609,12 @@ function _buildQuickWeeklyPlan(weekDates, days) {
     const _blockedByFamily = function(name, tag) {
         return (typeof _dishBlockedByFamily === 'function') ? _dishBlockedByFamily(name, tag, _familyWords) : null;
     };
+    // V352(P1-2): 高龄/慢病家庭硬过滤（未订阅家庭同样生效）——油煎/腌制菜不进候选池与最终计划
+    const _elderInfo = (typeof _familyElderChronicInfo === 'function') ? _familyElderChronicInfo() : { active: false };
+    const _elderActive = !!_elderInfo.active;
+    const _hardForElder = function(name, tag) {
+        return _elderActive && (typeof _dishHardForElder === 'function') ? _dishHardForElder(name, tag) : false;
+    };
     // V351(P1-1): 卡片展示的「一句个性化推荐理由」（把画像标签翻译成一句人话）
     function _profileReasonText(rsn) {
         const s = String(rsn || '');
@@ -63483,6 +63639,7 @@ function _buildQuickWeeklyPlan(weekDates, days) {
                         const nm = x && (x.dish || x.name);
                         if (!nm) return;
                         if (_blockedByFamily(nm, '')) return; // V351(P1-1)：禁口/过敏原候选直接剔除
+                        if (_hardForElder(nm, '')) return; // V352(P1-2)：高龄/慢病家庭不用油煎/腌制菜做候选
                         const rsn = Array.isArray(x.reason) ? x.reason.join(' ') : String(x.reason || '');
                         const bucket = _PROFILE_MARK.test(rsn) ? _profileMeals : _fillMeals;
                         if (!bucket[mt].some(function(o){ return o.name === nm; })) bucket[mt].push({ name: nm, reason: rsn });
@@ -63586,14 +63743,17 @@ function _buildQuickWeeklyPlan(weekDates, days) {
             const variant = pool[mealKey][candidates[vi]];
             let overlap = 0;
             let sweetCount = 0;
+            let elderHardCount = 0;
             variant.forEach(d => {
                 if (!isStaple(d.name) && usedPool.has(d.name)) overlap++;
                 if (isSweet(d.name)) sweetCount++;
+                if (_hardForElder(d.name, d.tag)) elderHardCount++;
             });
-            // 甜品类超过1道：严重扣分
+            // 甜品类超过1道：严重扣分；高龄/慢病：油煎/腌制菜严重扣分（优先选不用替换的变体）
             const sweetPenalty = sweetCount > 1 ? 100 : 0;
+            const elderPenalty = elderHardCount * 30;
             // 非主食不重复分(+10)+变体优先分(没用到+5)+重叠越少分越高
-            const score = (variant.length - overlap) * 10 + (candidates.length !== variantOptions.length ? 5 : 0) - sweetPenalty - overlap * 2;
+            const score = (variant.length - overlap) * 10 + (candidates.length !== variantOptions.length ? 5 : 0) - sweetPenalty - elderPenalty - overlap * 2;
             if (score > bestScore) { bestScore = score; bestVariant = candidates[vi]; }
         }
 
@@ -63670,6 +63830,10 @@ function _buildQuickWeeklyPlan(weekDates, days) {
                 _done++;
             }
         } catch(e) {}
+        // V352(P1-2): 高龄/慢病——油煎/腌制菜换成软烂低盐同类，并保证午晚餐至少 1 道软烂低盐菜
+        if (_elderActive && typeof _elderSoftFilterDishes === 'function') {
+            __out = _elderSoftFilterDishes(__out, mealKey, isStaple);
+        }
         return __out;
     }
 
@@ -63715,6 +63879,19 @@ function _buildQuickWeeklyPlan(weekDates, days) {
                 mealObj.dishes = _net;
             });
         });
+    }
+    // V352(P1-2): 高龄/慢病安全网——最终计划再过一遍，油煎/腌制菜一律换软烂低盐同类，并补齐每餐软菜
+    if (_elderActive && typeof _elderSoftFilterDishes === 'function') {
+        _plan.days.forEach(function(day){
+            Object.keys(day.meals || {}).forEach(function(mk){
+                const mealObj = day.meals[mk];
+                if (!mealObj || !Array.isArray(mealObj.dishes)) return;
+                mealObj.dishes = _elderSoftFilterDishes(mealObj.dishes, mk, isStaple);
+            });
+        });
+        if (_plan.summary.indexOf('高龄/慢病') < 0) {
+            _plan.summary += ' 已按高龄/慢病家庭要求，油煎/腌制主菜替换为软烂低盐做法。';
+        }
     }
     return _plan;
 }
@@ -63939,6 +64116,19 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
         });
     });
     // ===== 菜品数量补充结束 =====
+
+    // V352(P1-2): 高龄/慢病——AI 更新路径同样禁用油煎/腌制菜，换软烂低盐并保证午晚餐有软菜
+    if (typeof _familyElderChronicInfo === 'function' && _familyElderChronicInfo().active && typeof _elderSoftFilterDishes === 'function') {
+        days.forEach(day => {
+            const meals = day.meals || {};
+            ['breakfast','lunch','dinner'].forEach(mt => {
+                const meal = meals[mt];
+                if (meal && Array.isArray(meal._normalizedDishes)) {
+                    meal._normalizedDishes = _elderSoftFilterDishes(meal._normalizedDishes, mt, isPostStaple, globalUsed);
+                }
+            });
+        });
+    }
 
     // 补充后再排序一次（确保补充的菜品也按主食→汤→其他排列）
     days.forEach(day => {
