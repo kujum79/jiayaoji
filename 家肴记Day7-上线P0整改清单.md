@@ -90,6 +90,9 @@
 | **验收标准** | 新环境一键部署后 `/plan`、`/recommend-dishes`、`/recommend-restaurants`、`/parse-menu-image`、`/parse-menu-url`、`/recognize_ingredients`、`/chef-image`、`/ai/usage`、`/ai/budget`、`/ai/vision` 均返回 JSON 而非 HTML / 405 |
 | **回归范围** | 生产部署流程 |
 
+> **P0-5 关联风险（2026-11-02 实际发生）**：本地仓库有**两个远端**——`origin`=GitHub（`github.com/kujum79/jiayaoji`）、`gitee`=Gitee（`gitee.com/jiayaoji/jiayaoji`），**生产 systemd 所在服务器拉的是 Gitee**。V344/V345 只推到 GitHub，导致生产在 2026-11-02 仍停留在 `6f9d746`（V343），`git pull` 一直 `Already up to date`。补齐推送后（`6f9d746..8b3751a`）生产才更新到 V345。**发布约定需固化为：每次「提交推送」必须同时 `git push origin main` 与 `git push gitee main`，否则线上不更新**（建议发布脚本用一个 `push-all` 命令或把 Gitee 设为唯一部署源、GitHub 仅作备份镜像）。
+> 生产发布实测（2026-11-02）：`git pull` → `8b3751a`、`sudo systemctl restart jiayaoji` → `active`、`/health` `{"ping":"pong"}`、`https://jiayaoji.cn/app` 返回 `V345-20261102`、`app=200`；nginx `root=/var/www/jiayaoji/frontend`（静态页直接读仓库目录，前端刷新即生效），`proxy_pass http://127.0.0.1:8000`（API 走后端）。首次启动按预期执行 V344/V345 迁移（就餐记录回填、地址补全、菜品名归一、dishMeta 每人份归一）。
+
 ### P0-6 付费承诺一致性：「快速记录 4 星」未落库（D7-04）
 
 | 项 | 内容 |
