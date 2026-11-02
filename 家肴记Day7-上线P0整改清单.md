@@ -188,7 +188,7 @@
 | V348 | 「AI 生成三餐」前端超时 20s→45s | `5e31c41` | 仍偶发 `AbortError`，说明 45s 不足 |
 | V349 | 同上 45s→90s | `2418320` | 仍偶发 `AbortError`，定位为首家服务商 150s 才降级 |
 | V350 | 后端 `/plan` 三餐级请求（`max_tokens<=3000`）单服务商超时 150s→35s | `eddd1b9` | 实测 `json_mode` 请求 8.28s；浏览器 `[食材用量调试] 获取结果: 18 道菜有用量`，不再回退内置方案 |
-| V351 | P1-1 收口：全家禁口/过敏原硬过滤 + 卡片一句个性化推荐理由 | 待填 | 本地自测（构造家庭 3 天 26 菜）：禁口命中 0 / 同餐重复 0 / 理由 5 条 |
+| V351 | P1-1 收口：全家禁口/过敏原硬过滤 + 卡片一句个性化推荐理由 | `84bd1f8` | 本地自测（构造家庭 3 天 26 菜）：禁口命中 0 / 同餐重复 0 / 理由 5 条 |
 
 > 环境事实（务必写进部署基线）：生产部署源是 **Gitee**（`gitee.com/jiayaoji/jiayaoji.git`），GitHub 是备份远端；每次发布必须 **双推**，否则线上不更新（本次 V344/V345 曾因只推 GitHub 导致生产滞留 V343）。生产后端端口 **8000**，已由 `0.0.0.0` 收紧为 **`127.0.0.1`**（仅 nginx 本机可达）；nginx `root=/var/www/jiayaoji/frontend`、`proxy_pass http://127.0.0.1:8000`（配置基线见 `deploy/nginx/jiayaoji.conf`）；API Key 只在 `/etc/jiayaoji/api-keys.env`（`override.conf` 中 `EnvironmentFile=-…`，仓库内副本已移除）。
 
