@@ -13,6 +13,7 @@
     可写在 backend/.env（无需 python-dotenv，启动时自动加载，已有环境变量优先）。
 """
 import asyncio
+import hashlib
 import json
 import os
 import random
@@ -66,6 +67,22 @@ class AIServiceBusy(Exception):
     """D5-01: 并发闸门排队超时——上层统一映射为 HTTP 503 + 明确中文提示。"""
 
     status_code = 503
+
+
+# ========== P0-4: 已泄漏 Key 拒绝使用 ==========
+# 旧版前端曾明文内置阿里云 DashScope Key（已在 V331 移除，阿里云侧确认 401 失效）。
+# 此处只保留该 Key 的 sha256，不落明文；即使有人把它误配回环境变量 / .env，也拒绝参与路由。
+_LEAKED_KEY_SHA256 = {
+    "0eb268714d6489b5e0204ba8060e3590e38676ce75a9e3b5c605696460ee4137",
+}
+
+
+def is_leaked_api_key(key: str) -> bool:
+    """判断给定 Key 是否命中已泄漏黑名单（空值直接返回 False）。"""
+    k = (key or "").strip()
+    if not k:
+        return False
+    return hashlib.sha256(k.encode("utf-8")).hexdigest() in _LEAKED_KEY_SHA256
 
 
 # 模型服务商配置（priority 越小越优先；cost 为每 token 单价，元）
@@ -134,6 +151,13 @@ PROVIDERS: Dict[str, Dict[str, Any]] = {
         "image_path": "/prompt/{prompt}",  # 占位符由调用分支替换
     },
 }
+
+
+# P0-4: 启动时过滤已泄漏 Key——命中黑名单的服务商视为「未配置」，由路由自动降级到下一家
+for _pname, _pcfg in PROVIDERS.items():
+    if is_leaked_api_key(_pcfg.get("api_key", "")):
+        print(f"[安全] 服务商 {_pname} 的 API Key 命中已泄漏黑名单，已拒绝使用；请在控制台轮换后写入 backend/.env", flush=True)
+        _pcfg["api_key"] = ""
 
 
 # 按优先级排序

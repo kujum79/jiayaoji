@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V344-20261101';
+        var APP_VER = 'V345-20261102';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -19526,7 +19526,11 @@ function renderFridgeRecView() {
     // 2) 采购计算
     const today = new Date();
     const confirmedInfo = countConfirmedPlanDays(today);
-    prep.servings = getCurrentServings();
+    // V345(D7-08): 用餐人数按「成人 + 婴儿（不计入）」拆分展示；采购按折算份数计算
+    const _prepCtx = (typeof getMealDinerContext === 'function') ? getMealDinerContext() : null;
+    prep.adultCount = (_prepCtx && _prepCtx.count) ? _prepCtx.count : getCurrentServings();
+    prep.infantCount = _prepCtx ? (_prepCtx.infantCount || 0) : 0;
+    prep.servings = prep.adultCount;
     // 自定义上限强制收敛
     if (prep.cycleDays > confirmedInfo.days) {
         prep.cycleDays = Math.max(1, confirmedInfo.days);
@@ -19717,7 +19721,7 @@ function renderFridgeRecView() {
                     <option value="custom"${mode==='custom'?' selected':''}>自定义…</option>
                 </select>
             </div>
-            <div class="prep-servings prep-servings-right">用餐<b>${prep.servings}人</b> <button class="prep-servings-btn" type="button" onclick="openPrepServingsModal()">调整人数</button></div>
+            <div class="prep-servings prep-servings-right">用餐<b>${prep.adultCount || prep.servings}人</b>${prep.infantCount > 0 ? ` + 婴儿<b>${prep.infantCount}人</b>（不计入）` : ''} <button class="prep-servings-btn" type="button" onclick="openPrepServingsModal()">调整人数</button></div>
         </div>
     </div>`;
 
@@ -20260,6 +20264,19 @@ function computeIngredientNeeds(daysList, servings, daysCount) {
             }
             if (!dishesToCount.length) return;
             const S_meal = getMealServings(key, meal, servingsFallback);
+            // V345(D7-08): 采购按「折算份数」而非含婴儿的原始人数——婴儿系数 0、70+×0.8、
+            // 4-6岁×0.7、1-3岁×0.5、体力劳动者主食×1.3/蛋白×1.2。
+            // plan.servings 等于「就餐组人数（含婴儿）」时视为自动值，直接采用折算份数；
+            // 为手动调整值时（如临时只做 2 人份），按成人人数等比缩放。
+            const _dCtx = (typeof getMealDinerContext === 'function') ? getMealDinerContext(key) : null;
+            const _eqM = (_dCtx && _dCtx.equivalent) ? _dCtx.equivalent : null;
+            let _svRatio = 1;
+            if (_eqM && _dCtx.count > 0 && Number(S_meal) > 0) {
+                const _autoTotal = _dCtx.count + (_dCtx.infantCount || 0);
+                if (!(Number(S_meal) > _dCtx.count && Number(S_meal) === _autoTotal)) {
+                    _svRatio = Number(S_meal) / _dCtx.count;
+                }
+            }
             dishesToCount.forEach(dsh => {
                 const dishName = (typeof dsh === 'string') ? dsh : (dsh && dsh.name ? dsh.name : '');
                 if (!dishName) return;
@@ -20288,12 +20305,15 @@ function computeIngredientNeeds(daysList, servings, daysCount) {
                         if (!map[norm].onePersonQty && q1) { map[norm].onePersonQty = q1; map[norm].onePersonUnit = u1; }
                         if (!map[norm].totalUnit && u1) map[norm].totalUnit = u1;
                     }
-                    mealSum[norm] = (mealSum[norm] || 0) + S_meal;
-                    // 累计总需求（量化的加一人份×该餐人数；无量化累计人次）
+                    // V345(D7-08): 食材按类别取折算份数（主食/蛋白/其他各有权重）
+                    const _kind = (_eqM && typeof _ingAmountKind === 'function') ? _ingAmountKind(nm) : 'other';
+                    const _eff = (_eqM && isFinite(_eqM[_kind]) ? _eqM[_kind] : S_meal) * _svRatio;
+                    mealSum[norm] = (mealSum[norm] || 0) + _eff;
+                    // 累计总需求（量化的加一人份×折算份数；无量化累计人次）
                     if (q1 && q1 > 0) {
-                        map[norm].totalQty += q1 * S_meal;
+                        map[norm].totalQty += q1 * _eff;
                     } else {
-                        map[norm].usedCount += S_meal;
+                        map[norm].usedCount += _eff;
                     }
                 });
             });
@@ -24162,12 +24182,14 @@ function _isManualLaborDiner(m) {
     var blob = [m.occupation, m.workSchedule, m.taste, m.dietaryPreference, m.healthConcerns, m.place, m.constitutionDetail].join(' ');
     return /务农|农民|农活|种植|建筑|工地|工人|搬运|重体力|体力劳动|快递|外卖员|物流|装修|采矿|矿工|渔民|捕鱼|钢筋|架子工|焊工|钣金|流水线/.test(blob);
 }
-// 单个成员对某类食材的份量系数（互斥优先级：婴儿0 → 老人70+×0.8 → 儿童3-6岁×0.5 → 体力劳动者 主食1.3/蛋白1.2 → 普通1）
+// 单个成员对某类食材的份量系数（互斥优先级：婴儿0 → 老人70+×0.8 → 4-6岁×0.7 → 1-3岁×0.5 → 体力劳动者 主食1.3/蛋白1.2 → 普通1）
 function _memberServingWeight(m, kind) {
     if (_isInfantDiner(m)) return 0;
     var age = _memberAgeNum(m);
     if (age !== null && age >= 70) return 0.8;
-    if (age !== null && age >= 3 && age <= 6) return 0.5;
+    // V345(D7-08): 按《P0-3》口径拆分学龄前系数——1-3 岁 0.5、4-6 岁 0.7（原 3-6 岁统一 0.5）
+    if (age !== null && age >= 4 && age <= 6) return 0.7;
+    if (age !== null && age >= 1 && age < 4) return 0.5;
     if (_isManualLaborDiner(m)) return (kind === 'staple') ? 1.3 : ((kind === 'protein') ? 1.2 : 1);
     return 1;
 }
@@ -24196,7 +24218,8 @@ function getMealDinerContext(dateKey) {
         eq.other += _memberServingWeight(m, 'other');
         var age = _memberAgeNum(m);
         if (age !== null && age >= 70) tags.push({ name: m.name, text: m.name + ' 70+×0.8' });
-        else if (age !== null && age >= 3 && age <= 6) tags.push({ name: m.name, text: m.name + ' 儿童×0.5' });
+        else if (age !== null && age >= 4 && age <= 6) tags.push({ name: m.name, text: m.name + ' 4-6岁×0.7' });
+        else if (age !== null && age >= 1 && age < 4) tags.push({ name: m.name, text: m.name + ' 1-3岁×0.5' });
         else if (_isManualLaborDiner(m)) tags.push({ name: m.name, text: m.name + ' 体力×1.2/1.3' });
     });
     var infantCount = all.filter(_isInfantDiner).length;
@@ -24286,10 +24309,10 @@ function _dishAmountBlockHtml(dishName, normalizedIngs, savedIngredients, dateKe
         var parts = [];
         var labor = ctx.tags.filter(function (t) { return /体力/.test(t.text); });
         var old = ctx.tags.filter(function (t) { return /70/.test(t.text); });
-        var kid = ctx.tags.filter(function (t) { return /儿童/.test(t.text); });
+        var kid = ctx.tags.filter(function (t) { return /1-3岁|4-6岁/.test(t.text); });
         if (labor.length) parts.push('体力劳动者 ' + labor.length + ' 人：主食×1.3、高蛋白×1.2');
         if (old.length) parts.push('70+老人 ' + old.length + ' 人：×0.8');
-        if (kid.length) parts.push('3-6岁儿童 ' + kid.length + ' 人：×0.5');
+        if (kid.length) parts.push('1-6岁儿童 ' + kid.length + ' 人：1-3岁×0.5、4-6岁×0.7');
         tagHtml = '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:4px 8px;margin-top:4px;">⚖️ 已按人群调整：' + escapeHtml(parts.join('；')) + '</div>';
     }
     if (!ctx.manual && ctx.infantCount > 0) {
@@ -38626,7 +38649,7 @@ async function _mwAiImage(ev) {
         var imgUrl = '';
         // 主通道：自家后端万相文生图；失败（如账户欠费）自动降级到免费图源
         try {
-            var resp = await fetch(API_BASE + '/chef-image', {
+            var resp = await fetch(API_BASE + '/api/chef-image', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt: prompt, size: '1024*1024' })
@@ -53770,7 +53793,6 @@ async function generateMultiDayRecommendation(days) {
                 const dishNames = dishList.map(d => d.name);
                 // 提取食材用量数据到dishMeta
                 let dishMeta = {};
-                const wServings = diningGroup ? diningGroup.members.length : 1;
                 dishList.forEach(d => {
                     // 解析推荐理由中的人群健康标签（如"适合生长发育期"→['grow']）
                     var hTags = (typeof parseHealthTags === 'function') ? parseHealthTags(d.reason || '').map(function(t){return t.key;}) : [];
@@ -53778,12 +53800,12 @@ async function generateMultiDayRecommendation(days) {
                     if (d.reason) metaBase.userComment = d.reason;
                     if (hTags.length) metaBase.healthTags = hTags;
                     if (d.ingredients && Array.isArray(d.ingredients) && d.ingredients.length > 0) {
-                        dishMeta[d.name] = Object.assign({ ingredients: d.ingredients, source: 'ai' }, metaBase);
+                        dishMeta[d.name] = Object.assign({ ingredients: d.ingredients, source: 'ai', perPersonIngredients: true }, metaBase);
                     } else {
-                        // AI未返回食材时，从菜品食材数据库按人数补全
-                        const calcIngs = (typeof getDishIngredientsWithServings === 'function') ? getDishIngredientsWithServings(d.name, wServings) : null;
+                        // AI未返回食材时，从菜品食材数据库按「每人份」补全（V345/D7-10：读取端再按就餐人数倍乘）
+                        const calcIngs = (typeof getDishIngredientsWithServings === 'function') ? getDishIngredientsWithServings(d.name, 1) : null;
                         if (calcIngs && calcIngs.length > 0) {
-                            dishMeta[d.name] = Object.assign({ ingredients: calcIngs, source: 'database' }, metaBase);
+                            dishMeta[d.name] = Object.assign({ ingredients: calcIngs, source: 'database', perPersonIngredients: true }, metaBase);
                         } else if (Object.keys(metaBase).length > 0) {
                             dishMeta[d.name] = Object.assign({ source: 'ai' }, metaBase);
                         }
@@ -54312,21 +54334,19 @@ function showAiRecommendationModal(recommendation, targetDate) {
                 return { name: cleanDishName(String(d)), ingredients: null };
             });
             const dishNamesStr = normalizedDishes.map(d => escapeHtml(d.name)).join('、');
-            // 构建食材用量列表
+            // 构建食材用量列表（V345/D7-10：统一展示「每人份」，避免与整菜总量混淆）
             let ingredientsHtml = '';
-            const modalServings = (typeof getDiaryDiningGroup === 'function' && getDiaryDiningGroup()) ? getDiaryDiningGroup().members.length : 1;
             normalizedDishes.forEach(d => {
                 const dName = (d.name || '').trim();
+                let ingList = null;
                 if (d.ingredients && Array.isArray(d.ingredients) && d.ingredients.length > 0) {
-                    const ingStr = d.ingredients.map(i => `${escapeHtml(i.name)}${i.quantity ? i.quantity : ''}${i.unit ? escapeHtml(i.unit) : ''}`).join('、');
-                    ingredientsHtml += `<div style="font-size:12px;color:#9A3412;margin-top:2px;">🥘 ${escapeHtml(d.name)}：${ingStr}</div>`;
-                } else {
-                    // 回退：从菜品食材数据库按人数获取
-                    const calcIngs = (typeof getDishIngredientsWithServings === 'function') ? getDishIngredientsWithServings(dName, modalServings) : null;
-                    if (calcIngs && calcIngs.length > 0) {
-                        const ingStr = calcIngs.map(i => `${escapeHtml(i.name)}${i.quantity ? i.quantity : ''}${i.unit ? escapeHtml(i.unit) : ''}`).join('、');
-                        ingredientsHtml += `<div style="font-size:12px;color:#9A3412;margin-top:2px;">🥘 ${escapeHtml(d.name)}：${ingStr}</div>`;
-                    }
+                    ingList = d.ingredients;
+                } else if (typeof getDishIngredientsWithServings === 'function') {
+                    ingList = getDishIngredientsWithServings(dName, 1);
+                }
+                if (ingList && ingList.length > 0) {
+                    const ingStr = ingList.map(i => `${escapeHtml(i.name)}${i.quantity ? i.quantity : ''}${i.unit ? escapeHtml(i.unit) : ''}`).join('、');
+                    ingredientsHtml += `<div style="font-size:12px;color:#9A3412;margin-top:2px;">🥘 ${escapeHtml(d.name)}（每人份）：${ingStr}</div>`;
                 }
             });
             mealsHtml += `<div style="background:#FFF7ED;border-radius:10px;padding:12px;margin-bottom:10px;">
@@ -54417,7 +54437,7 @@ function confirmAiRecommendation() {
             const existingMeta = (existing.plan && existing.plan.dishMeta) ? existing.plan.dishMeta : {};
             const merged = [...existingDishes];
             const mergedMeta = { ...existingMeta };
-            const cServings = (existing.plan && existing.plan.servings) ? existing.plan.servings : ((typeof getDiaryDiningGroup === 'function' && getDiaryDiningGroup()) ? getDiaryDiningGroup().members.length : 1);
+            // V345(D7-10): dishMeta 统一为每人份口径，此处不再需要按人数缩放
             normalizedDishes.forEach(d => {
                 if (!d.name) return;
                 // V238: 流质同餐互斥——已有液体时跳过新增液体，AI 自身多道液体也只留第一道
@@ -54432,11 +54452,13 @@ function confirmAiRecommendation() {
                 if (typeof prior.confirmed !== 'boolean') prior.confirmed = false;
                 prior.source = 'ai';
                 if (!prior.addedAt) prior.addedAt = Date.now();
-                // 存储食材用量数据（优先 AI 返回，否则数据库补全）
-                if (d.ingredients && Array.isArray(d.ingredients) && d.ingredients.length > 0) prior.ingredients = d.ingredients;
-                else {
-                    const calcIngs = (typeof getDishIngredientsWithServings === 'function') ? getDishIngredientsWithServings(d.name, cServings) : null;
-                    if (calcIngs && calcIngs.length > 0) prior.ingredients = calcIngs;
+                // 存储食材用量数据（优先 AI 返回的每人份用量，否则数据库每人份补全）
+                if (d.ingredients && Array.isArray(d.ingredients) && d.ingredients.length > 0) {
+                    prior.ingredients = d.ingredients;
+                    prior.perPersonIngredients = true;
+                } else {
+                    const calcIngs = (typeof getDishIngredientsWithServings === 'function') ? getDishIngredientsWithServings(d.name, 1) : null;
+                    if (calcIngs && calcIngs.length > 0) { prior.ingredients = calcIngs; prior.perPersonIngredients = true; }
                 }
                 mergedMeta[d.name] = prior;
             });
@@ -54446,8 +54468,8 @@ function confirmAiRecommendation() {
                 var meta = Object.assign({}, mergedMeta[dishName] || {});
                 var changed = false;
                 if (!meta.ingredients) {
-                    const calcIngs = (typeof getDishIngredientsWithServings === 'function') ? getDishIngredientsWithServings(dishName, cServings) : null;
-                    if (calcIngs && calcIngs.length > 0) { meta.ingredients = calcIngs; changed = true; }
+                    const calcIngs = (typeof getDishIngredientsWithServings === 'function') ? getDishIngredientsWithServings(dishName, 1) : null;
+                    if (calcIngs && calcIngs.length > 0) { meta.ingredients = calcIngs; meta.perPersonIngredients = true; changed = true; }
                 }
                 if (!/^(existing|shopping|weekend|ai|preferred|manual)$/.test(String(meta.source||''))) { meta.source = 'ai'; changed = true; }
                 if (typeof meta.confirmed !== 'boolean') { meta.confirmed = false; changed = true; }
@@ -54933,6 +54955,7 @@ function buildRecommendationPrompt(data, weekDatesStr) {
     prompt += `${startIdx + 3}. 【硬性规则】同一餐中甜品类/甜汤类（如银耳羹、莲子羹、雪梨羹、糖水、水果沙拉、酸奶等）最多只能出现1道，严禁同餐出现2道或以上的甜食/甜汤\n`;
     prompt += `${startIdx + 4}. 同一餐中主食类最多1-2道（如同时有米饭+汤是允许的，但不能同时有米饭+面条+粥），主菜（蛋白质类）至少1道，素菜至少1道\n`;
     prompt += `【硬性规则·流质同餐互斥】粥/稀饭/汤/羹/豆浆/米糊/牛奶/酸奶/果汁/奶茶等流质与饮品，同一餐合计最多1道：早餐若已有粥，就不要再给酸奶/牛奶/豆浆/果汁；午餐/晚餐若已有汤，就不要再给粥/羹。早餐必须至少有1道固体主食（面包/馒头/包子/饼/蛋/饭团等），不能只给流食。\n`;
+    prompt += `【硬性规则·食材用量口径】每道菜 ingredients 中的 quantity 必须是「每人份」用量（不是全家总用量），单位用克/毫升/个/片/颗；前端会按实际就餐人数自动倍乘。\n`;
     prompt += `\n请严格按照以下JSON格式返回，不要添加任何其他文字：\n`;
     // V234: 有激活专项健康饮食计划时，每餐 JSON 追加 specialInterventions 字段
     var _spMealFrag = hasActiveSP ? ',"specialInterventions":[{"memberName":"儿子","planType":"illness","targetDish":"菜名","note":"低油少盐，易消化"}]' : '';
@@ -55597,18 +55620,18 @@ function confirmWeeklyAiRecommendation() {
                 let cappedDishes = _filterLiquidStaplePerMeal(dishes);
                 if (cappedDishes.length > _mealCap) cappedDishes = cappedDishes.slice(0, _mealCap);
                 // 替换已有计划（不合并已有菜品，直接用AI推荐替换）
-                const wConfirmServings = ((typeof getDiaryDiningGroup === 'function' && getDiaryDiningGroup()) ? getDiaryDiningGroup().members.length : 1);
                 const merged = [];
                 const mergedMeta = {};
                 cappedDishes.forEach(d => {
                     if (!merged.includes(d.name)) {
                         merged.push(d.name);
                         if (d.ingredients && Array.isArray(d.ingredients) && d.ingredients.length > 0) {
-                            mergedMeta[d.name] = { ingredients: d.ingredients, source: 'ai' };
+                            mergedMeta[d.name] = { ingredients: d.ingredients, source: 'ai', perPersonIngredients: true };
                         } else {
-                            const calcIngs = (typeof getDishIngredientsWithServings === 'function') ? getDishIngredientsWithServings(d.name, wConfirmServings) : null;
+                            // V345(D7-10): dishMeta 统一存每人份，读取端按就餐人数倍乘
+                            const calcIngs = (typeof getDishIngredientsWithServings === 'function') ? getDishIngredientsWithServings(d.name, 1) : null;
                             if (calcIngs && calcIngs.length > 0) {
-                                mergedMeta[d.name] = { ingredients: calcIngs, source: 'database' };
+                                mergedMeta[d.name] = { ingredients: calcIngs, source: 'database', perPersonIngredients: true };
                             } else {
                                 // 既无 AI 用量，又不在数据库中：收集起来，稍后自动获取
                                 missingDishNames.add(d.name);
@@ -56064,11 +56087,10 @@ function sendMessage(inputEl) {
 
         const merged = [...existingDishes, dishName];
         const mergedMeta = { ...existingMeta };
-        // 从菜品食材数据库按人数补全新添加菜品的食材信息
-        const mServings = (existing.plan && existing.plan.servings) ? existing.plan.servings : ((typeof getDiaryDiningGroup === 'function' && getDiaryDiningGroup()) ? getDiaryDiningGroup().members.length : 1);
-        const calcIngs = (typeof getDishIngredientsWithServings === 'function') ? getDishIngredientsWithServings(dishName, mServings) : null;
+        // V345(D7-10): 从菜品食材数据库按「每人份」补全新添加菜品的食材信息（读取端再按人数倍乘）
+        const calcIngs = (typeof getDishIngredientsWithServings === 'function') ? getDishIngredientsWithServings(dishName, 1) : null;
         if (calcIngs && calcIngs.length > 0) {
-            mergedMeta[dishName] = { ingredients: calcIngs, source: 'database' };
+            mergedMeta[dishName] = { ingredients: calcIngs, source: 'database', perPersonIngredients: true };
         }
         let planData = { dishes: merged, note: '' };
         if (Object.keys(mergedMeta).length > 0) planData.dishMeta = mergedMeta;
@@ -56636,10 +56658,15 @@ document.addEventListener('click', function(e) {
 });
 
 // 渲染一周食谱推荐（从今天开始7天）
-// 迁移：为已有计划数据补全缺失的食材信息
+// 迁移：为已有计划数据补全缺失的食材信息；V345(D7-10) 统一 dishMeta.ingredients 为「每人份」口径
 function migrateDishMetaIngredients() {
     const calendar = getDietCalendar();
     let updated = false;
+    // 旧写入路径把「每人份 × 人数」的总量存进了 dishMeta，与读取端（按每人份 × 就餐人数）重复放大；
+    // 若能精确匹配「库内每人份 × plan.servings」，则判定为旧口径并还原为每人份。
+    const _qtyNear = function (a, b) {
+        return isFinite(a) && isFinite(b) && Math.abs(a - b) <= Math.max(1, Math.abs(b) * 0.05);
+    };
     Object.keys(calendar).forEach(dateKey => {
         const dayData = calendar[dateKey];
         if (!dayData) return;
@@ -56648,20 +56675,54 @@ function migrateDishMetaIngredients() {
             if (mealData && mealData.plan && mealData.plan.dishes && mealData.plan.dishes.length > 0) {
                 if (!mealData.plan.dishMeta) mealData.plan.dishMeta = {};
                 const dishMeta = mealData.plan.dishMeta;
-                const servings = mealData.plan.servings || 1;
+                // 旧口径还原需要「当餐实际人数」：plan.servings 缺失时依次用就餐成员数、当前就餐组人数兜底
+                let servings = Number(mealData.plan.servings);
+                if (!(isFinite(servings) && servings >= 1)) {
+                    const dmLen = Array.isArray(mealData.plan.diningMembers) ? mealData.plan.diningMembers.length : 0;
+                    servings = dmLen >= 1 ? dmLen : ((typeof getMealServings === 'function') ? Number(getMealServings(dateKey, mealType, 1)) : 1);
+                }
+                servings = Math.max(1, Math.floor(Number(servings) || 1));
                 mealData.plan.dishes.forEach(dishRaw => {
                     // 兼容 dishes 中为对象（{id,name}）的历史数据
                     const dishName = (dishRaw && typeof dishRaw === 'object') ? String(dishRaw.name || dishRaw.dish || '') : String(dishRaw || '');
                     const dTrimmed = dishName.trim();
                     const meta = dishMeta[dishName] || dishMeta[dTrimmed];
-                    // 需要补全的情况：完全缺失、或数据库来源但含"适量"无具体用量
+                    // ① 统一每人份口径
+                    if (meta && Array.isArray(meta.ingredients) && meta.ingredients.length > 0 && meta.perPersonIngredients !== true) {
+                        let normalized = servings <= 1;
+                        if (servings > 1 && typeof DISH_INGREDIENTS !== 'undefined' && DISH_INGREDIENTS[dTrimmed] && typeof getDishIngredientsWithServings === 'function') {
+                            const one = getDishIngredientsWithServings(dTrimmed, 1);
+                            if (Array.isArray(one) && one.length === meta.ingredients.length) {
+                                const sameShape = one.every(function (o, i) {
+                                    const m = meta.ingredients[i] || {};
+                                    const mq = Number(m.quantity);
+                                    const oq = Number(o.quantity);
+                                    return normalizeIngredientName(String(m.name || '')) === normalizeIngredientName(String(o.name || ''))
+                                        && String(m.unit || '').trim() === String(o.unit || '').trim()
+                                        && _qtyNear(mq, oq * servings);
+                                });
+                                if (sameShape) {
+                                    meta.ingredients = one;
+                                    normalized = true;
+                                    updated = true;
+                                }
+                            }
+                        }
+                        // 仅在「已确认是每人份」（还原成功或 servings<=1）时打标；
+                        // 无法判定（servings>1 且与库内每人份×人数不匹配）保持原样，等下次启动拿到就餐组上下文再判
+                        if (normalized) {
+                            meta.perPersonIngredients = true;
+                            updated = true;
+                        }
+                    }
+                    // ② 补全缺失、或数据库来源但含"适量"无具体用量
                     const needsUpdate = !meta || !meta.ingredients || !Array.isArray(meta.ingredients) || meta.ingredients.length === 0 ||
                         (meta.source === 'database' && meta.ingredients.some(i => i.quantity === null || i.unit === '适量'));
                     if (needsUpdate) {
-                        // 从DISH_INGREDIENTS按人数补全具体用量
-                        const calcIngs = (typeof getDishIngredientsWithServings === 'function') ? getDishIngredientsWithServings(dishName, servings) : null;
+                        // 从 DISH_INGREDIENTS 按「每人份」补全具体用量（读取端会按就餐人数倍乘）
+                        const calcIngs = (typeof getDishIngredientsWithServings === 'function') ? getDishIngredientsWithServings(dishName, 1) : null;
                         if (calcIngs && calcIngs.length > 0) {
-                            dishMeta[dishName] = { ingredients: calcIngs, source: 'database' };
+                            dishMeta[dishName] = { ingredients: calcIngs, source: 'database', perPersonIngredients: true };
                             updated = true;
                         }
                     }
@@ -56671,7 +56732,7 @@ function migrateDishMetaIngredients() {
     });
     if (updated) {
         saveDietCalendar(calendar);
-        console.log('[迁移] 已为部分菜品补全食材信息');
+        console.log('[迁移] 已补全菜品食材信息并按每人份口径归一（D7-10）');
     }
 }
 
@@ -63301,6 +63362,33 @@ const WEEKLY_AI_CACHE = { key: null, data: null, expireAt: 0 };
 
 function _buildQuickWeeklyPlan(weekDates, days) {
     const styles = _getFallbackStyles(); // 家常风/快手风/养生风
+    // V345(D7-07): 内置快速方案接入家庭画像——先用本地画像引擎（儿童/外籍/体力劳动/家乡菜系/口味偏好）
+    // 生成"家庭特色菜"候选池，再在每天每餐替换 1-2 道非主食，避免不同家庭拿到完全相同的通用菜单
+    const _profileMeals = { breakfast: [], lunch: [], dinner: [] };
+    const _fillMeals = { breakfast: [], lunch: [], dinner: [] };
+    const _usedProfileDish = { breakfast: new Set(), lunch: new Set(), dinner: new Set() };
+    // 画像特色标记：命中则优先替换，保证家乡菜系 / 儿童 / 外籍 / 体力劳动者等家庭差异先体现
+    const _PROFILE_MARK = /家乡风味|儿童|学龄|青春期|外籍|国际|意大利|英式|体力|高蛋白|补钙|补铁|孕期|产后|老年|慢病/;
+    try {
+        const _likedIng = (typeof _extractUserLikedIngredients === 'function') ? _extractUserLikedIngredients(30) : [];
+        const _termObj = (typeof getSolarTermForDate === 'function') ? getSolarTermForDate(weekDates[0] || new Date()) : {};
+        const _servN = (typeof getXiaojiaMemberCount === 'function') ? getXiaojiaMemberCount() : 3;
+        const _keys = weekDates.slice(0, days).map(function(d){ return dateToKey(d); });
+        [0, 137, 271].forEach(function(off){
+            const p = _staticFallbackIngrPrefRecipes(_keys, _likedIng, _termObj, off, _servN) || {};
+            Object.keys(p).forEach(function(dk){
+                ['breakfast','lunch','dinner'].forEach(function(mt){
+                    (p[dk][mt] || []).forEach(function(x){
+                        const nm = x && (x.dish || x.name);
+                        if (!nm) return;
+                        const rsn = Array.isArray(x.reason) ? x.reason.join(' ') : String(x.reason || '');
+                        const bucket = _PROFILE_MARK.test(rsn) ? _profileMeals : _fillMeals;
+                        if (bucket[mt].indexOf(nm) === -1) bucket[mt].push(nm);
+                    });
+                });
+            });
+        });
+    } catch(e) { console.warn('内置方案画像补齐失败：', e); }
     const weekDays = ['周日','周一','周二','周三','周四','周五','周六'];
     const styleReasonMap = {
         '家常风': '采用经典家常搭配，口味贴近日常饮食习惯，荤素均衡，主食齐全。',
@@ -63413,6 +63501,33 @@ function _buildQuickWeeklyPlan(weekDates, days) {
             const _dcQ = getDishCountByMembers(getXiaojiaMemberCount());
             const _capQ = mealKey === 'breakfast' ? _dcQ.breakNum : mealKey === 'lunch' ? _dcQ.lunchNum : _dcQ.dinnerNum;
             if (__out.length > _capQ) __out = __out.slice(0, _capQ);
+        } catch(e) {}
+        // V345(D7-07): 用家庭画像特色菜替换 1-2 道非主食（保留主食与道数、避免同餐两道流质、跨天不重复）
+        try {
+            const _candAll = _profileMeals[mealKey].concat(_fillMeals[mealKey]).filter(function(n){
+                if (_usedProfileDish[mealKey].has(n)) return false;
+                return !__out.some(function(d){ return d.name === n; });
+            });
+            const _isLiquid = function(n){ return _LIQUID_DISH_RE.test(String(n || '')); };
+            const _replaced = {};
+            const _swapMax = Math.min(__out.length >= 4 ? 2 : 1, __out.length - 1);
+            let _done = 0;
+            for (let _ci = 0; _ci < _candAll.length && _done < _swapMax; _ci++) {
+                const _newName = _candAll[_ci];
+                let _idx = -1;
+                if (_isLiquid(_newName)) {
+                    const _li = __out.map(function(d, i){ return _isLiquid(d.name) ? i : -1; }).filter(function(i){ return i >= 0; });
+                    _idx = _li.length ? _li[0] : -1;
+                } else {
+                    const _ni = __out.map(function(d, i){ return (!isStaple(d.name) && !_isLiquid(d.name)) ? i : -1; }).filter(function(i){ return i >= 0; });
+                    _idx = _ni.length ? _ni[_ni.length - 1] : -1;
+                }
+                if (_idx < 0 || _replaced[_idx]) continue;
+                __out[_idx] = { name: _newName, ingredients: null, reason: '按家庭画像推荐' };
+                _replaced[_idx] = 1;
+                _usedProfileDish[mealKey].add(_newName);
+                _done++;
+            }
         } catch(e) {}
         return __out;
     }

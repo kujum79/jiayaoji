@@ -48,12 +48,16 @@ ALIYUN_MODEL = "qwen-turbo"  # 可选 qwen-plus, qwen-max, qwen-turbo（免费�
 
 # ========== 多模型路由层（model_config.py） ==========
 try:
-    from backend.model_config import call_ai, route_vision, AIServiceBusy  # 包形式导入（项目根目录启动 / Render 部署）
+    from backend.model_config import call_ai, route_vision, AIServiceBusy, is_leaked_api_key  # 包形式导入（项目根目录启动 / Render 部署）
 except ImportError:  # 直接从 backend 目录启动时按同级模块导入
-    from model_config import call_ai, route_vision, AIServiceBusy  # noqa: E402
+    from model_config import call_ai, route_vision, AIServiceBusy, is_leaked_api_key  # noqa: E402
 
 # model_config 导入时已加载 backend/.env（已有环境变量优先），这里再解析一次 Key
 ALIYUN_API_KEY = os.getenv("DASHSCOPE_API_KEY", "") or os.getenv("ALIYUN_API_KEY", "")
+# P0-4: 已泄漏 Key 拒绝使用（黑名单只存 sha256；误配回来也不会直连 dashscope）
+if ALIYUN_API_KEY and is_leaked_api_key(ALIYUN_API_KEY):
+    print("[安全] 检测到已泄漏的 DashScope Key，已拒绝使用；请先在阿里云控制台轮换", flush=True)
+    ALIYUN_API_KEY = ""
 # ===================================================
 
 app = FastAPI(

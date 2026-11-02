@@ -50,9 +50,15 @@
 | **影响家庭** | ①家3；②家1、家2（付费家庭，最伤） |
 | **用户后果** | 「买了吃不完 / 做了不够吃」；付费用户体验反而低于免费用户 |
 | **根因** | ① 就餐人数未按年龄段折算（0-6m 系数应为 0）；② AI 方案 `ingredients` 未按人数放大，通用方案已放大 → 两套写入路径不一致 |
-| **修法** | ① 统一 `getDiaryServings()` 返回加权人数（成人 1、1-3 岁 0.5、4-6 岁 0.7、0-6m 0），界面显示「成人 3 + 婴儿 1（不计入）」；② AI 方案生成后端统一 `×servings` 放大，或在 `dishMeta` 增加 `servings` 并在 UI 明示「本菜 N 人份」；③ 采购清单与食谱共用同一份 servings 计算结果 |
-| **验收标准** | ① 家3 采购区显示「成人 3 + 婴儿 1（不计入）」且总量较现状下降约 25%；② 家1/家2 燕麦主料达到「≥40g/人」量级；③ 家4 与家3 同菜克数仍保持 1.5 倍关系 |
+| **修法** | ① 统一 `getDiaryServings()` 返回加权人数（成人 1、1-3 岁 0.5、4-6 岁 0.7、0-6m 0），界面显示「成人 3 + 婴儿 1（不计入）」；② AI 方案统一 `×servings` 放大，或在 `dishMeta` 增加 `servings` 并在 UI 明示「本菜 N 人份」；③ 采购清单与食谱共用同一份 servings 计算结果 |
+| **验收标准** | ① 家3 采购区显示「成人 3 + 婴儿 1（不计入）」且总量较现状下降约 25%；② 家1/家2 燕麦主料达到「≥40g/人」量级（70+ 老人按 0.8 折算后可略低）；③ 家3/家4 同菜按「每人份基准一致 + 按人群折算」定价，折算后克数比 ≈ 5.5/3（不再机械追求 1.5 倍） |
 | **回归范围** | 四家今日三餐、3 天规划、采购清单、食材推荐 |
+
+> **P0-3 状态（2026-11-02，已修 V345-20261102，四家实测）**：
+> - **D7-08 婴儿/分龄折算接入采购**：`computeIngredientNeeds` 从「原始人数」改为「折算份数」（`q1 × eq[staple|protein|other]`），`_memberServingWeight` 拆分 1-3 岁 0.5 / 4-6 岁 0.7；食材页人数改为「用餐 3 人 + 婴儿 1 人（不计入）」。实测家3 文案与 `ctx{count:3,infantCount:1}` 一致；同批已确认菜品旧/新总量比：家1 **1.00**、家2 **0.90**（两位 70+ ×0.8）、家3 **0.75**（-25%，达标）、家4 **0.87~0.92**（儿童 0.7/0.5、外婆 1.3/1.2）。
+> - **D7-10 菜量口径统一为「每人份」**：5 条写入路径（周计划 AI 应用 / 日推荐应用 / 周 AI 确认 / 语音加菜 / 推荐预览）统一存 `getDishIngredientsWithServings(name,1)` + `perPersonIngredients:true`；启动迁移对旧「总量」数据按「库内每人份 × 当餐人数」精确匹配还原（`plan.servings` 缺失时用就餐组成员数兜底），无法判定则保持原值不强改；周计划 prompt 增加「quantity 必须每人份」硬性规则，预览弹窗标注「（每人份）」。
+> - **实测**：家3 三明治 `吐司320→80g / 鸡蛋4→1 / 生菜120→30 / 番茄200→50`，牛奶麦片 `燕麦片200→50 / 牛奶1000→250`；家4 三明治 `480→80g`，牛奶麦片 `300→50 / 1500→250`；采购侧折算后 家3 吐司 **240g**、家4 **440g**（旧口径实际为 1280g / 2880g 的重复放大已消除）；家1 燕麦粥保留 AI 每人份 40g（采购 120g，人均 40g）；四家 0 console / pageerror。
+> - **遗留说明**：老日期中「不在库内」的 AI 总量数据无法自动判别（同形同量校验不通过时保持原值），需等该菜被重新生成或人工改写；`getDiaryServings()` 仍返回实际人数（用于外食/省钱展示），采购侧一律用折算份数。
 
 ### P0-4 安全凭据：已泄漏的阿里云 API Key 仍未轮换（D5-02 残留）
 
@@ -63,6 +69,17 @@
 | **修法** | 阿里云控制台吊销旧 Key → 新建 Key 仅存后端环境变量 → 后端 `/plan` 等代理统一鉴权；上线前用旧 Key 发一次请求确认返回 401 |
 | **验收标准** | 旧 Key 调用失败；前端产物中全局搜索无 `sk-` 明文；`/plan`、`/recommend-dishes`、`/chef-image`、`/ai/*` 全部经后端 |
 | **回归范围** | 线上 AI 全链路（三餐生成、点菜、餐厅推荐、菜单识别、专家评估） |
+
+> **P0-4 状态（2026-11-02，V345 复核 + 代码加固）**：
+> - **旧 Key 实测失效**：从 git 历史取出 V331 前前端明文的 DashScope Key，直接请求 `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions` → **HTTP 401 Unauthorized**，即该 Key 已在阿里云侧失效/删除，验收①「旧 Key 调用失败」达标。
+> - **前端产物无明文**：`frontend/` 全目录搜索 `sk-…` / `aliyuncs.com` / `dashscope` → **0 命中**；`/plan`、`/recommend-dishes`、`/recommend-restaurants`、`/recognize_ingredients`、`/ai/vision`、`/parse-menu-image|url` 全部经 `API_BASE` 走后端，验收②③达标。
+> - **修掉一处未走后端**：前端 AI 配图原先请求 `/chef-image`，但后端只定义 `/api/chef-image`（线上必然 404 后降级到 pollinations）→ 已改为 `/api/chef-image`。实测该路由返回 JSON（无 Key 时为 502 JSON 错误，而非 404/HTML）；`/plan` 422 JSON、`/recommend-dishes` 200 JSON、`/ai/usage` 405（GET 路由收到 POST）均证明路由在后端。
+> - **新增泄漏 Key 黑名单守卫**：`backend/model_config.py` 只存旧 Key 的 sha256（不落明文），命中即视为「未配置」并打印安全日志、自动降级下一服务商；`backend/main.py` 的 `ALIYUN_API_KEY` 同样过滤。实测：把旧 Key 注入 `DASHSCOPE_API_KEY` → `is_leaked_api_key=True`、`dashscope_key_empty=True`；随机新 Key → `False`（正常放行）。
+> - **生产服务器复核（2026-11-02，47.97.178.39 真实执行）**：扫描 `backend/.env`、根 `.env`、`/etc/environment`、`/root/.bashrc|.profile`、`/etc/default|sysconfig/jiayaoji`、`/etc/systemd/system/*jiayaoji*` → 仅 2 个 `sk-` 令牌（指纹 `8314124c`、`6d60ec57`，均为 Agnes/SiliconFlow 正常 Key），**旧泄漏 Key 0 命中**；`systemctl cat jiayaoji` 只有 `EnvironmentFile=/var/www/jiayaoji/backend/.env`、无内联 `Environment=`；线上 `https://jiayaoji.cn/app` `sk-` 命中 **0**。结论：无需清理动作，生产侧无旧 Key 残留。
+> - **生产 Key 文件已解耦（2026-11-02，47.97.178.39 真实执行完成）**：主单元 `systemctl show -p FragmentPath` = `/etc/systemd/system/jiayaoji.service`（本身无 `EnvironmentFile`），真实来源是 drop-in `jiayaoji.service.d/override.conf`。已做：① 备份到 `/root/jiayaoji-backup-20261102085110/`（`backend.env`、`unit-*.txt`、`override.conf.orig`）；② Key 复制为 `/etc/jiayaoji/api-keys.env`（600，与 `backend/.env` sha256 一致 `77ed591b…`）；③ `override.conf` 改为 `EnvironmentFile=-/etc/jiayaoji/api-keys.env`、删除临时 `30-envfile.conf`；④ 移走仓库副本 `backend/.env`。验证：`systemctl show -p EnvironmentFiles` **只剩** `/etc/jiayaoji/api-keys.env (ignore errors=yes)`；重启后 `active`、进程环境 `AGNES_API_KEY` 计数 1、`/health` `{"ping":"pong"}`、`https://jiayaoji.cn/app` 200、`POST /recommend-dishes` 200、`POST /plan` 422；`backend/.env` 已不存在。**注意**：systemd 对 `EnvironmentFile=` 不支持「空值清空」，靠 drop-in 追加无法覆盖旧值（曾出现两处并存），覆写必须直接改 `override.conf`（已记入操作步骤）。
+> - **后续轮换方式**：需启用百炼时在控制台新建 Key，只写 `/etc/jiayaoji/api-keys.env`（或 `deploy/rotate-api-key.sh --set` 写入的 `20-api-keys.conf`），禁止进仓库。仓库根 `.env`、`backend/.env` 均未被 git 跟踪（`git ls-files` 0 命中；`.env` 已在 `.gitignore`）。
+> - **运维脚本**：[deploy/rotate-api-key.sh](file:///d:/jiayaoji/deploy/rotate-api-key.sh) 提供 `--check`（只读扫描 + 线上 `sk-` 断言）、`--remove`（清空泄漏 Key 并自动备份）、`--set` / `--set-file`（新 Key 写入 `/etc/systemd/system/jiayaoji.service.d/20-api-keys.conf`，600 权限、不进仓库）、`--verify`（不重启只验证）。脚本只输出 sha256 指纹，不打印 Key 原文。
+> - **残留（P2，不阻塞）**：食材知识、菜谱配图仍有 keyless 的 pollinations 直连（`text.pollinations.ai` / `image.pollinations.ai`），无密钥泄漏风险，但严格绕过后端代理，建议随 P0-5 发布门禁一并收敛。
 
 ### P0-5 部署基线：nginx 非 `/api` 路由代理必须入库并纳入发布校验（D6-08 防回退）
 
@@ -122,6 +139,8 @@
 | 9 | 积分兑换差额提示「还差 N 分」 | PM U6 | 减少挫败 |
 | 10 | 食记卡片价格区折叠、采购页首屏给结论 | PM U1/U2 | 首屏清爽 |
 | 11 | `reason` 字段语义归一（理由 ≠ 时长） | 厨师报告 | 数据一致性 |
+
+> **P1-1 进度（2026-11-02，V345-20261102）**：D7-07 画像差异化已落地——内置快速方案接入本地画像引擎（儿童分龄 / 外籍 / 体力劳动 / 家乡菜系 / 节气 / 喜欢食材），每餐替换 1–2 道非主食。四家实测跨家庭相同餐次 ≤1/9（家3/家4 由 6/6 相同 → 0/9），地区化（家1 湖北热干面 / 家2 贵州辣子鸡 / 家3 意大利面 / 家4 东北锅包肉）生效，同餐流质 ≤1、道数不变、0 报错。剩余项：禁口硬过滤、卡片一句个性化推荐理由（婴儿不计人数已随 P0-3 修复）。
 
 ---
 
