@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V349-20261102';
+        var APP_VER = 'V351-20261102';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -29876,6 +29876,79 @@ function _vrTaboosOf(member) {
     });
     return out;
 }
+// ===== V351(P1-1)：全家禁口/过敏原硬过滤（不区分会员，未订阅家庭同样生效）=====
+// 忌口词 → 菜名/食材关键词（菜名里未必出现原词，如「不吃猪肉」须挡住红烧肉/排骨）
+var _FAMILY_BLOCK_SYN = {
+    '猪肉': ['猪','排骨','五花','回锅肉','红烧肉','腊味','肉丝','肉末','里脊','肘子','肉丸'],
+    '牛肉': ['牛'], '羊肉': ['羊'], '鸡肉': ['鸡'], '鸭肉': ['鸭'],
+    '鱼': ['鱼','鲈','鲫','鳕','带鱼'], '虾': ['虾'], '蟹': ['蟹'], '蛋': ['蛋'], '鸡蛋': ['蛋'],
+    '牛奶': ['奶'], '奶': ['奶'], '花生': ['花生'], '坚果': ['坚果','花生','核桃','腰果','杏仁'],
+    '辣': ['辣','麻辣','麻椒','花椒','泡椒','剁椒','辣椒','豆瓣','藤椒'],
+    '辛辣': ['辣','麻辣','麻椒','花椒','辣椒'],
+    '辣椒': ['辣','辣椒','泡椒','剁椒'], '香菜': ['香菜'], '葱': ['葱'], '蒜': ['蒜'],
+    '海鲜': ['虾','蟹','鱼','贝','螺','鱿'], '牛羊肉': ['牛','羊'], '内脏': ['肝','肚','肠','腰'],
+    '肥肉': ['五花','肥牛','肥肠','肘子'], '豆制品': ['豆腐','豆干','腐竹','豆浆','豆皮'],
+    '麸质': ['面','饼','馒头','面包','吐司','饺','馄饨','意面','麦']
+};
+// 全家的过敏原 + 忌口词（结果为 [{word, kind:'allergy'|'taboo'}]，按 familyData 内容缓存）
+var _FAMILY_BLOCK_CACHE = { raw: null, words: null };
+function _familyForbiddenWords() {
+    var raw = '';
+    try { raw = lsGet('familyData') || ''; } catch (e) {}
+    if (_FAMILY_BLOCK_CACHE.words && _FAMILY_BLOCK_CACHE.raw === raw) return _FAMILY_BLOCK_CACHE.words;
+    var words = [], seen = {};
+    function add(w, kind) {
+        w = String(w || '').trim().replace(/^(不能吃|不吃|忌口|忌|不要|反感|少吃|拒绝)/, '').replace(/[的了]/g, '').replace(/类$/, '');
+        if (!w || w === '无' || w === '不过敏' || w === '无忌口' || w === '不忌口') return;
+        if (seen[w]) return;
+        seen[w] = 1;
+        words.push({ word: w, kind: kind });
+    }
+    function items(m, field, alt) {
+        var v = m ? (m[field] || m[alt] || '') : '';
+        if (Array.isArray(v)) return v.map(function(x){ return String(x || '').trim(); }).filter(Boolean);
+        return String(v).split(/[、,，;；\/\s]+/).map(function(x){ return x.trim(); }).filter(Boolean);
+    }
+    try {
+        (typeof getFamilyMembers === 'function' ? getFamilyMembers() : []).forEach(function(m){
+            items(m, 'allergens', 'allergies').forEach(function(a){ add(a, 'allergy'); });
+            items(m, 'dietaryTaboos', 'taboos').forEach(function(t){ add(t, 'taboo'); });
+            ((typeof _vrTaboosOf === 'function' ? _vrTaboosOf(m) : []) || []).forEach(function(t){
+                if (t && t.word) add(t.word, 'taboo');
+            });
+        });
+    } catch (e) {}
+    _FAMILY_BLOCK_CACHE.raw = raw;
+    _FAMILY_BLOCK_CACHE.words = words;
+    return words;
+}
+// 单道菜是否命中全家禁口（菜名 + 标签 + 本地配方食材）；命中返回命中的词对象，否则 null
+function _dishBlockedByFamily(name, tag, words) {
+    words = words || _familyForbiddenWords();
+    if (!words.length) return null;
+    var texts = [String(name || ''), String(tag || '')];
+    try {
+        if (typeof DISH_INGREDIENTS !== 'undefined' && DISH_INGREDIENTS[name] && Array.isArray(DISH_INGREDIENTS[name].items)) {
+            DISH_INGREDIENTS[name].items.forEach(function(i){ texts.push(String((i && i.name) || '')); });
+        }
+    } catch (e) {}
+    texts = texts.filter(Boolean);
+    var AL_SINGLE = ['虾','蟹','蛋','奶','鱼']; // 高危单字：多字词含这些字时单字命中也算（与 _vpHit 同口径）
+    function hit(w) {
+        var terms = [w].concat(_FAMILY_BLOCK_SYN[w] || []);
+        for (var i = 0; i < terms.length; i++) {
+            var k = terms[i];
+            if (!k) continue;
+            if (texts.some(function(t){ return t.indexOf(k) >= 0; })) return true;
+            if (k.length > 1 && k.split('').some(function(ch){
+                return AL_SINGLE.indexOf(ch) >= 0 && texts.some(function(t){ return t.indexOf(ch) >= 0; });
+            })) return true;
+        }
+        return false;
+    }
+    for (var i = 0; i < words.length; i++) { if (hit(words[i].word)) return words[i]; }
+    return null;
+}
 // 辣味菜特征（「不吃辣」命中）
 function _vrIsSpicy(texts) {
     var joined = texts.join('|');
@@ -55178,6 +55251,8 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
         '水果': ['蓝莓','草莓','橙子','葡萄','西瓜','梨','猕猴桃','火龙果'],
         '默认': ['清炒时蔬','番茄炒蛋','蒸蛋羹','凉拌木耳','荷塘小炒','白灼秋葵']
     };
+    // V351(P1-1): 后置去重的替换菜同样要过全家禁口，避免兜底环节把过敏原/忌口菜塞回来
+    var _renderFamilyWords = (typeof _familyForbiddenWords === 'function') ? _familyForbiddenWords() : [];
     function getReplace2Dish(origName, usedSet) {
         var cat = '默认';
         if (/鱼|虾|海鲜|鲈|鳕|带鱼|深海鱼/.test(origName)) cat = '鱼鲜';
@@ -55187,7 +55262,11 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
         else if (/菠菜|西兰花|白菜|黄瓜|木耳|菜|萝卜|莲藕|山药|秋葵/.test(origName)) cat = '蔬菜';
         else if (/苹果|香蕉|蓝莓|草莓|橙|葡萄|西瓜|梨|猕猴桃|水果/.test(origName)) cat = '水果';
         var pool = REPLACE2_POOL[cat] || REPLACE2_POOL['默认'];
-        for (var i = 0; i < pool.length; i++) { if (!usedSet.has(pool[i]) && pool[i] !== origName) return pool[i]; }
+        for (var i = 0; i < pool.length; i++) {
+            if (usedSet.has(pool[i]) || pool[i] === origName) continue;
+            if (typeof _dishBlockedByFamily === 'function' && _dishBlockedByFamily(pool[i], '', _renderFamilyWords)) continue;
+            return pool[i];
+        }
         return origName + '（改良版）';
     }
     // 全局去重
@@ -63375,6 +63454,22 @@ function _buildQuickWeeklyPlan(weekDates, days) {
     const _usedProfileDish = { breakfast: new Set(), lunch: new Set(), dinner: new Set() };
     // 画像特色标记：命中则优先替换，保证家乡菜系 / 儿童 / 外籍 / 体力劳动者等家庭差异先体现
     const _PROFILE_MARK = /家乡风味|儿童|学龄|青春期|外籍|国际|意大利|英式|体力|高蛋白|补钙|补铁|孕期|产后|老年|慢病/;
+    // V351(P1-1): 全家禁口/过敏原硬过滤（未订阅家庭同样生效）——候选池与最终计划均不得出现被禁菜
+    const _familyWords = (typeof _familyForbiddenWords === 'function') ? _familyForbiddenWords() : [];
+    const _blockedByFamily = function(name, tag) {
+        return (typeof _dishBlockedByFamily === 'function') ? _dishBlockedByFamily(name, tag, _familyWords) : null;
+    };
+    // V351(P1-1): 卡片展示的「一句个性化推荐理由」（把画像标签翻译成一句人话）
+    function _profileReasonText(rsn) {
+        const s = String(rsn || '');
+        const _nut = (s.match(/钙|蛋白质|铁|锌|维生素[A-Za-z\u4e00-\u9fa5]*|膳食纤维|DHA|软烂|易咀嚼|低盐/g) || []).filter(function(v, i, a){ return a.indexOf(v) === i; });
+        if (s.indexOf('🏠') >= 0) return '🏠 家乡风味 · 按家庭住址优先安排熟悉的家乡菜';
+        if (s.indexOf('💪') >= 0) return '💪 高能量配餐 · 按体力劳动强度补充主食与蛋白';
+        if (s.indexOf('🧒') >= 0) return '🧒 分龄配餐 · ' + (_nut.length ? _nut.join('、') + '，' : '') + '按孩子年龄搭配易咀嚼、营养足的菜';
+        if (s.indexOf('🌍') >= 0) return '🌍 国际风味 · 照顾外籍家人的口味习惯';
+        if (s) return s + ' · 按家庭画像推荐';
+        return '按家庭画像推荐';
+    }
     try {
         const _likedIng = (typeof _extractUserLikedIngredients === 'function') ? _extractUserLikedIngredients(30) : [];
         const _termObj = (typeof getSolarTermForDate === 'function') ? getSolarTermForDate(weekDates[0] || new Date()) : {};
@@ -63387,9 +63482,10 @@ function _buildQuickWeeklyPlan(weekDates, days) {
                     (p[dk][mt] || []).forEach(function(x){
                         const nm = x && (x.dish || x.name);
                         if (!nm) return;
+                        if (_blockedByFamily(nm, '')) return; // V351(P1-1)：禁口/过敏原候选直接剔除
                         const rsn = Array.isArray(x.reason) ? x.reason.join(' ') : String(x.reason || '');
                         const bucket = _PROFILE_MARK.test(rsn) ? _profileMeals : _fillMeals;
-                        if (bucket[mt].indexOf(nm) === -1) bucket[mt].push(nm);
+                        if (!bucket[mt].some(function(o){ return o.name === nm; })) bucket[mt].push({ name: nm, reason: rsn });
                     });
                 });
             });
@@ -63415,6 +63511,9 @@ function _buildQuickWeeklyPlan(weekDates, days) {
         const n = dishName.trim();
         return SWEET_KEYWORDS.some(k => n.includes(k));
     }
+    // V351(P1-1): 禁口命中后的兜底替换菜（同样要过禁口检查，避免用「替代菜」再踩雷）
+    const SAFE_STAPLE_FALLBACK = ['米饭','馒头','煮玉米','蒸红薯'];
+    const SAFE_DISH_FALLBACK = ['清炒时蔬','凉拌黄瓜','蒸南瓜','清炒土豆丝','白灼菜心','蒜蓉西兰花'];
 
     // 每餐的扩展菜品池（用于跨天去重，避免3天轮换完全重复）
     const pool = {
@@ -63508,18 +63607,53 @@ function _buildQuickWeeklyPlan(weekDates, days) {
             const _capQ = mealKey === 'breakfast' ? _dcQ.breakNum : mealKey === 'lunch' ? _dcQ.lunchNum : _dcQ.dinnerNum;
             if (__out.length > _capQ) __out = __out.slice(0, _capQ);
         } catch(e) {}
+        // V351(P1-1): 禁口/过敏原硬过滤——命中即换成同餐次的同类安全菜，道数与主食结构不变
+        if (_familyWords.length) {
+            const _safePool = [];
+            pool[mealKey].forEach(function(v){ v.forEach(function(d){ if (!_blockedByFamily(d.name, d.tag)) _safePool.push(d); }); });
+            const _outSafe = [];
+            __out.forEach(function(d){
+                if (!_blockedByFamily(d.name, d.reason)) { _outSafe.push(d); return; }
+                const _wantStaple = isStaple(d.name);
+                let _alt = null;
+                for (let i = 0; i < _safePool.length; i++) {
+                    const c = _safePool[i];
+                    if (isStaple(c.name) !== _wantStaple) continue;
+                    if (_outSafe.some(function(o){ return o.name === c.name; })) continue;
+                    if (__out.some(function(o){ return o !== d && o.name === c.name; })) continue; // 防止替回同餐已有菜（出现两道同名）
+                    if (isSweet(c.name) && !isSweet(d.name) && _outSafe.some(function(o){ return isSweet(o.name); })) continue;
+                    if (_LIQUID_DISH_RE.test(c.name) && !_LIQUID_DISH_RE.test(d.name) && _outSafe.some(function(o){ return _LIQUID_DISH_RE.test(o.name); })) continue;
+                    _alt = c; break;
+                }
+                if (_alt) {
+                    _outSafe.push({ name: _alt.name, ingredients: null, reason: _alt.tag || '' });
+                    return;
+                }
+                const _fb = _wantStaple ? SAFE_STAPLE_FALLBACK : SAFE_DISH_FALLBACK;
+                for (let i = 0; i < _fb.length; i++) {
+                    if (_blockedByFamily(_fb[i], '') || _outSafe.some(function(o){ return o.name === _fb[i]; })) continue;
+                    if (__out.some(function(o){ return o !== d && o.name === _fb[i]; })) continue;
+                    _outSafe.push({ name: _fb[i], ingredients: null, reason: '禁口替换' });
+                    return;
+                }
+                _outSafe.push(d);
+            });
+            __out = _outSafe;
+        }
         // V345(D7-07): 用家庭画像特色菜替换 1-2 道非主食（保留主食与道数、避免同餐两道流质、跨天不重复）
         try {
-            const _candAll = _profileMeals[mealKey].concat(_fillMeals[mealKey]).filter(function(n){
-                if (_usedProfileDish[mealKey].has(n)) return false;
-                return !__out.some(function(d){ return d.name === n; });
+            const _candAll = _profileMeals[mealKey].concat(_fillMeals[mealKey]).filter(function(o){
+                if (_usedProfileDish[mealKey].has(o.name)) return false;
+                if (_blockedByFamily(o.name, '')) return false; // V351(P1-1)：禁口候选不再回填
+                return !__out.some(function(d){ return d.name === o.name; });
             });
             const _isLiquid = function(n){ return _LIQUID_DISH_RE.test(String(n || '')); };
             const _replaced = {};
             const _swapMax = Math.min(__out.length >= 4 ? 2 : 1, __out.length - 1);
             let _done = 0;
             for (let _ci = 0; _ci < _candAll.length && _done < _swapMax; _ci++) {
-                const _newName = _candAll[_ci];
+                const _pick = _candAll[_ci];
+                const _newName = _pick.name;
                 let _idx = -1;
                 if (_isLiquid(_newName)) {
                     const _li = __out.map(function(d, i){ return _isLiquid(d.name) ? i : -1; }).filter(function(i){ return i >= 0; });
@@ -63529,7 +63663,8 @@ function _buildQuickWeeklyPlan(weekDates, days) {
                     _idx = _ni.length ? _ni[_ni.length - 1] : -1;
                 }
                 if (_idx < 0 || _replaced[_idx]) continue;
-                __out[_idx] = { name: _newName, ingredients: null, reason: '按家庭画像推荐' };
+                // V351(P1-1): 写入一句个性化推荐理由，卡片直接展示
+                __out[_idx] = { name: _newName, ingredients: null, reason: _profileReasonText(_pick.reason) };
                 _replaced[_idx] = 1;
                 _usedProfileDish[mealKey].add(_newName);
                 _done++;
@@ -63538,7 +63673,7 @@ function _buildQuickWeeklyPlan(weekDates, days) {
         return __out;
     }
 
-    return {
+    const _plan = {
         days: weekDates.slice(0, days).map((d, idx) => {
             // 每天轮换不同风格（第1天家常，第2天快手，第3天养生，第4天又家常...）
             const styleIdx = idx % styles.length;
@@ -63558,6 +63693,30 @@ function _buildQuickWeeklyPlan(weekDates, days) {
         }),
         summary: `本方案采用${days}天轮换风格（家常风→快手风→养生风），${styleReasonMap['家常风']}${styleReasonMap['快手风']}${styleReasonMap['养生风']}7天内菜品尽量不重复。如需更个性化可等待AI智能升级。`
     };
+    // V351(P1-1): 安全网——最终计划逐菜再查一遍，任何漏网禁口菜一律换掉（宁可少一道风味，不可上桌过敏原）
+    if (_familyWords.length) {
+        _plan.days.forEach(function(day){
+            Object.keys(day.meals || {}).forEach(function(mk){
+                const mealObj = day.meals[mk];
+                if (!mealObj || !Array.isArray(mealObj.dishes)) return;
+                const _orig = mealObj.dishes;
+                const _net = [];
+                _orig.forEach(function(x){
+                    if (!_blockedByFamily(x.name, x.reason)) { _net.push(x); return; }
+                    const _st = isStaple(x.name);
+                    const _fb = _st ? SAFE_STAPLE_FALLBACK : SAFE_DISH_FALLBACK;
+                    for (let i = 0; i < _fb.length; i++) {
+                        if (_blockedByFamily(_fb[i], '') || _net.some(function(o){ return o.name === _fb[i]; })) continue;
+                        _net.push({ name: _fb[i], ingredients: null, reason: '禁口替换' });
+                        return;
+                    }
+                    _net.push(x);
+                });
+                mealObj.dishes = _net;
+            });
+        });
+    }
+    return _plan;
 }
 
 function _updateWeeklyModalWithAi(aiRecommendation) {
