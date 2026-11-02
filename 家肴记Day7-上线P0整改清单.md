@@ -88,11 +88,18 @@
 |---|---|
 | **现象** | D6-08 曾导致线上所有 AI 路由 405 / 落静态页；修复只存在于服务器，**不在仓库**，换环境/重装即丢失 |
 | **修法** | 把 `nginx.conf` 片段纳入仓库部署基线（`deploy/nginx/jiayaoji.conf`），发布脚本加一步「路由冒烟」；CI/部署后自动 `POST /plan`（空参）断言非 405 |
-| **验收标准** | 新环境一键部署后 `/plan`、`/recommend-dishes`、`/recommend-restaurants`、`/parse-menu-image`、`/parse-menu-url`、`/recognize_ingredients`、`/chef-image`、`/ai/usage`、`/ai/budget`、`/ai/vision` 均返回 JSON 而非 HTML / 405 |
+| **验收标准** | 新环境一键部署后 `POST /plan`、`POST /recommend-dishes`、`POST /recommend-restaurants`、`POST /parse-menu-image`、`POST /parse-menu-url`、`POST /recognize_ingredients`、`POST /api/chef-image`、`GET /ai/usage`、`GET /ai/budget`、`POST /ai/vision` 均返回 JSON 而非 HTML / 405 |
 | **回归范围** | 生产部署流程 |
 
 > **P0-5 关联风险（2026-11-02 实际发生）**：本地仓库有**两个远端**——`origin`=GitHub（`github.com/kujum79/jiayaoji`）、`gitee`=Gitee（`gitee.com/jiayaoji/jiayaoji`），**生产 systemd 所在服务器拉的是 Gitee**。V344/V345 只推到 GitHub，导致生产在 2026-11-02 仍停留在 `6f9d746`（V343），`git pull` 一直 `Already up to date`。补齐推送后（`6f9d746..8b3751a`）生产才更新到 V345。**发布约定需固化为：每次「提交推送」必须同时 `git push origin main` 与 `git push gitee main`，否则线上不更新**（建议发布脚本用一个 `push-all` 命令或把 Gitee 设为唯一部署源、GitHub 仅作备份镜像）。
 > 生产发布实测（2026-11-02）：`git pull` → `8b3751a`、`sudo systemctl restart jiayaoji` → `active`、`/health` `{"ping":"pong"}`、`https://jiayaoji.cn/app` 返回 `V345-20261102`、`app=200`；nginx `root=/var/www/jiayaoji/frontend`（静态页直接读仓库目录，前端刷新即生效），`proxy_pass http://127.0.0.1:8000`（API 走后端）。首次启动按预期执行 V344/V345 迁移（就餐记录回填、地址补全、菜品名归一、dishMeta 每人份归一）。
+>
+> **P0-5 状态（2026-11-02，代码侧已落地，实测全通过）**：
+> - **nginx 片段入库**：`deploy/nginx-jiayaoji-proxy.conf` 迁入 [deploy/nginx/jiayaoji.conf](file:///d:/jiayaoji/deploy/nginx/jiayaoji.conf)，含 `location /api/`、10 条非 `/api` 路由 regex、`location /ai/` 前缀，全部 `proxy_pass http://127.0.0.1:8000`（读写超时 180s，与 `/plan` 150s 后端预算留余量）。以后后端新增非 `/api` 路由，必须同步追加到该 regex，否则线上必 405/落静态页。
+> - **路由冒烟脚本**：[deploy/smoke-routes.sh](file:///d:/jiayaoji/deploy/smoke-routes.sh)，11 项断言（10 条路由 + `/app` 版本号）。用「空参」触发 FastAPI 的 `422 JSON` 来证明路由被代理，**不消耗 AI 额度**；判定失败条件为「404 / 405+HTML / 响应体含 `<html` / Content-Type 非 JSON或图片」。支持 `BASE=http://127.0.0.1:8000` 绕过 nginx 只验后端。**2026-11-02 对生产实跑：11 通过 / 0 失败**（`/plan` 422、`/recommend-dishes` 422、`/recommend-restaurants` 422、`/parse-menu-image` 422、`/parse-menu-url` 422、`/recognize_ingredients` 422、`/api/chef-image` 422、`/ai/usage` 200 JSON、`/ai/budget` 200 JSON、`/ai/vision` 422、`/app` 200 `V349-20261102`）。
+> - **一键发布脚本**：[deploy/release.sh](file:///d:/jiayaoji/deploy/release.sh)，顺序为「工作区必须干净 → `git push origin main` + `git push gitee main` →（可选）`SRV=admin@…` ssh 拉取 + `systemctl restart` + `/health` → 调用冒烟」。未设 `SRV` 时只做双推并打印服务器命令，避免误操作生产。
+> - **实测纠正两处清单口径**：① `/parse-menu-url` 是 `POST`（GET 会走 FastAPI 兜底落回 index.html，看起来像「未代理」）；② `/chef-image` 后端不存在，P0-4 已把前端改到 `/api/chef-image`，冒烟按新路径断言。
+> - **待人工执行（服务器侧，未自动改动）**：① 把生产 server 块纳入基线：`ssh admin@47.97.178.39 "sudo cat /etc/nginx/conf.d/jiayaoji.conf" > deploy/nginx/production-site.conf`（确认与片段一致后再入库）；② 收紧后端监听：`systemctl cat jiayaoji.service | grep ExecStart` 确认 `--host 0.0.0.0` 后改为 `--host 127.0.0.1`（nginx 仍走 `127.0.0.1:8000`，不受影响），`systemctl daemon-reload && sudo systemctl restart jiayaoji`，再从公网 `curl http://47.97.178.39:8000/health` 应失败；③ 同步检查阿里云安全组是否放通了 8000，若放通则收回。
 
 ### P0-6 付费承诺一致性：「快速记录 4 星」未落库（D7-04）
 
