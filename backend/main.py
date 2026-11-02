@@ -665,6 +665,10 @@ async def plan(req: PlanRequest) -> Dict[str, str]:
         if sub_plan and sub_plan in _SUBSCRIPTION_PROMPT_SEGMENTS:
             system_content += _SUBSCRIPTION_PROMPT_SEGMENTS[sub_plan] + "\n\n"
     system_content += req.system_prompt
+    # V350: 三餐级计划（max_tokens<=3000）单服务商只等 35s——任一服务商卡死时立即降级下一家，
+    # 整条链路必须在前端 90s 超时前给出结果；7 天级长计划（10k+ token）仍保留 150s
+    _max_tok = int(req.max_tokens or 8000)
+    _plan_timeout = 35.0 if _max_tok <= 3000 else 150.0
     content = await call_qwen(
         [
             {"role": "system", "content": system_content},
@@ -676,7 +680,7 @@ async def plan(req: PlanRequest) -> Dict[str, str]:
         json_mode=req.json_mode,
         max_tokens=req.max_tokens,
         task_type=task_type,
-        timeout=150.0,  # V139: 7天完整计划正文可达 10k+ token，60s 会掐断长生成
+        timeout=_plan_timeout,
     )
     return {"response": content}
 
