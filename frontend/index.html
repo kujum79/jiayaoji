@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V345-20261102';
+        var APP_VER = 'V346-20261102';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -55772,6 +55772,8 @@ async function _autoFetchMissingIngredients(weekDateKeys, dishNames) {
                     plan.dishMeta[dName] = plan.dishMeta[dName] || {};
                     plan.dishMeta[dName].ingredients = allResults[dName];
                     plan.dishMeta[dName].source = 'ai-batch';
+                    // V346(D7-10): 本路径请求的就是「每人份」，补上口径标记，避免被迁移当成旧的总量数据
+                    plan.dishMeta[dName].perPersonIngredients = true;
                     updated = true;
                 }
             });
