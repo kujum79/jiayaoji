@@ -101,7 +101,8 @@
 > - **实测纠正两处清单口径**：① `/parse-menu-url` 是 `POST`（GET 会走 FastAPI 兜底落回 index.html，看起来像「未代理」）；② `/chef-image` 后端不存在，P0-4 已把前端改到 `/api/chef-image`，冒烟按新路径断言。
 > - **服务器侧已执行（2026-11-02 实测）**：① 生产 `/etc/nginx/conf.d/jiayaoji.conf` 已完整抄录入库，不再依赖 `production-site.conf` 快照；② 后端监听已从 `--host 0.0.0.0` 收紧为 **`--host 127.0.0.1 --port 8000`**（主单元 `/etc/systemd/system/jiayaoji.service`，改动前已备份到 `/root/jiayaoji.service.bak-<时间戳>`）；`systemctl is-active` = `active`、`curl 127.0.0.1:8000/health` = `{"ping":"pong"}`、`ss -lntp` 显示 `127.0.0.1:8000`（旧 `0.0.0.0` 消失），`https://jiayaoji.cn/app` 200、`POST /plan` 422 不受影响。
 > - **防火墙已收口（2026-11-02 阿里云控制台实测）**：轻量应用服务器（非 ECS，无「安全组」，端口在「防火墙」页管理）规则已收敛为 80 / 443 / 22 / ICMP，`FastAPI 后端` 那条 `TCP 8000 0.0.0.0/0` 已删除。**探测口径注意**：本机对公网 `8000` 的 curl 返回 `000 + Empty reply from server`，但 `8001` / `9999` / `3306` 表现完全相同（本地链路有中间设备接受连接后断开），因此**不能以公网 curl 判断端口是否关闭**；权威依据是「后端只监听 `127.0.0.1:8000`」+「防火墙无 8000 规则」两条同时成立。
-> - **已知差异（生产 vs 基线，属建议项未改）**：① 生产 `location /api/` **没有** `proxy_read_timeout`，走 nginx 默认 60s；`/api/chef-image` 图片生成在拿到 Key 后可能超过 60s 被 504（非 `/api` 路由已有 180s）。补齐方式：在该 location 内加 `proxy_read_timeout 180s; proxy_send_timeout 180s;`，然后 `sudo nginx -t && sudo nginx -s reload`。② 生产未设 `client_max_body_size`（默认 1m）；当前前端上传前已压缩（菜单 `1024px/q0.85`、食材 `1280px/q0.75`），实测体积通常 <1MB，暂不改，若后续放宽压缩参数需同步调大。
+> - **超时与体积上限已补入基线（2026-11-02）**：`server` 级新增 `client_max_body_size 10m`（原默认 1m，菜单/食材照片靠前端压缩才勉强通过，留 10m 余量）；`location /api/` 新增 `proxy_read_timeout 180s` + `proxy_send_timeout 180s`（原走默认 60s，`/api/chef-image` 生图可能被 504）。同步方式：服务器 `cd /var/www/jiayaoji && git pull` → 备份 `/etc/nginx/conf.d/jiayaoji.conf` → `sudo cp deploy/nginx/jiayaoji.conf /etc/nginx/conf.d/jiayaoji.conf` → `sudo nginx -t && sudo systemctl reload nginx`。
+> - **已知限制**：`client_max_body_size` 只覆盖 nginx 层；若后续前端取消压缩，需同时确认 FastAPI/uvicorn 的请求体上限与超时。
 
 ### P0-6 付费承诺一致性：「快速记录 4 星」未落库（D7-04）
 
