@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V352-20261102';
+        var APP_VER = 'V353-20261102';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -24548,10 +24548,11 @@ function showDishDetail(dishName, dateKey, mealType) {
     var speakBtn = overlay.querySelector('#helpDishSpeakBtn');
     if (speakBtn) speakBtn.addEventListener('click', function() { _hlDishSpeakHl(dishName); });
 
-    // 从 dishMeta 获取已保存的食材用量、健康标签、推荐理由
+    // 从 dishMeta 获取已保存的食材用量、健康标签、推荐理由、做法档案
     let savedIngredients = null;
     let savedHealthTags = [];
     let savedReason = '';
+    let savedCookMeta = null;
     if (dateKey && mealType) {
         try {
             const calendar = getDietCalendar();
@@ -24564,6 +24565,22 @@ function showDishDetail(dishName, dateKey, mealType) {
                 }
                 if (Array.isArray(meta.healthTags)) savedHealthTags = meta.healthTags;
                 if (meta.userComment) savedReason = meta.userComment;
+                // V353(P1-3): 老数据缺 steps/heat/cookTime 时补齐并落库
+                if (!(Array.isArray(meta.steps) && meta.steps.length) || !meta.heat || !(Number(meta.cookTime) > 0)) {
+                    if (_seedDishCookMeta(plan, dishName)) saveDietCalendar(calendar);
+                }
+                savedCookMeta = {
+                    steps: Array.isArray(meta.steps) ? meta.steps : [],
+                    heat: meta.heat || '',
+                    cookTime: Number(meta.cookTime) || 0,
+                    method: meta.method || ''
+                };
+            } else if (plan) {
+                if (_seedDishCookMeta(plan, dishName)) {
+                    saveDietCalendar(calendar);
+                    const meta2 = plan.dishMeta[dishName] || {};
+                    savedCookMeta = { steps: meta2.steps || [], heat: meta2.heat || '', cookTime: Number(meta2.cookTime) || 0, method: meta2.method || '' };
+                }
             }
         } catch(e) { console.warn('获取dishMeta失败:', e); }
     }
@@ -24571,9 +24588,9 @@ function showDishDetail(dishName, dateKey, mealType) {
     // 先尝试从知识库查找，没有则直接AI生成
     const knowledgeRecipe = findDishInKnowledge(dishName);
     if (knowledgeRecipe) {
-        renderDishDetailFromKnowledge(dishName, knowledgeRecipe, savedIngredients, { healthTags: savedHealthTags, reason: savedReason, dateKey: dateKey, mealType: mealType });
+        renderDishDetailFromKnowledge(dishName, knowledgeRecipe, savedIngredients, { healthTags: savedHealthTags, reason: savedReason, dateKey: dateKey, mealType: mealType, cookMeta: savedCookMeta });
     } else {
-        generateDishRecipeAI(dishName, savedIngredients);
+        generateDishRecipeAI(dishName, savedIngredients, dateKey, mealType);
     }
 }
 
@@ -24640,6 +24657,276 @@ function cleanIngredientName(raw) {
     return name.trim();
 }
 
+// ===== V353(P1-3)：菜谱结构化——计划菜补 steps + heat + cookTime（从「菜单」变「菜谱」）=====
+var _COOK_METHOD_LABEL = { steam: '清蒸', stew: '炖煮', stirfry: '快炒', soup: '煮汤', porridge: '熬粥', boil: '水煮', panfry: '煎制', deepfry: '油炸', roast: '烘烤', cold: '凉拌', sandwich: '组装', rice: '焖饭' };
+var _COOK_METHOD_PROFILE = {
+    porridge: { heat: '大火烧开转小火', cookTime: 35 },
+    soup: { heat: '大火烧开转小火', cookTime: 25 },
+    steam: { heat: '大火', cookTime: 15 },
+    stew: { heat: '大火转小火', cookTime: 45 },
+    stirfry: { heat: '大火', cookTime: 10 },
+    boil: { heat: '中火', cookTime: 12 },
+    panfry: { heat: '中小火', cookTime: 12 },
+    deepfry: { heat: '中油温（六成热）', cookTime: 15 },
+    roast: { heat: '烤箱 200℃', cookTime: 30 },
+    cold: { heat: '无需加热', cookTime: 10 },
+    sandwich: { heat: '中小火', cookTime: 8 },
+    rice: { heat: '电饭煲', cookTime: 35 }
+};
+var _COOK_CONDIMENT_RE = /^(水|清水|高汤|盐|酱油|生抽|老抽|食用油|香油|料酒|醋|香醋|米醋|糖|冰糖|白糖|淀粉|姜|生姜|姜片|姜丝|葱|葱花|大葱|小葱|蒜|大蒜|蒜末|蒜蓉|香菜|胡椒|花椒|辣椒|豆瓣酱|蚝油|蒸鱼豉油|鸡精|味精|枸杞|八角|桂皮|香叶|虾皮|紫菜|芝麻|沙拉酱|番茄酱|芝麻酱|辣椒油|咖喱|孜然|五香粉|十三香|酵母|泡打粉|小苏打|柠檬|陈皮|红枣|蜜枣|茶叶|酱油膏)$/;
+
+// 按菜名判断主做法
+function _dishCookMethod(name) {
+    var n = String(name || '');
+    if (/粥|羹/.test(n)) return 'porridge';
+    if (/汤|煲/.test(n)) return 'soup';
+    if (/蒸/.test(n)) return 'steam';
+    if (/炖|焖|红烧|卤|扣肉/.test(n)) return 'stew';
+    if (/三明治|吐司|面包|汉堡/.test(n)) return 'sandwich';
+    if (/沙拉|凉拌|拌/.test(n)) return 'cold';
+    if (/炸|油条|锅包肉|春卷|薯条/.test(n)) return 'deepfry';
+    if (/煎|锅贴|生煎|饼/.test(n)) return 'panfry';
+    if (/烤|叉烧|焗/.test(n)) return 'roast';
+    if (/炒饭|炒面|焖饭|煲仔饭/.test(n)) return 'stirfry';
+    if (/米饭|杂粮饭/.test(n)) return 'rice';
+    if (/面|粉|水饺|馄饨|汤圆|煮/.test(n)) return 'boil';
+    if (/炒|爆|煸/.test(n)) return 'stirfry';
+    return 'stirfry';
+}
+
+// 取主料与配菜（去掉调味料）
+function _dishCookParts(name) {
+    var list = [];
+    try { list = getDishIngredients(name) || []; } catch (e) { list = []; }
+    var solids = list.filter(function (x) { return x && !_COOK_CONDIMENT_RE.test(String(x)); });
+    return { main: solids[0] || '', sides: solids.slice(1, 4) };
+}
+
+// 按做法生成 4~5 步可执行做法（含主料名，不依赖网络）
+function _dishCookSteps(name, method, main, sides) {
+    var n = String(name || '');
+    var m = main || '主料';
+    var s = sides.length ? sides.join('、') : '';
+    if (/米饭|杂粮饭/.test(n)) return [
+        '大米淘洗两遍，挑去杂质，沥干水分。',
+        '按米水 1:1.2 加水（喜欢软一点可到 1:1.3），静置 10 分钟。',
+        '放入电饭煲，选标准煮饭模式，约 35 分钟。',
+        '跳保温后再焖 10 分钟，开盖用饭勺翻松。',
+        '盛出装碗，搭配菜一起上桌。'
+    ];
+    if (/白煮蛋|水煮蛋/.test(n)) return [
+        '鸡蛋放入锅中，加冷水没过鸡蛋。',
+        '大火烧开后转中火煮 8 分钟至全熟。',
+        '捞出立即过凉水，剥壳更容易。',
+        '对半切开或整只装盘，可撒少许盐。'
+    ];
+    if (/蒸蛋羹|鸡蛋羹|豆腐蒸蛋/.test(n)) return [
+        '鸡蛋打散，加 1.5 倍温水与少许盐，搅匀。',
+        '过筛去掉泡沫，倒入碗中' + (s ? '，铺上' + s : '') + '。',
+        '水开后上锅，中小火蒸 10-12 分钟至凝固。',
+        '出锅淋几滴香油和生抽，撒葱花即可。'
+    ];
+    if (/馒头|包子|花卷|发糕/.test(n)) return [
+        '生坯放入蒸屉，盖上盖子醒发 10 分钟。',
+        '蒸锅水烧开后上锅，大火蒸 10-12 分钟。',
+        '关火焖 2 分钟再开盖，避免回缩。',
+        '取出稍放凉，装盘食用。'
+    ];
+    if (/红薯|紫薯|南瓜|玉米|山药|芋头/.test(n) && method === 'steam') return [
+        m + ' 洗净去皮，切成 2 厘米左右的块。',
+        '蒸锅水烧开，把 ' + m + ' 放入蒸屉。',
+        '大火蒸 15-20 分钟，筷子能轻松插入即可。',
+        '取出稍放凉，装盘食用。'
+    ];
+    switch (method) {
+        case 'porridge':
+            return [
+                m + ' 淘洗干净' + (s ? '，' + s + ' 去皮切小块' : '') + '。',
+                '锅中加足量清水烧开，下 ' + m + '，转小火煮 20 分钟，期间搅拌防粘底。',
+                s ? '加入 ' + s + '，继续小火煮 10 分钟。' : '继续小火煮 10 分钟，至米粒开花。',
+                '煮至软烂浓稠，关火焖 5 分钟，按口味加少许糖或盐。'
+            ];
+        case 'soup':
+            return [
+                m + ' 处理干净' + (s ? '，' + s + ' 洗净切好' : '') + '。',
+                '锅中加清水或高汤烧开，放入 ' + m + ' 和姜片。',
+                '大火烧开后转小火煮 15-20 分钟。',
+                s ? '加入 ' + s + '，再煮 3-5 分钟。' : '撇去浮沫，再煮 3-5 分钟。',
+                '加盐调味，出锅前撒葱花或香菜。'
+            ];
+        case 'steam':
+            return [
+                m + ' 处理干净' + (s ? '，' + s + ' 洗净切好' : '') + '；用少许盐和料酒抓匀，腌 10 分钟去腥。',
+                '盘底铺姜片葱段，放上 ' + m + '。',
+                '水开后上锅，大火蒸 12-15 分钟（按大小调整）。',
+                '关火焖 2 分钟再开盖，倒掉盘中腥水。',
+                '淋少许生抽或蒸鱼豉油，撒葱花即可。'
+            ];
+        case 'stew':
+            return [
+                m + ' 切块，冷水下锅焯去浮沫，捞出沥干。',
+                '锅中放少许油，下姜片葱段炒香，放入 ' + m + ' 翻炒上色。',
+                s ? '加入 ' + s + '，倒入没过食材的热水，大火烧开。' : '倒入没过食材的热水，大火烧开。',
+                '转小火炖 40-45 分钟，至 ' + m + ' 软烂、汤汁收至一半。',
+                '加盐调味，撒葱花出锅。'
+            ];
+        case 'stirfry':
+            return [
+                m + ' 洗净切好' + (s ? '，' + s + ' 切成合适大小' : '') + '；肉类可用少许生抽和淀粉抓匀腌 10 分钟。',
+                '热锅少油，下葱姜蒜爆香。',
+                '放入 ' + m + '，大火快炒至变色断生。',
+                s ? '加入 ' + s + '，继续翻炒 2-3 分钟。' : '继续翻炒 2-3 分钟。',
+                '沿锅边淋少许生抽，尝味补盐，翻匀出锅。'
+            ];
+        case 'boil':
+            if (/水饺|馄饨|汤圆/.test(n)) return [
+                '锅中加足量水，大火烧开。',
+                '下 ' + m + '，用勺背轻推防止粘底。',
+                '再次沸腾后点一次凉水，重复 2 次。',
+                m + ' 全部浮起、皮变透明即熟。',
+                '捞出装碗，可配少许汤和香油。'
+            ];
+            if (/面|粉/.test(n)) return [
+                '锅中水烧开，下 ' + m + ' 煮 3-5 分钟至八分熟。',
+                '捞出过一下凉水，沥干备用。',
+                s ? '另起锅少油，炒香 ' + s + '。' : '另起锅少油，下葱姜炒香。',
+                '把 ' + m + ' 回锅，加少许生抽和盐，翻匀。',
+                '装碗，趁热食用。'
+            ];
+            return [
+                '锅中加足量清水，大火烧开。',
+                '放入 ' + m + '，中火煮 8-10 分钟至熟。',
+                s ? '加入 ' + s + '，再煮 3 分钟。' : '撇去浮沫，再煮 3 分钟。',
+                '加少许盐调味。',
+                '盛出装碗，趁热食用。'
+            ];
+        case 'panfry':
+            return [
+                m + ' 洗净' + (s ? '，' + s + ' 切好备用' : '') + '，用少许盐和料酒腌 10 分钟。',
+                '平底锅刷一层薄油，中小火烧热。',
+                '放入 ' + m + '，煎至一面金黄后翻面。',
+                '两面煎熟，约 8-12 分钟，中途可盖锅盖焖 1 分钟。',
+                '出锅前撒少许盐或黑胡椒，装盘即可。'
+            ];
+        case 'deepfry':
+            return [
+                m + ' 处理干净切块，用少许盐和料酒腌 15 分钟。',
+                '表面拍薄薄一层淀粉，抖掉多余粉。',
+                '油温烧至六成热（约 170℃），下 ' + m + ' 炸至定型。',
+                '捞出沥油，升高油温复炸 30 秒至金黄酥脆。',
+                '沥干油分装盘，趁热食用。'
+            ];
+        case 'roast':
+            return [
+                m + ' 洗净擦干，用盐、生抽和少许油抹匀，腌 20 分钟。',
+                '烤箱预热 200℃，烤盘垫锡纸。',
+                '放入 ' + m + '，中层烤 25-30 分钟，中途翻面一次。',
+                '表面金黄后取出，静置 3 分钟再切。',
+                '装盘，可按口味撒黑胡椒或孜然。'
+            ];
+        case 'cold':
+            return [
+                m + ' 洗净' + (s ? '，' + s + ' 切丝或切块' : '') + '；需要焯水的焯熟后过凉水沥干。',
+                '调汁：生抽 1 勺、香醋半勺、少许盐和香油，搅匀。',
+                '食材放入大碗，淋上酱汁。',
+                '拌匀后静置 5 分钟入味。',
+                '装盘，可撒芝麻或葱花。'
+            ];
+        case 'sandwich':
+            return [
+                '面包片放入平底锅或烤箱，中小火烤 1 分钟至微脆。',
+                '鸡蛋煎熟或煮熟切片，生菜洗净沥干，番茄切片。',
+                '面包片上抹薄薄一层沙拉酱，依次铺生菜、番茄、鸡蛋。',
+                '盖上另一片面包，轻压定型。',
+                '对角切开装盘，搭配牛奶食用。'
+            ];
+        default:
+            return [
+                m + ' 洗净切好' + (s ? '，' + s + ' 切好备用' : '') + '。',
+                '锅中放少许油烧热，下葱姜蒜炒香。',
+                '放入 ' + m + ' 翻炒至断生。',
+                s ? '加入 ' + s + '，翻炒 2-3 分钟。' : '翻炒 2-3 分钟。',
+                '加盐调味，翻匀出锅。'
+            ];
+    }
+}
+
+// 生成一道菜的本地菜谱档案（无需联网）
+function _dishCookProfile(name) {
+    var n = String(name || '');
+    var method = _dishCookMethod(n);
+    var parts = _dishCookParts(n);
+    var prof = _COOK_METHOD_PROFILE[method] || _COOK_METHOD_PROFILE.stirfry;
+    var cookTime = prof.cookTime;
+    if (/蒸蛋羹|鸡蛋羹/.test(n)) cookTime = 12;
+    if (/白煮蛋|水煮蛋/.test(n)) cookTime = 10;
+    if (/红薯|紫薯|南瓜|玉米|山药|芋头/.test(n) && method === 'steam') cookTime = 20;
+    return {
+        steps: _dishCookSteps(n, method, parts.main, parts.sides),
+        heat: prof.heat,
+        cookTime: cookTime,
+        cookTimeText: '约 ' + cookTime + ' 分钟',
+        method: _COOK_METHOD_LABEL[method] || '家常做法'
+    };
+}
+
+// 给单道计划菜补齐 steps/heat/cookTime（只补空缺，不覆盖已有）
+function _seedDishCookMeta(plan, dishName) {
+    if (!plan || !dishName) return false;
+    if (!plan.dishMeta) plan.dishMeta = {};
+    var meta = plan.dishMeta[dishName];
+    if (!meta) meta = plan.dishMeta[dishName] = {};
+    var hasSteps = Array.isArray(meta.steps) && meta.steps.length > 0;
+    var hasHeat = !!meta.heat;
+    var hasTime = Number(meta.cookTime) > 0;
+    if (hasSteps && hasHeat && hasTime) return false;
+    var p = _dishCookProfile(dishName);
+    if (!hasSteps) meta.steps = p.steps.slice();
+    if (!hasHeat) meta.heat = p.heat;
+    if (!hasTime) { meta.cookTime = p.cookTime; meta.cookTimeText = p.cookTimeText; }
+    if (!meta.method) meta.method = p.method;
+    if (!meta.cookSource) meta.cookSource = 'local';
+    return true;
+}
+
+// 把 AI/知识库解析出的做法写回 dishMeta（默认不覆盖更完整的已有步骤）
+function _saveDishCookMeta(dateKey, mealType, dishName, data, opts) {
+    if (!dateKey || !mealType || !dishName || !data) return false;
+    opts = opts || {};
+    try {
+        var cal = getDietCalendar();
+        var mealData = cal[dateKey] && cal[dateKey][mealType];
+        var plan = mealData && mealData.plan;
+        if (!plan) return false;
+        if (!plan.dishMeta) plan.dishMeta = {};
+        var meta = plan.dishMeta[dishName] || (plan.dishMeta[dishName] = {});
+        if (Array.isArray(data.steps) && data.steps.length && (!opts.keepExisting || !(Array.isArray(meta.steps) && meta.steps.length))) {
+            meta.steps = data.steps.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+        }
+        if (data.heat && (!opts.keepExisting || !meta.heat)) meta.heat = String(data.heat);
+        if (Number(data.cookTime) > 0 && (!opts.keepExisting || !(Number(meta.cookTime) > 0))) {
+            meta.cookTime = Number(data.cookTime);
+            meta.cookTimeText = '约 ' + Number(data.cookTime) + ' 分钟';
+        }
+        if (data.method && (!opts.keepExisting || !meta.method)) meta.method = String(data.method);
+        meta.cookSource = data.cookSource || meta.cookSource || 'local';
+        meta.cookUpdatedAt = Date.now();
+        saveDietCalendar(cal);
+        return true;
+    } catch (e) { console.warn('保存菜谱步骤失败:', e); return false; }
+}
+
+// 菜谱档案展示条（火候 / 用时 / 做法）
+function _dishCookMetaHtml(cook) {
+    if (!cook) return '';
+    var parts = [];
+    if (cook.method) parts.push('🍳 ' + escapeHtml(String(cook.method)));
+    if (cook.heat) parts.push('🔥 火候：' + escapeHtml(String(cook.heat)));
+    if (Number(cook.cookTime) > 0) parts.push('⏱ 用时：约 ' + Number(cook.cookTime) + ' 分钟');
+    if (!parts.length) return '';
+    return '<div class="dish-cook-meta" style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:#9A3412;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:6px 10px;margin-bottom:8px;line-height:1.6;">' + parts.join('<span style="color:#FDBA74;">｜</span>') + '</div>';
+}
+
 // 从知识库渲染菜品详情
 function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra) {
     const body = document.getElementById('dishDetailBody');
@@ -24684,23 +24971,51 @@ function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra
         }).catch(function(){});
     }
 
-    // 解析步骤：尝试从content中提取分步说明
+    // V353(P1-3)：解析步骤——优先 dishMeta 的结构化 steps，其次知识库正文编号步骤，最后本地菜谱档案
     let stepsHtml = '';
     let tipsHtml = '';
     const content = recipe.content || '';
-    // 如果content中包含数字序号（如1. 2.），尝试解析为步骤
-    const stepMatches = content.match(/(?:\d+[.．、]|第[一二三四五六七八九十]+步|Step\s*\d+)[:：]?\s*([^\n]+)/gi);
-    if (stepMatches && stepMatches.length >= 2) {
-        stepsHtml = stepMatches.map((step, idx) => {
-            const text = step.replace(/^[^\w\u4e00-\u9fa5]+/, '').trim();
+    var cookMeta = extra.cookMeta || null;
+    if (!cookMeta || !Array.isArray(cookMeta.steps) || !cookMeta.steps.length) {
+        var _localCook = _dishCookProfile(dishName);
+        cookMeta = {
+            steps: _localCook.steps,
+            heat: (cookMeta && cookMeta.heat) || _localCook.heat,
+            cookTime: (cookMeta && Number(cookMeta.cookTime) > 0) ? Number(cookMeta.cookTime) : _localCook.cookTime,
+            method: (cookMeta && cookMeta.method) || _localCook.method
+        };
+    }
+    var resolvedSteps = null;
+    var stepSource = 'meta';
+    if (Array.isArray(cookMeta.steps) && cookMeta.steps.length) {
+        resolvedSteps = cookMeta.steps.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+    }
+    if (!resolvedSteps || !resolvedSteps.length) {
+        // 如果content中包含数字序号（如1. 2.），尝试解析为步骤
+        const stepMatches = content.match(/(?:\d+[.．、]|第[一二三四五六七八九十]+步|Step\s*\d+)[:：]?\s*([^\n]+)/gi);
+        if (stepMatches && stepMatches.length >= 2) {
+            resolvedSteps = stepMatches.map(function (step) { return step.replace(/^[^\w\u4e00-\u9fa5]+/, '').trim(); });
+            stepSource = 'knowledge';
+        } else {
+            // 没有明显步骤，将整个content作为一段说明
+            resolvedSteps = content.split(/[。！？\n]+/).filter(s => s.trim().length > 5).slice(0, 6).map(function (s) { return s.trim() + '。'; });
+            stepSource = 'knowledge';
+        }
+    }
+    if (resolvedSteps && resolvedSteps.length) {
+        stepsHtml = resolvedSteps.map((text, idx) => {
             return `<div class="dish-detail-step" data-step="${idx}" onclick="_hlDishSpeakFrom(${idx})" style="cursor:pointer;" title="点击从此步开始朗读"><div class="dish-step-num">${idx + 1}</div><div class="dish-step-text" data-hltxt="s${idx}">${escapeHtml(text)}</div></div>`;
         }).join('');
-    } else {
-        // 没有明显步骤，将整个content作为一段说明
-        const sentences = content.split(/[。！？\n]+/).filter(s => s.trim().length > 5);
-        stepsHtml = sentences.slice(0, 6).map((s, idx) => {
-            return `<div class="dish-detail-step" data-step="${idx}" onclick="_hlDishSpeakFrom(${idx})" style="cursor:pointer;" title="点击从此步开始朗读"><div class="dish-step-num">${idx + 1}</div><div class="dish-step-text" data-hltxt="s${idx}">${escapeHtml(s.trim())}。</div></div>`;
-        }).join('');
+    }
+    // 首次打开时把做法写回 dishMeta，下次不再依赖正文解析
+    if (extra.dateKey && extra.mealType && (!extra.cookMeta || !Array.isArray(extra.cookMeta.steps) || !extra.cookMeta.steps.length)) {
+        _saveDishCookMeta(extra.dateKey, extra.mealType, dishName, {
+            steps: resolvedSteps,
+            heat: cookMeta.heat,
+            cookTime: cookMeta.cookTime,
+            method: cookMeta.method,
+            cookSource: stepSource === 'knowledge' ? 'knowledge' : 'local'
+        }, { keepExisting: true });
     }
 
     // 提取注意事项（从content最后部分或包含"注意""技巧""关键"的句子）
@@ -24761,6 +25076,7 @@ function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra
         ${constHtml}
         ${solarHtml}
         ${nutritionHtml}
+        ${_dishCookMetaHtml(cookMeta)}
         ${amountBlockHtml}
         ${_twReqHtml(dishName)}
         <div class="dish-detail-section">
@@ -24779,51 +25095,16 @@ function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra
 }
 
 // V202.3: AI 不可用时的本地兜底做法（避免详情页出现「生成失败」空态）
-function _renderDishRecipeFallback(dishName, ingredients, savedIngredients) {
+function _renderDishRecipeFallback(dishName, ingredients, savedIngredients, dateKey, mealType) {
     var body = document.getElementById('dishDetailBody');
     if (!body) return;
     var ings = (ingredients && ingredients.length) ? ingredients : [];
     var ingHtml = ings.length
         ? ings.map(function (x) { return escapeHtml(String(x)); }).join('、')
         : '按家常备料（主料 + 葱姜蒜 + 常用调味）';
-    var n = dishName || '这道菜';
-    var steps;
-    if (/蒸/.test(n)) {
-        steps = [
-            '主料洗净处理好，表面划刀或切块，用少许料酒和姜片腌制 10 分钟去腥。',
-            '盘底铺葱段姜片，放上主料，水开后上锅，大火蒸 8-10 分钟（按大小调整）。',
-            '蒸好后倒掉盘中腥水，铺上葱丝，淋一勺蒸鱼豉油。',
-            '烧热一勺油浇在葱丝上激香，趁热上桌。'
-        ];
-    } else if (/炒/.test(n)) {
-        steps = [
-            '主料与配菜分别洗净切好，肉类可先用少许生抽、淀粉抓匀腌 10 分钟。',
-            '热锅凉油，先下葱姜蒜爆香，再下肉类炒至变色。',
-            '加入配菜大火翻炒，沿锅边淋少许生抽调味。',
-            '出锅前尝味补盐，翻匀即可装盘。'
-        ];
-    } else if (/炖|汤|煲|煮/.test(n)) {
-        steps = [
-            '主料洗净切块，冷水下锅焯去浮沫，捞出沥干。',
-            '锅中加足量热水，放主料和姜片，大火烧开转小火。',
-            '炖 40-60 分钟至软烂，中途按需补水（加热水）。',
-            '出锅前 5 分钟加盐调味，撒葱花即可。'
-        ];
-    } else if (/拌|沙拉/.test(n)) {
-        steps = [
-            '食材洗净，需要焯水的先焯熟，捞出过凉水沥干。',
-            '按口味调酱汁：生抽、香醋、少许糖和香油拌匀。',
-            '食材放入大碗，淋上酱汁拌匀。',
-            '静置 5 分钟入味后装盘。'
-        ];
-    } else {
-        steps = [
-            '食材洗净切好，肉类可提前用少许生抽、淀粉腌制 10 分钟。',
-            '热锅凉油，葱姜蒜爆香后下主料翻炒至断生。',
-            '按口味加盐、生抽等调味，加少量水焖 3-5 分钟。',
-            '收汁后出锅装盘，撒葱花点缀。'
-        ];
-    }
+    // V353(P1-3): 统一走本地菜谱档案，保证有步骤、火候、用时
+    var cook = _dishCookProfile(dishName);
+    var steps = cook.steps;
     var stepsHtml = steps.map(function (s, i) {
         return '<div class="dish-detail-step" data-step="' + i + '"><div class="dish-step-num">' + (i + 1) + '</div><div class="dish-step-text">' + escapeHtml(s) + '</div></div>';
     }).join('');
@@ -24832,8 +25113,17 @@ function _renderDishRecipeFallback(dishName, ingredients, savedIngredients) {
         var stdIngs = ings.map(function (x) { return normalizeIngredientName(String(x)); });
         amountHtml = _dishAmountBlockHtml(dishName, stdIngs, savedIngredients, null, null);
     } catch (e) {}
+    // 落库：只补空缺，不覆盖已有的 AI/知识库做法
+    if (dateKey && mealType) {
+        try {
+            var cal = getDietCalendar();
+            var plan = cal[dateKey] && cal[dateKey][mealType] && cal[dateKey][mealType].plan;
+            if (plan && _seedDishCookMeta(plan, dishName)) saveDietCalendar(cal);
+        } catch (e) {}
+    }
     body.innerHTML = `
         <div style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;margin-bottom:8px;line-height:1.5;">⚠️ AI 大厨暂时繁忙，以下为基础做法。稍后重新打开可获取更详细的做法。</div>
+        ${_dishCookMetaHtml(cook)}
         ${amountHtml}
         ${_twReqHtml(dishName)}
         <div class="dish-detail-section">
@@ -24851,7 +25141,7 @@ function _renderDishRecipeFallback(dishName, ingredients, savedIngredients) {
 }
 
 // AI生成菜品做法
-async function generateDishRecipeAI(dishName, savedIngredients) {
+async function generateDishRecipeAI(dishName, savedIngredients, dateKey, mealType) {
     const body = document.getElementById('dishDetailBody');
     if (!body) return;
     body.innerHTML = '<div class="dish-detail-loading">🤖 AI正在生成做法，请稍候...</div>';
@@ -24861,6 +25151,7 @@ async function generateDishRecipeAI(dishName, savedIngredients) {
 
 请按以下格式输出：
 【食材清单】列出所需食材及用量
+【火候与时间】火候：大火/中火/小火；总用时：约 N 分钟
 【制作步骤】分步骤详细说明（至少4步）
 【烹饪技巧】给出2-3条关键注意事项或技巧
 
@@ -24875,14 +25166,30 @@ async function generateDishRecipeAI(dishName, savedIngredients) {
         const aiText = result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '';
 
         if (!aiText) {
-            _renderDishRecipeFallback(dishName, ingredients, savedIngredients);
+            _renderDishRecipeFallback(dishName, ingredients, savedIngredients, dateKey, mealType);
             return;
         }
 
         // 解析AI输出
-        const ingMatch = aiText.match(/【食材清单】([\s\S]*?)(?=【制作步骤】|$)/);
+        const ingMatch = aiText.match(/【食材清单】([\s\S]*?)(?=【火候与时间】|【制作步骤】|$)/);
         const stepMatch = aiText.match(/【制作步骤】([\s\S]*?)(?=【烹饪技巧】|$)/);
         const tipMatch = aiText.match(/【烹饪技巧】([\s\S]*?)$/);
+        const cookMatch = aiText.match(/【火候与时间】([\s\S]*?)(?=【|$)/);
+        // V353(P1-3): 解析火候与总用时，缺失时用本地菜谱档案兜底
+        var aiHeat = '';
+        var aiCookTime = 0;
+        if (cookMatch) {
+            const hm = cookMatch[1].match(/火候[：:]\s*([^；;\n，,]+)/);
+            if (hm) aiHeat = hm[1].trim();
+            const tm = cookMatch[1].match(/用时[：:]?\s*约?\s*(\d+)\s*分钟/);
+            if (tm) aiCookTime = Number(tm[1]);
+        }
+        var _aiCookProfile = _dishCookProfile(dishName);
+        var cookMetaAi = {
+            heat: aiHeat || _aiCookProfile.heat,
+            cookTime: aiCookTime || _aiCookProfile.cookTime,
+            method: _aiCookProfile.method
+        };
 
         // V153：解析AI给出的食材名（用量以 DISH_INGREDIENTS 单人份/dishMeta 为准，按就餐组人数+人群系数计算）
         let aiIngs = [];
@@ -24914,13 +25221,24 @@ async function generateDishRecipeAI(dishName, savedIngredients) {
             }).catch(function () {});
         }
 
-        let stepsHtml = '';
+        var stepTexts = [];
         if (stepMatch) {
-            const steps = stepMatch[1].split(/\n+/).filter(s => s.trim().length > 5);
-            stepsHtml = steps.map((s, idx) => {
-                const clean = s.replace(/^\d+[.．、]/, '').trim();
-                return `<div class="dish-detail-step" data-step="${idx}" onclick="_hlDishSpeakFrom(${idx})" style="cursor:pointer;" title="点击从此步开始朗读"><div class="dish-step-num">${idx + 1}</div><div class="dish-step-text" data-hltxt="s${idx}">${escapeHtml(clean)}</div></div>`;
-            }).join('');
+            stepTexts = stepMatch[1].split(/\n+/).filter(s => s.trim().length > 5)
+                .map(function (s) { return s.replace(/^\d+[.．、]/, '').trim(); });
+        }
+        if (!stepTexts.length) stepTexts = _aiCookProfile.steps.slice();
+        let stepsHtml = stepTexts.map((text, idx) => {
+            return `<div class="dish-detail-step" data-step="${idx}" onclick="_hlDishSpeakFrom(${idx})" style="cursor:pointer;" title="点击从此步开始朗读"><div class="dish-step-num">${idx + 1}</div><div class="dish-step-text" data-hltxt="s${idx}">${escapeHtml(text)}</div></div>`;
+        }).join('');
+        // V353(P1-3): 把 AI 做法（步骤/火候/用时）写回 dishMeta，下次打开不必再等 AI
+        if (dateKey && mealType) {
+            _saveDishCookMeta(dateKey, mealType, dishName, {
+                steps: stepTexts,
+                heat: cookMetaAi.heat,
+                cookTime: cookMetaAi.cookTime,
+                method: cookMetaAi.method,
+                cookSource: 'ai'
+            });
         }
 
         let tipsHtml = '';
@@ -24948,6 +25266,7 @@ async function generateDishRecipeAI(dishName, savedIngredients) {
         body.innerHTML = `
             ${_aiConstHtml}
             ${_aiSolarHtml}
+            ${_dishCookMetaHtml(cookMetaAi)}
             ${aiAmountBlockHtml}
             ${_twReqHtml(dishName)}
             <div class="dish-detail-section">
@@ -24965,7 +25284,7 @@ async function generateDishRecipeAI(dishName, savedIngredients) {
         }
     } catch (err) {
         console.warn('[dish_recipe] AI 生成失败，使用本地兜底:', err);
-        _renderDishRecipeFallback(dishName, ingredients, savedIngredients);
+        _renderDishRecipeFallback(dishName, ingredients, savedIngredients, dateKey, mealType);
     }
 }
 
@@ -56953,6 +57272,31 @@ function migrateDishMetaIngredients() {
     }
 }
 
+// V353(P1-3) 迁移：给所有计划菜补 steps + heat + cookTime（老数据无做法档案时本地生成）
+function migrateDishCookProfiles() {
+    const calendar = getDietCalendar();
+    let updated = false;
+    let dishCount = 0;
+    Object.keys(calendar).forEach(function (dateKey) {
+        const dayData = calendar[dateKey];
+        if (!dayData) return;
+        ['breakfast', 'lunch', 'dinner'].forEach(function (mealType) {
+            const mealData = dayData[mealType];
+            const plan = mealData && mealData.plan;
+            if (!plan || !Array.isArray(plan.dishes) || !plan.dishes.length) return;
+            plan.dishes.forEach(function (dishRaw) {
+                const dishName = (typeof dishNameOf === 'function') ? dishNameOf(dishRaw) : String(dishRaw || '');
+                if (!dishName) return;
+                if (_seedDishCookMeta(plan, dishName)) { updated = true; dishCount++; }
+            });
+        });
+    });
+    if (updated) {
+        saveDietCalendar(calendar);
+        console.log('[迁移] 已为 ' + dishCount + ' 道计划菜补全步骤/火候/用时（P1-3）');
+    }
+}
+
 // 迁移：清理知识库来源的菜品名（去除问号和"怎么做"等后缀）
 function migrateDishNamesFromKnowledge() {
     const calendar = getDietCalendar();
@@ -71306,6 +71650,9 @@ try { migrateDishMetaIngredients(); } catch(e) { console.error('migrateDishMetaI
 
 // 迁移：清理知识库来源的菜品名（去除问号和"怎么做"等后缀）
 try { migrateDishNamesFromKnowledge(); } catch(e) { console.error('migrateDishNamesFromKnowledge error:', e); }
+
+// 迁移：为所有计划菜补 steps + heat + cookTime（V353，P1-3）
+try { migrateDishCookProfiles(); } catch(e) { console.error('migrateDishCookProfiles error:', e); }
 
 // 迁移：全局 mealRecords 按家庭归属拆回家庭前缀键（V344，修复 V336 隔离后的历史数据孤儿化）
 try { migrateGlobalMealRecords(); } catch(e) { console.error('migrateGlobalMealRecords error:', e); }
