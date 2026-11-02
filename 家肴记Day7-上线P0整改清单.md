@@ -160,3 +160,18 @@
 ## 五、一句话总结
 
 **功能可以上线，账本不能带着错上线。** 这 6 项 P0 里有 4 项（库存、份量、迁移、评分）本质都是同一个问题——**同一个业务事实存在两套存储口径**（`quantity` vs `quantityValue`、`dietCalendar` vs `mealRecords`、`servings` 两套写入、整餐 vs 逐菜评分）。因此除了逐项修，更建议在修复时顺手统一「单一真值来源」，否则下一次改版还会再犯同一类错。
+
+---
+
+## 六、生产发布记录（2026-11-02）
+
+| 版本 | 内容 | 提交 | 生产验证 |
+|---|---|---|---|
+| V345 | D7-07 画像差异化、D7-08 婴儿/分龄折算接入采购、D7-10 每人份口径、P0-4 泄漏 Key 守卫、配图改 `/api/chef-image` | `8b3751a` | `/app` 返回 `V345-20261102`；小高之家 `日期数 7 / 在册菜品 55 / 未标记 0 / 孤儿 meta 26` |
+| V346 | `ai-batch` 自动补全路径补 `perPersonIngredients` 标记 | `69dd165` | 同上（旧条目由启动迁移补标） |
+| V347 | 启动迁移对 `source=ai|ai-batch` 存量直接补标 | `e578eac` | 同上 |
+| V348 | 「AI 生成三餐」前端超时 20s→45s | `5e31c41` | 仍偶发 `AbortError`，说明 45s 不足 |
+| V349 | 同上 45s→90s | `2418320` | 仍偶发 `AbortError`，定位为首家服务商 150s 才降级 |
+| V350 | 后端 `/plan` 三餐级请求（`max_tokens<=3000`）单服务商超时 150s→35s | `eddd1b9` | 实测 `json_mode` 请求 8.28s；浏览器 `[食材用量调试] 获取结果: 18 道菜有用量`，不再回退内置方案 |
+
+> 环境事实（务必写进部署基线）：生产部署源是 **Gitee**（`gitee.com/jiayaoji/jiayaoji.git`），GitHub 是备份远端；每次发布必须 **双推**，否则线上不更新（本次 V344/V345 曾因只推 GitHub 导致生产滞留 V343）。生产后端端口 **8000**（`0.0.0.0`），nginx `root=/var/www/jiayaoji/frontend`、`proxy_pass http://127.0.0.1:8000`；API Key 只在 `/etc/jiayaoji/api-keys.env`（`override.conf` 中 `EnvironmentFile=-…`，仓库内副本已移除）。
