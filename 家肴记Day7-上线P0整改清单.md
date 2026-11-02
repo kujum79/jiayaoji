@@ -188,4 +188,28 @@
 | V349 | 同上 45s→90s | `2418320` | 仍偶发 `AbortError`，定位为首家服务商 150s 才降级 |
 | V350 | 后端 `/plan` 三餐级请求（`max_tokens<=3000`）单服务商超时 150s→35s | `eddd1b9` | 实测 `json_mode` 请求 8.28s；浏览器 `[食材用量调试] 获取结果: 18 道菜有用量`，不再回退内置方案 |
 
-> 环境事实（务必写进部署基线）：生产部署源是 **Gitee**（`gitee.com/jiayaoji/jiayaoji.git`），GitHub 是备份远端；每次发布必须 **双推**，否则线上不更新（本次 V344/V345 曾因只推 GitHub 导致生产滞留 V343）。生产后端端口 **8000**（`0.0.0.0`），nginx `root=/var/www/jiayaoji/frontend`、`proxy_pass http://127.0.0.1:8000`；API Key 只在 `/etc/jiayaoji/api-keys.env`（`override.conf` 中 `EnvironmentFile=-…`，仓库内副本已移除）。
+> 环境事实（务必写进部署基线）：生产部署源是 **Gitee**（`gitee.com/jiayaoji/jiayaoji.git`），GitHub 是备份远端；每次发布必须 **双推**，否则线上不更新（本次 V344/V345 曾因只推 GitHub 导致生产滞留 V343）。生产后端端口 **8000**，已由 `0.0.0.0` 收紧为 **`127.0.0.1`**（仅 nginx 本机可达）；nginx `root=/var/www/jiayaoji/frontend`、`proxy_pass http://127.0.0.1:8000`（配置基线见 `deploy/nginx/jiayaoji.conf`）；API Key 只在 `/etc/jiayaoji/api-keys.env`（`override.conf` 中 `EnvironmentFile=-…`，仓库内副本已移除）。
+
+---
+
+## 七、上线前冒烟实测（2026-11-02，线上 `https://jiayaoji.cn/app`）
+
+> 方法：线上真实点击 + 页面内自检脚本（读 `dietCalendar` / 食材页 DOM）。前端版本四家启动日志均打印 `家肴记前端版本: V349-20261102`。
+
+| # | 检查项 | 家1 `BHDVWN36` | 家2 `V2C8WRFR` | 家3 `NJQSFVA5` | 家4 `KWL47P39` |
+|---|---|---|---|---|---|
+| 1 | 版本 | V349 ✓ | V349 ✓ | V349 ✓ | V349 ✓ |
+| 2 | 食记今日四卡（早/午/晚/加餐） | ✓ | ✓ | ✓ | ✓ |
+| 3 | 快速记录 → 逐菜评分一致（P0-6） | 当日未记录 | 早 `4星/3菜`、午 `4星/4菜`、晚 `4星/3菜`，无 `:0` ✓ | 当日未记录 | 当日未记录 |
+| 4 | 食材概览无 `×0`（P0-1） | 0 ✓ | 0 ✓ | 0 ✓ | 0 ✓ |
+| 6 | 采购「用餐 N 人」婴儿不计入（P0-3） | 用餐 3 人 ✓ | 用餐 3 人（就餐组 3）✓ | 用餐 3 人 ✓（婴儿未计入） | 用餐 6 人 ✓ |
+| 7 | 食养堂卡片有正文 | — | 未单测（家4 已见正文） | — | ✓ |
+| 8 | 我的 → 积分中心 | — | — | — | ✓（可打开） |
+| 9 | Console 红色 `Uncaught TypeError` | — | 0 ✓ | — | 0 ✓ |
+| 12 | 线上 AI 路由非 405/HTML（P0-5） | 11 条路由全 PASS（`/plan`、`/recommend-dishes`、`/recommend-restaurants`、`/parse-menu-image`、`/parse-menu-url`、`/recognize_ingredients`、`/api/chef-image` 均 422 JSON；`/ai/usage`、`/ai/budget` 200 JSON；`/ai/vision` 422；`/app` 200） | | | |
+
+**四家启动日志均出现**「已补齐全菜品食材信息并按每人份口径归一（D7-10）」「食材显示数量与数字字段对齐」，证明 V346/V347 迁移在真实数据上正常执行，无异常中断。
+
+**遗留（不阻塞上线）**：10-25 / 10-26 的历史「快速记录」仍是 `整餐4星 / 逐菜0星`，按 P0-6 约定不回填（仅对修复后的新记录生效），已确认不影响偏好画像读取新记录。
+
+**部署基线收口（同日完成）**：nginx 生产 server 块已按线上原文入库 [deploy/nginx/jiayaoji.conf](file:///d:/jiayaoji/deploy/nginx/jiayaoji.conf)；新增 `client_max_body_size 10m` 与 `/api/` 的 `proxy_read_timeout 180s`（原默认 1m / 60s，`/api/chef-image` 有 504 风险）；后端监听收紧至 `127.0.0.1:8000` 并实测公网 8000 不可达；云防火墙（轻量应用服务器「防火墙」，非安全组）删除 8000 规则，仅留 22/80/443/ICMP；发布脚本 `deploy/release.sh`（双推 → 可选远程 pull+restart → 路由冒烟）、`deploy/smoke-routes.sh` 已入库。
