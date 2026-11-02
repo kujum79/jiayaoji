@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V346-20261102';
+        var APP_VER = 'V347-20261102';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -56711,8 +56711,10 @@ function migrateDishMetaIngredients() {
                             }
                         }
                         // 仅在「已确认是每人份」（还原成功或 servings<=1）时打标；
-                        // 无法判定（servings>1 且与库内每人份×人数不匹配）保持原样，等下次启动拿到就餐组上下文再判
-                        if (normalized) {
+                        // V347(D7-10): AI 路径（ai / ai-batch）写入的 ingredients 本就是每人份，直接补标；
+                        // 其余无法判定的保持原样，等下次启动拿到就餐组上下文再判
+                        const _isAiSrc = (meta.source === 'ai' || meta.source === 'ai-batch');
+                        if (normalized || _isAiSrc) {
                             meta.perPersonIngredients = true;
                             updated = true;
                         }
