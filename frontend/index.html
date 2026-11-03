@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V359-20261103';
+        var APP_VER = 'V360-20261103';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -17075,16 +17075,50 @@ function calcMealSaving(md) {
     var out = dishes.reduce(function (s, x) { return s + x.out; }, 0);
     return { dishes: dishes, home: Math.round(home * 10) / 10, out: out, saved: Math.round((out - home) * 10) / 10, servings: sv, projected: isProjected };
 }
+// V360: 价格区默认折叠（只露一行「省 ¥X」），点开才看在家做/外面吃/省下的完整明细
+window.__mealPriceOpen = window.__mealPriceOpen || {};
+function toggleMealPriceBar(el) {
+    if (!el) return;
+    var bar = el.closest ? el.closest('[data-price-fold]') : null;
+    if (!bar) return;
+    var toOpen = bar.getAttribute('data-price-fold') === 'collapsed';
+    bar.setAttribute('data-price-fold', toOpen ? 'expanded' : 'collapsed');
+    var fold = bar.querySelector('.meal-price-fold-line');
+    var detail = bar.querySelector('.meal-price-detail');
+    if (fold) fold.style.display = toOpen ? 'none' : 'flex';
+    if (detail) detail.style.display = toOpen ? 'block' : 'none';
+    var key = bar.getAttribute('data-price-key') || '';
+    if (key) window.__mealPriceOpen[key] = toOpen;
+}
 // 食记餐卡上的省钱条 HTML（非在家做饭/无菜不显示）
-function buildMealSavingBarHtml(md) {
+function buildMealSavingBarHtml(md, foldKey) {
     if (!_savingIsHomeCooked(md)) return '';
     var r = calcMealSaving(md);
     if (!r || r.saved <= 0) return '';
     var tag = r.projected ? '预计' : '';
-    return '<div style="margin-top:4px;padding:4px 10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;font-size:11.5px;color:#166534;line-height:1.5;">💰 '
-        + (tag ? tag + '：' : '') + '在家做 <b>¥' + r.home.toFixed(1).replace(/\.0$/, '') + '</b>'
-        + ' ｜ 外面吃 <b>¥' + r.out.toFixed(1).replace(/\.0$/, '') + '</b>'
-        + ' ｜ <b style="color:#15803D;">省 ¥' + r.saved.toFixed(1).replace(/\.0$/, '') + '</b></div>';
+    var key = String(foldKey || '');
+    var isOpen = !!(key && window.__mealPriceOpen[key] === true);
+    var fmt = function (v) { return (Math.round(v * 10) / 10).toFixed(1).replace(/\.0$/, ''); };
+    var full = '在家做 <b>¥' + fmt(r.home) + '</b>'
+        + ' ｜ 外面吃 <b>¥' + fmt(r.out) + '</b>'
+        + ' ｜ <b style="color:#15803D;">省 ¥' + fmt(r.saved) + '</b>';
+    var dishes = (r.dishes || []).filter(function (x) { return x && x.saved > 0; })
+        .slice().sort(function (a, b) { return b.saved - a.saved; });
+    var dishRows = dishes.slice(0, 3).map(function (x) {
+        return '<div class="meal-price-dish-row" style="display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#4B5563;line-height:1.7;">'
+            + '<span>' + escapeHtml(String(x.name || '')) + '</span>'
+            + '<span>在家 ¥' + fmt(x.home) + ' ｜ 外面 ¥' + fmt(x.out) + ' ｜ <span style="color:#15803D;">省 ¥' + fmt(x.saved) + '</span></span></div>';
+    }).join('');
+    if (dishes.length > 3) dishRows += '<div style="font-size:11px;color:#9CA3AF;">…另 ' + (dishes.length - 3) + ' 道菜</div>';
+    return '<div data-price-fold="' + (isOpen ? 'expanded' : 'collapsed') + '" data-price-key="' + escapeHtml(key) + '" style="margin-top:4px;">'
+        + '<div class="meal-price-fold-line" onclick="toggleMealPriceBar(this)" style="display:' + (isOpen ? 'none' : 'flex') + ';align-items:center;gap:6px;padding:3px 10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;font-size:11.5px;color:#166534;line-height:1.5;cursor:pointer;">'
+        + '💰 ' + (tag ? tag + '省' : '省') + ' ¥' + fmt(r.saved)
+        + '<span style="margin-left:auto;font-size:11px;color:#16A34A;">明细 ▸</span></div>'
+        + '<div class="meal-price-detail" style="display:' + (isOpen ? 'block' : 'none') + ';padding:5px 10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;font-size:11.5px;color:#166534;line-height:1.5;">'
+        + '<div style="cursor:pointer;" onclick="toggleMealPriceBar(this)">💰 ' + (tag ? tag + '：' : '') + full
+        + '<span style="margin-left:6px;color:#16A34A;">收起 ▴</span></div>'
+        + (dishRows ? '<div style="margin-top:4px;border-top:1px dashed #BBF7D0;padding-top:4px;">' + dishRows + '</div>' : '')
+        + '</div></div>';
 }
 // 区间统计：只统计已记录 actual 的在家做饭餐次
 function aggregateSaving(start, end) {
@@ -31653,13 +31687,31 @@ function renderShoppingPlan(planMap, dishCount, servings) {
         grouped[cat].push({ name, ...info });
     });
 
-    let html = `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
-        <span style="font-size:13px; color:#6B7280;">覆盖 ${dishCount} 道菜品${servingsStr}，需采购 ${list.length} 种食材</span>
-        <span style="display:inline-flex;gap:8px;">
-            <button type="button" onclick="selectAllShoppingItems(true)" style="padding:4px 12px;border:1px solid #FDBA74;background:#fff;color:#C2410C;border-radius:999px;font-size:12px;cursor:pointer;">全选</button>
-            <button type="button" onclick="selectAllShoppingItems(false)" style="padding:4px 12px;border:1px solid #E5E7EB;background:#fff;color:#6B7280;border-radius:999px;font-size:12px;cursor:pointer;">取消全选</button>
-            <button type="button" onclick="clearCompletedShoppingItems()" style="padding:4px 12px;border:1px solid #FCA5A5;background:#FEF2F2;color:#DC2626;border-radius:999px;font-size:12px;cursor:pointer;">清空已完成</button>
-        </span>
+    let html = '';
+
+    // V360: 首屏先给结论（需买项数 / 品类数 / 预计花费 / 库存抵扣），明细按品类在下方展开
+    const catCount = Object.keys(grouped).length;
+    const ownedCount = list.filter(([n, info]) => Array.isArray(info.ownedUnits) && info.ownedUnits.length > 0).length;
+    let estTotal = 0;
+    list.forEach(([name, info]) => {
+        if (Array.isArray(info.buyUnits) && info.buyUnits.length) {
+            info.buyUnits.forEach(u => { estTotal += Number(estimatePrepPrice(name, u.qty, u.unit)) || 0; });
+        } else {
+            estTotal += Number(estimatePrepPrice(name, 1, '')) || 0;
+        }
+    });
+    estTotal = Math.round(estTotal * 10) / 10;
+    html += `<div class="shop-conclusion" style="background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FDBA74;border-radius:12px;padding:12px;margin-bottom:10px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;">
+            <span style="font-size:15px;font-weight:600;color:#9A3412;">本次需买 <b style="font-size:20px;">${list.length}</b> 项</span>
+            <span style="font-size:17px;font-weight:700;color:#DC2626;">约 ¥${estTotal.toFixed(1)}</span>
+        </div>
+        <div style="font-size:12px;color:#7C2D12;margin-top:4px;line-height:1.6;">覆盖 ${catCount} 个品类 ｜ 来自 ${dishCount} 道菜${servingsStr}${ownedCount ? ` ｜ 已抵扣家中 ${ownedCount} 种库存` : ''}</div>
+    </div>`;
+    html += `<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:6px;">
+        <button type="button" onclick="selectAllShoppingItems(true)" style="padding:4px 12px;border:1px solid #FDBA74;background:#fff;color:#C2410C;border-radius:999px;font-size:12px;cursor:pointer;">全选</button>
+        <button type="button" onclick="selectAllShoppingItems(false)" style="padding:4px 12px;border:1px solid #E5E7EB;background:#fff;color:#6B7280;border-radius:999px;font-size:12px;cursor:pointer;">取消全选</button>
+        <button type="button" onclick="clearCompletedShoppingItems()" style="padding:4px 12px;border:1px solid #FCA5A5;background:#FEF2F2;color:#DC2626;border-radius:999px;font-size:12px;cursor:pointer;">清空已完成</button>
     </div>`;
 
     for (const [cat, items] of Object.entries(grouped)) {
@@ -58118,7 +58170,7 @@ function renderDiary() {
                     ${hasActual && !data.actual.groupRecord && data.actual.location ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">📍 ${escapeHtml(data.actual.location)}${data.actual.location !== '家' ? ' 就餐' : ''}</div>` : ''}
                     ${hasActual && data.actual.groupRecord && data.actual.locationSummary ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">👥 ${escapeHtml(data.actual.locationSummary)}</div>` : ''}
                     ${hasActual && data.actual.photos && data.actual.photos.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${data.actual.photos.slice(0,4).map(p => `<img src="${p}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">`).join('')}</div>` : ''}
-                    ${buildMealSavingBarHtml(data)}
+                    ${buildMealSavingBarHtml(data, dateKey + '|' + meal.key)}
                 </div>
             `}
         ${_renderMealDiarySummary(dateKey, meal.key)}
