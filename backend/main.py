@@ -4247,10 +4247,60 @@ _FAMILY_BACKUP_MAX_BYTES = 3 * 1024 * 1024
 class FamilyBackupRequest(BaseModel):
     familyId: str = Field(..., min_length=8, max_length=8)
     data: Dict[str, str] = Field(default_factory=dict)
+    # V367: 用户主动删除成员等"合法缩减"需显式带上 force，否则服务端拒绝覆盖
+    force: bool = False
 
 
 def _family_backup_path(fid: str) -> Path:
     return _FAMILY_BACKUP_DIR / f"{fid}.json"
+
+
+# ========== V367: 防"默认数据覆盖云端"校验 ==========
+def _backup_member_count(data: Dict[str, str]) -> int:
+    raw = data.get("familyData")
+    if not raw:
+        return 0
+    try:
+        arr = json.loads(raw)
+        return len(arr) if isinstance(arr, list) else 0
+    except (json.JSONDecodeError, TypeError):
+        return 0
+
+
+def _backup_calendar_dates(data: Dict[str, str]) -> int:
+    raw = data.get("dietCalendar")
+    if not raw:
+        return 0
+    try:
+        obj = json.loads(raw)
+        return len(obj) if isinstance(obj, dict) else 0
+    except (json.JSONDecodeError, TypeError):
+        return 0
+
+
+def _backup_shrink_guard(old_data: Dict[str, str], new_data: Dict[str, str], force: bool) -> Optional[str]:
+    """V367: 拒绝会让云端数据"降级"的覆盖；返回错误文案，None 表示放行。
+
+    背景：空设备/清缓存后若恢复失败，前端会用 1~3 人的默认数据把云端真实快照覆盖掉。
+    规则：
+    - force=True 时放行（用户主动删成员、清空数据等合法缩减）
+    - 旧快照有成员、新快照没有 → 拒绝
+    - 成员数减少且新快照 ≤ 3 人 → 拒绝（默认模板就是 1~3 人）
+    - 日历有效日期从 ≥4 天降到不足一半 → 拒绝
+    """
+    if force:
+        return None
+    old_members = _backup_member_count(old_data)
+    new_members = _backup_member_count(new_data)
+    if old_members and not new_members:
+        return "缺少家庭成员数据，疑似默认数据覆盖"
+    if old_members >= 3 and new_members and new_members <= 3 and new_members < old_members:
+        return f"家庭成员由 {old_members} 人降为 {new_members} 人，疑似默认数据覆盖"
+    old_dates = _backup_calendar_dates(old_data)
+    new_dates = _backup_calendar_dates(new_data)
+    if old_dates >= 4 and new_dates < max(1, old_dates // 2):
+        return f"饮食日历由 {old_dates} 天降为 {new_dates} 天，疑似默认数据覆盖"
+    return None
 
 
 @app.post("/api/family-backup")
@@ -4269,6 +4319,20 @@ async def save_family_backup(req: FamilyBackupRequest) -> Dict[str, Any]:
         clean[k] = v
     if not clean:
         return {"ok": False, "error": "备份内容为空"}
+    # V367: 写盘前与旧快照比对，拒绝默认数据/异常缩减覆盖云端
+    old_data: Dict[str, str] = {}
+    path = _family_backup_path(fid)
+    if path.exists():
+        try:
+            old_payload = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(old_payload, dict) and isinstance(old_payload.get("data"), dict):
+                old_data = old_payload["data"]
+        except (OSError, json.JSONDecodeError):
+            old_data = {}
+    blocked = _backup_shrink_guard(old_data, clean, bool(req.force))
+    if blocked:
+        print(f"[family-backup] 拒绝覆盖 {fid}: {blocked}")
+        return {"ok": False, "code": "SHRINK_REJECTED", "error": blocked}
     payload = {"familyId": fid, "updatedAt": int(time.time()), "data": clean}
     tmp = _family_backup_path(fid).with_suffix(".tmp")
     try:

@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V366-20261103';
+        var APP_VER = 'V367-20261104';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -7930,7 +7930,14 @@ function saveFamilyMembers(members) {
     // 覆盖前自动留一份上一版备份（防成员库被误改写后无法找回）
     try {
         var __prev = lsGet('familyData');
-        if (__prev) lsSet('familyData_autoBackup', __prev);
+        if (__prev) {
+            lsSet('familyData_autoBackup', __prev);
+            // V367: 用户主动删成员属于合法缩减，下一次云端推送带 force，避免被服务端降级校验拦截
+            try {
+                var __prevLen = (JSON.parse(__prev) || []).length;
+                if ((members || []).length < __prevLen) window.__allowShrinkOnce = true;
+            } catch (e2) {}
+        }
     } catch(e) {}
     lsSet('familyData', JSON.stringify(members || []));
 }
@@ -12756,6 +12763,17 @@ function _errClassify(url) {
 // 恢复：启动时本地无 familyData（__hadLocalFamilyData===false）且已登录 → 拉云端快照写入本地前缀键并重载一次
 // V192: 备份键清单上移（必须在 lsSet 之前完成初始化），否则启动早期迁移写键会绕过游客态拦截
 var _cloudBackupTimer = null;
+// V367: 推送门闩——启动/恢复判断完成前不推送，避免默认数据覆盖云端真实快照
+window.__cloudBackupReady = false;
+window.__pendingBackup = false;
+window.__allowShrinkOnce = false;
+function _cloudMarkReady() {
+    window.__cloudBackupReady = true;
+    if (window.__pendingBackup) {
+        window.__pendingBackup = false;
+        cloudBackupSchedule();
+    }
+}
 function _isBackupKey(key) {
     if (typeof _FAMILY_BACKUP_KEYS === 'undefined' || !key) return false;
     for (var i = 0; i < _FAMILY_BACKUP_KEYS.length; i++) {
@@ -12766,11 +12784,13 @@ function _isBackupKey(key) {
 function cloudBackupSchedule() {
     if (window.__demoMode) return; // V195: 演示模式绝不推送云端
     if (typeof getFamilyId !== 'function' || !getFamilyId()) return;
+    if (!window.__cloudBackupReady) { window.__pendingBackup = true; return; } // V367: 等恢复判断完成
     if (_cloudBackupTimer) clearTimeout(_cloudBackupTimer);
     _cloudBackupTimer = setTimeout(cloudBackupPush, 8000);
 }
 function cloudBackupPush() {
     if (window.__demoMode) return; // V195: 演示模式绝不推送云端
+    if (!window.__cloudBackupReady) { window.__pendingBackup = true; return; } // V367: 未就绪不推送
     var fid = getFamilyId();
     if (!fid) return;
     var data = {};
@@ -12779,10 +12799,20 @@ function cloudBackupPush() {
         if (v !== null && typeof v !== 'undefined') data[_FAMILY_BACKUP_KEYS[i]] = v;
     }
     if (!Object.keys(data).length) return;
+    var force = !!window.__allowShrinkOnce; // V367: 用户主动删成员等合法缩减
     try {
-        var body = JSON.stringify({ familyId: fid, data: data });
+        var body = JSON.stringify({ familyId: fid, data: data, force: force });
         if (body.length > 2500000) return; // 超大体量不推送（服务器上限 3MB）
-        fetch('/api/family-backup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body }).catch(function () {});
+        fetch('/api/family-backup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (j && j.ok) { window.__allowShrinkOnce = false; window.__cloudBackupBlocked = false; return; }
+                if (j && j.code === 'SHRINK_REJECTED') {
+                    window.__cloudBackupBlocked = true;
+                    console.warn('[云端备份] 已拒绝降级覆盖：' + (j.error || ''));
+                }
+            })
+            .catch(function () { /* 网络失败：保留 force 标记，下次变更再推 */ });
     } catch (e) {}
 }
 async function cloudBackupRestoreIfNeeded() {
@@ -12790,11 +12820,16 @@ async function cloudBackupRestoreIfNeeded() {
         if (window.__demoMode) return false; // V195: 演示数据由引导脚本单独灌入，不走恢复链路
         var fid = getFamilyId();
         if (!fid) return false;
-        if (window.__hadLocalFamilyData !== false) return false; // 仅"启动时本地无数据"才恢复，绝不覆盖现有数据
-        if (sessionStorage.getItem('_cloudRestored') === fid) return false; // 防恢复后重载死循环
+        if (window.__hadLocalFamilyData !== false) { _cloudMarkReady(); return false; } // 仅"启动时本地无数据"才恢复，绝不覆盖现有数据
+        if (sessionStorage.getItem('_cloudRestored') === fid) { _cloudMarkReady(); return false; } // 防恢复后重载死循环
         var r = await fetch('/api/family-backup/get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ familyId: fid }) });
         var j = await r.json();
-        if (!j || !j.ok || !j.data || !Object.keys(j.data).length) return false;
+        if (!j || !j.ok || !j.data || !Object.keys(j.data).length) {
+            // V367: 新家庭（云端确实无备份）允许推送；其余异常不放开推送，避免默认数据覆盖云端
+            if (!j || /无云端备份/.test(String(j.error || ''))) { _cloudMarkReady(); }
+            else { console.warn('[云端备份] 恢复失败，本次已阻止默认数据上传：' + (j && j.error ? j.error : '未知错误')); }
+            return false;
+        }
         sessionStorage.setItem('_cloudRestored', fid);
         Object.keys(j.data).forEach(function (k) {
             if (_isBackupKey(k) && typeof j.data[k] === 'string') {
@@ -12804,7 +12839,10 @@ async function cloudBackupRestoreIfNeeded() {
         console.log('[云端备份] 已恢复家庭数据（备份于 ' + new Date((j.updatedAt || 0) * 1000).toLocaleString() + '），即将刷新页面');
         location.reload();
         return true;
-    } catch (e) { return false; }
+    } catch (e) {
+        console.warn('[云端备份] 恢复请求异常，本次已阻止默认数据上传');
+        return false;
+    }
 }
 
 // 将全局数据认领到当前家庭前缀下（仅在首次创建/加入家庭时执行）
