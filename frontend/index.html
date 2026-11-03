@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V364-20261103';
+        var APP_VER = 'V365-20261103';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -14164,6 +14164,10 @@ function recommendSnacksForDay(dateKey, topN) {
 }
 
 function updateMealPlan(date, mealType, planData) {
+    // V365: 写入前统一三餐组合规则（早餐流质≤1、晚餐无红薯/紫薯、汤品第2道）
+    if (planData && Array.isArray(planData.dishes) && planData.dishes.length) {
+        planData.dishes = _normalizeMealComposition(planData.dishes, mealType);
+    }
     const calendar = getDietCalendar();
     if (!calendar[date]) calendar[date] = {};
     if (!calendar[date][mealType]) calendar[date][mealType] = { plan: null, actual: null };
@@ -21584,6 +21588,124 @@ function _filterLiquidStaplePerMeal(arr) {
         if (RE.test(n)) { if (seen) return false; seen = true; }
         return true;
     });
+}
+
+// V365: 三餐组合硬规则——早餐流质≤1、红薯/紫薯不进晚餐、汤品固定第2道
+var _PLAN_STAPLE_RE = /米饭|粥|面|馒头|包子|饼|吐司|面包|三明治|麦片|玉米|红薯|紫薯|南瓜|饭|炒饭|煲仔饭|意面|馄饨|蒸饺|水饺|山药|芋头|藜麦/;
+function _mealDishName(d) { return typeof d === 'string' ? d : ((d && d.name) || ''); }
+function _isSoupDishName(n) {
+    var s = String(n || '').trim();
+    if (!s) return false;
+    // 汤圆/汤面/汤粉/汤包/汤饺是主食，蛋羹是蒸蛋，不算汤品
+    if (/汤圆|汤面|汤粉|汤包|汤饺|蛋羹|蒸蛋|鸡蛋羹/.test(s)) return false;
+    return /汤|羹|煲/.test(s);
+}
+function _isBreakfastLiquidDish(n) {
+    var s = String(n || '').trim();
+    if (!s) return false;
+    if (/蛋羹|蒸蛋|鸡蛋羹/.test(s)) return false;
+    return _LIQUID_DISH_RE.test(s);
+}
+function _pickMealReplaceDish(pool, usedNames, blocked) {
+    for (var i = 0; i < pool.length; i++) {
+        var n = pool[i];
+        if (usedNames[n]) continue;
+        if (typeof blocked === 'function' && blocked(n, '')) continue;
+        return n;
+    }
+    return null;
+}
+function _normalizeMealComposition(dishes, mealType) {
+    if (!Array.isArray(dishes) || dishes.length === 0) return dishes;
+    var arr = dishes.slice();
+    var _blocked = (typeof _dishBlockedByFamily === 'function' && typeof _familyForbiddenWords === 'function')
+        ? function(n, tag) { return _dishBlockedByFamily(n, tag, _familyForbiddenWords()); }
+        : null;
+    if (mealType === 'breakfast') {
+        var _liqIdx = [];
+        arr.forEach(function(d, i) { if (_isBreakfastLiquidDish(_mealDishName(d))) _liqIdx.push(i); });
+        if (_liqIdx.length > 1) {
+            // 优先保留蛋白饮品（牛奶/豆浆/酸奶），把粥/米糊/果汁等换成固体主食
+            var _keep = _liqIdx.filter(function(i) { return /牛奶|豆浆|豆奶|酸奶|羊奶|奶昔/.test(_mealDishName(arr[i])); })[0];
+            if (_keep === undefined) _keep = _liqIdx[0];
+            var _used = {};
+            arr.forEach(function(d) { _used[_mealDishName(d)] = 1; });
+            var _solidPool = ['蒸南瓜', '煮玉米', '水煮蛋', '全麦面包', '杂粮馒头', '蒸山药', '苹果', '小番茄', '凉拌黄瓜'];
+            var _next = [];
+            arr.forEach(function(d, i) {
+                if (i === _keep || !_isBreakfastLiquidDish(_mealDishName(d))) { _next.push(d); return; }
+                var _alt = _pickMealReplaceDish(_solidPool, _used, _blocked);
+                if (_alt) {
+                    _next.push({ name: _alt, ingredients: null, reason: '早餐搭配调整：同餐流质不超过1道' });
+                    _used[_alt] = 1;
+                }
+                // 没有可替换的固体菜时直接去掉多余流质，保证规则优先
+            });
+            arr = _next;
+        }
+    }
+    if (mealType === 'dinner') {
+        // 红薯/紫薯/地瓜晚上不易消化，换成更温和的主食（红薯叶/苗/藤是蔬菜，不在此列）
+        var _usedD = {};
+        arr.forEach(function(d) { _usedD[_mealDishName(d)] = 1; });
+        var _dinnerPool = ['杂粮饭', '蒸南瓜', '煮玉米', '蒸山药', '藜麦饭', '全麦馒头'];
+        var _nextD = [];
+        arr.forEach(function(d) {
+            var n = _mealDishName(d);
+            if (!(/红薯|紫薯|地瓜|番薯/.test(n) && !/叶|苗|藤/.test(n))) { _nextD.push(d); return; }
+            var _alt = _pickMealReplaceDish(_dinnerPool, _usedD, _blocked);
+            if (_alt) {
+                _nextD.push({ name: _alt, ingredients: null, reason: '晚餐搭配调整：红薯/紫薯换成更易消化的主食' });
+                _usedD[_alt] = 1;
+            }
+        });
+        arr = _nextD;
+    }
+    // 排序：主食第1、汤品第2、其余保持原顺序
+    if (arr.length > 1) {
+        var _firstIdx = -1;
+        for (var i = 0; i < arr.length; i++) {
+            var _n = _mealDishName(arr[i]);
+            if (_PLAN_STAPLE_RE.test(_n) && !_isSoupDishName(_n)) { _firstIdx = i; break; }
+        }
+        if (_firstIdx < 0) {
+            for (var j = 0; j < arr.length; j++) {
+                if (!_isSoupDishName(_mealDishName(arr[j]))) { _firstIdx = j; break; }
+            }
+        }
+        if (_firstIdx < 0) _firstIdx = 0;
+        var _soupIdx = -1;
+        for (var k = 0; k < arr.length; k++) {
+            if (k !== _firstIdx && _isSoupDishName(_mealDishName(arr[k]))) { _soupIdx = k; break; }
+        }
+        var _ordered = [arr[_firstIdx]];
+        if (_soupIdx >= 0) _ordered.push(arr[_soupIdx]);
+        for (var m = 0; m < arr.length; m++) {
+            if (m !== _firstIdx && m !== _soupIdx) _ordered.push(arr[m]);
+        }
+        arr = _ordered;
+    }
+    return arr;
+}
+function migrateMealPlanComposition() {
+    try {
+        var cal = getDietCalendar();
+        var dirty = false;
+        Object.keys(cal).forEach(function(dk) {
+            ['breakfast', 'lunch', 'dinner'].forEach(function(mt) {
+                var slot = cal[dk] && cal[dk][mt];
+                var plan = slot && slot.plan;
+                if (!plan || !Array.isArray(plan.dishes) || plan.dishes.length < 1) return;
+                var before = JSON.stringify(plan.dishes);
+                var next = _normalizeMealComposition(plan.dishes, mt);
+                if (JSON.stringify(next) !== before) {
+                    plan.dishes = next;
+                    dirty = true;
+                }
+            });
+        });
+        if (dirty) saveDietCalendar(cal);
+    } catch (e) { console.warn('migrateMealPlanComposition error:', e); }
 }
 
 // 基于 DISH_INGREDIENTS 本地库 × 喜欢食材 × 节气 × 餐别 生成：3 天 × 3 餐 × 每餐道数按家庭人数（1人=2道，3人=3道…）。
@@ -54670,7 +54792,7 @@ async function generateMultiDayRecommendation(days) {
     const systemPrompt = '你是家肴记饮食顾问。生成未来' + days + '天三餐方案，只返回 JSON，禁解释文字。\n'
         + '每道菜reason不超过35字（必须含一个膳食指南数值）。\n'
         + '每餐道数（' + (recData.servings || 3) + '人）：早' + _dc.breakfast + '、午' + _dc.lunch + '、晚' + _dc.dinner + '（上限' + _dc.breakNum + '/' + _dc.lunchNum + '/' + _dc.dinnerNum + '），不低于下限，控份量不控道数。\n'
-        + '每餐首道主食优先杂粮/全谷（糙米饭、杂粮饭、二米饭、玉米、红薯等），白米饭可少量搭配、不强制禁止；次道汤类或蔬菜，余为主/副菜。\n'
+        + '每餐首道主食优先杂粮/全谷（糙米饭、杂粮饭、二米饭、玉米、红薯等），白米饭可少量搭配、不强制禁止；次道汤类或蔬菜，余为主/副菜；早餐流质（粥/牛奶/豆浆/果汁）只留1道且至少1道固体主食；红薯/紫薯不排晚餐；汤品固定第2道，不放最后。\n'
         + _bloodSysPrompt()
         + '菜名全局唯一(主食除外)；水果不足则三餐安排独立水果。';
 
@@ -55276,9 +55398,9 @@ function showAiRecommendationModal(recommendation, targetDate) {
                 if (stIdx3 >= 0) reordered3.push(norm3[stIdx3]);
                 if (spIdx3 >= 0) reordered3.push(norm3[spIdx3]);
                 for (var si9 = 0; si9 < norm3.length; si9++) { if (si9 !== stIdx3 && si9 !== spIdx3) reordered3.push(norm3[si9]); }
-                meal3._normalizedDishes = reordered3;
+                meal3._normalizedDishes = _normalizeMealComposition(reordered3, mt);
             } else {
-                meal3._normalizedDishes = norm3;
+                meal3._normalizedDishes = _normalizeMealComposition(norm3, mt);
             }
         }
     });
@@ -56043,7 +56165,7 @@ async function generateWeeklyAiMealRecommendation(days) {
 
     // V117 精简（约 850 字 → ~111 字）：usr 已含九维/编号约束/JSON模板/ingredients每人份/膳食指南参考量/人群约束(👤🎯)，sys 只留 usr 未覆盖的独有硬约束
     const systemPrompt = '你是家肴记饮食顾问。生成未来' + days + '天三餐方案，只返回 JSON，禁解释文字。\n'
-        + '每餐首道主食优先杂粮/全谷（糙米饭、杂粮饭、二米饭、玉米、红薯等），白米饭可少量搭配、不强制禁止；次道汤类或蔬菜，余为主/副菜；流质每餐≤1道，禁早餐饮+豆浆同现。\n'
+        + '每餐首道主食优先杂粮/全谷（糙米饭、杂粮饭、二米饭、玉米、红薯等），白米饭可少量搭配、不强制禁止；次道汤类或蔬菜，余为主/副菜；早餐流质（粥/牛奶/豆浆/果汁）只留1道且至少1道固体主食；红薯/紫薯不排晚餐；汤品固定第2道，不放最后。\n'
         + _bloodSysPrompt()
         + '菜名全局唯一(主食除外)；水果不足则三餐安排独立水果。';
 
@@ -56237,7 +56359,7 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
                 if (stapleIdx >= 0) reordered.push(arr[stapleIdx]);
                 if (soupIdx >= 0) reordered.push(arr[soupIdx]);
                 for (var si3 = 0; si3 < arr.length; si3++) { if (si3 !== stapleIdx && si3 !== soupIdx) reordered.push(arr[si3]); }
-                meal._normalizedDishes = reordered;
+                meal._normalizedDishes = _normalizeMealComposition(reordered, mt);
             }
         });
     });
@@ -56306,7 +56428,7 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
                 if (stIdx2f >= 0) reordered2f.push(arr2f[stIdx2f]);
                 if (spIdx2f >= 0) reordered2f.push(arr2f[spIdx2f]);
                 for (var si6f = 0; si6f < arr2f.length; si6f++) { if (si6f !== stIdx2f && si6f !== spIdx2f) reordered2f.push(arr2f[si6f]); }
-                meal._normalizedDishes = reordered2f;
+                meal._normalizedDishes = _normalizeMealComposition(reordered2f, mt);
             }
         });
     });
@@ -64774,6 +64896,14 @@ function _buildQuickWeeklyPlan(weekDates, days) {
             _plan.summary += ' 已按血虚/补铁家庭要求，每餐至少 1 道富铁菜并避开生冷。';
         }
     }
+    // V365: 最终组合规则——早餐流质≤1、晚餐无红薯/紫薯、汤品固定第2道
+    _plan.days.forEach(function(day){
+        Object.keys(day.meals || {}).forEach(function(mk){
+            const mealObj = day.meals[mk];
+            if (!mealObj || !Array.isArray(mealObj.dishes)) return;
+            mealObj.dishes = _normalizeMealComposition(mealObj.dishes, mk);
+        });
+    });
     return _plan;
 }
 
@@ -64969,7 +65099,7 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
                 for (var si3 = 0; si3 < arr.length; si3++) {
                     if (si3 !== stapleIdx && si3 !== soupIdx) reordered.push(arr[si3]);
                 }
-                meal._normalizedDishes = reordered;
+                meal._normalizedDishes = _normalizeMealComposition(reordered, mt);
             }
         });
     });
@@ -65038,7 +65168,7 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
                 if (stIdx2 >= 0) reordered2.push(arr2[stIdx2]);
                 if (spIdx2 >= 0) reordered2.push(arr2[spIdx2]);
                 for (var si6 = 0; si6 < arr2.length; si6++) { if (si6 !== stIdx2 && si6 !== spIdx2) reordered2.push(arr2[si6]); }
-                meal._normalizedDishes = reordered2;
+                meal._normalizedDishes = _normalizeMealComposition(reordered2, mt);
             }
         });
     });
@@ -72205,6 +72335,7 @@ try { migrateDishCookProfiles(); } catch(e) { console.error('migrateDishCookProf
 
 // 迁移：dishMeta 的 reason/userComment 语义归一（V361，P1-11）
 try { migrateDishReasonSemantics(); } catch(e) { console.error('migrateDishReasonSemantics error:', e); }
+try { migrateMealPlanComposition(); } catch(e) { console.error('migrateMealPlanComposition error:', e); }
 
 // 迁移：全局 mealRecords 按家庭归属拆回家庭前缀键（V344，修复 V336 隔离后的历史数据孤儿化）
 try { migrateGlobalMealRecords(); } catch(e) { console.error('migrateGlobalMealRecords error:', e); }
