@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V367-20261104';
+        var APP_VER = 'V369-20261104';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -58378,12 +58378,29 @@ function renderDiary() {
                     + ('speechSynthesis' in window ? '<button type="button" title="朗读" onclick="event.preventDefault();event.stopPropagation();_dishListenReadDirect(\'' + escapeAttr(it.name) + '\');" style="border:none;background:none;padding:0;font-size:14px;line-height:1;color:#F97316;cursor:pointer;flex-shrink:0;margin-left:2px;vertical-align:middle;">🔊</button>' : '')
                     + '</label>';
             }).join('');
+            // V369: 计划区展示 AI 推荐理由（唯一来源 dishMeta.userComment；纯时长文案由 _dishMetaReasonText 过滤）
+            var _reasonItems = [];
+            if (typeof _dishMetaReasonText === 'function') {
+                allDishes.forEach(function(it){
+                    var _rt = _dishMetaReasonText(it.meta);
+                    if (_rt) _reasonItems.push({ name: it.name, text: _rt });
+                });
+            }
+            var planReasonHtml = '';
+            if (_reasonItems.length > 0) {
+                planReasonHtml = '<details style="flex-basis:100%;width:100%;margin:2px 0 0;">'
+                    + '<summary style="cursor:pointer;list-style:none;font-size:11px;color:#9A3412;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:1px 8px;display:inline-block;">💬 推荐理由（' + _reasonItems.length + '）</summary>'
+                    + '<div style="margin-top:4px;font-size:12px;color:#7A4A21;background:#FFFDF7;border:1px solid #FDE68A;border-radius:8px;padding:6px 8px;line-height:1.7;">'
+                    + _reasonItems.map(function(r){ return '<div><b>' + escapeHtml(r.name) + '</b>：' + escapeHtml(r.text) + '</div>'; }).join('')
+                    + '</div></details>';
+            }
             var planConfirmedLocal = (data.plan.state === 'confirmed' || data.plan.confirmed === true || data.plan.state === 'completed');
             var btnLabel = planConfirmedLocal ? '已确认' : '确认'; // V104: 确认计划→确认
             var btnDisabledAttr = planConfirmedLocal ? ' disabled' : '';
             planHtml = '<div class="diary-source-group" style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px 8px;flex:1 1 0;min-width:120px;margin:0;padding:0;background:transparent;border:none;border-radius:0;">'
                 + rowsHtml + '</div>'
-                + _renderMealNutritionSummary(allDishes);
+                + _renderMealNutritionSummary(allDishes)
+                + planReasonHtml;
             // 确认计划按钮放到 meal-actions 中渲染（见下方 meal header 构造）
             window.__diaryPlanBtnHtml = planConfirmedLocal
                 ? '<button disabled class="diary-plan-btn diary-plan-btn-disabled">' + btnLabel + '</button>'
