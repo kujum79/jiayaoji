@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V362-20261103';
+        var APP_VER = 'V363-20261103';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -38166,29 +38166,35 @@ function renderFamily() {
     const relColors = { '家人': '#F97316', '亲戚': '#10B981', '朋友': '#3B82F6', '同事': '#8B5CF6' };
     // 成员选择器 + 单成员展示（xiaojiaMembers 已在上方"小家成员区"处计算）
     if (xiaojiaMembers.length > 0) {
-        // V314: 小家成员全部平铺展示（原 V135 只渲染「当前操作人」一人，其余成员在「我家」页不可见也改不了，容易误改别人）
+        // V363: 恢复「只显示当前操作人」一张卡，其余成员通过「切换家人」标签切换（保留 V314 的可编辑能力）
         var _curOpName = (curOp && curOp.name) ? curOp.name : '';
         selectedFamilyMemberName = (_curOpName && xiaojiaNames.includes(_curOpName)) ? _curOpName : (xiaojiaNames.includes('我') ? '我' : xiaojiaMembers[0].name);
+        var _selMember = xiaojiaMembers.find(function(m) { return m.name === selectedFamilyMemberName; }) || xiaojiaMembers[0];
         var _xjWrap = document.createElement('div');
         _xjWrap.id = 'familyMembersAnchor';
         _xjWrap.style.cssText = 'margin-bottom:10px;';
         _xjWrap.innerHTML = `
             <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px 6px;">
                 <span style="font-weight:600;color:#374151;font-size:13px;">👪 小家 · ${xiaojiaMembers.length} 人</span>
-                <span style="font-size:12px;color:#9CA3AF;">点击卡片切换当前操作人</span>
+                <span style="font-size:12px;color:#9CA3AF;">点姓名切换当前操作人</span>
             </div>
-            ${xiaojiaMembers.map(function(m) {
-                var _isCur = _curOpName ? (m.name === _curOpName) : false;
+            <div style="display:flex;align-items:center;gap:6px;overflow-x:auto;padding:0 2px 8px;white-space:nowrap;">
+                ${xiaojiaMembers.map(function(m) {
+                    var _active = (m.name === selectedFamilyMemberName);
+                    return `<button type="button" data-switch-member="${m.id}" style="flex-shrink:0;padding:5px 12px;border-radius:14px;border:1px solid ${_active ? '#F97316' : '#E5E7EB'};background:${_active ? '#FFF7ED' : '#FFFFFF'};color:${_active ? '#C2410C' : '#6B7280'};font-size:12px;font-weight:${_active ? '600' : '400'};cursor:pointer;">${escapeHtml(m.name)}</button>`;
+                }).join('')}
+            </div>
+            ${_selMember ? (function(m) {
                 var _cst = m.constitution ? '<span class="constitution-tag" style="margin-left:0;margin-right:6px;">' + escapeHtml(m.constitution) + '</span>' : '';
                 var _sum = _memberPreferenceSummary(m);
                 return `
-                <div class="member-card" data-member-id="${m.id}" style="cursor:pointer;${_isCur ? 'border:1px solid #FDBA74;background:#FFF7ED;' : ''}">
+                <div class="member-card" data-member-id="${m.id}" style="border:1px solid #FDBA74;background:#FFF7ED;">
                     <div class="member-info" style="min-width:0;flex:1;">
                         <div class="detail" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                             <span style="font-weight:600;color:#1F2937;">${escapeHtml(m.name)}</span>
                             ${m.age ? '<span style="font-size:12px;color:#6B7280;">' + m.age + '岁</span>' : ''}
                             ${_cst}
-                            ${_isCur ? '<span style="font-size:11px;color:#C2410C;background:#FED7AA;border-radius:8px;padding:1px 6px;">当前操作人</span>' : ''}
+                            <span style="font-size:11px;color:#C2410C;background:#FED7AA;border-radius:8px;padding:1px 6px;">当前操作人</span>
                         </div>
                         <div class="detail" style="font-size:12px;color:#4B5563;">口味：${escapeHtml(m.taste || '未填')} ｜ 饮食要求：${escapeHtml(m.dietaryPreference || '未填写')}</div>
                         ${_sum ? '<div class="detail" style="font-size:12px;color:#9A3412;background:#FFF7ED;border-radius:6px;padding:3px 8px;margin-top:2px;">🍽️ ' + escapeHtml(_sum) + '</div>' : ''}
@@ -38199,14 +38205,14 @@ function renderFamily() {
                         <button type="button" data-id="${m.id}" class="edit-member" onclick="event.stopPropagation();window.editMemberCard('${m.id}')" style="background:none;border:none;color:#F97316;font-size:14px;cursor:pointer;">✎ 编辑</button>
                     </div>
                 </div>`;
-            }).join('')}
+            })(_selMember) : ''}
         `;
         familyList.appendChild(_xjWrap);
-        // 点卡片切换当前操作人（按钮已 stopPropagation，不会误触）
-        _xjWrap.querySelectorAll('.member-card[data-member-id]').forEach(function(card) {
-            card.addEventListener('click', function() {
-                var _id = card.getAttribute('data-member-id');
-                if (_id) switchCurrentMember(_id);
+        // 点姓名标签切换当前操作人；同一人点击不重复切换
+        _xjWrap.querySelectorAll('[data-switch-member]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var _id = btn.getAttribute('data-switch-member');
+                if (_id && String(_id) !== String(_selMember && _selMember.id)) switchCurrentMember(_id);
             });
         });
     } else {
