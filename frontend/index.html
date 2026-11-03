@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V355-20261102';
+        var APP_VER = 'V356-20261103';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -24986,6 +24986,72 @@ function _dishCookMetaHtml(cook) {
     return '<div class="dish-cook-meta" style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:#9A3412;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:6px 10px;margin-bottom:8px;line-height:1.6;">' + parts.join('<span style="color:#FDBA74;">｜</span>') + '</div>';
 }
 
+// ===== V356(P1-6)：器具/分锅提示（整鱼 >750g、蔬菜 >800g）=====
+// 整鱼判定：带清蒸/红烧/糖醋/干烧/烤等做法的“一条鱼”；鱼片/鱼丝/鱼丸/鱼香/水煮鱼/酸菜鱼/带鱼段不算
+function _isWholeFishDish(name) {
+    var n = String(name || '');
+    if (!/鱼/.test(n)) return false;
+    if (/鱼香|鱼片|鱼丝|鱼丸|鱼柳|鱼块|鱼排|鱼豆腐|鱼籽|鱼肚|水煮鱼|酸菜鱼|带鱼/.test(n)) return false;
+    return /清蒸|红烧|糖醋|干烧|松鼠|剁椒|葱烧|烤|香煎|干煎|葱油|豆瓣|啤酒/.test(n);
+}
+function _isFishIngredientName(name) {
+    var n = String(name || '');
+    if (/鲈鱼|桂鱼|鳜鱼|鲤鱼|草鱼|鲫鱼|鲳鱼|鳕鱼|黄花鱼|黄鱼|鲢鱼|黑鱼|罗非鱼|多宝鱼|鲶鱼|鲅鱼|鱼/.test(n)) return true;
+    try {
+        var ni = INGREDIENT_NUTRITION[n];
+        if (ni && /水产|鱼类/.test(ni.foodGroup || '')) return true;
+    } catch (e) {}
+    return false;
+}
+function _isVegIngredientName(name) {
+    var n = String(name || '');
+    try {
+        var ni = INGREDIENT_NUTRITION[n];
+        if (ni && ni.category === '蔬菜类') return true;
+    } catch (e) {}
+    return /青菜|白菜|菠菜|生菜|油麦菜|空心菜|上海青|西兰花|花菜|菜花|芹菜|韭菜|豆角|四季豆|茄子|青椒|彩椒|黄瓜|番茄|西红柿|土豆|胡萝卜|白萝卜|冬瓜|丝瓜|苦瓜|莲藕|山药|芋头|蘑菇|香菇|金针菇|杏鲍菇|木耳|海带|紫菜|豆芽|莴笋|芦笋|西葫芦|秋葵|荷兰豆|豌豆|毛豆|荠菜|茼蒿|苋菜|芥蓝|包菜|卷心菜|紫甘蓝|洋葱|蒜苗|蒜苔|竹笋|冬笋|春笋|娃娃菜|大白菜/.test(n);
+}
+// 把一行用量换算成克（优先 g/kg/斤，其次营养库的单件重量）
+function _rowWeightGrams(row) {
+    var n = parseFloat(row && row.total);
+    if (!(n > 0)) return 0;
+    var u = String((row && row.unit) || '').trim();
+    if (/^(g|克)$/i.test(u)) return n;
+    if (/^(kg|千克)$/i.test(u)) return n * 1000;
+    if (u === '斤') return n * 500;
+    try {
+        var ni = INGREDIENT_NUTRITION[row.name];
+        if (ni && Number(ni.weight) > 0 && (!u || ni.unit === u)) return n * Number(ni.weight);
+    } catch (e) {}
+    return 0;
+}
+function _fmtWeightG(g) {
+    return g >= 1000 ? (Math.round(g / 100) / 10).toFixed(1) + 'kg' : Math.round(g) + 'g';
+}
+// 详情页「器具 / 分锅」提示条（无整鱼/蔬菜超量时不显示）
+function _dishCookwareTipHtml(dishName) {
+    var st = window._dishDetailState || null;
+    var rows = (st && st.lastRows) || [];
+    if (!rows.length) return '';
+    var people = Math.max(1, Math.round(Number((st && st.lastCtx && st.lastCtx.count) || 1)));
+    var fishG = 0, vegG = 0;
+    rows.forEach(function (r) {
+        var g = _rowWeightGrams(r);
+        if (!g) return;
+        if (_isFishIngredientName(r.name)) fishG += g;
+        else if (_isVegIngredientName(r.name)) vegG += g;
+    });
+    var lines = [];
+    if (_isWholeFishDish(dishName) && fishG > 750) {
+        lines.push('🐟 整鱼约 <b>' + _fmtWeightG(fishG) + '</b>（' + people + ' 人份），超过家用单锅约 750g：建议请摊主从背部剖开成两半（连骨不断）再蒸/烧，或改用大号蒸锅 / 烤盘，避免鱼尾露在锅外、受热不均。');
+    }
+    if (vegG > 800) {
+        lines.push('🥬 蔬菜合计约 <b>' + _fmtWeightG(vegG) + '</b>（' + people + ' 人份），超过单锅约 800g：建议分两锅炒（一锅先炒一半盛出再炒另一半），或改用大炒锅，避免出水变软、受热不均。');
+    }
+    if (!lines.length) return '';
+    return '<div class="dish-cookware-tip" style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:6px 10px;margin-bottom:8px;line-height:1.7;">' + lines.join('<br>') + '</div>';
+}
+
 // 从知识库渲染菜品详情
 function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra) {
     const body = document.getElementById('dishDetailBody');
@@ -25136,6 +25202,7 @@ function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra
         ${solarHtml}
         ${nutritionHtml}
         ${_dishCookMetaHtml(cookMeta)}
+        ${_dishCookwareTipHtml(dishName)}
         ${amountBlockHtml}
         ${_twReqHtml(dishName)}
         <div class="dish-detail-section">
@@ -25183,6 +25250,7 @@ function _renderDishRecipeFallback(dishName, ingredients, savedIngredients, date
     body.innerHTML = `
         <div style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;margin-bottom:8px;line-height:1.5;">⚠️ AI 大厨暂时繁忙，以下为基础做法。稍后重新打开可获取更详细的做法。</div>
         ${_dishCookMetaHtml(cook)}
+        ${_dishCookwareTipHtml(dishName)}
         ${amountHtml}
         ${_twReqHtml(dishName)}
         <div class="dish-detail-section">
@@ -25326,6 +25394,7 @@ async function generateDishRecipeAI(dishName, savedIngredients, dateKey, mealTyp
             ${_aiConstHtml}
             ${_aiSolarHtml}
             ${_dishCookMetaHtml(cookMetaAi)}
+            ${_dishCookwareTipHtml(dishName)}
             ${aiAmountBlockHtml}
             ${_twReqHtml(dishName)}
             <div class="dish-detail-section">
