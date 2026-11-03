@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V358-20261103';
+        var APP_VER = 'V359-20261103';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -74096,14 +74096,20 @@ function _pointsRenderCenter() {
             : '')
         + '<div style="background:#fff;border-radius:14px;overflow:hidden;margin-bottom:14px;">'
         + _POINT_MALL.map(function (it, idx) {
-            var can = total >= it.points;
+            // V359: 余额不足时按钮直接给出差额，避免只看到灰色「N 积分」不知还差多少
+            var gap = Math.max(0, it.points - total);
+            var can = gap <= 0;
             return '<div style="display:flex;align-items:center;gap:10px;padding:12px;' + (idx ? 'border-top:1px solid #F3F4F6;' : '') + '">'
                 + '<div style="width:34px;height:34px;border-radius:10px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;font-size:17px;">' + it.icon + '</div>'
                 + '<div style="flex:1;min-width:0;">'
                 +   '<div style="font-size:13px;font-weight:600;color:#1F2937;">' + it.title + '</div>'
                 +   '<div style="font-size:11px;color:#9CA3AF;margin-top:2px;line-height:1.5;">' + it.desc + '</div>'
                 + '</div>'
-                + '<button type="button" data-redeem="' + it.key + '" onclick="_openRedeemModal(\'' + it.key + '\')" ' + (can ? '' : 'disabled ') + 'style="padding:6px 10px;border-radius:10px;border:' + (can ? 'none' : '1px solid #E5E7EB') + ';background:' + (can ? '#EA580C' : '#F3F4F6') + ';color:' + (can ? '#fff' : '#9CA3AF') + ';font-size:11px;font-weight:700;cursor:' + (can ? 'pointer' : 'not-allowed') + ';white-space:nowrap;">' + it.points + ' 积分</button>'
+                + '<button type="button" data-redeem="' + it.key + '" onclick="_openRedeemModal(\'' + it.key + '\')" ' + (can ? '' : 'disabled ') + 'style="padding:6px 10px;border-radius:10px;border:' + (can ? 'none' : '1px solid #E5E7EB') + ';background:' + (can ? '#EA580C' : '#F3F4F6') + ';color:' + (can ? '#fff' : '#9CA3AF') + ';font-size:11px;font-weight:700;cursor:' + (can ? 'pointer' : 'not-allowed') + ';white-space:nowrap;text-align:right;line-height:1.35;">'
+                +   (can
+                    ? it.points + ' 积分'
+                    : it.points + ' 积分<br><span style="font-weight:600;color:#B45309;">还差 ' + gap + ' 分</span>')
+                + '</button>'
                 + '</div>';
         }).join('')
         + '</div>';
