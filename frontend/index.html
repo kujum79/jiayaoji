@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V356-20261103';
+        var APP_VER = 'V357-20261103';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -10397,6 +10397,43 @@ function _myClassroomArticleRow(folder, a, subscribed) {
         '</div>';
 }
 
+// V357(P1-7)：未订阅锁屏只露 1 个系列名 + 1 篇标题（不含正文/摘要），作为订阅转化钩子
+function _myClassroomLockTeaser() {
+    function fromGroup(g) {
+        if (!g || !g.folder) return null;
+        var arts = (g.articles || []).filter(function (a) { return a && a.title; });
+        if (!arts.length) return null;
+        return {
+            folder: String(g.folder.folderName || '未命名系列'),
+            count: (g.articles || []).length,
+            title: String(arts[0].title),
+            minutes: Number(arts[0].duration) || 5
+        };
+    }
+    try {
+        var r = getRecommendedCourses(getFamilyMembers()) || {};
+        var list = r.list || [];
+        for (var i = 0; i < list.length; i++) {
+            var t = fromGroup(list[i]);
+            if (t) return t;
+        }
+    } catch (e) {}
+    // 家庭标签未命中时，兜底露课程库第一个有文章的系列（仍只给系列名 + 标题）
+    try {
+        var folders = getCourseFolders() || [];
+        var allArts = getCourseArticles() || [];
+        for (var j = 0; j < folders.length; j++) {
+            var f = folders[j];
+            if (!f || !f.folderName) continue;
+            var arts2 = allArts.filter(function (a) { return a && a.folderId === f.folderId; });
+            var a2 = arts2.filter(function (a) { return a && a.title; })[0];
+            if (!a2) continue;
+            return { folder: String(f.folderName), count: arts2.length, title: String(a2.title), minutes: Number(a2.duration) || 5 };
+        }
+    } catch (e) {}
+    return null;
+}
+
 function _renderMyClassroom() {
     var body = document.getElementById('classroomBody');
     if (!body) return;
@@ -10409,11 +10446,28 @@ function _renderMyClassroom() {
         if (_backEl0) _backEl0.textContent = '← 返回';
         var _cnt0 = 0;
         try { _cnt0 = Number((getRecommendedCourses(getFamilyMembers()) || {}).folderCount) || 0; } catch (e) { _cnt0 = 0; }
+        // V357(P1-7)：锁屏露出 1 个系列名 + 1 篇标题（只做钩子，不展示正文/摘要）
+        var _teaser0 = null;
+        try { _teaser0 = _myClassroomLockTeaser(); } catch (e) { _teaser0 = null; }
+        var _teaserHtml0 = '';
+        if (_teaser0) {
+            _teaserHtml0 =
+                '<div style="text-align:left;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:12px 14px;margin:18px 0 2px;">' +
+                '<div style="font-size:11px;color:#B45309;margin-bottom:6px;letter-spacing:.3px;">先看一集 · 订阅后解锁全部</div>' +
+                '<div style="font-size:14px;font-weight:700;color:#7C2D12;line-height:1.5;">📁 ' + escapeHtml(_teaser0.folder) +
+                (_teaser0.count ? '<span style="font-size:11px;color:#B45309;font-weight:400;">　共 ' + _teaser0.count + ' 篇</span>' : '') + '</div>' +
+                (_teaser0.title
+                    ? '<div style="font-size:13px;color:#92400E;line-height:1.6;margin-top:4px;">《' + escapeHtml(_teaser0.title) + '》</div>' +
+                      '<div style="font-size:11px;color:#A16207;margin-top:2px;">⏱ ' + _teaser0.minutes + ' 分钟 · 🔒 订阅可读</div>'
+                    : '') +
+                '</div>';
+        }
         body.innerHTML =
             '<div style="margin-top:24px;background:#fff;border-radius:16px;padding:26px 20px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,0.05);">' +
             '<div style="font-size:40px;line-height:1;margin-bottom:12px;">🔒</div>' +
             '<div style="font-size:16px;font-weight:700;color:#1F2937;margin-bottom:8px;">我的专属课堂为全家桶专享</div>' +
             '<div style="font-size:13px;color:#6B7280;line-height:1.8;">订阅后可解锁全部系列课程，按家庭成员的体质与标签智能匹配' + (_cnt0 ? '（共 ' + _cnt0 + ' 个系列）' : '') + '。</div>' +
+            _teaserHtml0 +
             '<button type="button" onclick="_closeMyClassroom();_openSubscribeGuide();" style="width:100%;margin-top:18px;height:46px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:700;cursor:pointer;">立即订阅</button>' +
             '<div style="font-size:11px;color:#9CA3AF;margin-top:12px;line-height:1.7;">课程内容为日常饮食参考，不替代医疗建议。</div>' +
             '</div>';
