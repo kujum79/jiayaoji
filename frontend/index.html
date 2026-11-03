@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V357-20261103';
+        var APP_VER = 'V358-20261103';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -11034,7 +11034,7 @@ function _openClassroomCourse(id, kind) {
         (canSpeak ? '<button type="button" id="classroomSpeakBtn" onclick="_classroomSpeak()" style="flex:0 0 auto;border:none;background:none;font-size:16px;color:#F97316;cursor:pointer;padding:4px 6px;" title="边看边听">🔊</button>' : '') +
         '</div>' +
         '<div style="flex:1;overflow-y:auto;">' +
-        '<div id="article-body" class="md-body" style="padding:16px 18px 110px;">' + _renderMarkdown(content) + '</div>' +
+        '<div id="article-body" class="md-body" style="padding:16px 18px 110px;">' + _renderMarkdown(content) + _dietContraNoteHtml(c.title, content) + '</div>' +
         '</div>' +
         '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #EDE9E3;padding:10px 14px;display:flex;gap:8px;">' +
         (quiz ? '<button type="button" onclick="_openClassroomQuiz(\'' + escapeAttr(id) + '\')" style="flex:1;padding:11px;border:1px solid #FDBA74;background:#FFF7ED;border-radius:12px;font-size:13px;font-weight:600;color:#C2410C;cursor:pointer;">课后小测</button>' : '') +
@@ -32731,6 +32731,7 @@ function _dtRenderCard(tip) {
         + '<div onclick="_openDailyTipFull()" style="cursor:pointer;">'
         + '<div class="dt-title">' + emoji + ' ' + (tip.title || '') + '</div>'
         + '<div class="dt-summary">' + (tip.summary || '') + '</div>'
+        + (_dietContraNoteHtml(tip.title, (tip.content || '') + ' ' + (tip.summary || '')) ? '<div style="font-size:11px;color:#B45309;margin-top:6px;">⚠️ 按您家情况已附忌口提示，点开查看</div>' : '')
         + '</div>';
 }
 function _dtRenderDegraded(latestDate) {
@@ -33899,6 +33900,48 @@ function _dtSubInfoHtml() {
         + '<button type="button" onclick="event.stopPropagation(); openSubscriptionModal(\'' + st + '\')" style="margin-top:10px;width:100%;height:34px;border-radius:9px;border:none;background:' + (st === 'none' ? '#F97316' : 'rgba(255,255,255,.85)') + ';color:' + (st === 'none' ? '#fff' : color) + ';font-size:12px;font-weight:600;cursor:pointer;">' + btn + '</button>'
         + '</div>';
 }
+// V358(P1-8): 食养内容按家庭画像附禁忌注——柿子等高鞣酸/高糖食材，避免把通用内容读成"我家也能吃"
+function _dietProfileRisks() {
+    var tags = [];
+    try { tags = getFamilyTags(getFamilyMembers()) || []; } catch (e) { tags = []; }
+    var t = tags.join('|');
+    var minChildAge = null;
+    try {
+        (getFamilyMembers() || []).forEach(function (m) {
+            if (!m) return;
+            var a = Number(m.age);
+            if (!isFinite(a) || a < 0 || a > 17) return;
+            if (minChildAge === null || a < minChildAge) minChildAge = a;
+        });
+    } catch (e) {}
+    return {
+        dm: /糖尿病|高血糖|血糖偏高|糖耐量|控糖/.test(t),
+        gi: /胃炎|胃溃疡|胃病|胃肠|肠胃|胃寒|反酸|烧心|消化不良|胃食管/.test(t),
+        baby: /婴儿|婴幼儿|宝宝|幼儿/.test(t) || (minChildAge !== null && minChildAge <= 3),
+        minChildAge: minChildAge
+    };
+}
+function _dietContraNoteHtml(title, content) {
+    var text = String(title || '') + ' ' + String(content || '');
+    if (!/柿子/.test(text)) return '';
+    var r = _dietProfileRisks();
+    var items = [];
+    if (r.dm) {
+        items.push('<div style="font-size:13px;color:#7C2D12;line-height:1.75;margin-top:6px;"><b>🍬 糖尿病 / 控糖成员</b>：柿子含糖量较高（约 15%～20%），血糖控制不稳时先不吃；血糖平稳可控制在半个以内，放在两餐之间，并相应减少当餐主食。</div>');
+    }
+    if (r.gi) {
+        items.push('<div style="font-size:13px;color:#7C2D12;line-height:1.75;margin-top:6px;"><b>🍽 胃肠较弱成员</b>：空腹吃柿子（尤其未熟、带皮）鞣酸易与胃酸结合形成胃石。胃炎、胃溃疡、反酸者建议饭后少量、去皮、只吃熟透的，避免与螃蟹、牛奶、鸡蛋等高蛋白食物同餐大量同食。</div>');
+    }
+    if (r.baby) {
+        items.push('<div style="font-size:13px;color:#7C2D12;line-height:1.75;margin-top:6px;"><b>👶 婴幼儿</b>：3 岁以内不建议吃柿子，易呛噎且鞣酸影响消化；3～6 岁去皮去籽、饭后少量，不要空腹吃。</div>');
+    }
+    if (!items.length) return '';
+    return '<div style="margin-top:18px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:12px;padding:12px 14px;">'
+        + '<div style="font-size:13px;font-weight:700;color:#9A3412;margin-bottom:2px;">⚠️ 按您家情况，这课要注意</div>'
+        + items.join('')
+        + '<div style="font-size:11px;color:#B45309;line-height:1.7;margin-top:8px;">按家庭档案自动提示，不能替代医生或营养师建议。</div>'
+        + '</div>';
+}
 function _openDailyTipFull(tip) {
     // V140: 食养堂详情弹层（规格实现）——底部滑入、高 85%、头部下拉关闭、固定免责声明
     // tip 可选参数：往期回顾/收藏列表传入对应条目；缺省读当天缓存
@@ -33937,6 +33980,7 @@ function _openDailyTipFull(tip) {
     body.innerHTML = '<div style="font-size:18px;font-weight:700;color:#1F2937;line-height:1.5;">' + emoji + ' ' + (tip.title || '') + '</div>'
         + '<div style="margin-top:6px;font-size:12px;color:#9CA3AF;">' + (tip.date || _dtTodayKey()) + ' · ' + (tip.category || '节气食养') + '</div>'
         + '<div style="margin-top:14px;font-size:15px;color:#374151;line-height:1.9;white-space:pre-wrap;">' + (tip.content || tip.summary || '') + '</div>'
+        + _dietContraNoteHtml(tip.title, tip.content || tip.summary || '')
         + ((tip.tips || []).length ? '<div style="margin-top:18px;"><div style="font-size:14px;font-weight:700;color:#1F2937;">💡 小贴士</div>' + tipsHtml + '</div>' : '')
         + foodsHtml
         + _dtSubInfoHtml();
