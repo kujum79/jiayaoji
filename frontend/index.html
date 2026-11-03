@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V369-20261104';
+        var APP_VER = 'V370-20261104';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -6253,7 +6253,18 @@ function doFamilyPassLogin() {
     if (!name) { showToast('请输入家庭名称'); _loginFamErr('请输入家庭名称'); return; }
     if (!pwd) { showToast('请输入家庭密码'); _loginFamErr('请输入家庭密码'); return; }
     var rec = findFamilyCredByName(name);
-    if (!rec) { _loginFamErr('未找到该家庭，或该家庭尚未设置家庭密码'); return; }
+    if (!rec) {
+        // V370（原 V368-A）：家庭凭据只存在本机，空设备/清缓存后必然找不到，引导改用手机号登录
+        if (getFamilyCreds().length === 0) {
+            toggleFamilyLoginPanel(0);
+            _loginPhoneErr('当前设备没有家庭登录凭据，请改用手机号 + 验证码登录');
+            showToast('本机无家庭凭据，请用手机号登录');
+            setTimeout(function () { var pi = document.getElementById('loginPhone'); if (pi) pi.focus(); }, 50);
+            return;
+        }
+        _loginFamErr('未找到该家庭，或该家庭尚未设置家庭密码');
+        return;
+    }
     if (String(rec.password) !== pwd) { _loginFamErr('家庭密码错误'); return; }
     _applyFamilySession(rec);
 }
