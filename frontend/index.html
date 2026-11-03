@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V365-20261103';
+        var APP_VER = 'V366-20261103';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -31621,15 +31621,52 @@ function buildShoppingKeyword(names) {
     } catch (e) { return ''; }
 }
 
-// 跳转外部购买平台：淘宝/京东走关键词搜索；小象超市（原美团买菜）打开其30分钟快送超市
+// V366: 联盟返利配置——填入真实推广位后，采购链接自动带联盟参数并产生返利；
+// 留空时仍可正常跳转搜索，但不产生佣金。不要在代码里写死他人推广位。
+var AFFILIATE_CFG = {
+    taobaoPid: '',       // 淘宝联盟推广位 pid，如 mm_123456_7890123_110000000
+    jdUnionId: '',       // 京东联盟 unionId
+    jdPositionId: ''     // 京东联盟 positionId
+};
+function buildAffiliatePurchaseUrl(platform, keyword) {
+    var kw = String(keyword || '').trim() || '生鲜食材';
+    var track = '&utm_source=jiayaoji&utm_medium=app&utm_campaign=shopping_list';
+    if (platform === 'taobao') {
+        var tb = 'https://s.taobao.com/search?q=' + encodeURIComponent(kw) + '&commend=all&search_type=item' + track;
+        if (AFFILIATE_CFG.taobaoPid) tb += '&pid=' + encodeURIComponent(AFFILIATE_CFG.taobaoPid) + '&union_lens=recoveryid&source=jiayaoji';
+        return tb;
+    }
+    if (platform === 'jd') {
+        var jd = 'https://search.jd.com/Search?keyword=' + encodeURIComponent(kw) + '&enc=utf-8' + track;
+        if (AFFILIATE_CFG.jdUnionId) {
+            jd += '&unionId=' + encodeURIComponent(AFFILIATE_CFG.jdUnionId);
+            if (AFFILIATE_CFG.jdPositionId) jd += '&positionId=' + encodeURIComponent(AFFILIATE_CFG.jdPositionId);
+        }
+        return jd;
+    }
+    return '';
+}
+// 采购项行内“去淘宝买 / 去京东买”链接；已购项不再显示
+function shoppingBuyLinksHtml(name, purchased) {
+    if (purchased) return '';
+    var kw = String(name || '').trim();
+    if (!kw) return '';
+    var tb = buildAffiliatePurchaseUrl('taobao', kw);
+    var jd = buildAffiliatePurchaseUrl('jd', kw);
+    var style = 'display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;text-decoration:none;';
+    return '<div onclick="event.stopPropagation()" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:5px;">'
+        + '<a href="' + escapeAttr(tb) + '" target="_blank" rel="noopener noreferrer" style="' + style + 'border:1px solid #FFBB96;background:#FFF1F0;color:#E8552D;">去淘宝买</a>'
+        + '<a href="' + escapeAttr(jd) + '" target="_blank" rel="noopener noreferrer" style="' + style + 'border:1px solid #FFA39E;background:#FFF2F0;color:#C81623;">去京东买</a>'
+        + '</div>';
+}
+
+// 跳转外部购买平台：淘宝/京东走联盟参数搜索；小象超市（原美团买菜）打开其30分钟快送超市
 function openPurchaseChannel(platform, keyword) {
     try {
         var kw = String(keyword || '').trim() || '生鲜食材';
         var url = '';
-        if (platform === 'taobao') {
-            url = 'https://s.taobao.com/search?q=' + encodeURIComponent(kw);
-        } else if (platform === 'jd') {
-            url = 'https://search.jd.com/Search?keyword=' + encodeURIComponent(kw) + '&enc=utf-8';
+        if (platform === 'taobao' || platform === 'jd') {
+            url = buildAffiliatePurchaseUrl(platform, kw);
         } else if (platform === 'meituan') {
             // 小象超市（原美团买菜）：无公开搜索 H5，直接打开官网/附近门店
             url = 'https://maicai.meituan.com/';
@@ -31937,6 +31974,7 @@ function renderShoppingPlan(planMap, dishCount, servings) {
                 <div style="flex:1; ${lineThrough}">
                     <div style="font-size:14px; color:#1F2937; ${lineThrough}">${escapeHtml(item.name)}${quantityBadge}${ownedHint}</div>
                     <div style="font-size:12px; color:#9CA3AF;">用于：${item.dishes.map(d => escapeHtml(d)).join('、')}</div>
+                    ${isChecked ? '' : shoppingBuyLinksHtml(item.name, false)}
                 </div>
             </div>`;
         });
@@ -32319,6 +32357,7 @@ function renderShoppingView() {
                     <div class="shopping-item-info" onclick="openEditShoppingModal(${item.id})">
                         <div class="shopping-item-name">${escapeHtml(item.name)}${item.restock === 'refill' ? `<span style="font-size:11px; background:#FEF2F2; color:#DC2626; padding:1px 6px; border-radius:4px; margin-left:6px;">🔴 已用完补货</span>` : ''}${item.restock === 'suggest' ? `<span style="font-size:11px; background:#FEF3C7; color:#B45309; padding:1px 6px; border-radius:4px; margin-left:6px;">🟡 建议补货</span>` : ''}</div>
                         <div class="shopping-item-meta">${escapeHtml(item.quantity||'适量')} ${item.purchased ? '· 已购 ✓' : ''}</div>
+                        ${shoppingBuyLinksHtml(item.name, item.purchased)}
                     </div>
                     <button class="btn-icon" style="width:28px;height:28px;font-size:14px;border:1px solid #FCA5A5;border-radius:8px;color:#DC2626;flex-shrink:0;" onclick="deleteShoppingItem(${item.id})" title="删除">✕</button>
                 </div>`;
@@ -34223,7 +34262,7 @@ function _openDailyTipFull(tip) {
     var body = document.createElement('div');
     body.style.cssText = 'flex:1;overflow-y:auto;padding:16px 20px 12px;';
     body.innerHTML = '<div style="font-size:18px;font-weight:700;color:#1F2937;line-height:1.5;">' + emoji + ' ' + (tip.title || '') + '</div>'
-        + '<div style="margin-top:6px;font-size:12px;color:#9CA3AF;">' + (tip.date || _dtTodayKey()) + ' · ' + (tip.category || '节气食养') + '</div>'
+        + '<div style="margin-top:6px;font-size:12px;color:#9CA3AF;">' + (tip.date || _dtTodayKey()) + ' · ' + _fhNormCategory(tip.category) + '</div>'
         + '<div style="margin-top:14px;font-size:15px;color:#374151;line-height:1.9;white-space:pre-wrap;">' + (tip.content || tip.summary || '') + '</div>'
         + _dietContraNoteHtml(tip.title, tip.content || tip.summary || '')
         + ((tip.tips || []).length ? '<div style="margin-top:18px;"><div style="font-size:14px;font-weight:700;color:#1F2937;">💡 小贴士</div>' + tipsHtml + '</div>' : '')
@@ -34231,7 +34270,12 @@ function _openDailyTipFull(tip) {
         + _dtSubInfoHtml();
     var foot = document.createElement('div');
     foot.style.cssText = 'flex-shrink:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));border-top:1px solid #F3F4F6;background:white;';
-    foot.innerHTML = '<div style="text-align:center;font-size:11px;color:#9CA3AF;margin-bottom:8px;">以上内容仅供参考，不构成医疗建议。</div>'
+    var _repDish = _fhArticleDishName(tip);
+    foot.innerHTML = (_repDish
+            ? '<button type="button" onclick="_replicateArticleDish()" style="width:100%;height:40px;border-radius:12px;border:none;background:#F97316;color:white;font-size:14px;font-weight:700;cursor:pointer;">🍳 一键复刻这道菜</button>'
+              + '<div style="text-align:center;font-size:11px;color:#9CA3AF;margin:6px 0 8px;">加入今天午餐 · 缺的食材自动进采购清单</div>'
+            : '')
+        + '<div style="text-align:center;font-size:11px;color:#9CA3AF;margin-bottom:8px;">以上内容仅供参考，不构成医疗建议。</div>'
         + '<div style="display:flex;gap:10px;">'
         + '<button type="button" onclick="_closeDtFull()" style="flex:1;height:38px;border-radius:12px;border:none;background:#F3F4F6;color:#4B5563;font-size:14px;cursor:pointer;">关闭</button>'
         + '<button type="button" onclick="_closeDtFull(); _openSubscribeGuide()" style="flex:1;height:38px;border-radius:12px;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:14px;cursor:pointer;">🔔 订阅食养堂</button>'
@@ -34343,7 +34387,7 @@ function _openDailyTipArchive() {
     _dtArcSwitch('history');
 }
 var _dtArcCat = ''; // 当前筛选的 category（空=全部）
-var _DT_CATS = ['', '节气食养', '天气食养', '当季食材', '烹饪技巧', '饮食文化'];
+var _DT_CATS = ['', '节气食养', '天气食养', '当季食材', '厨房技巧', '选材避坑', '家庭宴客', '饮食文化'];
 function _dtArcSwitch(tab) {
     _dtArcTab = tab;
     var on = 'flex:1;height:34px;border-radius:10px;border:none;background:#F97316;color:white;font-size:13px;font-weight:600;cursor:pointer;';
@@ -34443,7 +34487,7 @@ function _dtArcUnfav(id) { _dtUnfav(id); }
 // 文章状态流转：draft → pending_review → published / rejected；
 // published 可下架回 draft，rejected 可回 draft 重编或重新提审。
 // auditStatus 随流转联动：提审=pending、发布=passed、驳回=rejected。
-var _FH_CATS = ['节气食养', '天气食养', '当季食材', '烹饪技巧', '饮食文化'];
+var _FH_CATS = ['节气食养', '天气食养', '当季食材', '厨房技巧', '选材避坑', '家庭宴客', '饮食文化'];
 var _FH_FLOW = {
     'draft': ['pending_review', 'archived'],
     'pending_review': ['published', 'rejected', 'draft'],
@@ -34473,7 +34517,7 @@ function _fhMake(fields) {
     var base = {
         id: 'fh_' + now + '_' + Math.floor(Math.random() * 1000),
         date: '', status: 'draft', source: 'ai', category: '节气食养',
-        title: '', summary: '', content: '', tips: [], relatedIngredients: [],
+        title: '', summary: '', content: '', tips: [], relatedIngredients: [], relatedDish: '',
         auditStatus: 'pending', auditNote: '', publishedAt: 0,
         createdAt: now, updatedAt: now, authorId: 'ai', viewCount: 0, favoriteCount: 0
     };
@@ -34488,6 +34532,85 @@ function _fhUpdate(id, patch) {
     list.forEach(function (x) { if (x.id === id) { var f = patch || {}; Object.keys(f).forEach(function (k) { x[k] = f[k]; }); x.updatedAt = Date.now(); hit = x; } });
     if (hit) _fhWrite(list);
     return hit;
+}
+// V366: 旧分类「烹饪技巧」统一归到「厨房技巧」，避免筛选时文章丢失
+function _fhNormCategory(c) { return c === '烹饪技巧' ? '厨房技巧' : (c || '节气食养'); }
+function migrateFoodHallCategories() {
+    try {
+        var list = _fhRead();
+        var dirty = false;
+        list.forEach(function (a) { if (a && a.category === '烹饪技巧') { a.category = '厨房技巧'; dirty = true; } });
+        if (dirty) _fhWrite(list);
+    } catch (e) { console.warn('migrateFoodHallCategories error:', e); }
+}
+// 文章关联菜名：优先后台填写的 relatedDish，其次从标题/摘要/正文里识别已知菜名
+function _fhArticleDishName(tip) {
+    if (!tip) return '';
+    var explicit = String(tip.relatedDish || '').trim();
+    if (explicit) return explicit;
+    var keys = (typeof DISH_INGREDIENTS !== 'undefined') ? Object.keys(DISH_INGREDIENTS) : [];
+    function findIn(text) {
+        var t = String(text || '');
+        if (!t) return '';
+        var hits = keys.filter(function (k) { return k && k.length >= 2 && t.indexOf(k) >= 0; });
+        hits.sort(function (a, b) { return b.length - a.length; });
+        return hits[0] || '';
+    }
+    return findIn(tip.title) || findIn(tip.summary) || findIn(tip.content);
+}
+function _fhArticleIngredients(tip, dish) {
+    try {
+        var info = (typeof DISH_INGREDIENTS !== 'undefined') ? DISH_INGREDIENTS[dish] : null;
+        if (info && Array.isArray(info.ingredients) && info.ingredients.length) return info.ingredients.slice();
+    } catch (e) {}
+    return (tip && Array.isArray(tip.relatedIngredients)) ? tip.relatedIngredients.slice() : [];
+}
+// 把缺的食材写入采购清单（跳过已有未购同名项）
+function _addArticleIngredientsToShopping(names, dish) {
+    var arr = [];
+    var seen = {};
+    (names || []).forEach(function (n) {
+        var s = String(n || '').trim();
+        if (!s || seen[s]) return;
+        seen[s] = 1; arr.push(s);
+    });
+    if (!arr.length) return 0;
+    var plans = JSON.parse(lsGet('shoppingPlans') || '[]') || [];
+    var added = 0;
+    arr.forEach(function (n) {
+        var exists = plans.some(function (p) {
+            if (!p || p.purchased) return false;
+            var pn = String(p.name || '');
+            return pn === n || (pn && n && (pn.indexOf(n) >= 0 || n.indexOf(pn) >= 0));
+        });
+        if (exists) return;
+        var cat = (typeof classifyIngredient === 'function') ? classifyIngredient(n) : '其他';
+        plans.push({
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            name: n, quantity: '适量', category: cat || '其他',
+            purchased: false, addedAt: Date.now(), note: '来自食养堂一键复刻' + (dish ? '·' + dish : '')
+        });
+        added++;
+    });
+    if (added) {
+        lsSet('shoppingPlans', JSON.stringify(plans));
+        try { if (typeof renderFridge === 'function') renderFridge(); } catch (e) {}
+    }
+    return added;
+}
+function _replicateArticleDish() {
+    var tip = _dtCurTip;
+    var dish = _fhArticleDishName(tip);
+    if (!dish) { showToast && showToast('这篇内容暂未关联菜谱，可在后台填写「关联菜名」'); return; }
+    var ings = _fhArticleIngredients(tip, dish);
+    var res = null;
+    try { res = addToPlanFromFridge(dish, 'lunch', 'manual', 0); } catch (e) { console.error('replicate error:', e); }
+    if (!res || !res.added) { showToast && showToast('加入计划失败，请稍后重试'); return; }
+    var missing = (res.insufficient || []).slice();
+    // 非内置菜谱没有库存扣减结果时，用文章关联食材兜底，确保采购清单有内容
+    if (!missing.length && !(typeof DISH_INGREDIENTS !== 'undefined' && DISH_INGREDIENTS[dish]) && ings.length) missing = ings;
+    var n = _addArticleIngredientsToShopping(missing, dish);
+    showToast && showToast('✅ 已加入今天午餐：' + dish + (n ? '，' + n + ' 种食材已加入采购清单' : '，食材家里已有'));
 }
 function _fhTransition(id, next) {
     // 合法流转才生效，非法返回 null；发布自动盖 publishedAt 与审核通过
@@ -34604,7 +34727,7 @@ function _fhAutoFallback(force) {
 }
 
 // 食养堂树状子分类（与生成端 category 一致）；食养收藏沿用同一套，仅内容=用户收藏
-var _FH_TREE_CATS = ['节气食养', '天气食养', '当季食材', '烹饪技巧', '饮食文化'];
+var _FH_TREE_CATS = ['节气食养', '天气食养', '当季食材', '厨房技巧', '选材避坑', '家庭宴客', '饮食文化'];
 var _fhServerArchive = [];          // 服务端自动发布归档（会话内缓存）
 var _fhServerArchiveAt = 0;
 var _fhArchiveLoading = false;
@@ -34640,8 +34763,8 @@ function _fhArchiveAll() {
         if (seen[key]) return;
         seen[key] = 1; out.push(a);
     };
-    _fhRead().filter(function (x) { return x && x.status === 'published' && x.title; }).forEach(push);
-    (_fhServerArchive || []).forEach(push);
+    _fhRead().filter(function (x) { return x && x.status === 'published' && x.title; }).forEach(function (a) { push(Object.assign({}, a, { category: _fhNormCategory(a.category) })); });
+    (_fhServerArchive || []).forEach(function (a) { push(Object.assign({}, a, { category: _fhNormCategory(a.category) })); });
     out.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
     return out;
 }
@@ -35058,7 +35181,9 @@ function _fhMgrEdit(id) {
         + '<div style="flex:1;overflow-y:auto;padding:12px 14px 30px;">'
         + '<div style="font-size:12px;color:#6B7280;margin-bottom:4px;">分类</div>'
         + '<select id="fhEdCat" style="width:100%;border:1px solid #E5E7EB;border-radius:8px;padding:9px;font-size:13px;background:white;color:#1F2937;">'
-        + _FH_CATS.map(function (c) { return '<option ' + (a && a.category === c ? 'selected' : '') + '>' + c + '</option>'; }).join('') + '</select>'
+        + _FH_CATS.map(function (c) { return '<option ' + (a && _fhNormCategory(a.category) === c ? 'selected' : '') + '>' + c + '</option>'; }).join('') + '</select>'
+        + '<div style="font-size:12px;color:#6B7280;margin:10px 0 4px;">关联菜名（可选，用于一键复刻和导购）</div>'
+        + '<input id="fhEdDish" maxlength="30" value="' + (a && a.relatedDish ? String(a.relatedDish).replace(/"/g, '&quot;') : '') + '" placeholder="如：番茄炒蛋；留空则自动从标题/正文识别" style="width:100%;border:1px solid #E5E7EB;border-radius:8px;padding:9px;font-size:13px;color:#1F2937;">'
         + '<div style="font-size:12px;color:#6B7280;margin:10px 0 4px;">标题 <span id="fhEdTitleN" style="color:#9CA3AF;"></span></div>'
         + '<input id="fhEdTitle" maxlength="30" value="' + (a && a.title ? String(a.title).replace(/"/g, '&quot;') : '') + '" placeholder="15 字内" style="width:100%;border:1px solid #E5E7EB;border-radius:8px;padding:9px;font-size:14px;color:#1F2937;">'
         + '<div style="font-size:12px;color:#6B7280;margin:10px 0 4px;">摘要 <span id="fhEdSumN" style="color:#9CA3AF;"></span></div>'
@@ -35094,6 +35219,7 @@ function _fhNationalHits(title, summary, content) {
 }
 function _fhEdSave() {
     var cat = (document.getElementById('fhEdCat') || {}).value || '节气食养';
+    var relatedDish = ((document.getElementById('fhEdDish') || {}).value || '').trim();
     var title = ((document.getElementById('fhEdTitle') || {}).value || '').trim();
     var summary = ((document.getElementById('fhEdSum') || {}).value || '').trim();
     var content = ((document.getElementById('fhEdCnt') || {}).value || '').trim();
@@ -35110,11 +35236,11 @@ function _fhEdSave() {
     try { var m = getCurrentMember(); if (m && m.id) author = m.id; } catch (e) {}
     if (_fhEdId) {
         var old = _fhGet(_fhEdId);
-        _fhUpdate(_fhEdId, { category: cat, title: title, summary: summary, content: content, tips: tips, auditNote: '' });
+        _fhUpdate(_fhEdId, { category: cat, relatedDish: relatedDish, title: title, summary: summary, content: content, tips: tips, auditNote: '' });
         // 驳回文章重新编辑保存后自动回草稿
         if (old && old.status === 'rejected') _fhTransition(_fhEdId, 'draft');
     } else {
-        _fhAdd({ date: _dtTodayKey(), source: _fhEdSource, authorId: author, category: cat, title: title, summary: summary, content: content, tips: tips });
+        _fhAdd({ date: _dtTodayKey(), source: _fhEdSource, authorId: author, category: cat, relatedDish: relatedDish, title: title, summary: summary, content: content, tips: tips });
     }
     var ed = document.getElementById('fhEdOv');
     if (ed) ed.remove();
@@ -43596,7 +43722,9 @@ const CATEGORY_TREE_DATA = {
         { icon: '🧭', label: '食养原则', sub: '食养原则' },
         { icon: '📖', label: '食养食谱', sub: '食养食谱' },
         { icon: '🥬', label: '当季食材', sub: '当季食材' },
-        { icon: '🍳', label: '烹饪技巧', sub: '烹饪技巧' },
+        { icon: '🍳', label: '厨房技巧', sub: '厨房技巧' },
+        { icon: '🛒', label: '选材避坑', sub: '选材避坑' },
+        { icon: '🎉', label: '家庭宴客', sub: '家庭宴客' },
         { icon: '📚', label: '饮食文化', sub: '饮食文化' }
     ],
     cooking: [
@@ -43651,7 +43779,9 @@ const KNOWLEDGE_TREE = {
         '食养原则': ['低盐', '低糖', '低脂', '高纤维', '易消化'],
         '食养食谱': ['家常', '家宴', '中式'],
         '当季食材': [],
-        '烹饪技巧': [],
+        '厨房技巧': [],
+        '选材避坑': [],
+        '家庭宴客': [],
         '饮食文化': []
     },
     '烹饪': {
@@ -72336,6 +72466,7 @@ try { migrateDishCookProfiles(); } catch(e) { console.error('migrateDishCookProf
 // 迁移：dishMeta 的 reason/userComment 语义归一（V361，P1-11）
 try { migrateDishReasonSemantics(); } catch(e) { console.error('migrateDishReasonSemantics error:', e); }
 try { migrateMealPlanComposition(); } catch(e) { console.error('migrateMealPlanComposition error:', e); }
+try { migrateFoodHallCategories(); } catch(e) { console.error('migrateFoodHallCategories error:', e); }
 
 // 迁移：全局 mealRecords 按家庭归属拆回家庭前缀键（V344，修复 V336 隔离后的历史数据孤儿化）
 try { migrateGlobalMealRecords(); } catch(e) { console.error('migrateGlobalMealRecords error:', e); }
