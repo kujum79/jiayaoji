@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V360-20261103';
+        var APP_VER = 'V361-20261103';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -24707,11 +24707,13 @@ function showDishDetail(dishName, dateKey, mealType) {
             const plan = dayData && dayData[mealType] && dayData[mealType].plan;
             if (plan && plan.dishMeta && plan.dishMeta[dishName]) {
                 const meta = plan.dishMeta[dishName];
+                // V361(P1-11): 就地归一 reason 语义（纯时长迁到 cookTime，文字理由留在 userComment）
+                if (_normalizeDishReasonMeta(meta)) saveDietCalendar(calendar);
                 if (meta.ingredients && Array.isArray(meta.ingredients) && meta.ingredients.length > 0) {
                     savedIngredients = meta.ingredients;
                 }
                 if (Array.isArray(meta.healthTags)) savedHealthTags = meta.healthTags;
-                if (meta.userComment) savedReason = meta.userComment;
+                savedReason = _dishMetaReasonText(meta);
                 // V353(P1-3): 老数据缺 steps/heat/cookTime 时补齐并落库
                 if (!(Array.isArray(meta.steps) && meta.steps.length) || !meta.heat || !(Number(meta.cookTime) > 0)) {
                     if (_seedDishCookMeta(plan, dishName)) saveDietCalendar(calendar);
@@ -25015,6 +25017,61 @@ function _dishCookProfile(name) {
         cookTimeText: '约 ' + cookTime + ' 分钟',
         method: _COOK_METHOD_LABEL[method] || '家常做法'
     };
+}
+
+// ===== V361(P1-11)：reason 语义归一——理由只存文字，时长只走 cookTime =====
+// 识别「整段只写了时长」的文本（如 5分钟 / 约15分钟 / 10min / 半小时 / 1小时），返回分钟数；不是纯时长返回 0
+function _parseDurationOnlyText(text) {
+    var s = String(text || '').trim();
+    if (!s || s.length > 16) return 0;
+    s = s.replace(/^[\s\u3000"'“”‘’《「（()]+|[\s\u3000"'“”‘’》」）)。.，,！!；;]+$/g, '');
+    s = s.replace(/^(约|大约|大概|需要|需|用时|耗时|共计|共|全程)\s*/g, '');
+    if (/^(半小时|半个小时)$/.test(s)) return 30;
+    if (/^(一个半小时|一小时半)$/.test(s)) return 90;
+    if (/^(一|1|两|2)个?小时$/.test(s)) return 60;
+    var m = s.match(/^(\d+(?:\.\d+)?)\s*(分钟|分|min|mins|minutes|小时|h|hr|hrs)$/i);
+    if (!m) return 0;
+    var num = parseFloat(m[1]);
+    if (!(num > 0)) return 0;
+    return Math.round(/小时|h|hr/i.test(m[2]) ? num * 60 : num);
+}
+
+// dishMeta 里的理由文本：仅取文字理由，纯时长一律不当作理由返回
+function _dishMetaReasonText(meta) {
+    if (!meta || typeof meta !== 'object') return '';
+    var t = String(meta.userComment || meta.reason || '').trim();
+    return _parseDurationOnlyText(t) ? '' : t;
+}
+
+// 归一单条 dishMeta：纯时长的 reason/userComment → cookTime；旧 reason 的文字理由并入 userComment。
+// 返回是否发生了改动（调用方可据此落库）。
+function _normalizeDishReasonMeta(meta) {
+    if (!meta || typeof meta !== 'object') return false;
+    var changed = false;
+    ['reason', 'userComment'].forEach(function (field) {
+        var raw = meta[field];
+        if (!raw) return;
+        var mins = _parseDurationOnlyText(raw);
+        if (!mins) return;
+        if (!(Number(meta.cookTime) > 0)) {
+            meta.cookTime = mins;
+            meta.cookTimeText = '约 ' + mins + ' 分钟';
+            if (!meta.cookSource) meta.cookSource = 'ai';
+        }
+        delete meta[field];
+        changed = true;
+    });
+    if (meta.reason) {
+        var text = String(meta.reason).trim();
+        if (meta.userComment) {
+            if (String(meta.userComment).indexOf(text) === -1) meta.userComment = String(meta.userComment) + ' | ' + text;
+        } else {
+            meta.userComment = text;
+        }
+        delete meta.reason;
+        changed = true;
+    }
+    return changed;
 }
 
 // 给单道计划菜补齐 steps/heat/cookTime（只补空缺，不覆盖已有）
@@ -29538,7 +29595,7 @@ async function _auditPlanAndSaveRecord(dateKey, mealType, force) {
             if (!n) return null;
             var meta = dm[n] || {};
             var ingrs = (DISH_INGREDIENTS && DISH_INGREDIENTS[n] && DISH_INGREDIENTS[n].ingredients) || meta.ingredients || [n];
-            return { dish: n, ingredients: ingrs, reason: (meta.userComment || meta.reason || '') };
+            return { dish: n, ingredients: ingrs, reason: _dishMetaReasonText(meta) };
         }).filter(Boolean);
         // 外食计划 → 以餐厅菜品条目参与审核（isOut 标记，报告里归为外食）
         if (dop) dop.restaurants.forEach(function(r) {
@@ -54703,9 +54760,19 @@ async function generateMultiDayRecommendation(days) {
                 let dishMeta = {};
                 dishList.forEach(d => {
                     // 解析推荐理由中的人群健康标签（如"适合生长发育期"→['grow']）
-                    var hTags = (typeof parseHealthTags === 'function') ? parseHealthTags(d.reason || '', d.name).map(function(t){return t.key;}) : [];
+                    // V361(P1-11): 理由字段只存文字；AI 若把时长写进 reason，迁到 cookTime
+                    var _dReason = String(d.reason || '').trim();
+                    var _dMins = _parseDurationOnlyText(_dReason);
+                    var _dReasonText = _dMins > 0 ? '' : _dReason;
+                    var hTags = (typeof parseHealthTags === 'function') ? parseHealthTags(_dReasonText, d.name).map(function(t){return t.key;}) : [];
                     var metaBase = {};
-                    if (d.reason) metaBase.userComment = d.reason;
+                    if (_dMins > 0) {
+                        metaBase.cookTime = _dMins;
+                        metaBase.cookTimeText = '约 ' + _dMins + ' 分钟';
+                        metaBase.cookSource = 'ai';
+                    } else if (_dReasonText) {
+                        metaBase.userComment = _dReasonText;
+                    }
                     if (hTags.length) metaBase.healthTags = hTags;
                     if (d.ingredients && Array.isArray(d.ingredients) && d.ingredients.length > 0) {
                         dishMeta[d.name] = Object.assign({ ingredients: d.ingredients, source: 'ai', perPersonIngredients: true }, metaBase);
@@ -56573,8 +56640,17 @@ function confirmWeeklyAiRecommendation() {
                             }
                         }
                         if (d.reason) {
+                            // V361(P1-11): 纯时长写进 cookTime，文字理由写进 userComment，reason 不再混用
+                            var _wReason = String(d.reason).trim();
+                            var _wMins = _parseDurationOnlyText(_wReason);
                             if (!mergedMeta[d.name]) mergedMeta[d.name] = {};
-                            mergedMeta[d.name].reason = d.reason;
+                            if (_wMins > 0) {
+                                mergedMeta[d.name].cookTime = _wMins;
+                                mergedMeta[d.name].cookTimeText = '约 ' + _wMins + ' 分钟';
+                                if (!mergedMeta[d.name].cookSource) mergedMeta[d.name].cookSource = 'ai';
+                            } else {
+                                mergedMeta[d.name].userComment = _wReason;
+                            }
                         }
                     }
                 });
@@ -57697,6 +57773,28 @@ function migrateDishCookProfiles() {
     if (updated) {
         saveDietCalendar(calendar);
         console.log('[迁移] 已为 ' + dishCount + ' 道计划菜补全步骤/火候/用时（P1-3）');
+    }
+}
+
+// V361(P1-11) 迁移：历史 dishMeta 里被当成时长用的 reason/userComment → cookTime，文字理由统一进 userComment
+function migrateDishReasonSemantics() {
+    const calendar = getDietCalendar();
+    let updated = false;
+    let dishCount = 0;
+    Object.keys(calendar).forEach(function (dateKey) {
+        const dayData = calendar[dateKey];
+        if (!dayData) return;
+        ['breakfast', 'lunch', 'dinner'].forEach(function (mealType) {
+            const plan = dayData[mealType] && dayData[mealType].plan;
+            if (!plan || !plan.dishMeta) return;
+            Object.keys(plan.dishMeta).forEach(function (dishName) {
+                if (_normalizeDishReasonMeta(plan.dishMeta[dishName])) { updated = true; dishCount++; }
+            });
+        });
+    });
+    if (updated) {
+        saveDietCalendar(calendar);
+        console.log('[迁移] 已归一 ' + dishCount + ' 道菜的 reason/userComment（理由≠时长，P1-11）');
     }
 }
 
@@ -72104,6 +72202,9 @@ try { migrateDishNamesFromKnowledge(); } catch(e) { console.error('migrateDishNa
 
 // 迁移：为所有计划菜补 steps + heat + cookTime（V353，P1-3）
 try { migrateDishCookProfiles(); } catch(e) { console.error('migrateDishCookProfiles error:', e); }
+
+// 迁移：dishMeta 的 reason/userComment 语义归一（V361，P1-11）
+try { migrateDishReasonSemantics(); } catch(e) { console.error('migrateDishReasonSemantics error:', e); }
 
 // 迁移：全局 mealRecords 按家庭归属拆回家庭前缀键（V344，修复 V336 隔离后的历史数据孤儿化）
 try { migrateGlobalMealRecords(); } catch(e) { console.error('migrateGlobalMealRecords error:', e); }
