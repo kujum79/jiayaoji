@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V354-20261102';
+        var APP_VER = 'V355-20261102';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -30443,6 +30443,127 @@ function _elderSoftFilterDishes(dishes, mealKey, isStapleFn, usedSet) {
     }
     return out;
 }
+// ===== V355(P1-5)：血虚/补铁体质——每餐至少 1 道富铁菜 + 忌生冷（不区分会员，未订阅同样生效）=====
+var _BLOOD_TXT_RE = /血虚|贫血|补血|补铁|气血不足|缺铁/;
+var _IRON_RICH_RE = /猪肝|鸡肝|鸭肝|猪血|鸭血|鸡血|动物血|牛肉|羊肉|瘦肉|瘦猪肉|里脊|乌鸡|菠菜|木耳|黑木耳|红枣|黑芝麻|红豆|黑豆|桂圆|牡蛎|蛤蜊|蛏|葡萄干|南瓜子/;
+var _BLOOD_COLD_RE = /凉拌|沙拉|刺身|冰镇|冷面|凉皮|凉粉|冷盘|生食|寿司/;
+var _BLOOD_STAPLE_POOL = ['红枣小米粥', '菠菜猪肝面', '猪肝瘦肉粥', '红豆粥', '牛肉三明治'];
+var _BLOOD_MAIN_POOL = ['菠菜猪肝汤', '番茄炖牛肉', '牛肉炒西兰花', '鸭血豆腐羹', '黑木耳炒山药', '瘦肉炒菠菜', '黑木耳炒鸡蛋', '菠菜炒鸡蛋', '韭菜炒猪肝', '黑芝麻糊', '红枣蒸南瓜'];
+var _BLOOD_BREAK_MAIN_POOL = ['菠菜炒鸡蛋', '黑木耳炒鸡蛋', '瘦肉炒菠菜', '韭菜炒猪肝', '红枣蒸南瓜', '黑芝麻糊', '菠菜猪肝汤', '鸭血豆腐羹', '番茄炖牛肉', '黑木耳炒山药', '牛肉炒西兰花'];
+var _BLOOD_CACHE = { raw: null, info: null };
+function _familyBloodInfo() {
+    var raw = '';
+    try { raw = lsGet('familyData') || ''; } catch (e) {}
+    if (_BLOOD_CACHE.info && _BLOOD_CACHE.raw === raw) return _BLOOD_CACHE.info;
+    var info = { active: false, names: [] };
+    try {
+        (typeof getFamilyMembers === 'function' ? getFamilyMembers() : []).forEach(function (m) {
+            if (!m) return;
+            var tags = Array.isArray(m.tags) ? m.tags.join(' ') : '';
+            var txt = [m.constitution, m.constitutionDetail, m.diseaseType, m.healthConcerns, m.healthNote, m.groupType, tags].join(' ');
+            if (!_BLOOD_TXT_RE.test(txt)) return;
+            var nm = String(m.name || '家人');
+            if (info.names.indexOf(nm) < 0) info.names.push(nm);
+        });
+    } catch (e) {}
+    info.active = info.names.length > 0;
+    _BLOOD_CACHE.raw = raw;
+    _BLOOD_CACHE.info = info;
+    return info;
+}
+// 单道菜是否富铁（菜名 + 本地配方主辅料；生冷做法不算）
+function _dishIronRich(name) {
+    var n = String(name || '');
+    if (!n || _BLOOD_COLD_RE.test(n)) return false;
+    var txt = n;
+    try {
+        if (typeof DISH_INGREDIENTS !== 'undefined' && DISH_INGREDIENTS[n] && Array.isArray(DISH_INGREDIENTS[n].items)) {
+            DISH_INGREDIENTS[n].items.forEach(function (i) { txt += ' ' + String((i && i.name) || ''); });
+        }
+    } catch (e) {}
+    return _IRON_RICH_RE.test(txt);
+}
+function _bloodPool(mealKey, wantStaple) {
+    if (wantStaple) return _BLOOD_STAPLE_POOL;
+    return mealKey === 'breakfast' ? _BLOOD_BREAK_MAIN_POOL : _BLOOD_MAIN_POOL;
+}
+// AI 系统提示词里的血虚/补铁一句话约束（非血虚家庭返回空串，不干扰原提示词）
+function _bloodSysPrompt() {
+    try {
+        var bi = _familyBloodInfo();
+        return (bi && bi.active) ? '每餐至少1道富铁菜（猪肝/鸭血/瘦牛肉/菠菜/黑木耳/红枣等），忌凉拌/沙拉/刺身等生冷。\n' : '';
+    } catch (e) { return ''; }
+}
+// 把一餐里的生冷菜换成温热富铁同类，并保证本餐至少 1 道富铁菜（保持道数与主食结构）
+function _bloodFilterDishes(dishes, mealKey, isStapleFn, usedSet) {
+    var info = _familyBloodInfo();
+    if (!info.active || !Array.isArray(dishes)) return dishes;
+    var isSt = (typeof isStapleFn === 'function') ? isStapleFn : function (n) { return _ELDER_STAPLE_RE.test(String(n || '')); };
+    var who = info.names.slice(0, 3).join('、');
+    var out = [];
+    function taken(alt) {
+        return out.some(function (o) { return o && o.name === alt; }) || dishes.some(function (o) { return o && o.name === alt; });
+    }
+    function breaksLiquid(alt, skipDish) {
+        if (typeof _LIQUID_DISH_RE === 'undefined' || !_LIQUID_DISH_RE.test(String(alt || ''))) return false;
+        if (out.some(function (o) { return o !== skipDish && o && _LIQUID_DISH_RE.test(String(o.name || '')); })) return true;
+        // 后续尚未处理的菜也要算（替换菜若为流质，不能与本餐原有的汤/粥重复）
+        return dishes.some(function (o) { return o && o !== skipDish && _LIQUID_DISH_RE.test(String((o && o.name) || '')); });
+    }
+    function usable(alt, wantStaple, skipDish) {
+        if (isSt(alt) !== !!wantStaple) return false;
+        if (taken(alt)) return false;
+        if (breaksLiquid(alt, skipDish)) return false;
+        if (typeof _dishBlockedByFamily === 'function' && _dishBlockedByFamily(alt, '')) return false;
+        if (typeof _dishHardForElder === 'function' && typeof _familyElderChronicInfo === 'function' && _familyElderChronicInfo().active && _dishHardForElder(alt, '')) return false;
+        return true;
+    }
+    function bloodReason(kind) {
+        return '🩸 富铁·忌生冷：适合' + (who || '血虚家人') + (kind ? '（' + kind + '）' : '');
+    }
+    // 1) 生冷菜 → 温热富铁同类
+    dishes.forEach(function (d) {
+        var nm = (d && d.name) || '';
+        if (!nm || !_BLOOD_COLD_RE.test(nm)) { out.push(d); return; }
+        var p = _bloodPool(mealKey, isSt(nm));
+        for (var i = 0; i < p.length; i++) {
+            if (!usable(p[i], isSt(nm), d)) continue;
+            if (usedSet && !isSt(p[i])) usedSet.add(p[i]);
+            out.push({ name: p[i], ingredients: (d && d.ingredients) || null, reason: bloodReason('替换生冷菜') });
+            return;
+        }
+        out.push(d);
+    });
+    // 2) 本餐至少 1 道富铁菜（优先替换非主食，其次主食；保持道数与结构）
+    var hasIron = out.some(function (d) { return d && _dishIronRich((d && d.name) || ''); });
+    if (!hasIron) {
+        var idxs = [];
+        out.forEach(function (d, i) { if (d && d.name) idxs.push(i); });
+        var tries = idxs.filter(function (i) { return !isSt(out[i].name); }).concat(idxs.filter(function (i) { return isSt(out[i].name); }));
+        for (var ti = 0; ti < tries.length && !hasIron; ti++) {
+            var idx = tries[ti];
+            var nm0 = out[idx].name;
+            var p2 = _bloodPool(mealKey, isSt(nm0));
+            for (var pi = 0; pi < p2.length; pi++) {
+                if (!usable(p2[pi], isSt(nm0), out[idx])) continue;
+                if (usedSet && !isSt(p2[pi])) usedSet.add(p2[pi]);
+                out[idx] = { name: p2[pi], ingredients: (out[idx] && out[idx].ingredients) || null, reason: bloodReason('本餐富铁菜') };
+                hasIron = true;
+                break;
+            }
+        }
+    }
+    // 3) 卡片可见：给第一道富铁菜补一句「富铁·忌生冷」
+    var tagged = out.some(function (d) { return d && String(d.reason || '').indexOf('🩸 富铁') >= 0; });
+    if (hasIron && !tagged) {
+        for (var t = 0; t < out.length; t++) {
+            if (!out[t] || !_dishIronRich(out[t].name)) continue;
+            out[t] = { name: out[t].name, ingredients: out[t].ingredients || null, reason: (out[t].reason ? out[t].reason + '；' : '') + bloodReason('本餐富铁菜') };
+            break;
+        }
+    }
+    return out;
+}
 // 辣味菜特征（「不吃辣」命中）
 function _vrIsSpicy(texts) {
     var joined = texts.join('|');
@@ -54264,6 +54385,7 @@ async function generateMultiDayRecommendation(days) {
         + '每道菜reason不超过35字（必须含一个膳食指南数值）。\n'
         + '每餐道数（' + (recData.servings || 3) + '人）：早' + _dc.breakfast + '、午' + _dc.lunch + '、晚' + _dc.dinner + '（上限' + _dc.breakNum + '/' + _dc.lunchNum + '/' + _dc.dinnerNum + '），不低于下限，控份量不控道数。\n'
         + '每餐首道主食优先杂粮/全谷（糙米饭、杂粮饭、二米饭、玉米、红薯等），白米饭可少量搭配、不强制禁止；次道汤类或蔬菜，余为主/副菜。\n'
+        + _bloodSysPrompt()
         + '菜名全局唯一(主食除外)；水果不足则三餐安排独立水果。';
 
     // 显示持续"生成中"横幅（替代一闪而过的toast）
@@ -55465,6 +55587,18 @@ function buildRecommendationPrompt(data, weekDatesStr) {
             + `5) 每道菜的 reason 必须标注「👤 适合：${_elderWho} 🎯 低盐≤2g/餐、软烂易嚼」。\n\n`;
     }
 
+    // V355(P1-5): 血虚/补铁硬约束——每餐至少 1 道富铁菜，忌生冷
+    var _bloodInfoP = (typeof _familyBloodInfo === 'function') ? _familyBloodInfo() : { active: false, names: [] };
+    var _bloodWhoNames = (_bloodInfoP.names || []).filter(function (n) { return !_elderNameList.length || _elderNameList.indexOf(n) >= 0; });
+    if (_bloodWhoNames.length > 0) {
+        var _bloodWho = _bloodWhoNames.join('、');
+        prompt += `【血虚/补铁硬约束（必须遵守）】\n`
+            + `家庭成员 ${_bloodWho} 属血虚/贫血体质：\n`
+            + `1) 早餐、午餐、晚餐每餐至少有1道富铁菜（猪肝/鸭血/瘦牛肉/瘦猪肉/乌鸡/菠菜/黑木耳/红枣/黑芝麻/红豆等），该菜 reason 以「🩸 富铁」开头；\n`
+            + `2) 【明令禁止】生冷：不得出现凉拌菜、沙拉、刺身、冰镇、冷面/凉皮/凉粉，全部温热熟食；\n`
+            + `3) 富铁菜搭配番茄/青椒/西兰花等富含维C食材促进铁吸收，避免与浓茶/咖啡同餐；\n\n`;
+    }
+
     // V245: 订阅勾选的特殊需求也加入一周配餐约束
     if (typeof _subNeedTagsBrief === 'function') {
         var _needBriefWeek = _subNeedTagsBrief();
@@ -55614,6 +55748,7 @@ async function generateWeeklyAiMealRecommendation(days) {
     // V117 精简（约 850 字 → ~111 字）：usr 已含九维/编号约束/JSON模板/ingredients每人份/膳食指南参考量/人群约束(👤🎯)，sys 只留 usr 未覆盖的独有硬约束
     const systemPrompt = '你是家肴记饮食顾问。生成未来' + days + '天三餐方案，只返回 JSON，禁解释文字。\n'
         + '每餐首道主食优先杂粮/全谷（糙米饭、杂粮饭、二米饭、玉米、红薯等），白米饭可少量搭配、不强制禁止；次道汤类或蔬菜，余为主/副菜；流质每餐≤1道，禁早餐饮+豆浆同现。\n'
+        + _bloodSysPrompt()
         + '菜名全局唯一(主食除外)；水果不足则三餐安排独立水果。';
 
     // 后台跑AI，成功后自动替换弹窗内容；用户关闭弹窗则静默写入缓存
@@ -55843,6 +55978,18 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
                 const meal = meals[mt];
                 if (meal && Array.isArray(meal._normalizedDishes)) {
                     meal._normalizedDishes = _elderSoftFilterDishes(meal._normalizedDishes, mt, isPost2Staple, globalUsed2);
+                }
+            });
+        });
+    }
+    // V355(P1-5): 血虚/补铁——AI 方案每餐保底 1 道富铁菜，生冷菜换温热富铁
+    if (typeof _familyBloodInfo === 'function' && _familyBloodInfo().active && typeof _bloodFilterDishes === 'function') {
+        days.forEach(day => {
+            const meals = day.meals || {};
+            ['breakfast','lunch','dinner'].forEach(mt => {
+                const meal = meals[mt];
+                if (meal && Array.isArray(meal._normalizedDishes)) {
+                    meal._normalizedDishes = _bloodFilterDishes(meal._normalizedDishes, mt, isPost2Staple, globalUsed2);
                 }
             });
         });
@@ -63935,6 +64082,22 @@ function _buildMealPlanPrompt(dateStr, ctx, styleCount) {
             }
         }
     } catch(e) {}
+    // V355(P1-5): 血虚/补铁硬约束——三餐每餐至少 1 道富铁菜，忌生冷
+    try {
+        var _bloodInfoM = (typeof _familyBloodInfo === 'function') ? _familyBloodInfo() : null;
+        if (_bloodInfoM && _bloodInfoM.active) {
+            var _blNamesM = (_bloodInfoM.names || []).filter(function(n){
+                if (!ctx.diningMembers.length) return true;
+                return ctx.diningMembers.some(function(m){ return ((typeof m === 'string') ? m : (m && m.name)) === n; });
+            });
+            if (_blNamesM.length) {
+                p += '【血虚/补铁硬约束·必须遵守】家庭成员 '+_blNamesM.join('、')+' 属血虚/贫血体质：\n'
+                  + '1) 早餐/午餐/晚餐每餐至少 1 道富铁菜（猪肝、鸭血、瘦牛肉、瘦猪肉、乌鸡、菠菜、黑木耳、红枣、黑芝麻、红豆等），其 tag 写「富铁补血」；\n'
+                  + '2) 忌生冷：不得出现凉拌、沙拉、刺身、冰镇、冷面/凉皮/凉粉，全部温热熟食；\n'
+                  + '3) 富铁菜搭配番茄/青椒/西兰花等富含维C食材促进铁吸收；\n\n';
+            }
+        }
+    } catch(e) {}
     if (ctx.userInput) p += '【用户指令】'+ctx.userInput+'\n\n';
     if (ctx.chatKeywords) p += '【近期关注】'+ctx.chatKeywords+'\n\n';
     p += '【用餐人数】'+ctx.diningCount+'人\n';
@@ -63996,6 +64159,9 @@ function _buildQuickWeeklyPlan(weekDates, days) {
     const _hardForElder = function(name, tag) {
         return _elderActive && (typeof _dishHardForElder === 'function') ? _dishHardForElder(name, tag) : false;
     };
+    // V355(P1-5): 血虚/补铁家庭硬约束（未订阅家庭同样生效）——每餐至少 1 道富铁菜，生冷菜换温热富铁
+    const _bloodInfo = (typeof _familyBloodInfo === 'function') ? _familyBloodInfo() : { active: false };
+    const _bloodActive = !!_bloodInfo.active;
     // V351(P1-1): 卡片展示的「一句个性化推荐理由」（把画像标签翻译成一句人话）
     function _profileReasonText(rsn) {
         const s = String(rsn || '');
@@ -64215,6 +64381,10 @@ function _buildQuickWeeklyPlan(weekDates, days) {
         if (_elderActive && typeof _elderSoftFilterDishes === 'function') {
             __out = _elderSoftFilterDishes(__out, mealKey, isStaple);
         }
+        // V355(P1-5): 血虚/补铁——每餐至少 1 道富铁菜，生冷菜换成温热富铁同类
+        if (_bloodActive && typeof _bloodFilterDishes === 'function') {
+            __out = _bloodFilterDishes(__out, mealKey, isStaple);
+        }
         return __out;
     }
 
@@ -64272,6 +64442,19 @@ function _buildQuickWeeklyPlan(weekDates, days) {
         });
         if (_plan.summary.indexOf('高龄/慢病') < 0) {
             _plan.summary += ' 已按高龄/慢病家庭要求，油煎/腌制主菜替换为软烂低盐做法。';
+        }
+    }
+    // V355(P1-5): 血虚/补铁安全网——最终计划每餐再保底 1 道富铁菜并替换生冷
+    if (_bloodActive && typeof _bloodFilterDishes === 'function') {
+        _plan.days.forEach(function(day){
+            Object.keys(day.meals || {}).forEach(function(mk){
+                const mealObj = day.meals[mk];
+                if (!mealObj || !Array.isArray(mealObj.dishes)) return;
+                mealObj.dishes = _bloodFilterDishes(mealObj.dishes, mk, isStaple);
+            });
+        });
+        if (_plan.summary.indexOf('富铁') < 0) {
+            _plan.summary += ' 已按血虚/补铁家庭要求，每餐至少 1 道富铁菜并避开生冷。';
         }
     }
     return _plan;
@@ -64506,6 +64689,18 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
                 const meal = meals[mt];
                 if (meal && Array.isArray(meal._normalizedDishes)) {
                     meal._normalizedDishes = _elderSoftFilterDishes(meal._normalizedDishes, mt, isPostStaple, globalUsed);
+                }
+            });
+        });
+    }
+    // V355(P1-5): 血虚/补铁——AI 更新方案每餐保底 1 道富铁菜，生冷菜换温热富铁
+    if (typeof _familyBloodInfo === 'function' && _familyBloodInfo().active && typeof _bloodFilterDishes === 'function') {
+        days.forEach(day => {
+            const meals = day.meals || {};
+            ['breakfast','lunch','dinner'].forEach(mt => {
+                const meal = meals[mt];
+                if (meal && Array.isArray(meal._normalizedDishes)) {
+                    meal._normalizedDishes = _bloodFilterDishes(meal._normalizedDishes, mt, isPostStaple, globalUsed);
                 }
             });
         });
