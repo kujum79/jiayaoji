@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V361-20261103';
+        var APP_VER = 'V362-20261103';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -24739,7 +24739,7 @@ function showDishDetail(dishName, dateKey, mealType) {
     if (knowledgeRecipe) {
         renderDishDetailFromKnowledge(dishName, knowledgeRecipe, savedIngredients, { healthTags: savedHealthTags, reason: savedReason, dateKey: dateKey, mealType: mealType, cookMeta: savedCookMeta });
     } else {
-        generateDishRecipeAI(dishName, savedIngredients, dateKey, mealType);
+        generateDishRecipeAI(dishName, savedIngredients, dateKey, mealType, { healthTags: savedHealthTags, reason: savedReason });
     }
 }
 
@@ -25366,10 +25366,33 @@ function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra
 }
 
 // V202.3: AI 不可用时的本地兜底做法（避免详情页出现「生成失败」空态）
-function _renderDishRecipeFallback(dishName, ingredients, savedIngredients, dateKey, mealType) {
+// V362: 菜谱详情统一标签区（健康标签 / 体质适配 / 节气当季），列表页不再重复展示
+function _dishDetailTagBlocksHtml(dishName, ings, healthTags, reason) {
+    var html = '';
+    try {
+        if (Array.isArray(healthTags) && healthTags.length) {
+            html += '<div style="margin-bottom:6px;">' + renderHealthTagsFromKeys(healthTags, { dishName: dishName }) + '</div>';
+        } else if (reason) {
+            html += '<div style="margin-bottom:6px;">' + renderHealthTagsHtml(reason, { dishName: dishName }) + '</div>';
+        }
+    } catch (e) {}
+    try {
+        var cons = (typeof getDishConstitutions === 'function') ? getDishConstitutions(dishName, ings || []) : [];
+        if (cons.length) html += '<div style="margin-bottom:6px;"><span class="constitution-tag">🥗 适合：' + escapeHtml(cons.join('、')) + '</span></div>';
+    } catch (e) {}
+    try {
+        var st = (typeof solarTermTagHtmlForDish === 'function') ? solarTermTagHtmlForDish(dishName, ings || []) : '';
+        if (st) html += '<div style="margin-bottom:6px;">' + st + '</div>';
+    } catch (e) {}
+    return html;
+}
+
+function _renderDishRecipeFallback(dishName, ingredients, savedIngredients, dateKey, mealType, extra) {
     var body = document.getElementById('dishDetailBody');
     if (!body) return;
+    extra = extra || {};
     var ings = (ingredients && ingredients.length) ? ingredients : [];
+    var tagBlocksHtml = _dishDetailTagBlocksHtml(dishName, ings, extra.healthTags, extra.reason);
     var ingHtml = ings.length
         ? ings.map(function (x) { return escapeHtml(String(x)); }).join('、')
         : '按家常备料（主料 + 葱姜蒜 + 常用调味）';
@@ -25393,6 +25416,7 @@ function _renderDishRecipeFallback(dishName, ingredients, savedIngredients, date
         } catch (e) {}
     }
     body.innerHTML = `
+        ${tagBlocksHtml}
         <div style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;margin-bottom:8px;line-height:1.5;">⚠️ AI 大厨暂时繁忙，以下为基础做法。稍后重新打开可获取更详细的做法。</div>
         ${_dishCookMetaHtml(cook)}
         ${_dishCookwareTipHtml(dishName)}
@@ -25413,9 +25437,10 @@ function _renderDishRecipeFallback(dishName, ingredients, savedIngredients, date
 }
 
 // AI生成菜品做法
-async function generateDishRecipeAI(dishName, savedIngredients, dateKey, mealType) {
+async function generateDishRecipeAI(dishName, savedIngredients, dateKey, mealType, extra) {
     const body = document.getElementById('dishDetailBody');
     if (!body) return;
+    extra = extra || {};
     body.innerHTML = '<div class="dish-detail-loading">🤖 AI正在生成做法，请稍候...</div>';
 
     const ingredients = getDishIngredients(dishName);
@@ -25438,7 +25463,7 @@ async function generateDishRecipeAI(dishName, savedIngredients, dateKey, mealTyp
         const aiText = result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '';
 
         if (!aiText) {
-            _renderDishRecipeFallback(dishName, ingredients, savedIngredients, dateKey, mealType);
+            _renderDishRecipeFallback(dishName, ingredients, savedIngredients, dateKey, mealType, extra);
             return;
         }
 
@@ -25522,22 +25547,11 @@ async function generateDishRecipeAI(dishName, savedIngredients, dateKey, mealTyp
             </div>`;
         }
 
-        // V155: 体质适配区块（AI路径同样按菜名+食材匹配）
-        var _aiConstHtml = '';
-        try {
-            var _aic = (typeof getDishConstitutions === 'function') ? getDishConstitutions(dishName, aiIngs) : [];
-            if (_aic.length) _aiConstHtml = '<div style="margin-bottom:6px;"><span class="constitution-tag">🥗 适合：' + escapeHtml(_aic.join('、')) + '</span></div>';
-        } catch(e) {}
-        // V171: 节气当季食材标签（AI路径）
-        var _aiSolarHtml = '';
-        try {
-            var _aiStTag = (typeof solarTermTagHtmlForDish === 'function') ? solarTermTagHtmlForDish(dishName, aiIngs) : '';
-            if (_aiStTag) _aiSolarHtml = '<div style="margin-bottom:6px;">' + _aiStTag + '</div>';
-        } catch(e) {}
+        // V362: 健康 / 体质 / 节气标签统一在详情页顶部展示
+        var _aiTagBlocksHtml = _dishDetailTagBlocksHtml(dishName, aiIngs, extra.healthTags, extra.reason);
 
         body.innerHTML = `
-            ${_aiConstHtml}
-            ${_aiSolarHtml}
+            ${_aiTagBlocksHtml}
             ${_dishCookMetaHtml(cookMetaAi)}
             ${_dishCookwareTipHtml(dishName)}
             ${aiAmountBlockHtml}
@@ -25557,7 +25571,7 @@ async function generateDishRecipeAI(dishName, savedIngredients, dateKey, mealTyp
         }
     } catch (err) {
         console.warn('[dish_recipe] AI 生成失败，使用本地兜底:', err);
-        _renderDishRecipeFallback(dishName, ingredients, savedIngredients, dateKey, mealType);
+        _renderDishRecipeFallback(dishName, ingredients, savedIngredients, dateKey, mealType, extra);
     }
 }
 
@@ -40828,18 +40842,9 @@ function renderPlan() {
         // 没有用量数据时，添加"获取用量"按钮
         const fetchQtyBtn = (!hasQty && dishName) ? `<button class="fetch-qty-btn" data-date="${key}" data-meal="${mealKey}" data-name="${escapeHtml(dishName)}" data-servings="${planServings}" style="background:#FFF7ED;color:#9A3412;border:1px solid #FED7AA;border-radius:16px;padding:5px 12px;font-size:13px;cursor:pointer;margin-top:6px;transition:all .2s;">📋 获取食材用量</button>` : '';
 
-        // V155: 计算菜品适配体质标签（优先用 item.constitutions，否则按菜名+食材匹配）
-        var _dishCons = Array.isArray(item.constitutions) && item.constitutions.length
-            ? item.constitutions
-            : (typeof getDishConstitutions === 'function' ? getDishConstitutions(dishName, item.ingredients) : []);
-        var _consTagHtml = _dishCons.length ? `<div class="dish-constitution" style="margin-top:4px;"><span class="constitution-tag" style="margin-left:0;">🥗 适合：${escapeHtml(_dishCons.join('、'))}</span></div>` : '';
-        var _solarTagInner = (typeof solarTermTagHtmlForDish === 'function') ? solarTermTagHtmlForDish(dishName, item.ingredients) : '';
-        var _solarTagHtml = _solarTagInner ? `<div class="dish-solar" style="margin-top:4px;">${_solarTagInner.replace('class="solar-term-tag"', 'class="solar-term-tag" style="margin-left:0;"')}</div>` : '';
         html += `<div class="plan-dish-card">
-            <div class="dish-name">${escapeHtml(dishName)}${renderHealthTagsHtml(reason, { dishName: dishName })}</div>
+            <div class="dish-name">${escapeHtml(dishName)}</div>
             <div class="dish-for-whom">${escapeHtml(forWhom)}</div>
-            ${_consTagHtml}
-            ${_solarTagHtml}
             ${taste ? `<div class="dish-taste">${escapeHtml(taste)}</div>` : ''}
             ${ingredientsHtml ? `<div class="dish-ingredients">${ingredientsHtml}</div>` : ''}
             ${fetchQtyBtn}
@@ -58065,13 +58070,6 @@ function renderDiary() {
                 // V237: 命专项干预的菜高亮显示（普通菜保持原样）
                 var _siHits = (typeof specialInterventionsForDish === 'function') ? specialInterventionsForDish(_siList, it.name) : [];
                 var _isSpecial = _siHits.length > 0;
-                // healthTags 优先用持久化的；为空则从 userComment 回退解析（兼容旧数据）
-                var hTagsHtml = '';
-                if (it.meta.healthTags && it.meta.healthTags.length) {
-                    hTagsHtml = renderHealthTagsFromKeys(it.meta.healthTags, { plain: true, dishName: it.name });
-                } else if (it.meta.userComment) {
-                    hTagsHtml = renderHealthTagsHtml(it.meta.userComment, { plain: true, dishName: it.name });
-                }
                 return '<label class="diary-dish-row" style="display:inline-flex;align-items:center;gap:2px;'
                     + (_isSpecial
                         ? 'max-width:100%;flex-wrap:wrap;white-space:normal;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:0 4px;'
@@ -58083,9 +58081,6 @@ function renderDiary() {
                     + '<span class="dish-tag-clickable"' + (_isSpecial ? ' style="color:#C2410C;font-weight:700;"' : '') + ' onclick="showDishDetail(\'' + escapeAttr(it.name) + '\',\'' + escapeAttr(dateKey) + '\',\'' + escapeAttr(meal.key) + '\')">' + escapeHtml(it.name) + '</span>'
                     + (typeof specialInterventionBadgesHtml === 'function' ? specialInterventionBadgesHtml(_siList, it.name) : '')
                     + ('speechSynthesis' in window ? '<button type="button" title="朗读" onclick="event.preventDefault();event.stopPropagation();_dishListenReadDirect(\'' + escapeAttr(it.name) + '\');" style="border:none;background:none;padding:0;font-size:14px;line-height:1;color:#F97316;cursor:pointer;flex-shrink:0;margin-left:2px;vertical-align:middle;">🔊</button>' : '')
-                    + hTagsHtml
-                    + (typeof constitutionTagHtmlForDish === 'function' ? constitutionTagHtmlForDish(it.name, { plain: true }) : '')
-                    + (typeof solarTermTagHtmlForDish === 'function' ? solarTermTagHtmlForDish(it.name, null, null, { plain: true }) : '')
                     + '</label>';
             }).join('');
             var planConfirmedLocal = (data.plan.state === 'confirmed' || data.plan.confirmed === true || data.plan.state === 'completed');
