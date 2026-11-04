@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V370-20261104';
+        var APP_VER = 'V371-20261104';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4405,8 +4405,8 @@ async function _submitFeedback() {
                 <span class="hd-date" id="hdDateLine"></span>
                 <!-- V111: 状态标签（与三餐计划页餐次标签同款）；V121: 移到日期（周二）右侧，间距由 hd-head gap:8px 承担 -->
                 <span id="hdStatusBadge" style="display:inline-flex;align-items:center;"></span>
-                <!-- 就餐人（diaryDiningSelector 整节点搬入，与食记页数据同步）紧跟日期（hd-head gap:8px 自带间距） -->
-                <span id="homeDiaryDiningSlot" style="display:inline-flex;align-items:center;"></span>
+                <!-- 就餐人（V371: 首页仅只读展示人数，选择器只在食记页可点） -->
+                <span id="homeDiaryDiningSlot" style="display:inline-flex;align-items:center;"><span id="homeDiaryDiningReadonly" style="font-size:12px;color:#C2410C;font-weight:600;white-space:nowrap;"></span></span>
                 <!-- V61: ＋ 紧跟 2人▼（间距由 hd-head gap:8px 承担），计划确认 margin-left:auto 推右成按钮组 -->
                 <button class="hd-plus-btn" onclick="openMealPlanPage()" title="规划食谱">＋</button>
                 <button class="hd-pill-btn" id="hdConfirmBtn" onclick="_hdConfirmPlan()" title="确认本餐计划">确认</button>
@@ -35351,12 +35351,12 @@ function _fhParseUploadText(text, filename) {
 
 // ====== V41: 就餐人选择器 DOM 搬运（首页 ⇄ 食记页共用同一节点，两处数据/显示同步） ======
 // 搬到首页食记卡槽位（首页显示时调用）
+// V371: 首页不再搬入可点选择器，只把同一口径的人数写进只读文案；选择器固定留在食记页顶栏
 function _mountHomeDiningSelector() {
     var sel = document.getElementById('diaryDiningSelector');
-    var slot = document.getElementById('homeDiaryDiningSlot');
-    if (!sel || !slot) return;
-    if (sel.parentElement !== slot) slot.appendChild(sel);
-    sel.style.display = 'flex';
+    var leftSlot = document.getElementById('diaryDiningLeftSlot');
+    if (sel && leftSlot && sel.parentElement !== leftSlot) leftSlot.appendChild(sel);
+    if (sel) sel.style.display = 'none';
     try { updateDiaryDiningLabel(); } catch (e) {}
 }
 // 归还到食记页顶栏左上角（V226 起：原「最近吃过的菜」按钮位置；切子 Tab 时调用，显示与否由 switchTab 原逻辑接管）
@@ -57959,15 +57959,16 @@ function toggleDiaryDiningMember(memberName) {
 }
 
 // 更新选择器标签（V135: 匹配到组时显示「全家·4人」，自选组合显示「3人」）
+// V371: 首页只读文案同步同一口径，且只显示人数（不可点、不提示是否偏离默认组）
 function updateDiaryDiningLabel() {
     let current = getDiaryDiningGroup();
+    let labelText = current.members.length > 0
+        ? ((current.groupId !== null) ? `${current.groupName}·${current.members.length}人` : `${current.members.length}人`)
+        : '选择就餐人';
     let label = document.getElementById('diaryDiningLabel');
-    if (!label) return;
-    if (current.members.length > 0) {
-        label.textContent = (current.groupId !== null) ? `${current.groupName}·${current.members.length}人` : `${current.members.length}人`;
-    } else {
-        label.textContent = '选择就餐人';
-    }
+    if (label) label.textContent = labelText;
+    let readonlyLabel = document.getElementById('homeDiaryDiningReadonly');
+    if (readonlyLabel) readonlyLabel.textContent = current.members.length > 0 ? (current.members.length + '人') : '';
 }
 
 // 点击外部关闭下拉
