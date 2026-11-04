@@ -58,6 +58,12 @@ ALIYUN_API_KEY = os.getenv("DASHSCOPE_API_KEY", "") or os.getenv("ALIYUN_API_KEY
 if ALIYUN_API_KEY and is_leaked_api_key(ALIYUN_API_KEY):
     print("[安全] 检测到已泄漏的 DashScope Key，已拒绝使用；请先在阿里云控制台轮换", flush=True)
     ALIYUN_API_KEY = ""
+
+
+def _require_dashscope_key() -> None:
+    """V374: 未配置 DashScope Key 时不发起任何阿里百炼请求（避免无意义的失败与日志）。"""
+    if not ALIYUN_API_KEY:
+        raise HTTPException(status_code=503, detail="阿里百炼（通义千问）未配置 API Key，该功能暂不可用")
 # ===================================================
 
 app = FastAPI(
@@ -2198,6 +2204,7 @@ async def recognize_ingredients(file: UploadFile = File(...)):
     image_b64 = base64.b64encode(image_data).decode("utf-8")
     data_url = f"data:{mime};base64,{image_b64}"
 
+    _require_dashscope_key()  # V374: 未配置 Key 时不请求阿里百炼
     headers = {
         "Authorization": f"Bearer {ALIYUN_API_KEY}",
         "Content-Type": "application/json",
@@ -2357,6 +2364,8 @@ async def explore_ingredient(req: ExploreIngredientRequest) -> Dict[str, Any]:
 """.strip()
 
     use_deepseek = bool(DEEPSEEK_API_KEY)
+    if not use_deepseek:
+        _require_dashscope_key()  # V374: 无 DeepSeek Key 时才回退阿里百炼；两者都无则直接 503
     api_url = DEEPSEEK_API_URL if use_deepseek else FALLBACK_API_URL
     api_key = DEEPSEEK_API_KEY if use_deepseek else ALIYUN_API_KEY
     model = DEEPSEEK_MODEL if use_deepseek else FALLBACK_MODEL
@@ -2450,6 +2459,8 @@ async def generate_ingredient(req: GenerateIngredientRequest) -> Dict[str, Any]:
 """.strip()
 
     use_deepseek = bool(DEEPSEEK_API_KEY)
+    if not use_deepseek:
+        _require_dashscope_key()  # V374: 无 DeepSeek Key 时才回退阿里百炼；两者都无则直接 503
     api_url = DEEPSEEK_API_URL if use_deepseek else FALLBACK_API_URL
     api_key = DEEPSEEK_API_KEY if use_deepseek else ALIYUN_API_KEY
     model = DEEPSEEK_MODEL if use_deepseek else FALLBACK_MODEL
@@ -4199,6 +4210,7 @@ async def chef_image(req: ChefImageRequest) -> Dict[str, Any]:
     """我的创作：按菜名/食材生成一张作品配图，返回万相临时图片 URL。"""
     size = req.size if req.size in ("1024*1024", "720*1280", "1280*720") else "1024*1024"
     prompt = _chef_image_prompt(req.prompt)
+    _require_dashscope_key()  # V374: 未配置 Key 时不请求阿里百炼
     headers = {
         "Authorization": f"Bearer {ALIYUN_API_KEY}",
         "Content-Type": "application/json",
@@ -5246,7 +5258,7 @@ if not _err_logger.handlers:
         print(f"[error-log] 日志文件不可写，降级为控制台输出：{_e}")
     _err_logger.propagate = False
 
-_ERR_TYPES = {"api_timeout", "ai_error", "frontend_crash", "payment_error"}
+_ERR_TYPES = {"api_timeout", "ai_error", "frontend_crash", "payment_error", "api_network"}
 
 
 def _err_new_id() -> str:
@@ -5453,15 +5465,22 @@ async def admin_monitor() -> Dict[str, Any]:
     unresolved: List[Dict[str, Any]] = []
     unresolved_count = 0
     for obj in entries:
+        etype = str(obj.get("type") or "api_timeout")
+        message = str(obj.get("message") or "")
+        # V374: 纯网络失败（Failed to fetch / NetworkError）多为后端重启、断网等瞬时抖动，
+        # 统一归为「网络波动」：不计入今日新增报错，也不进入前端「需要动手」红榜（仅折叠展示）
+        if etype in ("api_timeout", "ai_error") and ("Failed to fetch" in message or "NetworkError" in message):
+            etype = "api_network"
         ts = int(obj.get("clientCreatedAt") or 0)
         ts_str = ""
         if ts > 0:
             ts_str = _dt_cls.fromtimestamp(ts / 1000).strftime("%Y-%m-%d %H:%M")
-            if ts_str.startswith(today):
+            if ts_str.startswith(today) and etype != "api_network":
                 today_count += 1
         elif str(obj.get("_logTime") or "").startswith(today):
             ts_str = str(obj.get("_logTime") or "")[:16]
-            today_count += 1
+            if etype != "api_network":
+                today_count += 1
         eid = str(obj.get("errorId") or "")
         # 已修复条目仍返回给前端（带 resolved 标记），刷新后继续显示「已修复」而不是变回「修复」
         is_resolved = bool(eid and eid in resolved)
@@ -5471,8 +5490,8 @@ async def admin_monitor() -> Dict[str, Any]:
             continue
         unresolved.append({
             "id": eid,
-            "type": str(obj.get("type") or "api_timeout"),
-            "message": str(obj.get("message") or ""),
+            "type": etype,
+            "message": message,
             "familyId": str(obj.get("familyId") or ""),
             "familyName": str(obj.get("familyName") or ""),
             "source": str(obj.get("source") or "frontend"),

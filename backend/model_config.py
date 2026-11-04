@@ -126,7 +126,10 @@ PROVIDERS: Dict[str, Dict[str, Any]] = {
             "text": "qwen-turbo",
             "vision": "qwen-vl-plus",  # V131: 视觉理解兜底（宣传单OCR等图片输入任务）
         },
-        "priority": 3,
+        # V374: 未配置 Key 时彻底禁用——不进入路由、不发起任何请求、不再产生 AI 失败日志；
+        # 配置 Key 后才自动启用，且优先级排到最后（仅作显式配置后的兜底）。
+        "enabled": bool(os.getenv("DASHSCOPE_API_KEY", "") or os.getenv("ALIYUN_API_KEY", "")),
+        "priority": 9,
         "cost": 0.0000003,
     },
     "deepseek": {
@@ -160,9 +163,19 @@ for _pname, _pcfg in PROVIDERS.items():
         _pcfg["api_key"] = ""
 
 
-# 按优先级排序
+def _provider_usable(cfg: Dict[str, Any]) -> bool:
+    """V374: 服务商是否可用——显式禁用或未配置 Key（且非公共接口）时完全不参与路由。"""
+    if not cfg.get("enabled", True):
+        return False
+    return bool(cfg.get("api_key") or cfg.get("public"))
+
+
+# 按优先级排序（V374: 跳过已禁用/未配置 Key 的服务商，避免无意义的下游调用）
 def get_provider_order() -> List[Tuple[str, Dict[str, Any]]]:
-    return sorted(PROVIDERS.items(), key=lambda x: x[1]["priority"])
+    return sorted(
+        [(name, cfg) for name, cfg in PROVIDERS.items() if _provider_usable(cfg)],
+        key=lambda x: x[1]["priority"],
+    )
 
 
 # V119: 场景路由——以下 task_type 用强档模型（审核评分/营养配餐/复杂推理），其余走快速档
@@ -457,6 +470,10 @@ def get_ai_cost_summary(month: Optional[str] = None, recent_limit: int = 0) -> D
         task = str(entry.get("task", "?"))
         error = str(entry.get("error") or "")
         if error:
+            # V374: 已禁用/未配置 Key 的服务商（如未配置的阿里百炼），历史失败不再计入本月异常
+            _cfg = PROVIDERS.get(provider)
+            if _cfg is not None and not _provider_usable(_cfg):
+                continue
             # V132: 失败调用单独统计（不计入 calls/tokens/cost）
             summary["total_errors"] += 1
             for key, name2 in (("by_provider", provider), ("by_task", task)):

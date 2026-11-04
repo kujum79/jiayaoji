@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V373-20261104';
+        var APP_VER = 'V374-20261104';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -11983,7 +11983,8 @@ var _MONITOR_TYPE_META = {
     ai_error:       { label: 'AI 异常',  color: '#DC2626' },
     payment_error:  { label: '支付异常', color: '#DC2626' },
     churn_warning:  { label: '流失预警', color: '#D97706' },
-    api_timeout:    { label: '接口异常', color: '#D97706' }
+    api_timeout:    { label: '接口异常', color: '#D97706' },
+    api_network:    { label: '网络波动', color: '#9CA3AF' }  // V374: 后端重启/断网等瞬时失败，仅折叠
 };
 
 async function _fetchMonitorData() {
@@ -12046,6 +12047,8 @@ function _monitorSplit(list) {
         if (!r) return;
         var hitUser = _MONITOR_USER_HINT.test(String(r.message || ''));
         var repeat = (counts[_monitorSig(r)] || 0) >= _MONITOR_REPEAT_MIN;
+        // V374: 网络波动（Failed to fetch / 后端重启）只在折叠区展示，不再进「需要动手」红榜
+        if (String(r.type || '') === 'api_network' && !hitUser) { fold.push(r); return; }
         if (hitUser || repeat) need.push(r); else fold.push(r);
     });
     return { need: need, fold: fold };
@@ -12603,6 +12606,7 @@ async function _sendActiveHeartbeat() {
 var _ERR_LOG_KEY = 'systemErrorLogs';
 var _ERR_LOG_MAX = 200;
 var _ERR_LOG_DEDUP_MS = 60000;
+var _ERR_LOG_DEDUP_MS_NET = 600000; // V374: 网络波动（Failed to fetch）10 分钟内同一条只记一次
 var _ERR_LOG_LAST = {};
 var _ERR_UPLOAD_TIMES = [];
 
@@ -12649,12 +12653,13 @@ function _errUploadToServer(entry) {
 function logError(type, message, extra) {
     try {
         var t = String(type || 'api_timeout');
-        if (['api_timeout', 'ai_error', 'frontend_crash', 'payment_error'].indexOf(t) < 0) t = 'api_timeout';
+        if (['api_timeout', 'ai_error', 'frontend_crash', 'payment_error', 'api_network'].indexOf(t) < 0) t = 'api_timeout';
         var msg = String(message || '').slice(0, 300);
         if (!msg) return null;
         var sig = t + '|' + msg.slice(0, 120);
         var lastAt = _ERR_LOG_LAST[sig] || 0;
-        if (Date.now() - lastAt < _ERR_LOG_DEDUP_MS) return null;
+        var dedupMs = (t === 'api_network') ? _ERR_LOG_DEDUP_MS_NET : _ERR_LOG_DEDUP_MS;
+        if (Date.now() - lastAt < dedupMs) return null;
         _ERR_LOG_LAST[sig] = Date.now();
 
         var ex = extra || {};
@@ -12712,7 +12717,9 @@ function _errClassify(url) {
             var r = ev && ev.reason;
             var msg = (r && (r.message || r.msg)) || String(r || '未知拒绝');
             var isAbort = r && r.name === 'AbortError';
-            logError(isAbort ? 'api_timeout' : 'ai_error', (isAbort ? '请求超时/取消：' : '未处理的异步异常：') + msg, {
+            var isNet = /Failed to fetch|NetworkError|Load failed/i.test(String(msg || ''));
+            logError(isAbort ? 'api_timeout' : (isNet ? 'api_network' : 'ai_error'),
+                (isAbort ? '请求超时/取消：' : (isNet ? '网络暂不可达：' : '未处理的异步异常：')) + msg, {
                 detail: r && r.stack ? String(r.stack).slice(0, 1000) : ''
             });
         } catch (e) {}
@@ -12773,9 +12780,12 @@ function _errClassify(url) {
                 try {
                     if (!noLog) {
                         var nm = (err && err.name) || '';
+                        var emsg = String((err && err.message) || '');
                         var isTimeout = nm === 'AbortError' || nm === 'TimeoutError';
-                        logError(isTimeout ? 'api_timeout' : _errClassify(url),
-                            (isTimeout ? '请求超时/取消：' : '请求失败：') + url + ' ' + ((err && err.message) || ''),
+                        // V374: 后端重启/断网产生的 Failed to fetch 归为「网络波动」，不刷红榜
+                        var isNetwork = !isTimeout && /Failed to fetch|NetworkError|Load failed/i.test(emsg);
+                        logError(isTimeout ? 'api_timeout' : (isNetwork ? 'api_network' : _errClassify(url)),
+                            (isTimeout ? '请求超时/取消：' : (isNetwork ? '网络暂不可达：' : '请求失败：')) + url + (isNetwork ? '' : ' ' + emsg),
                             { url: url, detail: nm + ' elapsed=' + (Date.now() - started) + 'ms' });
                     }
                 } catch (e) {}
