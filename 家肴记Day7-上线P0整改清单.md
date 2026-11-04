@@ -228,6 +228,7 @@
 | V369 | 食记计划区新增「💬 推荐理由（N）」折叠，逐菜展示 `dishMeta.userComment` 理由（纯时长文案过滤）；详情页原有 💬 理由保持 | 9f7ea7b | 本地实测：11-04 午/晚餐 3 道理由、11-05 午餐 2 道理由展开文案正确，无 SyntaxError |
 | V370（原 V368 方案 A） | 空设备/清缓存后家庭名+密码登录必然找不到本机凭据：检测 `familyCreds` 为空时自动切到手机号面板，并在面板内提示「请改用手机号 + 验证码登录」；有本机凭据但无此家庭时保留原提示 | 8d4a987 | 本地实测（清空登录态）：家庭登录页提交「小高之家 + 密码」→ 自动切手机号面板、光标落 `loginPhone`、`loginPhoneErr` 显示引导文案；V370 页面加载正常 |
 | V371 | 首页食记卡就餐人数改为只读「N人」（不提供点击、不提示偏离默认组）；可点选择器只保留在「三餐计划、记录」页顶栏，两处共用同一数据口径 | 9c83a11 | 本地实测：首页只读「3人」可见，`diaryDiningSelector` 固定在 `diaryDiningLeftSlot` 且隐藏；切食记页显示「小家·3人」可点、下拉「谁来吃饭 · 11月4日」正常；返回首页仍只读「3人」 |
+| V372 | 采纳即确认：规划食谱「完成」、关闭弹窗自动保存、AI 3天/7天方案应用后，直接落 `state=confirmed` + `dishMeta.confirmed` 并预留库存，采购清单即时出现；食记「确认」按钮改为按状态动态文案（未确认=「确认」，已确认=「复核」+ 次级灰样式），复核时取消勾选可退回 `pending` 并释放预留 | ae6a71a | 本地实测：`_confirmAdoptedMeals` 对 fixture 生效（`state=confirmed`/`confirmed=true`/`dishMeta.confirmed=true`）；食记三张卡按钮渲染为「确认/复核/确认」，复核按钮 `class="diary-plan-btn diary-plan-btn-review"`；点复核后状态保持 `confirmed` |
 
 > 环境事实（务必写进部署基线）：生产部署源是 **Gitee**（`gitee.com/jiayaoji/jiayaoji.git`），GitHub 是备份远端；每次发布必须 **双推**，否则线上不更新（本次 V344/V345 曾因只推 GitHub 导致生产滞留 V343）。生产后端端口 **8000**，已由 `0.0.0.0` 收紧为 **`127.0.0.1`**（仅 nginx 本机可达）；nginx `root=/var/www/jiayaoji/frontend`、`proxy_pass http://127.0.0.1:8000`（配置基线见 `deploy/nginx/jiayaoji.conf`）；API Key 只在 `/etc/jiayaoji/api-keys.env`（`override.conf` 中 `EnvironmentFile=-…`，仓库内副本已移除）。
 
