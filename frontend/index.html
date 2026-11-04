@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V371-20261104';
+        var APP_VER = 'V372-20261104';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -3456,6 +3456,12 @@
             border: 1px solid #E5E7EB;
             color: #9CA3AF;
             cursor: not-allowed;
+        }
+        /* V372: 已确认后按钮改为「复核」，用次级样式与「确认」区分 */
+        .diary-plan-btn-review {
+            background: #FFFFFF;
+            border: 1px solid #E5E7EB;
+            color: #6B7280;
         }
         /* 窄屏 430-376 区间: 先压缩一档（此前该区间无任何压缩规则） */
         @media (max-width: 430px) {
@@ -56998,6 +57004,11 @@ function confirmWeeklyAiRecommendation() {
 
     closeWeeklyAiRecommendationModal();
 
+    // V372: AI 3天/7天方案被采用即视为确认，自动落 confirmed 并预留库存
+    if (Array.isArray(weekDateKeys) && weekDateKeys.length > 0) {
+        weekDateKeys.forEach(function(dk){ _confirmAdoptedMeals(dk, ['breakfast','lunch','dinner']); });
+    }
+
     // 刷新食记显示
     renderDiary();
 
@@ -58406,17 +58417,13 @@ function renderDiary() {
                     + _reasonItems.map(function(r){ return '<div><b>' + escapeHtml(r.name) + '</b>：' + escapeHtml(r.text) + '</div>'; }).join('')
                     + '</div></details>';
             }
-            var planConfirmedLocal = (data.plan.state === 'confirmed' || data.plan.confirmed === true || data.plan.state === 'completed');
-            var btnLabel = planConfirmedLocal ? '已确认' : '确认'; // V104: 确认计划→确认
-            var btnDisabledAttr = planConfirmedLocal ? ' disabled' : '';
             planHtml = '<div class="diary-source-group" style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px 8px;flex:1 1 0;min-width:120px;margin:0;padding:0;background:transparent;border:none;border-radius:0;">'
                 + rowsHtml + '</div>'
                 + _renderMealNutritionSummary(allDishes)
                 + planReasonHtml;
-            // 确认计划按钮放到 meal-actions 中渲染（见下方 meal header 构造）
-            window.__diaryPlanBtnHtml = planConfirmedLocal
-                ? '<button disabled class="diary-plan-btn diary-plan-btn-disabled">' + btnLabel + '</button>'
-                : '<button onclick="confirmDiaryMealPlan(\'' + escapeAttr(meal.key) + '\',\'' + escapeAttr(dateKey) + '\')" class="diary-plan-btn">' + btnLabel + '</button>';
+            var planConfirmedLocal = (data.plan.state === 'confirmed' || data.plan.confirmed === true || data.plan.state === 'completed');
+            var btnLabel = planConfirmedLocal ? '复核' : '确认'; // V372: 已确认时按钮承担复核/撤销职责
+            window.__diaryPlanBtnHtml = '<button onclick="confirmDiaryMealPlan(\'' + escapeAttr(meal.key) + '\',\'' + escapeAttr(dateKey) + '\')" class="diary-plan-btn' + (planConfirmedLocal ? ' diary-plan-btn-review' : '') + '" title="' + (planConfirmedLocal ? '复核/调整本餐计划' : '确认本餐计划') + '">' + btnLabel + '</button>';
             planClass = 'diary-section-plan';
         } else {
             planHtml = '<div class="diary-source-group" style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px 8px;flex:1 1 0;min-width:120px;margin:0;padding:0;background:transparent;border:none;border-radius:0;">'
@@ -64402,6 +64409,8 @@ function closeMealPlanPage(alreadySaved) {
         updateMealPlan(_mealPlanState.dateKey, 'breakfast', { dishes: result.plan.breakfast, note: '来自规划食谱·'+result.styleName });
         updateMealPlan(_mealPlanState.dateKey, 'lunch', { dishes: result.plan.lunch, note: '来自规划食谱·'+result.styleName });
         updateMealPlan(_mealPlanState.dateKey, 'dinner', { dishes: result.plan.dinner, note: '来自规划食谱·'+result.styleName });
+        // V372: 直接关闭弹窗同样视为采纳，自动确认三餐
+        _confirmAdoptedMeals(_mealPlanState.dateKey, ['breakfast','lunch','dinner']);
         if (typeof renderDiary==='function') renderDiary();
         if (typeof showToast === 'function') showToast('✅ 已保存当前规划（'+result.total+'道菜）');
     }
@@ -65917,6 +65926,39 @@ function _collectAllSelectedDishes() {
     return { plan: plan, total: total, styleName: style ? style.name : '' };
 }
 
+// V372: 采纳即确认——「规划食谱·完成」或 AI 3天/7天方案应用后直接落 confirmed 并预留库存；
+// 食记页「确认」按钮此后作为「复核」使用（取消勾选再点复核会退回 pending）
+function _confirmAdoptedMeals(dateKey, mealTypes) {
+    if (!dateKey) return;
+    try {
+        var cal = getDietCalendar();
+        var day = cal[dateKey] || {};
+        var confirmed = [];
+        (mealTypes || ['breakfast','lunch','dinner']).forEach(function(mt){
+            var slot = day[mt];
+            var plan = slot && slot.plan;
+            if (!plan || !Array.isArray(plan.dishes) || plan.dishes.length === 0) return;
+            if (!plan.dishMeta) plan.dishMeta = {};
+            plan.dishes.forEach(function(d){
+                var n = (typeof d === 'string') ? d : ((d && d.name) || '');
+                if (!n) return;
+                if (!plan.dishMeta[n]) plan.dishMeta[n] = { source: 'ai', addedAt: Date.now() };
+                plan.dishMeta[n].confirmed = true;
+            });
+            plan.state = 'confirmed';
+            plan.confirmed = true;
+            plan.confirmTime = new Date().toISOString();
+            confirmed.push(mt);
+        });
+        if (confirmed.length === 0) return;
+        saveDietCalendar(cal);
+        confirmed.forEach(function(mt){
+            try { if (typeof cancelReservePlanIngredients === 'function') cancelReservePlanIngredients(dateKey, mt); } catch (e) {}
+            try { if (typeof reservePlanIngredients === 'function') reservePlanIngredients(dateKey, mt); } catch (e) {}
+        });
+    } catch (e) { console.warn('[V372] 采纳即确认失败:', e); }
+}
+
 function saveMealPlan() {
     var result = _collectAllSelectedDishes();
     if (result.total===0) { showToast('请至少勾选一道菜'); return; }
@@ -65930,6 +65972,8 @@ function saveMealPlan() {
     if (result.plan.snack && result.plan.snack.length > 0) {
         updateMealPlan(_mealPlanState.dateKey, 'snack', { dishes: result.plan.snack, note: '来自规划食谱·'+result.styleName });
     }
+    // V372: 用户点「完成」即视为采纳，直接确认三餐并预留库存（食材页采购清单同步出现）
+    _confirmAdoptedMeals(_mealPlanState.dateKey, ['breakfast','lunch','dinner']);
     // 加餐独立条目：标记 isPlanned=true（已默认存储，无需再改）
     _mealPlanState._saved = true;
     closeMealPlanPage(true);
