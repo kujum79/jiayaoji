@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V372-20261104';
+        var APP_VER = 'V373-20261104';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -3462,6 +3462,16 @@
             background: #FFFFFF;
             border: 1px solid #E5E7EB;
             color: #6B7280;
+        }
+        /* V373: 肠道休息悬浮横幅（食记页底部、底部导航之上） */
+        .gut-rest-banner {
+            position: fixed; left: 50%; transform: translateX(-50%); bottom: 68px;
+            z-index: 9000; display: none; align-items: center; gap: 6px;
+            max-width: calc(100% - 28px); padding: 6px 14px; border-radius: 999px;
+            background: rgba(255, 247, 237, 0.97); border: 1px solid #FED7AA;
+            box-shadow: 0 6px 18px rgba(234, 88, 12, 0.18);
+            font-size: 12px; font-weight: 600; color: #C2410C; white-space: nowrap;
+            pointer-events: none;
         }
         /* 窄屏 430-376 区间: 先压缩一档（此前该区间无任何压缩规则） */
         @media (max-width: 430px) {
@@ -46109,6 +46119,10 @@ function submitAddRecord() {
     if (autoBankCount > 0) toast += '（含从现购清单入库 ' + autoBankCount + ' 道后再扣）';
     if (tonightShopping && record.source === 'shopping') toast += '｜来源标记：现购食材 ✓';
     showToast(toast);
+    // V373: 晚餐记录后询问就餐时间（复盘「晚餐作息」用），已有选择则不再打扰
+    if (typeof _maybeAskDinnerTime === 'function') {
+        try { _maybeAskDinnerTime(date, mealKey); } catch (e) { console.warn('[V373] 晚餐时段询问失败:', e); }
+    }
 }
 
 // ==================== 食录模态框事件绑定 ====================
@@ -54992,7 +55006,7 @@ async function generateMultiDayRecommendation(days) {
                 showToast(`AI推荐重试中(${retry}/3)...`);
                 await new Promise(r => setTimeout(r, 2000 * retry));
             }
-            aiResponse = await callAliyunQwenApi(systemPrompt, userMessage, { mode: getCurrentRecommendMode(), jsonMode: true }); // V140: 多天计划要 JSON，显式开启 json_mode（/plan 缺省不再强制）
+            aiResponse = await callAliyunQwenApi(systemPrompt, userMessage, { mode: getCurrentRecommendMode(), jsonMode: true, mealScene: 'dinner' }); // V140: 多天计划要 JSON；V373: 含晚餐减负规则
             break;
         } catch (retryError) {
             if (retry === 2) {
@@ -55104,6 +55118,8 @@ async function generateMultiDayRecommendation(days) {
                     }
                 });
                 let planData = { dishes: dishNames, note: 'AI自动推荐' };
+                // V373: 晚餐计划来自「晚餐减负」规则，标记后食记晚餐卡显示「晚吃减负餐」
+                if (mealType === 'dinner') planData.lightDinner = true;
                 // V234: AI 返回的专项干预随计划一起落到餐次节点
                 if (Array.isArray(meal.specialInterventions) && meal.specialInterventions.length) planData.specialInterventions = meal.specialInterventions;
                 if (Object.keys(dishMeta).length > 0) planData.dishMeta = dishMeta;
@@ -55273,8 +55289,8 @@ async function generateAiMealRecommendation() {
         var _spMealFrag1 = _hasSP1 ? ',"specialInterventions":[{"memberName":"儿子","planType":"illness","targetDish":"菜名","note":"低油少盐，易消化"}]' : '';
         userMessage += `{"date":"${targetDateStr}","solarTerm":"${solarTerm.name}","meals":{"breakfast":{"dishes":[{"name":"菜名","ingredients":[{"name":"食材","quantity":2,"unit":"个"}]}],"reason":"理由"${_spMealFrag1}},"lunch":{"dishes":[同上结构]${_spMealFrag1}},"dinner":{"dishes":[同上结构]${_spMealFrag1}}},"summary":"综合说明（如何结合节气/食材/成员/历史）"}`;
 
-        // 调用 Aliyun Qwen API（维度①：AI大模型）；V140: 显式 json_mode（返回结构被 JSON.parse 解析）
-        const aiResponse = await callAliyunQwenApi(systemPrompt, userMessage, { mode: getCurrentRecommendMode(), jsonMode: true });
+        // 调用 Aliyun Qwen API（维度①：AI大模型）；V140: 显式 json_mode（返回结构被 JSON.parse 解析）；V373: 晚餐减负
+        const aiResponse = await callAliyunQwenApi(systemPrompt, userMessage, { mode: getCurrentRecommendMode(), jsonMode: true, mealScene: 'dinner' });
 
         // 解析并展示推荐结果
         showAiRecommendationModal(aiResponse, targetDate);
@@ -55511,6 +55527,8 @@ async function _callAliyunQwenApiCore(systemPrompt, userMessage, opts) {
         if (recTask) planPayload.task_type = recTask;
         // V140: 仅调用方显式要求时开启后端 json_mode（缺省关，避免聊天回复等被强制输出 JSON）
         if (opts && opts.jsonMode) planPayload.json_mode = true;
+        // V373: 三餐方案生成时声明含晚餐场景，后端追加「晚餐减负」规则
+        if (opts && opts.mealScene) planPayload.meal_scene = opts.mealScene;
         const response = await fetch(API_BASE + '/plan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -55761,6 +55779,8 @@ function confirmAiRecommendation() {
                 if (fs2SpIdx >= 0) fs2Reordered.push(merged[fs2SpIdx]);
                 for (var fs2i3 = 0; fs2i3 < merged.length; fs2i3++) { if (fs2i3 !== fs2StIdx && fs2i3 !== fs2SpIdx) fs2Reordered.push(merged[fs2i3]); }
                 let planData = { dishes: fs2Reordered, note: (existing.plan && existing.plan.note) ? existing.plan.note : '', dishMeta: mergedMeta, state: 'pending' };
+                // V373: 晚餐来自 AI 并受「晚餐减负」规则约束，打标供食记卡展示
+                if (mealType === 'dinner') planData.lightDinner = true;
                 // V234: 专项干预随 AI 推荐一起写入餐次节点
                 if (Array.isArray(meal.specialInterventions) && meal.specialInterventions.length) planData.specialInterventions = meal.specialInterventions;
                 updateMealPlan(targetDateKey, mealType, planData);
@@ -55768,6 +55788,7 @@ function confirmAiRecommendation() {
             } else if (Object.keys(mergedMeta).length > 0 || (Array.isArray(meal.specialInterventions) && meal.specialInterventions.length)) {
                 // 无新菜，但补齐了 dishMeta / 带了专项干预，仍写一次保证下次渲染分组正确
                 var _keepPlanData = { dishes: merged, note: (existing.plan && existing.plan.note) ? existing.plan.note : '', dishMeta: mergedMeta, state: (existing.plan && existing.plan.state) ? existing.plan.state : 'pending' };
+                if (mealType === 'dinner') _keepPlanData.lightDinner = true; // V373
                 if (Array.isArray(meal.specialInterventions) && meal.specialInterventions.length) _keepPlanData.specialInterventions = meal.specialInterventions;
                 updateMealPlan(targetDateKey, mealType, _keepPlanData);
             }
@@ -56357,7 +56378,7 @@ async function generateWeeklyAiMealRecommendation(days) {
     // 后台跑AI，成功后自动替换弹窗内容；用户关闭弹窗则静默写入缓存
     (async () => {
         try {
-            const aiResponse = await callAliyunQwenApi(systemPrompt, userMessage, { mode: getCurrentRecommendMode(), jsonMode: true }); // V140: 返回结构被 JSON.parse 解析，显式开启
+            const aiResponse = await callAliyunQwenApi(systemPrompt, userMessage, { mode: getCurrentRecommendMode(), jsonMode: true, mealScene: 'dinner' }); // V140: 返回结构被 JSON.parse 解析，显式开启；V373: 晚餐减负
             _weeklyAiPending = false;
             _weeklyAiFailed = false;
             _stopWeeklyAiProgress(null);
@@ -58528,10 +58549,14 @@ function renderDiary() {
         var _siDoneTag = (_siList && _siList.length && _siDoneStat.allDone)
             ? '<span style="display:inline-block;margin-left:6px;padding:0 6px;border-radius:9px;background:#F0FDF4;border:1px solid #BBF7D0;color:#16A34A;font-size:10px;font-weight:700;line-height:16px;vertical-align:middle;white-space:nowrap;">✅ 今日专项已完成</span>'
             : '';
+        // V373: 晚餐减负标签——AI 晚餐方案受「低脂低碳水易消化」规则约束
+        var _lightDinnerBadge = (meal.key === 'dinner' && data.plan && data.plan.lightDinner)
+            ? '<span class="diary-status-badge" style="background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;border-radius:9px;font-size:10px;font-weight:700;line-height:16px;padding:0 6px;margin-left:4px;">🌙 晚吃减负餐</span>'
+            : '';
 
         html += `<div class="diary-meal-card" style="border:none !important;box-shadow:none !important;background:transparent !important;">
             <div class="diary-meal-header">
-                <div><span class="diary-meal-label">${meal.name}</span>${_siMealBadge}${statusBadge}</div>
+                <div><span class="diary-meal-label">${meal.name}</span>${_siMealBadge}${_lightDinnerBadge}${statusBadge}</div>
                 <div class="diary-meal-actions">
                     ${isDiningOut ? (
                         outStatus === 'completed'
@@ -66817,6 +66842,99 @@ function switchReviewSection(value) {
 }
 
 // ==================== 本日总结数据加载 ====================
+// ==================== V373: 晚餐作息（记录后选时段 → 复盘打分提示） ====================
+var _DINNER_TIME_OPTIONS = [
+    { key: 'before17', label: '17点前', tip: '太棒了！您完美践行了「过五不食」，肠道有充足时间休息。' },
+    { key: '18_19', label: '18–19点', tip: '正常就餐时间，建议晚餐吃七分饱。' },
+    { key: '19_20', label: '19–20点', tip: '晚吃会加重肠胃负担，建议明晚提前，或降低肉食比例。' },
+    { key: 'after20', label: '20点以后', tip: '晚吃会加重肠胃负担，建议明晚提前，或降低肉食比例。' }
+];
+function _getDinnerTimeKey(dateKey) {
+    try {
+        var d = getDietCalendar()[dateKey] || {};
+        var a = d.dinner && d.dinner.actual;
+        return (a && a.dinnerTimeKey) || '';
+    } catch (e) { return ''; }
+}
+function _setDinnerTimeKey(dateKey, key) {
+    try {
+        var d = getDietCalendar()[dateKey] || {};
+        var a = d.dinner && d.dinner.actual;
+        if (!a || !Array.isArray(a.dishes) || a.dishes.length === 0) return false;
+        var next = Object.assign({}, a, { dinnerTimeKey: key });
+        updateMealActual(dateKey, 'dinner', next);
+        return true;
+    } catch (e) { console.warn('[V373] 晚餐时段保存失败:', e); return false; }
+}
+function _dinnerTimeBlockHtml(dateKey) {
+    var cur = _getDinnerTimeKey(dateKey);
+    var hasActual = false;
+    try {
+        var d = getDietCalendar()[dateKey] || {};
+        var a = d.dinner && d.dinner.actual;
+        hasActual = !!(a && Array.isArray(a.dishes) && a.dishes.length > 0);
+    } catch (e) {}
+    if (!hasActual) {
+        return '<div style="margin-top:10px;background:#F9FAFB;border:1px dashed #D1D5DB;border-radius:12px;padding:12px 14px;font-size:12px;color:#9CA3AF;">🌙 晚餐作息：记录今天的晚餐后，就可以选择就餐时间并查看健康提示。</div>';
+    }
+    var chips = _DINNER_TIME_OPTIONS.map(function (o) {
+        var on = cur === o.key;
+        return '<button type="button" onclick="_onPickDinnerTime(\'' + escapeAttr(dateKey) + '\',\'' + o.key + '\')" style="padding:5px 10px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ' + (on ? '#FDBA74' : '#E5E7EB') + ';background:' + (on ? '#FFF1E6' : '#fff') + ';color:' + (on ? '#C2410C' : '#6B7280') + ';">' + o.label + '</button>';
+    }).join('');
+    var curOpt = _DINNER_TIME_OPTIONS.filter(function (o) { return o.key === cur; })[0] || null;
+    var tipHtml = curOpt
+        ? '<div style="margin-top:8px;font-size:12px;line-height:1.7;color:' + (curOpt.key === 'before17' ? '#166534' : (curOpt.key === '18_19' ? '#92400E' : '#B91C1C')) + ';background:' + (curOpt.key === 'before17' ? '#F0FDF4' : (curOpt.key === '18_19' ? '#FFFBEB' : '#FEF2F2')) + ';border-radius:8px;padding:7px 10px;">' + escapeHtml(curOpt.tip) + '</div>'
+        : '<div style="margin-top:8px;font-size:12px;color:#9CA3AF;">请选择今晚的大概就餐时间。</div>';
+    return '<div style="margin-top:10px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:12px 14px;">'
+        + '<div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:8px;">🌙 晚餐作息</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + chips + '</div>'
+        + tipHtml
+        + '</div>';
+}
+function _onPickDinnerTime(dateKey, key) {
+    if (!_setDinnerTimeKey(dateKey, key)) {
+        showToast('请先记录晚餐，再选择就餐时间');
+        return;
+    }
+    var opt = _DINNER_TIME_OPTIONS.filter(function (o) { return o.key === key; })[0];
+    if (opt) showToast('🌙 ' + opt.tip);
+    try {
+        if (document.getElementById('diarySummaryOverlay') && typeof loadDailyReview === 'function') {
+            loadDailyReview();
+        } else if (typeof renderDiary === 'function') {
+            renderDiary();
+        }
+    } catch (e) {}
+}
+// 记录晚餐保存后轻量询问就餐时间（已有选择则不打扰）
+function _maybeAskDinnerTime(dateKey, mealKey) {
+    if (mealKey !== 'dinner') return;
+    var existed = _getDinnerTimeKey(dateKey);
+    var cur = existed || '';
+    var overlay = document.createElement('div');
+    overlay.id = 'dinnerTimeOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(31,41,55,0.5);display:flex;align-items:flex-end;justify-content:center;';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    var panel = document.createElement('div');
+    panel.style.cssText = 'width:100%;max-width:430px;background:#fff;border-radius:18px 18px 0 0;padding:18px 18px 22px;box-sizing:border-box;';
+    var chips = _DINNER_TIME_OPTIONS.map(function (o) {
+        var on = cur === o.key;
+        return '<button type="button" onclick="_pickDinnerTimeFromSheet(\'' + escapeAttr(dateKey) + '\',\'' + o.key + '\')" style="padding:9px 0;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid ' + (on ? '#FDBA74' : '#E5E7EB') + ';background:' + (on ? '#FFF1E6' : '#fff') + ';color:' + (on ? '#C2410C' : '#374151') + ';">' + o.label + '</button>';
+    }).join('');
+    panel.innerHTML = '<div style="font-size:17px;font-weight:800;color:#C2410C;margin-bottom:6px;">🌙 今晚大概几点吃晚餐？</div>'
+        + '<div style="font-size:12px;color:#9CA3AF;line-height:1.7;margin-bottom:14px;">用于复盘「晚餐作息」打分，只作大概区间，可随时在复盘里改。</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' + chips + '</div>'
+        + '<button type="button" onclick="document.getElementById(\'dinnerTimeOverlay\').remove()" style="width:100%;margin-top:14px;padding:10px;border:none;background:none;color:#9CA3AF;font-size:13px;cursor:pointer;">暂不选择</button>';
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+}
+function _pickDinnerTimeFromSheet(dateKey, key) {
+    var o = document.getElementById('dinnerTimeOverlay');
+    if (o) o.remove();
+    _onPickDinnerTime(dateKey, key);
+}
+window._onPickDinnerTime = _onPickDinnerTime;
+
 async function loadDailyReview() {
     const contentEl = document.getElementById('reviewContentArea');
     if (contentEl) {
@@ -66926,7 +67044,8 @@ async function loadDailyReview() {
             <div style="font-size:14px;font-weight:600;color:#166534;margin-bottom:10px;">📋 完成情况</div>
             ${mealStatusHtml}
             <div style="font-size:13px;color:#16A34A;font-weight:600;margin-top:6px;">已记录 ${actualCount}/3 餐</div>
-        </div>`,
+        </div>
+        ${_dinnerTimeBlockHtml(dateKey)}`,
         mealEval: `<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:12px;padding:14px;">
             <div style="font-size:14px;font-weight:600;color:#92400E;margin-bottom:6px;">💬 三餐搭配评价</div>
             <div style="font-size:14px;color:#78350F;line-height:1.6;">${escapeHtml(aiComment)}</div>
@@ -69740,6 +69859,10 @@ function openDiaryRecordModal(mealKey) {
         renderDiary();
         const hasFeedback = actualData.dishes.some(d => d.aiFeedback) || actualData.aiSuggestion;
         showToast('✅ 记录已保存' + (hasFeedback ? '，AI建议已生成' : ''));
+        // V373: 记录晚餐后询问就餐时间（复盘「晚餐作息」用）
+        if (mealKey === 'dinner') {
+            try { _maybeAskDinnerTime(dateKey, mealKey); } catch (e) { console.warn('[V373] 晚餐时段询问失败:', e); }
+        }
     });
 }
 
@@ -70254,6 +70377,10 @@ function openMealRecordModal(mealKey, opts) {
             showToast('已快速记录' + mealLabel + ' ✅' + spTip);
         } else {
             showToast('✅ 记录已保存' + (!fEatingOut && res.deducted > 0 ? '，已扣除 ' + res.deducted + ' 种食材' : '') + spTip);
+        }
+        // V373: 记录晚餐后询问就餐时间（复盘「晚餐作息」用）
+        if (mealKey === 'dinner' && !quick) {
+            try { _maybeAskDinnerTime(dateKey, mealKey); } catch (e) { console.warn('[V373] 晚餐时段询问失败:', e); }
         }
     }
 
@@ -73694,11 +73821,165 @@ function closeSpecialPlanBoard() {
     var ov = document.getElementById('specialPlanBoardOverlay');
     if (ov) ov.remove();
 }
-function openSpecialPlanBoard() {
-    if (typeof isSubscribed !== 'function' || !isSubscribed()) {
-        showToast('请先订阅全家桶');
-        return;
+// ==================== V373: 肠道休息（过五不食柔性引导） ====================
+// 设置项：gutRestSettings = { enabled, mode:'default'|'advanced'|'custom', start:'19:00', end:'07:00' }
+// 三种模式全部免费开放：肠道休息是习惯养成能力，不设 VIP 门槛（VIP 价值留在专项计划与深度报告）
+var GUT_REST_DEFAULTS = { enabled: true, mode: 'default', start: '19:00', end: '07:00' };
+function getGutRestSettings() {
+    var s = {};
+    try { s = JSON.parse(lsGet('gutRestSettings') || '{}') || {}; } catch (e) { s = {}; }
+    var out = Object.assign({}, GUT_REST_DEFAULTS, s);
+    if (!out.start || !out.end) { out.start = GUT_REST_DEFAULTS.start; out.end = GUT_REST_DEFAULTS.end; }
+    return out;
+}
+function saveGutRestSettings(next) {
+    var cur = getGutRestSettings();
+    var s = Object.assign({}, cur, next || {});
+    try { lsSet('gutRestSettings', JSON.stringify(s)); } catch (e) {}
+    try { if (typeof cloudBackupSchedule === 'function') cloudBackupSchedule(); } catch (e) {}
+    updateGutRestBanner();
+}
+function _gutRestParse(t) {
+    var m = String(t || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    var h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+    if (h < 0 || h > 23 || mi < 0 || mi > 59) return null;
+    return h * 60 + mi;
+}
+// 返回 { inRest, mins }：mins = 已坚持分钟数（跨零点窗口按前一日开始计算）
+function _gutRestStatus(now) {
+    var s = getGutRestSettings();
+    if (!s.enabled) return { inRest: false, mins: 0 };
+    var st = _gutRestParse(s.start), en = _gutRestParse(s.end);
+    if (st === null || en === null || st === en) return { inRest: false, mins: 0 };
+    var d = now || new Date();
+    var cur = d.getHours() * 60 + d.getMinutes();
+    var inRest, startToday;
+    if (st < en) {
+        inRest = cur >= st && cur < en;
+        startToday = st;
+    } else {
+        inRest = cur >= st || cur < en;
+        startToday = (cur >= st) ? st : st - 1440;
     }
+    return { inRest: inRest, mins: Math.max(0, cur - startToday) };
+}
+function _gutRestEnsureBanner() {
+    var el = document.getElementById('gutRestBanner');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'gutRestBanner';
+        el.className = 'gut-rest-banner';
+        document.body.appendChild(el);
+    }
+    return el;
+}
+function updateGutRestBanner() {
+    try {
+        var el = _gutRestEnsureBanner();
+        var st = _gutRestStatus(new Date());
+        if (!st.inRest) { el.style.display = 'none'; return; }
+        var hoursText;
+        if (st.mins < 60) hoursText = st.mins + ' 分钟';
+        else {
+            var h = st.mins / 60;
+            hoursText = (Math.round(h * 10) / 10) + ' 小时';
+        }
+        el.textContent = '🕒 肠道休息中（已坚持 ' + hoursText + '）';
+        el.style.display = 'inline-flex';
+    } catch (e) {}
+}
+// 打开设置面板（健康管家页内入口）
+function openGutRestSettings() {
+    var old = document.getElementById('gutRestSettingsOverlay');
+    if (old) old.remove();
+    var s = getGutRestSettings();
+    var overlay = document.createElement('div');
+    overlay.id = 'gutRestSettingsOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10010;background:rgba(31,41,55,0.5);display:flex;align-items:flex-end;justify-content:center;';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    var panel = document.createElement('div');
+    panel.style.cssText = 'width:100%;max-width:430px;background:#FFF7ED;border-radius:18px 18px 0 0;padding:18px 18px 22px;box-sizing:border-box;';
+    var radio = function (mode, title, desc, color) {
+        var active = s.mode === mode;
+        return '<div onclick="chooseGutRestMode(\'' + mode + '\')" data-gut-mode="' + mode + '" style="cursor:pointer;display:flex;align-items:flex-start;gap:10px;padding:12px;margin-bottom:10px;border-radius:12px;background:' + (active ? '#FFF1E6' : '#FFFFFF') + ';border:1px solid ' + (active ? '#FDBA74' : '#E5E7EB') + ';">'
+            + '<div style="width:18px;height:18px;border-radius:50%;flex-shrink:0;margin-top:2px;border:2px solid ' + (active ? '#F97316' : '#D1D5DB') + ';background:' + (active ? '#F97316' : '#fff') + ';"></div>'
+            + '<div style="flex:1;min-width:0;">'
+            + '<div style="font-size:14px;font-weight:700;color:' + color + ';">' + title + '</div>'
+            + '<div style="font-size:12px;color:#6B7280;line-height:1.6;margin-top:2px;">' + desc + '</div>'
+            + '</div></div>';
+    };
+    panel.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'
+        + '<div style="font-size:17px;font-weight:800;color:#C2410C;">🕒 肠道休息设置</div>'
+        + '<button type="button" onclick="document.getElementById(\'gutRestSettingsOverlay\').remove()" style="border:none;background:none;font-size:22px;color:#9CA3AF;cursor:pointer;line-height:1;">✕</button>'
+        + '</div>'
+        + '<div style="font-size:12px;color:#9A3412;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 10px;line-height:1.7;margin-bottom:12px;">肠道休息期间只喝水/淡茶，不进食；早餐在结束时间后再吃。全部模式免费开放。</div>'
+        + radio('default', '默认模式（19:00 – 次日 07:00）', '晚餐后留出 12 小时给肠道休整，循序渐进的起点。', '#9A3412')
+        + radio('advanced', '进阶模式 · 过五不食（17:00 – 次日 07:00）', '17 点后不再进食，肠道休息 14 小时；适合想进一步减负的家庭。', '#B45309')
+        + radio('custom', '自定义时间', '按家庭作息自行设定开始与结束时间。', '#374151')
+        + '<div id="gutRestCustomRow" style="display:' + (s.mode === 'custom' ? 'flex' : 'none') + ';align-items:center;gap:8px;margin:2px 0 14px;padding:0 2px;">'
+        + '<span style="font-size:13px;color:#4B5563;">从</span>'
+        + '<input id="gutRestStartInput" type="time" value="' + escapeAttr(s.start) + '" style="padding:6px 8px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#374151;background:#fff;" />'
+        + '<span style="font-size:13px;color:#4B5563;">到</span>'
+        + '<input id="gutRestEndInput" type="time" value="' + escapeAttr(s.end) + '" style="padding:6px 8px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;color:#374151;background:#fff;" />'
+        + '</div>'
+        + '<button type="button" onclick="saveGutRestForm()" style="width:100%;padding:12px;border:none;border-radius:12px;background:#F97316;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">保存设置</button>';
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+}
+function chooseGutRestMode(mode) {
+    var s = getGutRestSettings();
+    s.mode = mode;
+    if (mode === 'default') { s.start = '19:00'; s.end = '07:00'; }
+    if (mode === 'advanced') { s.start = '17:00'; s.end = '07:00'; }
+    try { lsSet('gutRestSettings', JSON.stringify(s)); } catch (e) {}
+    var boxes = document.querySelectorAll('#gutRestSettingsOverlay [data-gut-mode]');
+    boxes.forEach(function (b) {
+        var on = b.getAttribute('data-gut-mode') === mode;
+        b.style.background = on ? '#FFF1E6' : '#FFFFFF';
+        b.style.borderColor = on ? '#FDBA74' : '#E5E7EB';
+        var dot = b.firstElementChild;
+        if (dot) { dot.style.borderColor = on ? '#F97316' : '#D1D5DB'; dot.style.background = on ? '#F97316' : '#fff'; }
+    });
+    var row = document.getElementById('gutRestCustomRow');
+    if (row) row.style.display = mode === 'custom' ? 'flex' : 'none';
+    var si = document.getElementById('gutRestStartInput'), ei = document.getElementById('gutRestEndInput');
+    if (si) si.value = s.start;
+    if (ei) ei.value = s.end;
+}
+function saveGutRestForm() {
+    var s = getGutRestSettings();
+    if (s.mode === 'custom') {
+        var si = document.getElementById('gutRestStartInput'), ei = document.getElementById('gutRestEndInput');
+        var st = _gutRestParse(si && si.value), en = _gutRestParse(ei && ei.value);
+        if (st === null || en === null) { showToast('请填写合法的开始/结束时间'); return; }
+        if (st === en) { showToast('开始与结束时间不能相同'); return; }
+        saveGutRestSettings({ start: String(si.value), end: String(ei.value) });
+    } else {
+        saveGutRestSettings({});
+    }
+    var o = document.getElementById('gutRestSettingsOverlay');
+    if (o) o.remove();
+    // 健康管家页内的摘要同步刷新，避免保存后仍显示旧模式
+    var _s2 = getGutRestSettings();
+    var _line = document.getElementById('gutRestSummaryLine');
+    if (_line) {
+        var _lab = _s2.mode === 'advanced' ? '进阶模式（过五不食）' : (_s2.mode === 'custom' ? '自定义' : '默认模式');
+        var _cross = (_gutRestParse(_s2.end) !== null && _gutRestParse(_s2.start) !== null && _gutRestParse(_s2.end) <= _gutRestParse(_s2.start));
+        _line.innerHTML = '当前：<b style="color:#9A3412;">' + _lab + '</b> · ' + escapeHtml(_s2.start) + ' – ' + (_cross ? '次日 ' : '') + escapeHtml(_s2.end)
+            + (_s2.mode === 'advanced' ? '<br>17 点后不进食，把「过五不食」落到每天的作息里。' : (_s2.mode === 'default' ? '<br>晚餐后留出 12 小时，让肠道按时休整。' : ''));
+    }
+    showToast('✅ 肠道休息已设为 ' + _s2.start + ' – ' + _s2.end);
+}
+window.openGutRestSettings = openGutRestSettings;
+window.updateGutRestBanner = updateGutRestBanner;
+setInterval(function () { try { updateGutRestBanner(); } catch (e) {} }, 60000);
+try {
+    document.addEventListener('DOMContentLoaded', function () { updateGutRestBanner(); });
+    if (document.readyState === 'complete' || document.readyState === 'interactive') setTimeout(updateGutRestBanner, 0);
+} catch (e) {}
+
+function openSpecialPlanBoard() {
     closeSpecialPlanBoard();
     var plan = _getActiveSpecialPlan();
     var overlay = document.createElement('div');
@@ -73779,12 +74060,29 @@ function openSpecialPlanBoard() {
             + '</div>';
     }
 
+    // V373: 肠道休息设置卡（免费开放，置于专项计划内容之后）
+    var _gutS = getGutRestSettings();
+    var _gutModeLabel = _gutS.mode === 'advanced' ? '进阶模式（过五不食）' : (_gutS.mode === 'custom' ? '自定义' : '默认模式');
+    var _gutEndCross = (_gutRestParse(_gutS.end) !== null && _gutRestParse(_gutS.start) !== null && _gutRestParse(_gutS.end) <= _gutRestParse(_gutS.start));
+    var gutCardHtml = '<div style="padding:0 14px 18px;">'
+        + '<div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
+        +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+        +     '<div style="font-size:15px;font-weight:800;color:#C2410C;">🕒 肠道休息设置</div>'
+        +     '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">免费</span>'
+        +     '<button type="button" onclick="openGutRestSettings()" style="margin-left:auto;padding:7px 14px;border:1px solid #FDBA74;border-radius:10px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:700;cursor:pointer;">设置</button>'
+        +   '</div>'
+        +   '<div id="gutRestSummaryLine" style="font-size:12px;color:#6B7280;line-height:1.7;margin-top:8px;">'
+        +     '当前：<b style="color:#9A3412;">' + _gutModeLabel + '</b> · ' + escapeHtml(_gutS.start) + ' – ' + (_gutEndCross ? '次日 ' : '') + escapeHtml(_gutS.end)
+        +     (_gutS.mode === 'advanced' ? '<br>17 点后不进食，把「过五不食」落到每天的作息里。' : (_gutS.mode === 'default' ? '<br>晚餐后留出 12 小时，让肠道按时休整。' : ''))
+        +   '</div>'
+        + '</div></div>';
+
     panel.innerHTML = '<div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:14px 12px;background:#fff;border-bottom:1px solid #FED7AA;">'
         + '<button type="button" id="spBoardCloseBtn" style="width:34px;height:34px;border:none;background:#FFF7ED;border-radius:10px;font-size:18px;color:#C2410C;cursor:pointer;line-height:1;">＜</button>'
         + '<div style="font-size:17px;font-weight:700;color:#C2410C;">健康管家</div>'
         + (plan ? '<button type="button" id="spBoardEndBtn" style="margin-left:auto;padding:6px 10px;border:1px solid #FED7AA;border-radius:10px;background:#fff;color:#C2410C;font-size:12px;cursor:pointer;">结束计划</button>' : '')
         + '</div>'
-        + '<div style="flex:1;overflow-y:auto;min-height:0;">' + bodyHtml + '</div>'
+        + '<div style="flex:1;overflow-y:auto;min-height:0;">' + bodyHtml + gutCardHtml + '</div>'
         + (plan ? '<div style="flex-shrink:0;padding:12px 14px;background:#FFF7ED;border-top:1px solid #FED7AA;">'
             + '<button type="button" id="spBoardTodayBtn" style="width:100%;padding:12px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">🍽️ 查看今日融合食谱</button>'
             + '</div>' : '');

@@ -98,6 +98,7 @@ class PlanRequest(BaseModel):
     # V139 曾无条件强制 JSON 导致聊天回复也输出原始 JSON（用户不可读）——现仅周计划等明确要 JSON 的调用方传 true
     json_mode: bool = False
     subscriptionPlan: Optional[str] = None  # V199/V202: 订阅 tier（basic/premium），后端追加专属 Prompt 指令
+    meal_scene: Optional[str] = None  # V373: 餐次场景（dinner 时追加「晚餐减负」规则，早午餐不受影响）
 
 
 class RecommendRestaurantsRequest(BaseModel):
@@ -360,6 +361,22 @@ def get_mode_directive(mode: Optional[str]) -> str:
     key = (mode or "").strip()
     directive = RECOMMEND_MODE_DIRECTIVES.get(key)
     return f"{directive}并与下列要求保持一致。\n\n" if directive else ""
+
+
+# V373: 晚餐减负——仅对晚餐生效的柔性引导；早午餐规则不变
+DINNER_LIGHT_RULE = """【晚餐减负规则（仅作用于晚餐，早/午餐照常）】
+1. 晚餐优先推荐低脂、低碳水、易消化的轻食或汤品，避免油炸、干锅、红烧、糖醋等重油重盐做法。
+2. 晚餐主菜以鱼、虾、鸡胸、豆腐、蛋类等易消化蛋白为主，红肉控制在少量；主食可用杂粮/薯类小份替代白米饭。
+3. 晚餐至少一道深色蔬菜或菌菇，保证膳食纤维；汤品清淡少盐。
+4. 如用户就餐时间偏晚（19:00 以后），严格避免重油重盐与大量精制碳水，可提醒「晚吃减负、七分饱」。
+"""
+
+
+def get_meal_scene_directive(scene: Optional[str]) -> str:
+    """/plan 接口用：按餐次场景追加规则；当前仅支持 dinner（晚餐减负）。"""
+    if (scene or "").strip() == "dinner":
+        return DINNER_LIGHT_RULE + "\n"
+    return ""
 
 
 # ========== AI 调用核心（V113 起走多模型路由层，失败自动降级下一家服务商；V115 起带 task_type 记录调用日志） ==========
@@ -654,6 +671,8 @@ async def plan(req: PlanRequest) -> Dict[str, str]:
         task_type = "plan"
     # 前端已构建详细的五维上下文 system_prompt；mode 非默认时在其最前面追加模式侧重指令
     system_content = get_mode_directive(req.mode)
+    # V373: 晚餐场景追加「晚餐减负」规则（只影响晚餐菜品，早午餐保持原样）
+    system_content += get_meal_scene_directive(req.meal_scene)
     # V143: 仅对食谱规划类任务注入食养堂上下文（近7天已选主题防重复 + 近3天未选候选池），
     # 绝不作用于聊天回复，避免重蹈 V139 无差别污染输出格式的覆辙
     if "plan" in task_type:
