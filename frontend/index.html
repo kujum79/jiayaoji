@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V381-20261105';
+        var APP_VER = 'V382-20261105';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -14280,7 +14280,8 @@ function updateMealPlan(date, mealType, planData) {
             let dg = getDiaryDiningGroup();
             if (dg && dg.groupId) {
                 planData.diningGroupId = dg.groupId;
-                planData.servings = dg.members.length;
+                // V382: 显式传入的份数（如团圆餐固定 6 人份）优先，不被当前就餐组人数覆盖
+                if (planData.servings === undefined || planData.servings === null) planData.servings = dg.members.length;
                 planData.diningMembers = [...dg.members];
             }
         }
@@ -56668,6 +56669,12 @@ function _planScenarioDates(scenario) {
         while (d.getDay() !== 6) d.setDate(d.getDate() + 1);
         return [new Date(d), new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)];
     }
+    // V382: 周末团圆餐——只生成用户选中的那一天
+    if (scenario === 'reunion') {
+        const d = _reunionCtx && _reunionCtx.date ? new Date(_reunionCtx.date) : new Date(base);
+        d.setHours(0, 0, 0, 0);
+        return [d];
+    }
     return [];
 }
 
@@ -56679,7 +56686,7 @@ async function generateWeeklyAiMealRecommendation(days, scenario) {
 
     const today = new Date(currentDiaryDate);
     let weekDates = _planScenarioDates(scenario);
-    if (!weekDates.length || (scenario !== 'workday' && scenario !== 'weekend')) {
+    if (!weekDates.length || (scenario !== 'workday' && scenario !== 'weekend' && scenario !== 'reunion')) {
         weekDates = [];
         for (let i = 0; i < days; i++) {
             const d = new Date(today);
@@ -56691,7 +56698,7 @@ async function generateWeeklyAiMealRecommendation(days, scenario) {
 
     // ========== 缓存检查（5分钟内重复生成不重跑AI） ==========
     const _healthProfiles = collectMemberHealthProfiles(_recData0.members || []);
-    const cacheKey = 'weekly_' + scenario + '_' + days + '_' + dateToKey(today) + '_' + (_recData0.servings||'') + '_' + (_healthProfiles ? btoa(unescape(encodeURIComponent(_healthProfiles))).slice(0,16) : '');
+    const cacheKey = 'weekly_' + scenario + '_' + days + '_' + dateToKey(today) + '_' + (_recData0.servings||'') + '_' + (_healthProfiles ? btoa(unescape(encodeURIComponent(_healthProfiles))).slice(0,16) : '') + (scenario === 'reunion' ? ('_reunion_' + (_reunionCtx ? (_reunionCtx.dateKey + '_' + _reunionCtx.meal) : '')) : '');
     const nowTs = Date.now();
     const existing = document.getElementById('weeklyAiRecommendOverlay');
     if (existing) existing.remove();
@@ -56713,7 +56720,7 @@ async function generateWeeklyAiMealRecommendation(days, scenario) {
     quickPlan._source = 'quick';
     _weeklyAiPending = true;   // V322: AI 返回前标记为通用方案状态
     _weeklyAiFailed = false;
-    showToast(scenario === 'workday' ? '📆 工作日早晚餐方案已就绪' : (scenario === 'weekend' ? '🎉 周末家宴方案已就绪' : '📆 ' + days + '天食谱方案已就绪'));
+    showToast(scenario === 'workday' ? '📆 工作日早晚餐方案已就绪' : (scenario === 'weekend' ? '🎉 周末家宴方案已就绪' : (scenario === 'reunion' ? '🕯️ 周末团圆餐方案已就绪' : '📆 ' + days + '天食谱方案已就绪')));
     showWeeklyAiRecommendationModal(quickPlan, weekDates, days, scenario);
     _startWeeklyAiProgress();  // V322: 进度提示，不锁按钮
 
@@ -56725,12 +56732,23 @@ async function generateWeeklyAiMealRecommendation(days, scenario) {
     }).join('、');
 
     const recData = collectRecommendationData();
+    // V382: 团圆餐固定按 6 人份计算，确保食材克数可精准采购
+    if (scenario === 'reunion') recData.servings = 6;
     let userMessage = buildRecommendationPrompt(recData, weekDatesStr);
     // V376: 场景约束
     if (scenario === 'workday') {
         userMessage += '\n【工作日晚餐场景】只生成周一至周五，每天只输出 breakfast 和 dinner，禁止输出 lunch（JSON 中可省略 lunch 字段）。工作日时间紧迫，请推荐 30 分钟内可完成的快手菜；晚餐低脂、低碳水、易消化。';
     } else if (scenario === 'weekend') {
         userMessage += '\n【周末家宴场景】只生成周六、周日两天，每天输出早/午/晚三餐。周末时间充裕，请推荐适合全家共享的硬菜/炖菜（如炖牛腩、红烧鱼、砂锅鸡、整鸡整鸭等），兼顾老人孩子，少油少盐。';
+    } else if (scenario === 'reunion') {
+        const _reunionMealKey = (_reunionCtx && _reunionCtx.meal === 'dinner') ? 'dinner' : 'lunch';
+        const _reunionMealName = _reunionMealKey === 'dinner' ? '晚餐' : '午餐';
+        userMessage += '\n【周末团圆餐场景】只生成所选日期的' + _reunionMealName + '，JSON 的 meals 中只保留 ' + _reunionMealKey + ' 字段，其他餐次全部省略。本餐按 6 人份计算，必须安排 6-8 道丰盛团圆菜（主食 + 汤品 + 硬菜 + 素菜 + 凉拌/解腻菜），ingredients 的 quantity 仍为「每人份」精准克数。每道菜的 reason 必须以以下三类人群标注之一开头，并写清理由：\n'
+            + '· 👴 适合老人：软烂少刺（如清蒸鱼、炖排骨）\n'
+            + '· ❤️ 儿女最爱：下饭硬菜（如红烧肉、糖醋排骨）\n'
+            + '· 🥗 全家健康：清淡解腻（如凉拌秋葵、菌菇汤）\n'
+            + '三类标注都要出现，保证团圆餐兼顾老人、儿女和全家健康。\n'
+            + '【重要】忽略上文按人数计算的每餐道数上限，本餐固定 6-8 道菜，菜品之间不重复。';
     }
 
     // V117 精简（约 850 字 → ~111 字）：usr 已含九维/编号约束/JSON模板/ingredients每人份/膳食指南参考量/人群约束(👤🎯)，sys 只留 usr 未覆盖的独有硬约束
@@ -56740,11 +56758,12 @@ async function generateWeeklyAiMealRecommendation(days, scenario) {
         + '菜名全局唯一(主食除外)；水果不足则三餐安排独立水果。';
     if (scenario === 'workday') systemPrompt += '\n【场景】只排工作日（周一至周五）的早餐和晚餐，跳过午餐；快手菜优先。';
     if (scenario === 'weekend') systemPrompt += '\n【场景】只排周六、周日三餐，硬菜/炖菜为主，适合全家共享。';
+    if (scenario === 'reunion') systemPrompt += '\n【场景】周末团圆午晚餐：只排所选日期的午餐或晚餐，固定 6 人份、6-8 道团圆菜；每道菜 reason 必须以「👴 适合老人：软烂少刺」「❤️ 儿女最爱：下饭硬菜」「🥗 全家健康：清淡解腻」之一开头，三类都要覆盖；忽略每餐道数上限。';
 
     // 后台跑AI，成功后自动替换弹窗内容；用户关闭弹窗则静默写入缓存
     (async () => {
         try {
-            const aiResponse = await callAliyunQwenApi(systemPrompt, userMessage, { mode: getCurrentRecommendMode(), jsonMode: true, mealScene: scenario === 'weekend' ? null : 'dinner' }); // V140: 返回结构被 JSON.parse 解析，显式开启；V373: 晚餐减负（周末家宴不套用减负规则）
+            const aiResponse = await callAliyunQwenApi(systemPrompt, userMessage, { mode: getCurrentRecommendMode(), jsonMode: true, mealScene: (scenario === 'weekend' || scenario === 'reunion') ? null : 'dinner' }); // V140: 返回结构被 JSON.parse 解析，显式开启；V373: 晚餐减负（周末家宴/团圆餐不套用减负规则）
             _weeklyAiPending = false;
             _weeklyAiFailed = false;
             _stopWeeklyAiProgress(null);
@@ -56795,6 +56814,15 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount, sc
     // V376: 工作日场景硬性移除午餐（快速方案与 AI 方案都只保留早/晚餐）
     if (scenario === 'workday') {
         days.forEach(function (d) { if (d && d.meals) delete d.meals.lunch; });
+    }
+    // V382: 团圆餐只保留用户选中的午餐/晚餐，并保证 6-8 道
+    if (scenario === 'reunion') {
+        const _reunionMealKey = (_reunionCtx && _reunionCtx.meal === 'dinner') ? 'dinner' : 'lunch';
+        days.forEach(function (d) {
+            if (!d || !d.meals) return;
+            ['breakfast', 'lunch', 'dinner'].forEach(function (mt) { if (mt !== _reunionMealKey) delete d.meals[mt]; });
+            _padReunionMeal(d.meals[_reunionMealKey], 6);
+        });
     }
     let summary = recommendation.summary || recommendation.rawText || '';
 
@@ -57010,6 +57038,19 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount, sc
         });
     });
 
+    // V382: 团圆餐最多 8 道，超出部分裁掉（排序后主食/汤在前，裁尾不影响结构）
+    if (scenario === 'reunion') {
+        days.forEach(function (day) {
+            const meals = day.meals || {};
+            ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+                const meal = meals[mt];
+                if (meal && Array.isArray(meal._normalizedDishes) && meal._normalizedDishes.length > 8) {
+                    meal._normalizedDishes = meal._normalizedDishes.slice(0, 8);
+                }
+            });
+        });
+    }
+
     const mealLabels = { breakfast: '🌅 早餐', lunch: '☀️ 午餐', dinner: '🌙 晚餐' };
 
     let daysHtml = '';
@@ -57039,7 +57080,7 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount, sc
                             tagHtml = '<div style="font-size:11px;margin-top:1px;margin-left:6px;">' + tags.join(' ｜ ') + '</div>';
                         }
                     }
-                    dishNamesHtml += '<div style="font-size:13px;color:#4B5563;"><b>·</b> ' + escapeHtml(d.name) + '</div>' + tagHtml;
+                    dishNamesHtml += '<div style="font-size:13px;color:#4B5563;"><b>·</b> ' + escapeHtml(d.name) + '</div>' + _reunionTagHtml(d.reason) + tagHtml;
                 });
                 mealsHtml += `<div style="background:#FFF7ED;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
                     <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:3px;">${mealLabels[mealType]}</div>
@@ -57060,10 +57101,12 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount, sc
         : `<div class="ai-plan-status" style="font-size:12px;color:#6B7280;background:#F3F4F6;border:1px solid #E5E7EB;border-radius:6px;padding:2px 6px;display:inline-block;">食谱方案</div>`;
     const planTitle = scenario === 'workday'
         ? '💼 工作日早晚餐计划'
-        : (scenario === 'weekend' ? '🎉 周末两日家宴' : (dayCount === 7 ? '📆 一周食谱计划' : '📆 ' + dayCount + '天食谱计划'));
+        : (scenario === 'weekend' ? '🎉 周末两日家宴'
+            : (scenario === 'reunion' ? '🕯️ 周末团圆午晚餐' : (dayCount === 7 ? '📆 一周食谱计划' : '📆 ' + dayCount + '天食谱计划')));
     const planSubtitle = scenario === 'workday'
         ? '周一至周五 · 只排早/晚餐 · 快手菜优先'
-        : (scenario === 'weekend' ? '周六 + 周日 · 三餐家宴 · 硬菜/炖菜' : '共' + dayCount + '天');
+        : (scenario === 'weekend' ? '周六 + 周日 · 三餐家宴 · 硬菜/炖菜'
+            : (scenario === 'reunion' ? ((_reunionCtx && _reunionCtx.meal === 'dinner') ? '晚餐' : '午餐') + ' · 6 人份 · 6-8 道团圆菜 · 按 6 人份精准克数' : '共' + dayCount + '天'));
 
     const overlay = document.createElement('div');
     overlay.id = 'weeklyAiRecommendOverlay';
@@ -57082,6 +57125,7 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount, sc
                 </div>
             </div>
             <div class="ai-plan-body" style="flex:1;overflow-y:auto;padding:16px 20px;background:#F9FAFB;">
+                ${scenario === 'reunion' ? _reunionBannerHtml() : ''}
                 ${daysHtml}
                 ${summary ? `<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:12px;margin-top:8px;">
                     <div style="font-size:14px;font-weight:600;color:#15803D;margin-bottom:6px;">📋 综合说明</div>
@@ -57335,7 +57379,7 @@ function confirmWeeklyAiRecommendation() {
                 // 流质互斥（粥/豆浆/羹类同餐最多1道）+ 按就餐人数裁剪道数（1人=2道，宁少勿多）
                 const _dineN = ((typeof getDiaryDiningGroup === 'function' && getDiaryDiningGroup()) ? getDiaryDiningGroup().members.length : (getFamilyMembers().length || 3));
                 const _dcK = getDishCountByMembers(_dineN);
-                const _mealCap = (mealType === 'breakfast' ? _dcK.breakNum : mealType === 'lunch' ? _dcK.lunchNum : _dcK.dinnerNum) || 3;
+                const _mealCap = planScenario === 'reunion' ? 8 : ((mealType === 'breakfast' ? _dcK.breakNum : mealType === 'lunch' ? _dcK.lunchNum : _dcK.dinnerNum) || 3);
                 let cappedDishes = _filterLiquidStaplePerMeal(dishes);
                 if (cappedDishes.length > _mealCap) cappedDishes = cappedDishes.slice(0, _mealCap);
                 // 替换已有计划（不合并已有菜品，直接用AI推荐替换）
@@ -57389,6 +57433,12 @@ function confirmWeeklyAiRecommendation() {
                     let planData = { dishes: finalReordered, note: '' };
                     if (planScenario === 'weekend') planData.weekendFeast = true;
                     if (planScenario === 'workday') planData.workdayRush = true;
+                    // V382: 团圆餐沿用周末家宴预览/采购入口，并锁定 6 人份精准克数
+                    if (planScenario === 'reunion') {
+                        planData.weekendFeast = true;
+                        planData.servings = 6;
+                        planData.reunionMeal = (_reunionCtx && _reunionCtx.meal === 'dinner') ? 'dinner' : 'lunch';
+                    }
                     // V234: 专项干预随 AI 计划一起写入餐次节点
                     if (Array.isArray(meal.specialInterventions) && meal.specialInterventions.length) planData.specialInterventions = meal.specialInterventions;
                     if (Object.keys(mergedMeta).length > 0) planData.dishMeta = mergedMeta;
@@ -57408,7 +57458,8 @@ function confirmWeeklyAiRecommendation() {
 
     // V372: AI 3天/7天方案被采用即视为确认，自动落 confirmed 并预留库存
     if (Array.isArray(weekDateKeys) && weekDateKeys.length > 0) {
-        const confirmMeals = planScenario === 'workday' ? ['breakfast', 'dinner'] : ['breakfast', 'lunch', 'dinner'];
+        const confirmMeals = planScenario === 'workday' ? ['breakfast', 'dinner']
+            : (planScenario === 'reunion' ? [((_reunionCtx && _reunionCtx.meal) === 'dinner' ? 'dinner' : 'lunch')] : ['breakfast', 'lunch', 'dinner']);
         weekDateKeys.forEach(function(dk){ _confirmAdoptedMeals(dk, confirmMeals); });
     }
 
@@ -57418,6 +57469,7 @@ function confirmWeeklyAiRecommendation() {
     if (totalAdded > 0) {
         if (planScenario === 'weekend') showToast(`🎉 周末家宴已写入食记，共${totalAdded}道菜`);
         else if (planScenario === 'workday') showToast(`💼 工作日早晚餐已写入食记，共${filledDays}天 ${totalAdded} 道菜`);
+        else if (planScenario === 'reunion') showToast(`🕯️ 周末团圆${(_reunionCtx && _reunionCtx.meal === 'dinner') ? '晚餐' : '午餐'}已写入食记，共${totalAdded}道菜（按 6 人份采购）`);
         else showToast(`✅ 已填入${filledDays}天共${totalAdded}道菜品到食记` + (_adoptWhileAiPending ? '（AI 个性化方案仍在生成，完成后可重新生成替换）' : ''));
     } else {
         showToast('推荐菜品已存在，无需重复添加');
@@ -65597,8 +65649,18 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
     const days = aiRecommendation.days || [];
     if (!days || days.length === 0) return;
     // V376: 工作日场景移除午餐，避免 AI 多返回的午餐写入食记
-    if ((overlay.dataset.scenario || 'cycle') === 'workday') {
+    const _updScenario = overlay.dataset.scenario || 'cycle';
+    if (_updScenario === 'workday') {
         days.forEach(function (d) { if (d && d.meals) delete d.meals.lunch; });
+    }
+    // V382: 团圆餐只保留所选餐次，并保证 6-8 道
+    if (_updScenario === 'reunion') {
+        const _reunionMealKey = (_reunionCtx && _reunionCtx.meal === 'dinner') ? 'dinner' : 'lunch';
+        days.forEach(function (d) {
+            if (!d || !d.meals) return;
+            ['breakfast', 'lunch', 'dinner'].forEach(function (mt) { if (mt !== _reunionMealKey) delete d.meals[mt]; });
+            _padReunionMeal(d.meals[_reunionMealKey], 6);
+        });
     }
     const dayCount = overlay.dataset.dayCount || 7;
     // 调试：打印 AI 返回的原始数据结构
@@ -65858,6 +65920,19 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
         });
     });
 
+    // V382: 团圆餐最多 8 道（排序后主食/汤在前，裁尾不影响结构）
+    if (_updScenario === 'reunion') {
+        days.forEach(function (day) {
+            const meals = day.meals || {};
+            ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+                const meal = meals[mt];
+                if (meal && Array.isArray(meal._normalizedDishes) && meal._normalizedDishes.length > 8) {
+                    meal._normalizedDishes = meal._normalizedDishes.slice(0, 8);
+                }
+            });
+        });
+    }
+
     const mealLabels = { breakfast: '🌅 早餐', lunch: '☀️ 午餐', dinner: '🌙 晚餐' };
     let daysHtml = '';
     days.forEach((day, idx) => {
@@ -65885,7 +65960,7 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
                             tagHtml = '<div style="font-size:11px;margin-top:1px;margin-left:6px;">' + tags.join(' ｜ ') + '</div>';
                         }
                     }
-                    dishNamesHtml += '<div style="font-size:13px;color:#4B5563;"><b>·</b> ' + escapeHtml(d.name) + '</div>' + tagHtml;
+                    dishNamesHtml += '<div style="font-size:13px;color:#4B5563;"><b>·</b> ' + escapeHtml(d.name) + '</div>' + _reunionTagHtml(d.reason) + tagHtml;
                 });
                 mealsHtml += `<div style="background:#FFF7ED;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
                     <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:3px;">${mealLabels[mealType]}</div>
@@ -65902,7 +65977,7 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
     const summary = aiRecommendation.summary || aiRecommendation.rawText || '';
     const bodyEl = overlay.querySelector('.ai-plan-body');
     if (bodyEl) {
-        bodyEl.innerHTML = daysHtml + (summary ? `<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:12px;margin-top:8px;">
+        bodyEl.innerHTML = (_updScenario === 'reunion' ? _reunionBannerHtml() : '') + daysHtml + (summary ? `<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:12px;margin-top:8px;">
             <div style="font-size:14px;font-weight:600;color:#15803D;margin-bottom:6px;">📋 综合说明</div>
             <div style="font-size:14px;color:#374151;line-height:1.6;">${escapeHtml(summary)}</div>
         </div>` : '');
@@ -65913,7 +65988,8 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
     const headerTitle = overlay.querySelector('.ai-plan-title');
     const _titleScenario = overlay.dataset.scenario || 'cycle';
     const _titleText = _titleScenario === 'workday' ? '💼 工作日早晚餐计划'
-        : (_titleScenario === 'weekend' ? '🎉 周末两日家宴' : '✨ AI' + dayCount + '天智能推荐');
+        : (_titleScenario === 'weekend' ? '🎉 周末两日家宴'
+            : (_titleScenario === 'reunion' ? '🕯️ 周末团圆午晚餐' : '✨ AI' + dayCount + '天智能推荐'));
     if (headerTitle) headerTitle.innerHTML = _titleText + ' <span style="font-size:12px;font-weight:400;opacity:0.9;">已融合九维数据</span>';
     const aiStatusEl = overlay.querySelector('.ai-plan-status');
     if (aiStatusEl) aiStatusEl.style.display = 'none';
@@ -66684,9 +66760,143 @@ function openPlanScopeSheet() {
         <div style="font-size:13px;font-weight:800;color:#C2410C;margin:14px 0 8px;">🍽️ 按场景生成</div>
         ${card('💼', '工作日早晚餐', '周一至周五 · 只排早/晚餐 · 快手菜', "startPlanGeneration(5, 'workday')", true)}
         ${card('🎉', '周末两日家宴', '周六 + 周日三餐 · 全家共享硬菜/炖菜', "startPlanGeneration(2, 'weekend')", true)}
+        ${card('🕯️', '周末团圆午晚餐', '周六或周日 · 午餐/晚餐 · 6-8 道团圆菜 · 6 人份', "toggleWeekendReunionOptions()", true)}
+        <div id="reunionOptionsPanel" style="display:none;margin:2px 0 8px;padding:12px;background:#FFFBEB;border:1px dashed #FDE68A;border-radius:12px;">
+            <div style="font-size:12px;font-weight:800;color:#92400E;margin-bottom:6px;">📅 选择日期</div>
+            <div id="reunionDateChips" style="display:flex;gap:8px;margin-bottom:10px;"></div>
+            <div style="font-size:12px;font-weight:800;color:#92400E;margin-bottom:6px;">🍽️ 选择餐次 <span style="font-weight:400;color:#B45309;">（团圆餐只排午/晚餐，不含早餐）</span></div>
+            <div id="reunionMealChips" style="display:flex;gap:8px;margin-bottom:10px;"></div>
+            <button type="button" onclick="startReunionGeneration()" style="width:100%;padding:10px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#FB923C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">✨ 生成团圆餐</button>
+            <div style="font-size:11px;color:#B45309;margin-top:8px;line-height:1.6;">按 6 人份计算，已为您生成精准采购克数，避免浪费。</div>
+        </div>
     `;
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+}
+// V382: 周末团圆午晚餐——选中日期 + 午/晚餐（不含早餐，避免团圆餐变成一整天三餐排期）
+var _reunionCtx = null;
+function _reunionChipStyle(active) {
+    return 'padding:6px 12px;border-radius:999px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid ' + (active ? '#F97316' : '#E5E7EB') + ';background:' + (active ? '#FFF3E2' : '#fff') + ';color:' + (active ? '#C2410C' : '#6B7280') + ';';
+}
+function toggleWeekendReunionOptions() {
+    const panel = document.getElementById('reunionOptionsPanel');
+    if (!panel) return;
+    const willShow = panel.style.display === 'none';
+    panel.style.display = willShow ? 'block' : 'none';
+    if (willShow) _renderReunionOptions();
+}
+function _renderReunionOptions() {
+    const weekend = _planScenarioDates('weekend');
+    if (!_reunionCtx || !_reunionCtx.dateKey) {
+        _reunionCtx = { date: weekend[0], dateKey: dateToKey(weekend[0]), meal: 'lunch', servings: 6 };
+    }
+    const dateBox = document.getElementById('reunionDateChips');
+    const mealBox = document.getElementById('reunionMealChips');
+    if (dateBox) {
+        dateBox.innerHTML = weekend.map(function (d, i) {
+            const active = dateToKey(d) === _reunionCtx.dateKey;
+            return '<button type="button" onclick="selectReunionDate(' + i + ')" style="' + _reunionChipStyle(active) + '">' + (i === 0 ? '周六 · ' : '周日 · ') + (d.getMonth() + 1) + '月' + d.getDate() + '日</button>';
+        }).join('');
+    }
+    if (mealBox) {
+        mealBox.innerHTML = [['lunch', '☀️ 午餐'], ['dinner', '🌙 晚餐']].map(function (m) {
+            const active = _reunionCtx.meal === m[0];
+            return '<button type="button" onclick="selectReunionMeal(\'' + m[0] + '\')" style="' + _reunionChipStyle(active) + '">' + m[1] + '</button>';
+        }).join('');
+    }
+}
+function selectReunionDate(idx) {
+    const weekend = _planScenarioDates('weekend');
+    if (!weekend[idx]) return;
+    _reunionCtx.date = weekend[idx];
+    _reunionCtx.dateKey = dateToKey(weekend[idx]);
+    _renderReunionOptions();
+}
+function selectReunionMeal(meal) {
+    if (!_reunionCtx) return;
+    _reunionCtx.meal = meal === 'dinner' ? 'dinner' : 'lunch';
+    _renderReunionOptions();
+}
+function startReunionGeneration() {
+    if (!_reunionCtx || !_reunionCtx.date) { showToast('请先选择日期'); return; }
+    _reunionCtx.servings = 6;
+    const scope = document.getElementById('planScopeOverlay');
+    if (scope) scope.remove();
+    generateWeeklyAiMealRecommendation(1, 'reunion');
+}
+// V382: 团圆餐人群标注 + 兜底菜池（AI 未返回或道数不足时补齐 6 道，保证丰盛感）
+var _REUNION_TAGS = [
+    { key: '👴 适合老人：软烂少刺', bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' },
+    { key: '❤️ 儿女最爱：下饭硬菜', bg: '#FEF2F2', color: '#B91C1C', border: '#FECACA' },
+    { key: '🥗 全家健康：清淡解腻', bg: '#F0FDF4', color: '#15803D', border: '#BBF7D0' }
+];
+var _REUNION_DISH_POOL = [
+    { name: '清蒸鲈鱼', reason: '👴 适合老人：软烂少刺 · 鱼肉细嫩少刺，清蒸少油，老人易咀嚼' },
+    { name: '土豆炖排骨', reason: '👴 适合老人：软烂少刺 · 排骨炖至软烂，土豆绵软好入口' },
+    { name: '红烧肉', reason: '❤️ 儿女最爱：下饭硬菜 · 肥而不腻、酱香浓郁，年轻人下饭首选' },
+    { name: '糖醋排骨', reason: '❤️ 儿女最爱：下饭硬菜 · 酸甜开胃，孩子和年轻人都爱' },
+    { name: '宫保鸡丁', reason: '❤️ 儿女最爱：下饭硬菜 · 香辣下饭，团圆桌热门菜' },
+    { name: '凉拌秋葵', reason: '🥗 全家健康：清淡解腻 · 秋葵清爽滑嫩，解油腻、补膳食纤维' },
+    { name: '菌菇豆腐汤', reason: '🥗 全家健康：清淡解腻 · 菌菇鲜香、少油少盐，全家都能喝' },
+    { name: '蒜蓉西兰花', reason: '🥗 全家健康：清淡解腻 · 清炒少油，补充深色蔬菜' },
+    { name: '杂粮饭', reason: '🥗 全家健康：清淡解腻 · 粗细搭配，控糖更健康' },
+    { name: '清炒时蔬', reason: '🥗 全家健康：清淡解腻 · 当季绿叶菜，清爽解腻' }
+];
+function _reunionTagHtml(reason) {
+    if (!reason) return '';
+    var s = String(reason);
+    for (var i = 0; i < _REUNION_TAGS.length; i++) {
+        if (s.indexOf(_REUNION_TAGS[i].key) >= 0) {
+            var t = _REUNION_TAGS[i];
+            return '<div style="margin-top:2px;margin-left:6px;"><span style="display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;background:' + t.bg + ';color:' + t.color + ';border:1px solid ' + t.border + ';">[' + t.key + ']</span></div>';
+        }
+    }
+    return '';
+}
+function _reunionBannerHtml() {
+    return '<div style="background:#FFFBEB;border:1px dashed #FDE68A;border-radius:10px;padding:9px 11px;margin-bottom:10px;font-size:12px;color:#92400E;line-height:1.7;">👨‍👩‍👧‍👦 <b>按 6 人份计算，已为您生成精准采购克数，避免浪费。</b><br>👴 适合老人 · ❤️ 儿女最爱 · 🥗 全家健康 三类菜已自动标注</div>';
+}
+function _padReunionMeal(meal, minCount) {
+    if (!meal) return;
+    var raw = Array.isArray(meal.dishes) ? meal.dishes : (meal.dishes ? [meal.dishes] : []);
+    var norm = raw.map(function (d) {
+        if (typeof d === 'string') return { name: d, ingredients: null, reason: '' };
+        if (d && d.name) return d;
+        return { name: String(d), ingredients: null, reason: '' };
+    });
+    var names = norm.map(function (d) { return d.name; });
+    var forbidden = (typeof _familyForbiddenWords === 'function') ? _familyForbiddenWords() : [];
+    var _canAdd = function (cand) {
+        if (names.indexOf(cand.name) >= 0) return false;
+        if (typeof _dishBlockedByFamily === 'function' && _dishBlockedByFamily(cand.name, '', forbidden)) return false;
+        return true;
+    };
+    var _add = function (cand) {
+        norm.push({ name: cand.name, ingredients: null, reason: cand.reason });
+        names.push(cand.name);
+    };
+    // 1) 先补齐缺失的人群类别（老人 / 儿女 / 全家健康）
+    var tagsPresent = {};
+    norm.forEach(function (d) {
+        _REUNION_TAGS.forEach(function (t) { if (String(d.reason || '').indexOf(t.key) >= 0) tagsPresent[t.key] = true; });
+    });
+    _REUNION_TAGS.forEach(function (t) {
+        if (tagsPresent[t.key]) return;
+        for (var i = 0; i < _REUNION_DISH_POOL.length; i++) {
+            var cand = _REUNION_DISH_POOL[i];
+            if (!_canAdd(cand) || String(cand.reason).indexOf(t.key) !== 0) continue;
+            _add(cand);
+            tagsPresent[t.key] = true;
+            break;
+        }
+    });
+    // 2) 再按道数补齐到 6 道
+    for (var j = 0; j < _REUNION_DISH_POOL.length && norm.length < minCount; j++) {
+        var c2 = _REUNION_DISH_POOL[j];
+        if (!_canAdd(c2)) continue;
+        _add(c2);
+    }
+    meal.dishes = norm;
 }
 function startPlanGeneration(days, scenario) {
     const scope = document.getElementById('planScopeOverlay');
