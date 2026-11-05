@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V375-20261104';
+        var APP_VER = 'V376-20261105';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -31782,7 +31782,8 @@ function fridgeCountingStock(name, items) {
     } catch (e) { return { count: 0, hasStock: false, onlyWeightOrUnknown: false }; }
 }
 
-function generateShoppingPlan() {
+function generateShoppingPlan(opts) {
+    opts = opts || {};
     if (!requireLogin('生成采购计划')) return;
     fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     const calendar = getDietCalendar();
@@ -31791,14 +31792,22 @@ function generateShoppingPlan() {
     const diningGroup = (typeof getDiaryDiningGroup === 'function') ? getDiaryDiningGroup() : null;
     const servings = diningGroup ? diningGroup.members.length : 1;
 
-    // 获取未来7天已确认/待确认的菜品计划
-    const today = new Date();
+    // V376: 支持指定日期（周末家宴卡只汇总周六/周日），默认未来7天
+    let scanKeys = null;
+    if (Array.isArray(opts.dateKeys) && opts.dateKeys.length > 0) {
+        scanKeys = opts.dateKeys.slice();
+    } else {
+        scanKeys = [];
+        const today = new Date();
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(today); d.setDate(d.getDate() + i);
+            scanKeys.push(dateToKey(d));
+        }
+    }
     const futureDishes = [];
-    for (let i = 0; i < 7; i++) {
-        const d = new Date(today); d.setDate(d.getDate() + i);
-        const key = dateToKey(d);
+    scanKeys.forEach(function (key) {
         const dayData = calendar[key];
-        if (!dayData) continue;
+        if (!dayData) return;
         ['breakfast', 'lunch', 'dinner'].forEach(meal => {
             const mealData = dayData[meal];
             if (!mealData || !mealData.plan || !mealData.plan.dishes || !mealData.plan.dishes.length) return;
@@ -31860,10 +31869,10 @@ function generateShoppingPlan() {
                 });
             });
         });
-    }
+    });
 
     if (futureDishes.length === 0) {
-        showToast('未来7天暂无菜品计划，请先在食记中生成或添加菜品');
+        showToast(opts.emptyMessage || '未来7天暂无菜品计划，请先在食记中生成或添加菜品');
         return;
     }
 
@@ -31934,7 +31943,7 @@ function generateShoppingPlan() {
     window.__lastShopPlanServings = servings;
     renderShoppingPlan(filteredMap, futureDishes.length, servings);
 
-    document.getElementById('fridgeResultTitle').textContent = '🛒 采购计划';
+    document.getElementById('fridgeResultTitle').textContent = opts.title || '🛒 采购计划';
     document.getElementById('fridgeResultOverlay').classList.add('show');
 }
 
@@ -56319,22 +56328,51 @@ function _stopWeeklyAiProgress(finalText) {
     else { tag.style.display = 'none'; tag.textContent = ''; }
 }
 
-async function generateWeeklyAiMealRecommendation(days) {
+// V376: 按场景计算目标日期
+// - workday：从当前日期起收集 5 个工作日（周一至周五），每天只排早/晚餐
+// - weekend：找到最近的周六，生成周六+周日两日三餐
+function _planScenarioDates(scenario) {
+    const base = new Date(currentDiaryDate);
+    base.setHours(0, 0, 0, 0);
+    if (scenario === 'workday') {
+        const out = [];
+        const d = new Date(base);
+        while (out.length < 5) {
+            const wd = d.getDay();
+            if (wd >= 1 && wd <= 5) out.push(new Date(d));
+            d.setDate(d.getDate() + 1);
+        }
+        return out;
+    }
+    if (scenario === 'weekend') {
+        const d = new Date(base);
+        while (d.getDay() !== 6) d.setDate(d.getDate() + 1);
+        return [new Date(d), new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)];
+    }
+    return [];
+}
+
+async function generateWeeklyAiMealRecommendation(days, scenario) {
+    scenario = scenario || 'cycle';
     days = days || 7;
     var _recData0 = collectRecommendationData();
     var _dc0 = getDishCountByMembers(_recData0.servings || 3);
 
     const today = new Date(currentDiaryDate);
-    const weekDates = [];
-    for (let i = 0; i < days; i++) {
-        const d = new Date(today);
-        d.setDate(d.getDate() + i);
-        weekDates.push(d);
+    let weekDates = _planScenarioDates(scenario);
+    if (!weekDates.length || (scenario !== 'workday' && scenario !== 'weekend')) {
+        weekDates = [];
+        for (let i = 0; i < days; i++) {
+            const d = new Date(today);
+            d.setDate(d.getDate() + i);
+            weekDates.push(d);
+        }
     }
+    days = weekDates.length;
 
     // ========== 缓存检查（5分钟内重复生成不重跑AI） ==========
     const _healthProfiles = collectMemberHealthProfiles(_recData0.members || []);
-    const cacheKey = 'weekly_' + days + '_' + dateToKey(today) + '_' + (_recData0.servings||'') + '_' + (_healthProfiles ? btoa(unescape(encodeURIComponent(_healthProfiles))).slice(0,16) : '');
+    const cacheKey = 'weekly_' + scenario + '_' + days + '_' + dateToKey(today) + '_' + (_recData0.servings||'') + '_' + (_healthProfiles ? btoa(unescape(encodeURIComponent(_healthProfiles))).slice(0,16) : '');
     const nowTs = Date.now();
     const existing = document.getElementById('weeklyAiRecommendOverlay');
     if (existing) existing.remove();
@@ -56347,7 +56385,7 @@ async function generateWeeklyAiMealRecommendation(days) {
         cachedPlan._source = 'ai';
         _recordAiRecipeAuditHistory(days, weekDates, cachedPlan, cacheKey);
         showToast('📆 使用已生成的' + days + '天食谱方案');
-        showWeeklyAiRecommendationModal(cachedPlan, weekDates, days);
+        showWeeklyAiRecommendationModal(cachedPlan, weekDates, days, scenario);
         return;
     }
 
@@ -56356,8 +56394,8 @@ async function generateWeeklyAiMealRecommendation(days) {
     quickPlan._source = 'quick';
     _weeklyAiPending = true;   // V322: AI 返回前标记为通用方案状态
     _weeklyAiFailed = false;
-    showToast('📆 ' + days + '天食谱方案已就绪');
-    showWeeklyAiRecommendationModal(quickPlan, weekDates, days);
+    showToast(scenario === 'workday' ? '📆 工作日早晚餐方案已就绪' : (scenario === 'weekend' ? '🎉 周末家宴方案已就绪' : '📆 ' + days + '天食谱方案已就绪'));
+    showWeeklyAiRecommendationModal(quickPlan, weekDates, days, scenario);
     _startWeeklyAiProgress();  // V322: 进度提示，不锁按钮
 
     // ========== Step 2：后台异步调AI（不阻塞UI） ==========
@@ -56368,18 +56406,26 @@ async function generateWeeklyAiMealRecommendation(days) {
     }).join('、');
 
     const recData = collectRecommendationData();
-    const userMessage = buildRecommendationPrompt(recData, weekDatesStr);
+    let userMessage = buildRecommendationPrompt(recData, weekDatesStr);
+    // V376: 场景约束
+    if (scenario === 'workday') {
+        userMessage += '\n【工作日晚餐场景】只生成周一至周五，每天只输出 breakfast 和 dinner，禁止输出 lunch（JSON 中可省略 lunch 字段）。工作日时间紧迫，请推荐 30 分钟内可完成的快手菜；晚餐低脂、低碳水、易消化。';
+    } else if (scenario === 'weekend') {
+        userMessage += '\n【周末家宴场景】只生成周六、周日两天，每天输出早/午/晚三餐。周末时间充裕，请推荐适合全家共享的硬菜/炖菜（如炖牛腩、红烧鱼、砂锅鸡、整鸡整鸭等），兼顾老人孩子，少油少盐。';
+    }
 
     // V117 精简（约 850 字 → ~111 字）：usr 已含九维/编号约束/JSON模板/ingredients每人份/膳食指南参考量/人群约束(👤🎯)，sys 只留 usr 未覆盖的独有硬约束
-    const systemPrompt = '你是家肴记饮食顾问。生成未来' + days + '天三餐方案，只返回 JSON，禁解释文字。\n'
+    let systemPrompt = '你是家肴记饮食顾问。生成未来' + days + '天三餐方案，只返回 JSON，禁解释文字。\n'
         + '每餐首道主食优先杂粮/全谷（糙米饭、杂粮饭、二米饭、玉米、红薯等），白米饭可少量搭配、不强制禁止；次道汤类或蔬菜，余为主/副菜；早餐流质（粥/牛奶/豆浆/果汁）只留1道且至少1道固体主食；红薯/紫薯不排晚餐；汤品固定第2道，不放最后。\n'
         + _bloodSysPrompt()
         + '菜名全局唯一(主食除外)；水果不足则三餐安排独立水果。';
+    if (scenario === 'workday') systemPrompt += '\n【场景】只排工作日（周一至周五）的早餐和晚餐，跳过午餐；快手菜优先。';
+    if (scenario === 'weekend') systemPrompt += '\n【场景】只排周六、周日三餐，硬菜/炖菜为主，适合全家共享。';
 
     // 后台跑AI，成功后自动替换弹窗内容；用户关闭弹窗则静默写入缓存
     (async () => {
         try {
-            const aiResponse = await callAliyunQwenApi(systemPrompt, userMessage, { mode: getCurrentRecommendMode(), jsonMode: true, mealScene: 'dinner' }); // V140: 返回结构被 JSON.parse 解析，显式开启；V373: 晚餐减负
+            const aiResponse = await callAliyunQwenApi(systemPrompt, userMessage, { mode: getCurrentRecommendMode(), jsonMode: true, mealScene: scenario === 'weekend' ? null : 'dinner' }); // V140: 返回结构被 JSON.parse 解析，显式开启；V373: 晚餐减负（周末家宴不套用减负规则）
             _weeklyAiPending = false;
             _weeklyAiFailed = false;
             _stopWeeklyAiProgress(null);
@@ -56419,13 +56465,18 @@ function _weeklyAiDisclaimerKind() {
     return sp ? 'special' : 'general';
 }
 
-function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
+function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount, scenario) {
+    scenario = scenario || 'cycle';
     dayCount = dayCount || 7;
     // 移除已有弹窗
     const existing = document.getElementById('weeklyAiRecommendOverlay');
     if (existing) existing.remove();
 
     let days = recommendation.days || [];
+    // V376: 工作日场景硬性移除午餐（快速方案与 AI 方案都只保留早/晚餐）
+    if (scenario === 'workday') {
+        days.forEach(function (d) { if (d && d.meals) delete d.meals.lunch; });
+    }
     let summary = recommendation.summary || recommendation.rawText || '';
 
     // 主食豁免和甜汤检测工具函数
@@ -56688,6 +56739,12 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
     const sourceTag = (recommendation._source === 'ai')
         ? `<div style="font-size:12px;color:#15803D;background:#DCFCE7;border:1px solid #86EFAC;border-radius:6px;padding:2px 6px;display:inline-block;">AI · 已融合九维数据</div>`
         : `<div class="ai-plan-status" style="font-size:12px;color:#6B7280;background:#F3F4F6;border:1px solid #E5E7EB;border-radius:6px;padding:2px 6px;display:inline-block;">食谱方案</div>`;
+    const planTitle = scenario === 'workday'
+        ? '💼 工作日早晚餐计划'
+        : (scenario === 'weekend' ? '🎉 周末两日家宴' : (dayCount === 7 ? '📆 一周食谱计划' : '📆 ' + dayCount + '天食谱计划'));
+    const planSubtitle = scenario === 'workday'
+        ? '周一至周五 · 只排早/晚餐 · 快手菜优先'
+        : (scenario === 'weekend' ? '周六 + 周日 · 三餐家宴 · 硬菜/炖菜' : '共' + dayCount + '天');
 
     const overlay = document.createElement('div');
     overlay.id = 'weeklyAiRecommendOverlay';
@@ -56698,8 +56755,8 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
             <div style="background:linear-gradient(135deg,#F97316,#FB923C);color:white;padding:16px 20px;flex-shrink:0;">
                 <div style="display:flex;align-items:center;justify-content:space-between;">
                     <div>
-                        <div style="font-size:16px;font-weight:700;" class="ai-plan-title">${dayCount === 7 ? '📆 一周食谱计划' : '📆 ' + dayCount + '天食谱计划'} ${sourceTag}</div>
-                        <div style="font-size:13px;opacity:0.9;margin-top:2px;">共${dayCount}天</div>
+                        <div style="font-size:16px;font-weight:700;" class="ai-plan-title">${planTitle} ${sourceTag}</div>
+                        <div style="font-size:13px;opacity:0.9;margin-top:2px;">${planSubtitle}</div>
                         <div id="weeklyAiProgress" style="font-size:12px;margin-top:4px;display:none;background:rgba(255,255,255,0.22);border-radius:8px;padding:2px 8px;"></div>
                     </div>
                     <button onclick="closeWeeklyAiRecommendationModal()" style="background:rgba(255,255,255,0.2);border:none;color:white;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer;">✕</button>
@@ -56726,6 +56783,7 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount) {
     overlay.dataset.recommendation = JSON.stringify(recommendation);
     overlay.dataset.weekDates = JSON.stringify(weekDates.map(d => dateToKey(d)));
     overlay.dataset.dayCount = dayCount;
+    overlay.dataset.scenario = scenario;
     overlay.dataset.isAi = (recommendation._source === 'ai') ? 'true' : 'false';
 
     document.body.appendChild(overlay);
@@ -56888,6 +56946,7 @@ function confirmWeeklyAiRecommendation() {
 
     const recommendation = JSON.parse(overlay.dataset.recommendation || '{}');
     const weekDateKeys = JSON.parse(overlay.dataset.weekDates || '[]');
+    const planScenario = overlay.dataset.scenario || 'cycle';
 
     const days = recommendation.days || [];
     const mealTypes = ['breakfast', 'lunch', 'dinner'];
@@ -57009,6 +57068,8 @@ function confirmWeeklyAiRecommendation() {
                     for (var fsi3 = 0; fsi3 < merged.length; fsi3++) { if (fsi3 !== fstIdx && fsi3 !== fspIdx) finalReordered.push(merged[fsi3]); }
                     // 同步重排 mergedMeta 的 key 顺序（不需要，因为 meta 是按 name 索引的）
                     let planData = { dishes: finalReordered, note: '' };
+                    if (planScenario === 'weekend') planData.weekendFeast = true;
+                    if (planScenario === 'workday') planData.workdayRush = true;
                     // V234: 专项干预随 AI 计划一起写入餐次节点
                     if (Array.isArray(meal.specialInterventions) && meal.specialInterventions.length) planData.specialInterventions = meal.specialInterventions;
                     if (Object.keys(mergedMeta).length > 0) planData.dishMeta = mergedMeta;
@@ -57028,14 +57089,17 @@ function confirmWeeklyAiRecommendation() {
 
     // V372: AI 3天/7天方案被采用即视为确认，自动落 confirmed 并预留库存
     if (Array.isArray(weekDateKeys) && weekDateKeys.length > 0) {
-        weekDateKeys.forEach(function(dk){ _confirmAdoptedMeals(dk, ['breakfast','lunch','dinner']); });
+        const confirmMeals = planScenario === 'workday' ? ['breakfast', 'dinner'] : ['breakfast', 'lunch', 'dinner'];
+        weekDateKeys.forEach(function(dk){ _confirmAdoptedMeals(dk, confirmMeals); });
     }
 
     // 刷新食记显示
     renderDiary();
 
     if (totalAdded > 0) {
-        showToast(`✅ 已填入${filledDays}天共${totalAdded}道菜品到食记` + (_adoptWhileAiPending ? '（AI 个性化方案仍在生成，完成后可重新生成替换）' : ''));
+        if (planScenario === 'weekend') showToast(`🎉 周末家宴已写入食记，共${totalAdded}道菜`);
+        else if (planScenario === 'workday') showToast(`💼 工作日早晚餐已写入食记，共${filledDays}天 ${totalAdded} 道菜`);
+        else showToast(`✅ 已填入${filledDays}天共${totalAdded}道菜品到食记` + (_adoptWhileAiPending ? '（AI 个性化方案仍在生成，完成后可重新生成替换）' : ''));
     } else {
         showToast('推荐菜品已存在，无需重复添加');
     }
@@ -58306,6 +58370,72 @@ function migrateGlobalMealRecords() {
     } catch (e) { console.error('migrateGlobalMealRecords error:', e); }
 }
 
+// ==================== V376: 周末家宴预览卡 ====================
+function _getWeekendFeastKeys() {
+    let cal = {};
+    try { cal = getDietCalendar(); } catch (e) { return []; }
+    const out = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (let i = 0; i <= 10 && out.length < 2; i++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() + i);
+        const key = dateToKey(d);
+        const day = cal[key];
+        if (!day) continue;
+        const hasFeast = ['breakfast', 'lunch', 'dinner'].some(function (m) {
+            const p = day[m] && day[m].plan;
+            return !!(p && p.weekendFeast && Array.isArray(p.dishes) && p.dishes.length);
+        });
+        if (hasFeast) out.push(key);
+    }
+    return out;
+}
+function _planDishNames(plan) {
+    return ((plan && plan.dishes) || []).map(function (d) {
+        return typeof d === 'string' ? d : ((d && d.name) || '');
+    }).filter(Boolean);
+}
+function generateWeekendFeastShoppingList() {
+    const keys = _getWeekendFeastKeys();
+    if (!keys.length) { showToast('未找到周末家宴计划，请先生成'); return; }
+    generateShoppingPlan({
+        dateKeys: keys,
+        title: '🛒 周末家宴采购清单',
+        emptyMessage: '周末家宴暂无可采购的菜品，请先确认菜单'
+    });
+}
+function _weekendFeastPreviewHtml() {
+    const keys = _getWeekendFeastKeys();
+    if (!keys.length) return '';
+    let cal = {};
+    try { cal = getDietCalendar(); } catch (e) { return ''; }
+    const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    const mealLabels = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
+    const dayBlocks = keys.map(function (key) {
+        const parts = key.split('-').map(Number);
+        const d = new Date(parts[0], parts[1] - 1, parts[2]);
+        const day = cal[key] || {};
+        const lines = ['breakfast', 'lunch', 'dinner'].map(function (m) {
+            const plan = day[m] && day[m].plan;
+            const names = _planDishNames(plan);
+            if (!names.length) return '';
+            return '<div style="font-size:12px;color:#4B5563;line-height:1.7;margin-top:3px;"><b style="color:#9A3412;">' + mealLabels[m] + '</b>：' + names.map(escapeHtml).join('、') + '</div>';
+        }).join('');
+        return '<div style="background:#fff;border:1px solid #FDE68A;border-radius:10px;padding:9px 10px;margin-top:8px;">'
+            + '<div style="font-size:12px;font-weight:800;color:#B45309;">🗓️ ' + (d.getMonth() + 1) + '月' + d.getDate() + '日 · ' + weekDays[d.getDay()] + '</div>'
+            + lines + '</div>';
+    }).join('');
+    return '<div style="margin:0 14px 12px;background:linear-gradient(135deg,#FFFBEB,#FFF7ED);border:1px solid #FDE68A;border-radius:14px;padding:13px;box-shadow:0 3px 10px rgba(234,88,12,0.08);">'
+        + '<div style="display:flex;align-items:center;gap:8px;">'
+        +   '<div style="font-size:15px;font-weight:800;color:#B45309;">🎉 周末家宴预览卡</div>'
+        +   '<span style="font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">周六 / 周日</span>'
+        + '</div>'
+        + dayBlocks
+        + '<button onclick="generateWeekendFeastShoppingList()" style="width:100%;margin-top:10px;padding:11px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#FB923C);color:#fff;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(249,115,22,0.22);">🛒 一键生成周末大采购清单</button>'
+        + '</div>';
+}
+
 function renderDiary() {
     const dateKey = dateToKey(currentDiaryDate);
     const calendar = getDietCalendar();
@@ -58702,7 +58832,7 @@ function renderDiary() {
         }
     })();
 
-    document.getElementById('diaryMeals').innerHTML = _renderParentTasksBar() + html;
+    document.getElementById('diaryMeals').innerHTML = _renderParentTasksBar() + _weekendFeastPreviewHtml() + html;
 }
 
 // 复制餐次信息到剪贴板
@@ -64410,7 +64540,7 @@ function openMealPlanPage() {
     overlay.id = 'mealPlanOverlay';
     overlay.className = 'meal-plan-overlay';
     overlay.innerHTML =
-        '<div class="mp-header"><button class="mp-back" onclick="closeMealPlanPage()">＜</button><h2>规划食谱</h2><span class="mp-date"><span class="mp-date-ymd">'+_mpFormatDateYMD(planDate)+'</span><span class="mp-date-week">'+_mpFormatDateWeek(planDate)+'</span></span><div style="flex:1"></div><button class="mp-ai-btn" onclick="document.getElementById(\'mealPlanOverlay\').remove(); generateWeeklyAiMealRecommendation(3);">3天AI食谱</button><button class="mp-ai-btn" style="margin-left:6px;" onclick="document.getElementById(\'mealPlanOverlay\').remove(); generateWeeklyAiMealRecommendation(7);">7天AI食谱</button></div>'+
+        '<div class="mp-header"><button class="mp-back" onclick="closeMealPlanPage()">＜</button><h2>规划食谱</h2><span class="mp-date"><span class="mp-date-ymd">'+_mpFormatDateYMD(planDate)+'</span><span class="mp-date-week">'+_mpFormatDateWeek(planDate)+'</span></span><div style="flex:1"></div><button class="mp-ai-btn" onclick="document.getElementById(\'mealPlanOverlay\').remove(); openPlanScopeSheet();">✨ 生成饮食计划</button></div>'+
         '<div class="mp-body" id="mpBody"></div>'+
         '<div class="mp-footer"><span class="mp-selected-count" id="mpSelectedCount">💡 已选 <b>0</b> 道菜</span><button class="mp-done-btn" id="mpDoneBtn" onclick="saveMealPlan()" disabled>完成</button></div>';
     var appFrame = document.getElementById('app');
@@ -65147,6 +65277,10 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
     });
     const days = aiRecommendation.days || [];
     if (!days || days.length === 0) return;
+    // V376: 工作日场景移除午餐，避免 AI 多返回的午餐写入食记
+    if ((overlay.dataset.scenario || 'cycle') === 'workday') {
+        days.forEach(function (d) { if (d && d.meals) delete d.meals.lunch; });
+    }
     const dayCount = overlay.dataset.dayCount || 7;
     // 调试：打印 AI 返回的原始数据结构
     console.log('[调试] AI返回数据:', JSON.stringify(aiRecommendation).substring(0, 2000));
@@ -65456,9 +65590,12 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
     }
     overlay.dataset.recommendation = JSON.stringify(aiRecommendation);
     overlay.dataset.isAi = 'true';
-    // 更新标题
+    // 更新标题（V376: 场景方案保留场景名，不被「AI N天」覆盖）
     const headerTitle = overlay.querySelector('.ai-plan-title');
-    if (headerTitle) headerTitle.innerHTML = `✨ AI${dayCount}天智能推荐 <span style="font-size:12px;font-weight:400;opacity:0.9;">已融合九维数据</span>`;
+    const _titleScenario = overlay.dataset.scenario || 'cycle';
+    const _titleText = _titleScenario === 'workday' ? '💼 工作日早晚餐计划'
+        : (_titleScenario === 'weekend' ? '🎉 周末两日家宴' : '✨ AI' + dayCount + '天智能推荐');
+    if (headerTitle) headerTitle.innerHTML = _titleText + ' <span style="font-size:12px;font-weight:400;opacity:0.9;">已融合九维数据</span>';
     const aiStatusEl = overlay.querySelector('.ai-plan-status');
     if (aiStatusEl) aiStatusEl.style.display = 'none';
     _setWeeklyAdoptBtn('ready');  // V322: AI 已返回，恢复采用按钮
@@ -66170,13 +66307,9 @@ function proceedToPlanTomorrow() {
         </div>
         <div style="font-size:14px;color:#6B7280;margin-bottom:16px;">${autoSwitched ? '💡 已自动切换到明天' : '当前'}：${dateStr} ${weekDays[planDate.getDay()]}，请选择规划方式：</div>
 
-        <button onclick="document.getElementById('planTomorrowOverlay').remove(); generateWeeklyAiMealRecommendation(7);" style="width:100%;padding:14px;margin-bottom:6px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;font-size:14px;font-weight:600;color:#2563EB;cursor:pointer;text-align:left;">
-            <span style="font-size:18px;">🤖</span> AI推荐7天食谱<br>
-            <span style="font-size:13px;color:#6B7280;font-weight:400;">根据家中食材、节气、家庭成员偏好智能生成7天三餐推荐</span>
-        </button>
-        <button onclick="document.getElementById('planTomorrowOverlay').remove(); generateWeeklyAiMealRecommendation(3);" style="width:100%;padding:10px;margin-bottom:10px;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:10px;font-size:14px;font-weight:500;color:#0284C7;cursor:pointer;text-align:left;">
-            <span style="font-size:16px;">🤖</span> AI推荐3天食谱<br>
-            <span style="font-size:12px;color:#6B7280;font-weight:400;">快速生成3天三餐推荐</span>
+        <button onclick="openPlanScopeSheet()" style="width:100%;padding:16px;margin-bottom:12px;background:linear-gradient(135deg,#F97316,#FB923C);border:none;border-radius:14px;font-size:16px;font-weight:800;color:#fff;cursor:pointer;text-align:left;box-shadow:0 6px 16px rgba(249,115,22,0.28);">
+            <span style="font-size:20px;">✨</span> 生成饮食计划<br>
+            <span style="font-size:13px;color:#FFF7ED;font-weight:500;opacity:0.95;">可选周期（3天/7天）或场景（工作日早晚餐 / 周末两日家宴）</span>
         </button>
 
         <button onclick="document.getElementById('planTomorrowOverlay').remove(); openAddFromKnowledgeModal();" style="width:100%;padding:14px;margin-bottom:10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;font-size:14px;font-weight:600;color:#166534;cursor:pointer;text-align:left;">
@@ -66201,6 +66334,47 @@ function proceedToPlanTomorrow() {
     `;
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+}
+
+// V376: 「✨ 生成饮食计划」→ 半屏选择面板（周期 / 场景）
+function openPlanScopeSheet() {
+    const old = document.getElementById('planScopeOverlay');
+    if (old) old.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'planScopeOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(31,41,55,0.5);display:flex;align-items:flex-end;justify-content:center;';
+    overlay.addEventListener('click', function (e) { if (e.target === this) overlay.remove(); });
+    const card = function (icon, title, desc, onclick, primary) {
+        return '<button onclick="' + onclick + '" style="width:100%;display:flex;align-items:center;gap:10px;padding:13px 14px;margin-bottom:8px;border-radius:12px;cursor:pointer;text-align:left;border:1px solid ' + (primary ? '#FDBA74' : '#E5E7EB') + ';background:' + (primary ? '#FFF7ED' : '#fff') + ';">'
+            + '<span style="font-size:22px;">' + icon + '</span>'
+            + '<span style="flex:1;min-width:0;"><span style="display:block;font-size:14px;font-weight:800;color:' + (primary ? '#C2410C' : '#374151') + ';">' + title + '</span>'
+            + '<span style="display:block;font-size:11px;color:#9CA3AF;margin-top:2px;">' + desc + '</span></span>'
+            + '<span style="font-size:14px;color:#9CA3AF;">›</span></button>';
+    };
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#fff;border-radius:20px 20px 0 0;padding:18px;width:420px;max-width:calc(100% - 10px);box-shadow:0 -4px 20px rgba(0,0,0,0.15);';
+    modal.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div style="font-size:17px;font-weight:800;color:#374151;">✨ 生成饮食计划</div>
+            <button onclick="document.getElementById('planScopeOverlay').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9CA3AF;">✕</button>
+        </div>
+        <div style="font-size:12px;color:#9CA3AF;margin-bottom:14px;">选择生成周期或使用场景，采用后会直接填入食记</div>
+        <div style="font-size:13px;font-weight:800;color:#C2410C;margin:2px 0 8px;">📆 按周期生成</div>
+        ${card('📅', '3天计划', '连续 3 天 · 早/午/晚三餐', "startPlanGeneration(3, 'cycle')", false)}
+        ${card('🗓️', '7天计划', '连续 7 天 · 早/午/晚三餐', "startPlanGeneration(7, 'cycle')", false)}
+        <div style="font-size:13px;font-weight:800;color:#C2410C;margin:14px 0 8px;">🍽️ 按场景生成</div>
+        ${card('💼', '工作日早晚餐', '周一至周五 · 只排早/晚餐 · 快手菜', "startPlanGeneration(5, 'workday')", true)}
+        ${card('🎉', '周末两日家宴', '周六 + 周日三餐 · 全家共享硬菜/炖菜', "startPlanGeneration(2, 'weekend')", true)}
+    `;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+}
+function startPlanGeneration(days, scenario) {
+    const scope = document.getElementById('planScopeOverlay');
+    if (scope) scope.remove();
+    const entry = document.getElementById('planTomorrowOverlay');
+    if (entry) entry.remove();
+    generateWeeklyAiMealRecommendation(days, scenario);
 }
 // 关闭复盘弹窗并返回"三餐计划、记录"页（< 与 ✕ 按钮统一入口）
 // 若当前已在食记页则只关弹窗，避免重渲染丢失滚动位置
