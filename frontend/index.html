@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V378-20261105';
+        var APP_VER = 'V379-20261105';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -8820,7 +8820,7 @@ function renderCardActions(item, containerId, detailContainerId) {
 function buildKnowledgeCardHtml(item) {
     const badgeClass = getTypeBadgeClass(item.type);
     const typeLabel = getTypeLabel(item.type);
-    const summary = (item.content || '').substring(0, 80) + ((item.content || '').length > 80 ? '...' : '');
+    const summary = fangSummaryText(item.content, 80) || ((item.content || '').substring(0, 80) + ((item.content || '').length > 80 ? '...' : ''));
     const tagsHtml = (item.tags || []).slice(0, 3).map(t => `<span class="knowledge-card-tag">${escapeHtml(t)}</span>`).join('');
     const sceneTagsHtml = (item.sceneTags || []).map(t => `<span class="knowledge-card-tag" style="background:#FFF7ED;color:#F97316;border-color:#FED7AA;">🏷️ ${escapeHtml(t)}</span>`).join('');
     const timeStr = item.createdAt ? formatDateShort(new Date(item.createdAt)) : '';
@@ -34615,6 +34615,78 @@ function _fhUpdate(id, patch) {
 }
 // V366: 旧分类「烹饪技巧」统一归到「厨房技巧」，避免筛选时文章丢失
 function _fhNormCategory(c) { return c === '烹饪技巧' ? '厨房技巧' : (c || '节气食养'); }
+// ==================== V379: 食方结构化录入与卡片展示 ====================
+// content 约定：JSON 字符串 { source, constitutions:[], ingredients, method, contraindications }
+var FANG_CONSTITUTIONS = ['气虚', '阳虚', '阴虚', '痰湿', '湿热', '血瘀', '气郁', '特禀', '平和'];
+function parseFangContent(raw) {
+    var c = (raw && typeof raw === 'object') ? String(raw.content || '') : String(raw || '');
+    var s = c.trim();
+    if (!s || s.charAt(0) !== '{') return null;
+    try {
+        var o = JSON.parse(s);
+        if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+        if (!o.source && !o.ingredients && !o.method) return null;
+        var cons = o.constitutions;
+        if (Array.isArray(cons)) cons = cons.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+        else cons = String(cons || '').split(/[、,，]/).map(function (x) { return x.trim(); }).filter(Boolean);
+        return {
+            source: String(o.source || '').trim(),
+            constitutions: cons,
+            ingredients: String(o.ingredients || '').trim(),
+            method: String(o.method || '').trim(),
+            contraindications: String(o.contraindications || '').trim()
+        };
+    } catch (e) { return null; }
+}
+// 结构化食方 → 纯文本（列表摘要 / AI 参考 / 搜索命中统一使用，避免露出 JSON）
+function fangPlainText(raw) {
+    var o = parseFangContent(raw);
+    if (!o) return '';
+    var parts = [];
+    if (o.source) parts.push('出处：' + o.source);
+    if (o.constitutions.length) parts.push('适宜体质：' + o.constitutions.join('、'));
+    if (o.ingredients) parts.push('核心食材：' + o.ingredients);
+    if (o.method) parts.push('制作方法：' + o.method);
+    if (o.contraindications) parts.push('禁忌人群：' + o.contraindications);
+    return parts.join('；');
+}
+function fangSummaryText(raw, max) {
+    var t = fangPlainText(raw);
+    if (!t) return '';
+    max = max || 80;
+    return t.length > max ? t.substring(0, max) + '…' : t;
+}
+// 结构化食方 → 体质 / 食材 / 做法 / 禁忌 四张卡片（详情页）
+function renderFangCardsHtml(raw) {
+    var o = parseFangContent(raw);
+    if (!o) return '';
+    var esc = function (s) { return escapeHtml(String(s || '')); };
+    var chips = o.constitutions.length
+        ? o.constitutions.map(function (c) {
+            return '<span style="display:inline-block;padding:3px 10px;margin:3px 6px 3px 0;background:#FFF7ED;border:1px solid #FED7AA;border-radius:14px;font-size:13px;font-weight:600;color:#C2410C;">' + esc(c) + '</span>';
+        }).join('')
+        : '<span style="font-size:13px;color:#9CA3AF;">未标注</span>';
+    var steps = String(o.method || '').split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
+    var methodHtml = steps.length > 1
+        ? steps.map(function (s, i) {
+            return '<div style="display:flex;gap:8px;margin-bottom:8px;line-height:1.8;"><span style="flex-shrink:0;width:20px;height:20px;border-radius:50%;background:#F97316;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:2px;">' + (i + 1) + '</span><span style="flex:1;font-size:14px;color:#374151;">' + esc(s) + '</span></div>';
+        }).join('')
+        : '<div style="font-size:14px;color:#374151;line-height:1.9;">' + esc(o.method) + '</div>';
+    var cardStyle = 'background:#fff;border:1px solid #F3F4F6;border-radius:12px;padding:12px 14px;margin-bottom:10px;box-shadow:0 1px 2px rgba(0,0,0,0.03);';
+    var h3Style = 'margin:0 0 8px;font-size:14px;font-weight:700;color:#92400E;display:flex;align-items:center;gap:6px;';
+    var html = '';
+    if (o.source) {
+        html += '<div style="font-size:13px;color:#92400E;background:#FFFBEB;border:1px dashed #FDE68A;border-radius:10px;padding:8px 12px;margin-bottom:10px;line-height:1.7;">📜 出处：' + esc(o.source) + '</div>';
+    }
+    html += '<div style="' + cardStyle + '"><div style="' + h3Style + '">🧬 适宜体质</div><div style="line-height:1.9;">' + chips + '</div></div>';
+    html += '<div style="' + cardStyle + '"><div style="' + h3Style + '">🥬 核心食材</div><div style="font-size:14px;color:#374151;line-height:1.9;">' + esc(o.ingredients || '未标注') + '</div></div>';
+    html += '<div style="' + cardStyle + '"><div style="' + h3Style + '">🍳 制作方法</div>' + methodHtml + '</div>';
+    if (o.contraindications) {
+        html += '<div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:12px 14px;margin-bottom:10px;"><div style="' + h3Style + 'color:#B91C1C;">🚫 禁忌人群</div><div style="font-size:14px;color:#7F1D1D;line-height:1.9;">' + esc(o.contraindications) + '</div></div>';
+    }
+    return html;
+}
+
 function migrateFoodHallCategories() {
     try {
         var list = _fhRead();
@@ -43746,6 +43818,9 @@ function getKnowledgeImageHtml(item, size) {
 // 渲染含内嵌图片的内容（将[图片N]替换为实际图片）
 function renderKnowledgeContentWithImages(content, item) {
     if (!content) return '暂无详细内容';
+    // V379: 结构化食方 → 体质 / 食材 / 做法 / 禁忌 四张卡片
+    var _fangCards = renderFangCardsHtml(content);
+    if (_fangCards) return _fangCards;
     const images = item.images || (item.image ? [item.image] : []);
     let html = escapeHtml(content);
     // 替换 [图片N] 标记为实际图片（可点击放大）
@@ -45485,7 +45560,7 @@ function handleSubCategoryClick(catId, sub) {
     let html = '';
     if (matched.length > 0) {
         matched.forEach(item => {
-            const summary = (item.content || '').substring(0, 60) + ((item.content || '').length > 60 ? '...' : '');
+            const summary = fangSummaryText(item.content, 60) || ((item.content || '').substring(0, 60) + ((item.content || '').length > 60 ? '...' : ''));
             html += `<div class="cat-search-item" onclick="showKnowledgeDetail(${item.id})">
                 <div class="cat-search-item-title">${escapeHtml(item.title)}</div>
                 <div class="cat-search-item-summary">${escapeHtml(summary)}</div>
@@ -45665,7 +45740,7 @@ function handleCatTagClick(catId, sub, leaf) {
 
     if (matched.length > 0) {
         matched.forEach(item => {
-            const summary = (item.content || '').substring(0, 60) + ((item.content || '').length > 60 ? '...' : '');
+            const summary = fangSummaryText(item.content, 60) || ((item.content || '').substring(0, 60) + ((item.content || '').length > 60 ? '...' : ''));
             html += `<div class="cat-search-item" onclick="showKnowledgeDetail(${item.id})">
                 <div class="cat-search-item-title">${escapeHtml(item.title)}</div>
                 <div class="cat-search-item-summary">${escapeHtml(summary)}</div>
@@ -50415,7 +50490,7 @@ function appendPoolDisclaimer() {
 }
 
 function buildPoolCardHtml(p) {
-    var summary = (p.content || '').substring(0, 80) + ((p.content || '').length > 80 ? '...' : '');
+    var summary = fangSummaryText(p.content, 80) || ((p.content || '').substring(0, 80) + ((p.content || '').length > 80 ? '...' : ''));
     var tagsHtml = (p.tags || []).slice(0, 3).map(function(t) { return '<span class="knowledge-card-tag">' + escapeHtml(t) + '</span>'; }).join('');
     var thumbHtml = p.images && p.images.length
         ? '<div class="knowledge-card-thumb" style="width:48px;height:48px;border-radius:8px;flex-shrink:0;overflow:hidden;"><img src="' + p.images[0] + '" style="width:100%;height:100%;object-fit:cover;"/></div>'
@@ -53544,6 +53619,7 @@ function onMainCategoryChange() {
     const subSel = document.getElementById('newKnowledgeSubCategory');
     const subCat3Wrap = document.getElementById('subCategory3Wrap');
     const diningOutFields = document.getElementById('knowledgeDiningOutFields');
+    _toggleFangStructuredFields(false); // V379: 主分类切换后先隐藏食方结构化字段，待子分类选择后再判断
     if (!mainCat) {
         subSel.innerHTML = '<option value="">请选择子分类</option>';
         const leafSel = document.getElementById('newKnowledgeLeafCategory');
@@ -53606,6 +53682,52 @@ function onSubCategoryChange() {
     autoRecommendTags(mainCat, subCat);
     // 更新常用标签按钮
     renderCommonTagButtons(mainCat, subCat);
+    // V379: 选中「食方」时切换为结构化录入（出处/体质/食材/做法/禁忌 → content JSON）
+    _toggleFangStructuredFields(subCat === '食方');
+}
+
+// V379: 显示/隐藏食方结构化字段；普通分类恢复原「内容」输入框
+function _toggleFangStructuredFields(on) {
+    var wrap = document.getElementById('fangStructuredFields');
+    var label = document.getElementById('newKnowledgeContentLabel');
+    var contentEl = document.getElementById('newKnowledgeContent');
+    var aiBtn = document.getElementById('aiGenerateBtn');
+    if (wrap) wrap.style.display = on ? 'block' : 'none';
+    if (label) label.style.display = on ? 'none' : '';
+    if (contentEl) contentEl.style.display = on ? 'none' : '';
+    if (aiBtn) aiBtn.style.display = on ? 'none' : (isSuperAdmin() ? 'inline-block' : 'none');
+}
+function toggleFangConstitution(btn) {
+    if (!btn) return;
+    var on = !btn.classList.contains('selected');
+    btn.classList.toggle('selected', on);
+    btn.style.background = on ? '#F97316' : '#fff';
+    btn.style.color = on ? '#fff' : '#6B7280';
+    btn.style.borderColor = on ? '#F97316' : '#E5E7EB';
+    btn.style.fontWeight = on ? '700' : '400';
+}
+// V379: 收集食方表单（五项必填），失败返回 null 并提示
+function collectFangStructuredForm() {
+    var val = function (id) { var el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
+    var source = val('newFangSource');
+    if (!source) { showToast('食方必填：请填写【出处】'); return null; }
+    var cons = Array.prototype.slice.call(document.querySelectorAll('#newFangConstitutions .fang-cons-chip.selected')).map(function (b) { return b.getAttribute('data-c'); });
+    if (!cons.length) { showToast('食方必填：请至少选择一项【适宜体质】'); return null; }
+    var ingredients = val('newFangIngredients');
+    if (!ingredients) { showToast('食方必填：请填写【核心食材】'); return null; }
+    var method = val('newFangMethod');
+    if (!method) { showToast('食方必填：请填写【制作方法】'); return null; }
+    var contraindications = val('newFangContraindications');
+    if (!contraindications) { showToast('食方必填：请填写【禁忌人群】'); return null; }
+    return { source: source, constitutions: cons, ingredients: ingredients, method: method, contraindications: contraindications };
+}
+function resetFangStructuredForm() {
+    ['newFangSource', 'newFangIngredients', 'newFangMethod', 'newFangContraindications'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    Array.prototype.slice.call(document.querySelectorAll('#newFangConstitutions .fang-cons-chip.selected')).forEach(function (b) { toggleFangConstitution(b); });
+    _toggleFangStructuredFields(false);
 }
 
 function onLeafCategoryChange() {
@@ -54092,6 +54214,8 @@ function closeAddKnowledgeModal() {
     // 清空常用标签按钮
     const commonTagsEl = document.getElementById('commonTagsContainer');
     if (commonTagsEl) commonTagsEl.innerHTML = '';
+    // V379: 清空食方结构化字段与体质选中态
+    resetFangStructuredForm();
 }
 
 // ============ 推荐搭配（食材知识，1-8 道可增删） ============
@@ -54211,7 +54335,29 @@ async function aiGenerateKnowledgeContent() {
 
 function saveNewKnowledge() {
     const title = document.getElementById('newKnowledgeTitle').value.trim();
-    const content = document.getElementById('newKnowledgeContent').value.trim();
+    const mainCat = document.getElementById('newKnowledgeMainCategory').value;
+    const subCat = document.getElementById('newKnowledgeSubCategory').value || null;
+    const leafCat = document.getElementById('newKnowledgeLeafCategory') ? document.getElementById('newKnowledgeLeafCategory').value : '';
+    const subCat3 = document.getElementById('newKnowledgeSubCategory3') ? document.getElementById('newKnowledgeSubCategory3').value : '';
+    // V379: 食方结构化录入（出处/体质/食材/做法/禁忌 五项必填）→ 序列化写入 content
+    const isFang = subCat === '食方';
+    let content = document.getElementById('newKnowledgeContent').value.trim();
+    if (isFang) {
+        const fangObj = collectFangStructuredForm();
+        if (!fangObj) return;
+        // 医疗词审核逐字段执行，避免直接审核 JSON 字符串导致结构被破坏
+        var _audSrc = auditShiyangText(fangObj.source);
+        var _audIng = auditShiyangText(fangObj.ingredients);
+        var _audM = auditShiyangText(fangObj.method);
+        var _audCon = auditShiyangText(fangObj.contraindications);
+        var _fangRejected = [_audSrc, _audIng, _audM, _audCon].some(function (x) { return x.status === 'rejected'; });
+        if (_fangRejected) {
+            showToast('食方含医疗治疗表述，请改用滋养 / 润燥 / 健脾等食养词汇');
+            return;
+        }
+        // 禁忌人群等原文保留（如「感冒期间忌用」），只做拦截不做改写，避免语义被替换词弄错
+        content = JSON.stringify(fangObj);
+    }
 
     if (!title) {
         showToast('请输入标题');
@@ -54222,10 +54368,6 @@ function saveNewKnowledge() {
         return;
     }
 
-    const mainCat = document.getElementById('newKnowledgeMainCategory').value;
-    const subCat = document.getElementById('newKnowledgeSubCategory').value || null;
-    const leafCat = document.getElementById('newKnowledgeLeafCategory') ? document.getElementById('newKnowledgeLeafCategory').value : '';
-    const subCat3 = document.getElementById('newKnowledgeSubCategory3') ? document.getElementById('newKnowledgeSubCategory3').value : '';
     const images = window._knowledgeImages || (window._knowledgeImage ? [window._knowledgeImage] : []);
     const isDiningOut = mainCat === 'dining-out';
     // 同分类+同名去重检查（避免"银耳"这类食材被重复追加多条；V32 改应用内弹窗，原生 confirm 部分内嵌浏览器会吞掉）
@@ -54249,9 +54391,14 @@ function saveNewKnowledge() {
     if (mainCat === 'shiyang') {
         var _audT = auditShiyangText(title);
         if (_audT.status === 'rejected') { showToast('标题含医疗治疗表述，食养内容不允许（如"治疗/根治"等）'); return; }
-        var _audC = auditShiyangText(content);
-        if (_audC.status === 'rejected') { showToast('内容含医疗治疗表述，食养内容不允许（如"治疗/根治"等）'); return; }
-        _shiyangAudit = { status: (_audT.status === 'transformed' || _audC.status === 'transformed') ? 'transformed' : 'ok', title: _audT.text, content: _audC.text };
+        if (isFang) {
+            // 食方字段已在上面逐项审核，这里保留 JSON 原样
+            _shiyangAudit = { status: 'ok', title: _audT.text, content: content };
+        } else {
+            var _audC = auditShiyangText(content);
+            if (_audC.status === 'rejected') { showToast('内容含医疗治疗表述，食养内容不允许（如"治疗/根治"等）'); return; }
+            _shiyangAudit = { status: (_audT.status === 'transformed' || _audC.status === 'transformed') ? 'transformed' : 'ok', title: _audT.text, content: _audC.text };
+        }
     }
     // 两层模型：层级由身份与入口决定 —— 账号型超管录入 → 公共库；密码超管在「管理」Tab 录入 → 公共库；其余 → 家庭库
     var _ctx = getCurrentUserContext();
@@ -54391,7 +54538,7 @@ function addToPlanFromKnowledge(id) {
         <div style="flex:1;overflow-y:auto;padding:14px 16px;">
             <div style="margin-bottom:12px;padding:10px;background:#F9FAFB;border-radius:8px;">
                 <div style="font-size:14px;font-weight:600;color:#374151;">📚 ${escapeHtml(item.title)}</div>
-                <div style="font-size:13px;color:#6B7280;margin-top:4px;">${escapeHtml((item.content || '').substring(0, 60))}${(item.content || '').length > 60 ? '...' : ''}</div>
+                <div style="font-size:13px;color:#6B7280;margin-top:4px;">${escapeHtml(fangSummaryText(item.content, 60) || (item.content || '').substring(0, 60))}${(fangPlainText(item.content) || item.content || '').length > 60 ? '...' : ''}</div>
                 ${isDiningOut ? `<div style="font-size:12px;color:#D97706;margin-top:6px;padding:4px 8px;background:#FEF3C7;border-radius:6px;">🍽️ 来源：在外就餐 · 将加入「外出就餐规划」</div>` : ''}
             </div>
             <div style="display:flex;gap:8px;margin-bottom:12px;">
@@ -55311,7 +55458,7 @@ async function generateAiMealRecommendation() {
             let parts = [k.title];
             if (k.ingredient) parts.push(`食材:${k.ingredient}`);
             if (k.efficacy) parts.push(`功效:${k.efficacy}`);
-            if (k.content) parts.push(`内容:${k.content.substring(0, 80)}`);
+            if (k.content) parts.push(`内容:${(fangPlainText(k.content) || k.content).substring(0, 80)}`);
             return parts.join(' | ');
         }).join('\n');
 
@@ -62426,7 +62573,7 @@ async function aiRecommendFromKnowledge() {
             }
             return summary;
         } else {
-            var contentBrief = (k.content || '').substring(0, 50);
+            var contentBrief = (fangPlainText(k.content) || (k.content || '')).substring(0, 50);
             return (i+1) + '. [烹饪] ' + k.title + '（' + (k.subCategory || '未分类') + '）' + (contentBrief ? ' - ' + contentBrief : '');
         }
     }).join('\n');
@@ -74032,7 +74179,7 @@ function _fangEntries() {
             if (!it) return;
             if (_fhNormCategory(it.subCategory || it.category || '') !== '食方') return;
             if (typeof can === 'function' && !can('view', it)) return;
-            var text = String(it.content || '').replace(/\[图片[^\]]*\]/g, '').replace(/<[^>]+>/g, '').trim();
+            var text = fangPlainText(it.content) || String(it.content || '').replace(/\[图片[^\]]*\]/g, '').replace(/<[^>]+>/g, '').trim();
             if (!text) return;
             list.push({ title: String(it.title || '食方'), content: text, tags: String(it.tags || '') });
         });
@@ -74041,7 +74188,7 @@ function _fangEntries() {
         var pub = (typeof getFoodHallArticles === 'function') ? getFoodHallArticles() : [];
         (Array.isArray(pub) ? pub : []).forEach(function (a) {
             if (!a || _fhNormCategory(a.category) !== '食方') return;
-            var text = String(a.content || a.summary || '').replace(/\[图片[^\]]*\]/g, '').replace(/<[^>]+>/g, '').trim();
+            var text = fangPlainText(a.content) || String(a.content || a.summary || '').replace(/\[图片[^\]]*\]/g, '').replace(/<[^>]+>/g, '').trim();
             if (!text) return;
             var title = String(a.title || '食方');
             if (list.some(function (x) { return x.title === title; })) return;
@@ -76664,8 +76811,42 @@ setTimeout(function () { try { _maybeGenerateDailyLesson(); } catch (e) {} }, 80
                     <label style="white-space:nowrap;">标题 *</label>
                     <input type="text" id="newKnowledgeTitle" placeholder="例如：小暑饮食指南" style="flex:1;" />
                 </div>
-                <label>内容 * <span style="font-size:13px;color:#9CA3AF;font-weight:normal;">（可从网文、笔记中复制粘贴内容）</span><button type="button" id="aiGenerateBtn" onclick="aiGenerateKnowledgeContent()" style="display:none;margin-left:8px;padding:3px 12px;background:linear-gradient(135deg,#8B5CF6,#6366F1);color:white;border:none;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;vertical-align:middle;">✨ AI 生成</button></label>
+                <label id="newKnowledgeContentLabel">内容 * <span style="font-size:13px;color:#9CA3AF;font-weight:normal;">（可从网文、笔记中复制粘贴内容）</span><button type="button" id="aiGenerateBtn" onclick="aiGenerateKnowledgeContent()" style="display:none;margin-left:8px;padding:3px 12px;background:linear-gradient(135deg,#8B5CF6,#6366F1);color:white;border:none;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;vertical-align:middle;">✨ AI 生成</button></label>
                 <textarea id="newKnowledgeContent" placeholder="详细描述这条饮食知识..." onblur="autoScanContentTags()"></textarea>
+                <!-- V379: 食方结构化录入（分类=食方时显示，五项必填，保存为 content JSON） -->
+                <div id="fangStructuredFields" style="display:none;margin:8px 0 4px;padding:12px;background:#FFFBF5;border:1px solid #FDE68A;border-radius:12px;">
+                    <div style="font-size:13px;font-weight:700;color:#B45309;margin-bottom:8px;">📜 食方结构化录入（以下五项均为必填）</div>
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+                        <label style="white-space:nowrap;font-size:13px;color:#374151;margin:0;width:66px;">出处 *</label>
+                        <input type="text" id="newFangSource" placeholder="如：《中国食疗大全》" style="flex:1;padding:6px 8px;font-size:13px;border:1px solid #E5E7EB;border-radius:10px;" />
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block;font-size:13px;color:#374151;margin:0 0 6px;">适宜体质 * <span style="font-size:12px;color:#9CA3AF;font-weight:normal;">（多选）</span></label>
+                        <div id="newFangConstitutions" style="display:flex;flex-wrap:wrap;gap:6px;">
+                            <button type="button" class="fang-cons-chip" data-c="气虚" onclick="toggleFangConstitution(this)" style="padding:4px 10px;border:1px solid #E5E7EB;border-radius:14px;font-size:13px;background:#fff;color:#6B7280;cursor:pointer;">气虚</button>
+                            <button type="button" class="fang-cons-chip" data-c="阳虚" onclick="toggleFangConstitution(this)" style="padding:4px 10px;border:1px solid #E5E7EB;border-radius:14px;font-size:13px;background:#fff;color:#6B7280;cursor:pointer;">阳虚</button>
+                            <button type="button" class="fang-cons-chip" data-c="阴虚" onclick="toggleFangConstitution(this)" style="padding:4px 10px;border:1px solid #E5E7EB;border-radius:14px;font-size:13px;background:#fff;color:#6B7280;cursor:pointer;">阴虚</button>
+                            <button type="button" class="fang-cons-chip" data-c="痰湿" onclick="toggleFangConstitution(this)" style="padding:4px 10px;border:1px solid #E5E7EB;border-radius:14px;font-size:13px;background:#fff;color:#6B7280;cursor:pointer;">痰湿</button>
+                            <button type="button" class="fang-cons-chip" data-c="湿热" onclick="toggleFangConstitution(this)" style="padding:4px 10px;border:1px solid #E5E7EB;border-radius:14px;font-size:13px;background:#fff;color:#6B7280;cursor:pointer;">湿热</button>
+                            <button type="button" class="fang-cons-chip" data-c="血瘀" onclick="toggleFangConstitution(this)" style="padding:4px 10px;border:1px solid #E5E7EB;border-radius:14px;font-size:13px;background:#fff;color:#6B7280;cursor:pointer;">血瘀</button>
+                            <button type="button" class="fang-cons-chip" data-c="气郁" onclick="toggleFangConstitution(this)" style="padding:4px 10px;border:1px solid #E5E7EB;border-radius:14px;font-size:13px;background:#fff;color:#6B7280;cursor:pointer;">气郁</button>
+                            <button type="button" class="fang-cons-chip" data-c="特禀" onclick="toggleFangConstitution(this)" style="padding:4px 10px;border:1px solid #E5E7EB;border-radius:14px;font-size:13px;background:#fff;color:#6B7280;cursor:pointer;">特禀</button>
+                            <button type="button" class="fang-cons-chip" data-c="平和" onclick="toggleFangConstitution(this)" style="padding:4px 10px;border:1px solid #E5E7EB;border-radius:14px;font-size:13px;background:#fff;color:#6B7280;cursor:pointer;">平和</button>
+                        </div>
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block;font-size:13px;color:#374151;margin:0 0 4px;">核心食材 *</label>
+                        <input type="text" id="newFangIngredients" placeholder="如：山药、小米、红枣" style="width:100%;box-sizing:border-box;padding:6px 8px;font-size:13px;border:1px solid #E5E7EB;border-radius:10px;" />
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block;font-size:13px;color:#374151;margin:0 0 4px;">制作方法 * <span style="font-size:12px;color:#9CA3AF;font-weight:normal;">（一行一步）</span></label>
+                        <textarea id="newFangMethod" placeholder="如：&#10;山药去皮切段，小米淘洗&#10;加水同煮 30 分钟至软糯" style="width:100%;box-sizing:border-box;min-height:80px;padding:6px 8px;font-size:13px;border:1px solid #E5E7EB;border-radius:10px;resize:vertical;"></textarea>
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:13px;color:#374151;margin:0 0 4px;">禁忌人群 *</label>
+                        <textarea id="newFangContraindications" placeholder="如：孕妇忌用、感冒期间忌用" style="width:100%;box-sizing:border-box;min-height:56px;padding:6px 8px;font-size:13px;border:1px solid #E5E7EB;border-radius:10px;resize:vertical;"></textarea>
+                    </div>
+                </div>
                 <div style="margin-top:6px;margin-bottom:6px;">
                     <div id="knowledgeImagePreview" style="display:none;margin-top:6px;">
                         <div id="knowledgeImagePreviewGrid" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
