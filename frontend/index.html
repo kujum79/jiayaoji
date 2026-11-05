@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V382-20261105';
+        var APP_VER = 'V383-20261106';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -287,6 +287,11 @@
         .dt-head { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #F97316; padding-bottom: 8px; border-bottom: 1px solid #F3F4F6; margin-bottom: 8px; }
         .dt-head-btns { margin-left: auto; display: flex; gap: 6px; flex: 0 0 auto; }
         .dt-title { font-size: 16px; font-weight: 700; color: #1F2937; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        /* V383: 今日一课标签、语音播报、往期回顾统一并入文章标题行 */
+        .dt-title-row { display: flex; align-items: center; gap: 6px; }
+        .dt-title-row .dt-title { flex: 1 1 auto; min-width: 0; }
+        .dt-lesson-tag { flex: 0 0 auto; font-size: 10px; font-weight: 700; color: #C2410C; background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 8px; padding: 1px 6px; line-height: 1.5; white-space: nowrap; }
+        .dt-title-act { flex: 0 0 auto; border: none; background: none; cursor: pointer; padding: 2px 2px; line-height: 1; color: #6B7280; }
         .dt-summary { font-size: 13px; color: #4B5563; line-height: 1.5; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         .dt-btn { padding: 4px 12px; font-size: 12px; border-radius: 14px; cursor: pointer; text-align: center; border: 1px solid #E5E7EB; background: white; color: #6B7280; white-space: nowrap; }
         .dt-btn-primary { background: #F97316; border-color: #F97316; color: white; font-weight: 600; }
@@ -33050,7 +33055,7 @@ function _dtSubPlan() {
 function _dtRenderSkeleton() {
     var el = document.getElementById('homeDailyTipCard');
     if (!el) return;
-    el.innerHTML = '<div class="dt-head">📚 食养堂 · 今日一课</div><div class="dt-skeleton">'
+    el.innerHTML = '<div class="dt-head">📚 食养堂</div><div class="dt-skeleton">'
         + '<div class="sk" style="height:18px;width:75%;margin-bottom:8px;"></div>'
         + '<div class="sk" style="height:13px;width:95%;margin-bottom:6px;"></div>'
         + '<div class="sk" style="height:13px;width:60%;"></div></div>';
@@ -33058,9 +33063,6 @@ function _dtRenderSkeleton() {
 function _dtRenderCard(tip) {
     var el = document.getElementById('homeDailyTipCard');
     if (!el) return;
-    var emoji = '🍂';
-    var term = String(window.__currentSolarTerm || '');
-    if (term) emoji = '🎐';
     // V159: 移除「昨日」降级角标与「AI预选✓已确认」徽标（页面更简洁；待复核态操作保留）
     var adminCtl = '';
     var _fhAdmin = (typeof isSuperAdmin === 'function' && isSuperAdmin());
@@ -33080,16 +33082,19 @@ function _dtRenderCard(tip) {
     // V206.4: 移除「订阅专享内容」徽标（订阅状态已由按钮表达，不再重复标注）
     var exclusiveBadge = '';
     // V197: 移除「收藏」按钮，替换为「订阅」入口；标题+摘要整块可点开详情
-    el.innerHTML = '<div class="dt-head"><span>📚 食养堂 · 今日一课' + exclusiveBadge + '</span>'
+    el.innerHTML = '<div class="dt-head"><span>📚 食养堂' + exclusiveBadge + '</span>'
         + '<span class="dt-head-btns" onclick="event.stopPropagation()">'
         + adminCtl
-        // V305: 恢复「往期回顾」入口（V296 去掉往期精选后该页失去入口）
-        + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" style="border:none;background:none;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;color:#6B7280;" title="往期回顾">📅</button>'
-        + '<button id="dtCardSpeakBtn" onclick="event.stopPropagation(); _dtSpeakTip(\'card\')" style="border:none;background:none;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;color:#6B7280;" title="语音播报">🔊</button>'
         + subBtnHtml
         + '</span></div>'
         + '<div onclick="_openDailyTipFull()" style="cursor:pointer;">'
-        + '<div class="dt-title">' + emoji + ' ' + (tip.title || '') + '</div>'
+        + '<div class="dt-title-row">'
+        + '<button id="dtCardSpeakBtn" onclick="event.stopPropagation(); _dtSpeakTip(\'card\')" class="dt-title-act" style="font-size:16px;" title="语音播报">🔊</button>'
+        + '<span class="dt-lesson-tag">今日一课</span>'
+        + '<div class="dt-title">' + (tip.title || '') + '</div>'
+        // V383: 往期回顾按钮及图标移至文章标题行最右侧
+        + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" class="dt-title-act" style="font-size:16px;" title="往期回顾">📅</button>'
+        + '</div>'
         + '<div class="dt-summary">' + (tip.summary || '') + '</div>'
         + (_dietContraNoteHtml(tip.title, (tip.content || '') + ' ' + (tip.summary || '')) ? '<div style="font-size:11px;color:#B45309;margin-top:6px;">⚠️ 按您家情况已附忌口提示，点开查看</div>' : '')
         + '</div>';
@@ -33102,7 +33107,7 @@ function _dtRenderDegraded(latestDate) {
         var d = String(latestDate).slice(5).replace('-', ' 月 ') + ' 日';
         sub = '今日内容暂未更新 · 最近更新 ' + d;
     }
-    el.innerHTML = '<div class="dt-head"><span>📚 食养堂 · 今日一课</span></div>'
+    el.innerHTML = '<div class="dt-head"><span>📚 食养堂</span></div>'
         + '<div style="cursor:default;">'
         + '<div class="dt-degraded">' + sub + '</div>'
         + '</div>';
