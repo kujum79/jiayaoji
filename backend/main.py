@@ -4670,7 +4670,9 @@ class SpecialPlanRequest(BaseModel):
     description: str = ""
     familyBrief: str = ""
     solarTerm: str = ""
-    fangRefs: List[str] = []  # V378: 匹配的 3-5 条「食方」参考资料
+    fangRefs: List[str] = []  # V378: 匹配的 3-5 条「食方」参考资料（文本兜底）
+    fangRag: List[Dict[str, Any]] = []  # V381: 本地 RAG 检索出的食方 JSON 语料
+    allergens: List[str] = []  # V381: 家庭过敏原（命中参考语料食材须剔除）
 
 
 _SPECIAL_PLAN_LABELS = {
@@ -4688,13 +4690,15 @@ _SPECIAL_PLAN_PROMPT = """你是一位专业的家庭营养师。请为家庭中
 【计划类型】{planType}
 【具体情况】{description}
 【当前节气】{solarTerm}
-【专家知识库参考】：
+【家庭成员过敏原】{allergens}
+【专家参考语料】：
 {fangRefs}
 
 【任务要求】：
-1. 请结合上述传统食养知识，为该家庭生成一日三餐计划。
-2. 必须严格规避医疗词汇（治疗、治愈、降三高、防癌），只能使用“滋养、润燥、健脾”等食养词汇。
-3. 如果某项传统食材（如：人参）不适合该家庭成员（如：儿童），请坚决剔除，并说明原因。
+1. 请根据上述传统食方，结合用户的节气与体质，生成今天的一日三餐。
+2. 如果参考语料中的食材与用户过敏原冲突，必须剔除，并在报告中说明原因。
+3. 必须严格规避医疗词汇（治疗、治愈、降三高、防癌），只能使用“滋养、润燥、健脾”等食养词汇。
+4. 如果某项传统食材（如：人参）不适合该家庭成员（如：儿童），请坚决剔除，并说明原因。
 
 【要求】
 1. 输出一个包含 7 天一日三餐的 JSON 数据（早/中/晚餐的菜名）。
@@ -4719,9 +4723,36 @@ async def special_plan(req: SpecialPlanRequest) -> Dict[str, Any]:
     member_brief = (req.memberBrief or "").strip()[:300] or "家庭成员"
     family_brief = (req.familyBrief or "").strip()[:500] or "普通家庭"
     solar_term = (req.solarTerm or "").strip()[:20] or "当季"
-    # V378: 前端已按成员体质 + 节气筛选出 3-5 条「食方」，这里做长度与条数兜底
-    fang_refs = [str(x).strip()[:260] for x in (req.fangRefs or []) if str(x).strip()][:5]
-    fang_text = "\n".join(f"{i + 1}. {r}" for i, r in enumerate(fang_refs)) if fang_refs else "暂无匹配食方，请结合节气与成员体质常规推演。"
+    # V381: 优先使用前端本地 RAG 检索出的食方 JSON 语料；缺失时回退 V378 文本参考（含长度/条数兜底）
+    rag_refs: List[Dict[str, Any]] = []
+    for item in (req.fangRag or [])[:5]:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()[:40]
+        if not name:
+            continue
+        rag_refs.append({
+            "name": name,
+            "source": str(item.get("source") or "").strip()[:60],
+            "suitable": [str(x).strip()[:8] for x in (item.get("suitable") or []) if str(x).strip()][:6],
+            "ingredients": str(item.get("ingredients") or "").strip()[:120],
+            "steps": str(item.get("steps") or "").strip()[:200],
+            "contraindications": str(item.get("contraindications") or "").strip()[:120],
+        })
+    if not rag_refs:
+        for text in (req.fangRefs or [])[:5]:
+            text = str(text).strip()
+            if not text:
+                continue
+            m = re.match(r"《([^》]+)》", text)
+            rag_refs.append({
+                "name": (m.group(1) if m else text[:40]),
+                "source": "", "suitable": [], "ingredients": "",
+                "steps": "", "contraindications": "",
+            })
+    fang_text = json.dumps(rag_refs, ensure_ascii=False, indent=1) if rag_refs else "（暂无匹配食方，请结合节气与成员体质常规推演。）"
+    allergen_list = [str(a).strip()[:20] for a in (req.allergens or []) if str(a).strip()][:10]
+    allergen_text = "、".join(allergen_list) if allergen_list else "无已知过敏原"
 
     prompt = _SPECIAL_PLAN_PROMPT.format(
         memberBrief=member_brief,
@@ -4729,6 +4760,7 @@ async def special_plan(req: SpecialPlanRequest) -> Dict[str, Any]:
         planType=label,
         description=description,
         solarTerm=solar_term,
+        allergens=allergen_text,
         fangRefs=fang_text,
     )
     messages = [
@@ -4795,7 +4827,7 @@ async def special_plan(req: SpecialPlanRequest) -> Dict[str, Any]:
         "planLabel": label,
         "weeklyPlan": weekly_plan,
         "report": report,
-        "fangRefsUsed": fang_refs,
+        "fangRefsUsed": rag_refs,
     }
 
 
