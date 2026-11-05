@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V379-20261105';
+        var APP_VER = 'V380-20261105';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -44618,7 +44618,23 @@ function _syPaneHtml(libItems, curTerm) {
         } else {
             items = libItems.filter(function (k) { return k.subCategory === sec; });
         }
-        html += items.length ? items.map(_shiyangCardHtml).join('') : _shiyangEmptyHtml('暂无' + sec + '内容');
+        // V380: 超管在「食方」分类下提供批量导入 JSON 入口
+        var secHeader = '';
+        if (sec === '食方') {
+            var _canImportFang = false;
+            try {
+                _canImportFang = (typeof isSuperAdmin === 'function' && isSuperAdmin())
+                    || !!(JSON.parse(lsGet('superAdmin') || '{}') || {}).isLoggedIn;
+            } catch (e) {}
+            if (_canImportFang && _syTreeLib === 'public') {
+                secHeader = '<div style="display:flex;align-items:center;margin-bottom:10px;">'
+                    + '<div style="font-size:14px;font-weight:700;color:#9A3412;">📜 食方</div>'
+                    + '<span style="font-size:12px;color:#B08968;margin-left:8px;">共 ' + items.length + ' 条</span>'
+                    + '<button type="button" onclick="openFangBatchImport()" style="margin-left:auto;border:1px solid #FDBA74;background:#FFF3E2;color:#9A3412;font-size:12px;font-weight:600;border-radius:999px;padding:4px 12px;cursor:pointer;">📤 批量导入 JSON</button>'
+                    + '</div>';
+            }
+        }
+        html += secHeader + (items.length ? items.map(_shiyangCardHtml).join('') : _shiyangEmptyHtml('暂无' + sec + '内容'));
     } else if (segs.length === 3 && segs[2] === '婴儿辅食' && getYoungestInfantStage() === '0-6m') {
         // V321: 婴儿辅食安全拦截——家庭中有 0-6 个月婴儿时不展示任何辅食内容
         html += '<div style="background:#EFF6FF;border:2px solid #93C5FD;border-radius:14px;padding:20px 16px;margin-bottom:12px;text-align:center;">'
@@ -53728,6 +53744,106 @@ function resetFangStructuredForm() {
     });
     Array.prototype.slice.call(document.querySelectorAll('#newFangConstitutions .fang-cons-chip.selected')).forEach(function (b) { toggleFangConstitution(b); });
     _toggleFangStructuredFields(false);
+}
+
+// ==================== V380: 超管批量导入食方（JSON） ====================
+function openFangBatchImport() {
+    var allowed = false;
+    try {
+        allowed = (typeof isSuperAdmin === 'function' && isSuperAdmin())
+            || !!(JSON.parse(lsGet('superAdmin') || '{}') || {}).isLoggedIn;
+    } catch (e) {}
+    if (!allowed) { showToast('仅超级管理员可批量导入食方'); return; }
+    var input = document.getElementById('fangImportInput');
+    if (!input) {
+        input = document.createElement('input');
+        input.type = 'file';
+        input.id = 'fangImportInput';
+        input.accept = '.json,application/json';
+        input.style.display = 'none';
+        input.addEventListener('change', function () { _fangImportFile(this); });
+        document.body.appendChild(input);
+    }
+    input.value = '';
+    input.click();
+}
+
+// 读取 clean_text.py 产出的 foodTherapyDB.json，批量推入 dietKnowledge（公共层·食方）
+function _fangImportFile(input) {
+    var file = input && input.files && input.files[0];
+    if (!file) return;
+    if (!/\.json$/i.test(file.name)) { showToast('请上传 .json 格式文件'); return; }
+    var reader = new FileReader();
+    reader.onerror = function () { showToast('文件读取失败，请重试'); };
+    reader.onload = function () {
+        var list;
+        try {
+            var raw = JSON.parse(String(reader.result || ''));
+            list = Array.isArray(raw) ? raw : ((raw && Array.isArray(raw.items)) ? raw.items : ((raw && typeof raw === 'object') ? [raw] : []));
+        } catch (e) {
+            showToast('JSON 解析失败：' + e.message);
+            return;
+        }
+        if (!list.length) { showToast('文件中没有可导入的数据'); return; }
+        var now = Date.now();
+        var added = 0, skipped = 0;
+        list.forEach(function (it) {
+            if (!it || typeof it !== 'object') { skipped++; return; }
+            var name = String(it.name || it.title || '').trim();
+            if (!name) { skipped++; return; }
+            // 同名食方去重，避免重复导入
+            var dup = dietKnowledge.some(function (k) {
+                return k && String(k.title || '').trim() === name && _fhNormCategory(k.subCategory || k.category || '') === '食方';
+            });
+            if (dup) { skipped++; return; }
+            var cons = Array.isArray(it.suitable) ? it.suitable : String(it.suitable || '').split(/[、,，]/);
+            cons = cons.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+            var ing = Array.isArray(it.ingredients) ? it.ingredients.join('、') : String(it.ingredients || '').trim();
+            var steps = Array.isArray(it.steps) ? it.steps : String(it.steps || '').split(/[\n。；;]+/);
+            steps = steps.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+            var contra = Array.isArray(it.contraindications) ? it.contraindications.join('；') : String(it.contraindications || '').trim();
+            var source = String(it.source || '').trim();
+            var item = {
+                id: nextKnowledgeId++,
+                type: 'shiyang',
+                title: name,
+                source: source || '批量导入',
+                content: JSON.stringify({ source: source, constitutions: cons, ingredients: ing, method: steps.join('\n'), contraindications: contra }),
+                image: '',
+                images: [],
+                tags: ['食方'].concat(cons),
+                sceneTags: [],
+                createdAt: now,
+                sourceType: 'import',
+                sourceUrl: '',
+                mainCategory: 'shiyang',
+                category: '食方',
+                subCategory: '食方',
+                leafCategory: '',
+                subCategory3: '',
+                layer: 'public',
+                visibility: 'public',
+                auditStatus: 'ok',
+                scope: 'family',
+                stats: { ref: 0, replication: 0, download: 0 }
+            };
+            stampKnowledgePermissions(item);
+            dietKnowledge.push(item);
+            added++;
+        });
+        saveDietKnowledge();
+        try { renderDietKnowledge(); } catch (e) {}
+        try { renderShiyangContent(); } catch (e) {}
+        try { updateVisibilityCounts(); } catch (e) {}
+        var d = new Date(now);
+        var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+        var timeStr = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        logAdminAction('批量导入食方', '超管导入了 ' + added + ' 条食方数据，时间：' + timeStr);
+        showToast(added
+            ? ('成功导入 ' + added + ' 条食方' + (skipped ? '（跳过 ' + skipped + ' 条重复/无效）' : ''))
+            : ('未导入新食方' + (skipped ? '（' + skipped + ' 条重复/无效已跳过）' : '')));
+    };
+    reader.readAsText(file, 'utf-8');
 }
 
 function onLeafCategoryChange() {
