@@ -4568,7 +4568,7 @@ _EXPERT_SYSTEM = """你是高级临床营养师。请分析用户上传的体检
 四、需要留意的提醒
 全文控制在 700 字以内，不使用 Markdown 表格。"""
 
-_EXPERT_BAD_WORDS = ["治疗", "治愈", "导致疾病", "远离疾病", "包治", "药到病除", "吃药", "处方药", "停药"]
+_EXPERT_BAD_WORDS = ["治疗", "治愈", "降三高", "防癌", "导致疾病", "远离疾病", "包治", "药到病除", "吃药", "处方药", "停药"]
 
 # D5-07: 疾病名中性化词典（按长词优先替换，确保「中度脂肪肝」先于「脂肪肝」命中）
 _EXPERT_DISEASE_MAP: List[Tuple[str, str]] = [
@@ -4670,6 +4670,7 @@ class SpecialPlanRequest(BaseModel):
     description: str = ""
     familyBrief: str = ""
     solarTerm: str = ""
+    fangRefs: List[str] = []  # V378: 匹配的 3-5 条「食方」参考资料
 
 
 _SPECIAL_PLAN_LABELS = {
@@ -4687,6 +4688,14 @@ _SPECIAL_PLAN_PROMPT = """你是一位专业的家庭营养师。请为家庭中
 【计划类型】{planType}
 【具体情况】{description}
 【当前节气】{solarTerm}
+【专家知识库参考】：
+{fangRefs}
+
+【任务要求】：
+1. 请结合上述传统食养知识，为该家庭生成一日三餐计划。
+2. 必须严格规避医疗词汇（治疗、治愈、降三高、防癌），只能使用“滋养、润燥、健脾”等食养词汇。
+3. 如果某项传统食材（如：人参）不适合该家庭成员（如：儿童），请坚决剔除，并说明原因。
+
 【要求】
 1. 输出一个包含 7 天一日三餐的 JSON 数据（早/中/晚餐的菜名）。
 2. 生成一段 200 字左右的【专项健康饮食报告】。
@@ -4710,6 +4719,9 @@ async def special_plan(req: SpecialPlanRequest) -> Dict[str, Any]:
     member_brief = (req.memberBrief or "").strip()[:300] or "家庭成员"
     family_brief = (req.familyBrief or "").strip()[:500] or "普通家庭"
     solar_term = (req.solarTerm or "").strip()[:20] or "当季"
+    # V378: 前端已按成员体质 + 节气筛选出 3-5 条「食方」，这里做长度与条数兜底
+    fang_refs = [str(x).strip()[:260] for x in (req.fangRefs or []) if str(x).strip()][:5]
+    fang_text = "\n".join(f"{i + 1}. {r}" for i, r in enumerate(fang_refs)) if fang_refs else "暂无匹配食方，请结合节气与成员体质常规推演。"
 
     prompt = _SPECIAL_PLAN_PROMPT.format(
         memberBrief=member_brief,
@@ -4717,6 +4729,7 @@ async def special_plan(req: SpecialPlanRequest) -> Dict[str, Any]:
         planType=label,
         description=description,
         solarTerm=solar_term,
+        fangRefs=fang_text,
     )
     messages = [
         {"role": "system", "content": "你是家肴记的专业家庭营养师，严格按用户要求的 JSON 格式输出。"},
@@ -4782,6 +4795,7 @@ async def special_plan(req: SpecialPlanRequest) -> Dict[str, Any]:
         "planLabel": label,
         "weeklyPlan": weekly_plan,
         "report": report,
+        "fangRefsUsed": fang_refs,
     }
 
 

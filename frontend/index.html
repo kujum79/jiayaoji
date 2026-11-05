@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V377-20261105';
+        var APP_VER = 'V378-20261105';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -73801,7 +73801,8 @@ function createSpecialPlan(options) {
         startDate: startDate,
         endDate: options.endDate || _specialPlanAddDays(startDate, cfg.termDays || 7),
         weeklyPlan: options.weeklyPlan || {},
-        report: options.report || ''
+        report: options.report || '',
+        fangRefs: Array.isArray(options.fangRefs) ? options.fangRefs : []
     };
     list.push(plan);
     saveSpecialPlans(list);
@@ -74021,6 +74022,76 @@ function getActiveSpecialPlansBriefLines() {
 }
 
 // 打开「发起专项」弹窗（仅订阅用户可用）
+// ==================== V378: 健康管家 AI 推演接入「食方库」 ====================
+var _FANG_CONSTITUTIONS = ['气虚', '阳虚', '阴虚', '痰湿', '湿热', '血瘀', '气郁', '特禀', '平和'];
+function _fangEntries() {
+    var list = [];
+    try {
+        var arr = JSON.parse(lsGet('dietKnowledge') || '[]');
+        (Array.isArray(arr) ? arr : []).forEach(function (it) {
+            if (!it) return;
+            if (_fhNormCategory(it.subCategory || it.category || '') !== '食方') return;
+            if (typeof can === 'function' && !can('view', it)) return;
+            var text = String(it.content || '').replace(/\[图片[^\]]*\]/g, '').replace(/<[^>]+>/g, '').trim();
+            if (!text) return;
+            list.push({ title: String(it.title || '食方'), content: text, tags: String(it.tags || '') });
+        });
+    } catch (e) {}
+    try {
+        var pub = (typeof getFoodHallArticles === 'function') ? getFoodHallArticles() : [];
+        (Array.isArray(pub) ? pub : []).forEach(function (a) {
+            if (!a || _fhNormCategory(a.category) !== '食方') return;
+            var text = String(a.content || a.summary || '').replace(/\[图片[^\]]*\]/g, '').replace(/<[^>]+>/g, '').trim();
+            if (!text) return;
+            var title = String(a.title || '食方');
+            if (list.some(function (x) { return x.title === title; })) return;
+            list.push({ title: title, content: text, tags: '' });
+        });
+    } catch (e) {}
+    return list;
+}
+// 按家庭成员体质 + 当前节气 + 当季食材打分，取前 3-5 条食方作为专家参考
+function _buildFangRefsForPlan() {
+    var entries = _fangEntries();
+    if (!entries.length) return [];
+    var cons = [];
+    try {
+        var members = (typeof getFamilyMembers === 'function') ? getFamilyMembers() : [];
+        (members || []).forEach(function (m) {
+            var c = String((m && m.constitution) || '').trim();
+            if (c) cons.push(c);
+        });
+    } catch (e) {}
+    if (!cons.length) {
+        try {
+            var fd = (typeof familyData !== 'undefined' && Array.isArray(familyData)) ? familyData : [];
+            fd.forEach(function (m) { if (m && m.constitution) cons.push(String(m.constitution)); });
+        } catch (e) {}
+    }
+    var termObj = null, termName = '', foods = [];
+    try {
+        termObj = (typeof getSolarTermForDate === 'function') ? getSolarTermForDate(new Date()) : null;
+        termName = (termObj && termObj.name) || '';
+        foods = (typeof getSolarTermFoods === 'function') ? getSolarTermFoods(termObj) : [];
+    } catch (e) {}
+    var consKey = cons.join(' ');
+    entries.forEach(function (it) {
+        var blob = it.title + ' ' + it.content + ' ' + it.tags;
+        var score = 0;
+        _FANG_CONSTITUTIONS.forEach(function (c) {
+            if (consKey.indexOf(c) >= 0 && blob.indexOf(c) >= 0) score += 4;
+        });
+        if (termName && blob.indexOf(termName) >= 0) score += 3;
+        (foods || []).forEach(function (f) { if (f && blob.indexOf(f) >= 0) score += 1; });
+        if (/健脾|润燥|滋养|补气|滋阴|温补|祛湿|理气/.test(blob)) score += 1;
+        it._score = score;
+    });
+    entries.sort(function (a, b) { return (b._score || 0) - (a._score || 0); });
+    return entries.slice(0, 5).map(function (it) {
+        var body = it.content.length > 220 ? it.content.substring(0, 220) + '…' : it.content;
+        return '《' + it.title + '》' + body;
+    });
+}
 function openSpecialPlanModal(memberId) {
     if (typeof isSubscribed !== 'function' || !isSubscribed()) {
         showToast('请先订阅全家桶');
@@ -74132,7 +74203,8 @@ function openSpecialPlanModal(memberId) {
             planType: type,
             description: desc,
             familyBrief: familyBrief,
-            solarTerm: solarTerm
+            solarTerm: solarTerm,
+            fangRefs: _buildFangRefsForPlan()
         };
         fetch((typeof API_BASE !== 'undefined' ? API_BASE : '') + '/api/special-plan', {
             method: 'POST',
@@ -74145,7 +74217,8 @@ function openSpecialPlanModal(memberId) {
                     planType: type,
                     description: desc,
                     weeklyPlan: data.weeklyPlan || {},
-                    report: data.report || ''
+                    report: data.report || '',
+                    fangRefs: data.fangRefsUsed || payload.fangRefs || []
                 });
                 if (!created.ok) {
                     overlay.__busy = false;
@@ -74488,6 +74561,7 @@ function openSpecialPlanBoard() {
             +     '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">AI 生成</span>'
             +   '</div>'
             +   '<div style="font-size:13px;color:#4B5563;line-height:1.9;">' + reportHtml + '</div>'
+            +   '<div style="font-size:11px;color:#9CA3AF;line-height:1.7;margin-top:10px;padding-top:8px;border-top:1px dashed #FDE68A;">📖 该方案引用了《传统食养库》中的智慧，仅供日常饮食参考，不替代医疗建议。</div>'
             + '</div>'
             + '</div>';
     }
