@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V376-20261105';
+        var APP_VER = 'V377-20261105';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -34306,6 +34306,11 @@ function _openDailyTipFull(tip) {
     // tip 可选参数：往期回顾/收藏列表传入对应条目；缺省读当天缓存
     _dtCurTip = tip || _dtGetCached();
     if (!_dtCurTip) return;
+    // V377: 食育/食方为全订阅专享，非 premium 用户禁止打开详情
+    if (_premiumLocked(_fhNormCategory(_dtCurTip.category))) {
+        _premiumLockToast();
+        return;
+    }
     var old = document.getElementById('dtFullOv');
     if (old) old.remove();
     var tip = _dtCurTip;
@@ -34462,7 +34467,7 @@ function _openDailyTipArchive() {
     _dtArcSwitch('history');
 }
 var _dtArcCat = ''; // 当前筛选的 category（空=全部）
-var _DT_CATS = ['', '节气食养', '天气食养', '当季食材', '厨房技巧', '选材避坑', '家庭宴客', '饮食文化'];
+var _DT_CATS = ['', '节气食养', '天气食养', '当季食材', '厨房技巧', '选材避坑', '家庭宴客', '饮食文化', '食育', '食方'];
 function _dtArcSwitch(tab) {
     _dtArcTab = tab;
     var on = 'flex:1;height:34px;border-radius:10px;border:none;background:#F97316;color:white;font-size:13px;font-weight:600;cursor:pointer;';
@@ -34562,7 +34567,7 @@ function _dtArcUnfav(id) { _dtUnfav(id); }
 // 文章状态流转：draft → pending_review → published / rejected；
 // published 可下架回 draft，rejected 可回 draft 重编或重新提审。
 // auditStatus 随流转联动：提审=pending、发布=passed、驳回=rejected。
-var _FH_CATS = ['节气食养', '天气食养', '当季食材', '厨房技巧', '选材避坑', '家庭宴客', '饮食文化'];
+var _FH_CATS = ['节气食养', '天气食养', '当季食材', '厨房技巧', '选材避坑', '家庭宴客', '饮食文化', '食育', '食方'];
 var _FH_FLOW = {
     'draft': ['pending_review', 'archived'],
     'pending_review': ['published', 'rejected', 'draft'],
@@ -34802,7 +34807,7 @@ function _fhAutoFallback(force) {
 }
 
 // 食养堂树状子分类（与生成端 category 一致）；食养收藏沿用同一套，仅内容=用户收藏
-var _FH_TREE_CATS = ['节气食养', '天气食养', '当季食材', '厨房技巧', '选材避坑', '家庭宴客', '饮食文化'];
+var _FH_TREE_CATS = ['节气食养', '天气食养', '当季食材', '厨房技巧', '选材避坑', '家庭宴客', '饮食文化', '食育', '食方'];
 var _fhServerArchive = [];          // 服务端自动发布归档（会话内缓存）
 var _fhServerArchiveAt = 0;
 var _fhArchiveLoading = false;
@@ -43857,7 +43862,9 @@ const KNOWLEDGE_TREE = {
         '厨房技巧': [],
         '选材避坑': [],
         '家庭宴客': [],
-        '饮食文化': []
+        '饮食文化': [],
+        '食育': [],
+        '食方': []
     },
     '烹饪': {
         '烹饪技巧': ['刀工', '火候', '调味', '炒', '蒸', '炖', '煮', '炸'],
@@ -44192,15 +44199,17 @@ function _shiyangCardHtml(k) {
         var fa = k._fhArc;
         var fs = String(fa.summary || fa.content || '').replace(/\[图片[^\]]*\]/g, '').replace(/<[^>]+>/g, '').trim();
         var fb = fs.substring(0, 60) + (fs.length > 60 ? '...' : '');
+        var _lock1 = _premiumLocked(_fhNormCategory(fa.category)) ? ' <span style="font-size:11px;color:#B45309;background:#FEF3C7;border-radius:4px;padding:1px 6px;">🔒 全订阅</span>' : '';
         return '<div class="cat-search-item" onclick="_fhOpenArchiveId(\'' + fa.id + '\')">'
-            + '<div class="cat-search-item-title">' + escapeHtml(fa.title || '无标题') + '</div>'
+            + '<div class="cat-search-item-title">' + escapeHtml(fa.title || '无标题') + _lock1 + '</div>'
             + '<div class="cat-search-item-summary">' + escapeHtml(fb) + '</div>'
             + '</div>';
     }
     var summary = String(k.content || '').replace(/\[图片[^\]]*\]/g, '').replace(/<[^>]+>/g, '').trim();
     var brief = summary.substring(0, 60) + (summary.length > 60 ? '...' : '');
+    var _lock2 = _premiumItemLocked(k) ? ' <span style="font-size:11px;color:#B45309;background:#FEF3C7;border-radius:4px;padding:1px 6px;">🔒 全订阅</span>' : '';
     return '<div class="cat-search-item" onclick="showKnowledgeDetail(' + k.id + ')">'
-        + '<div class="cat-search-item-title">' + escapeHtml(k.title || '无标题') + '</div>'
+        + '<div class="cat-search-item-title">' + escapeHtml(k.title || '无标题') + _lock2 + '</div>'
         + '<div class="cat-search-item-summary">' + escapeHtml(brief) + '</div>'
         + '</div>';
 }
@@ -44265,7 +44274,30 @@ function _shiyangSetPrinciple(p) { _shiyangPrinciple = p; renderShiyangContent()
 var _syTreeLib = '';      // 当前文库层：public | family | shared
 var _syTreeOpen = {};     // 展开的分支 key
 var _syTreeSel = '';      // 当前选中节点 key
-var _SY_SECTIONS = ['人群配餐', '节气食养', '天气食养', '体质食养', '日常食养', '当季食材', '烹饪技巧', '饮食文化'];
+var _SY_SECTIONS = ['人群配餐', '节气食养', '天气食养', '体质食养', '日常食养', '当季食材', '烹饪技巧', '饮食文化', '食育', '食方'];
+// V377: 全订阅专享板块（食育=专属饮食课堂，食方=传统食疗良方/中华饮食智慧）
+var _PREMIUM_ONLY_SECTIONS = ['食育', '食方'];
+var _SY_SECTION_ICONS = { '食育': '📚', '食方': '📜' };
+var _PREMIUM_LOCK_MSG = '🔒 该内容为全订阅专享，升级后可解锁海量传统食养方。';
+function _isPremiumOnlySection(sec) { return _PREMIUM_ONLY_SECTIONS.indexOf(sec) >= 0; }
+function _hasPremiumTier() { try { return _subTier() === 'premium'; } catch (e) { return false; } }
+// 超管需预览/管理食育、食方内容，不受全订阅拦截
+function _premiumGateExempt() {
+    try { if (typeof isSuperAdmin === 'function' && isSuperAdmin()) return true; } catch (e) {}
+    try { if ((JSON.parse(lsGet('superAdmin') || '{}') || {}).isLoggedIn) return true; } catch (e) {}
+    return false;
+}
+function _premiumLocked(sec) { return _isPremiumOnlySection(sec) && !_hasPremiumTier() && !_premiumGateExempt(); }
+function _premiumItemLocked(k) { return _isPremiumOnlyItem(k) && !_hasPremiumTier() && !_premiumGateExempt(); }
+function _premiumLockToast() { showToast && showToast(_PREMIUM_LOCK_MSG); }
+// 条目是否属于全订阅专享分类（兼容 dietKnowledge 条目与食养堂归档文章）
+function _isPremiumOnlyItem(k) {
+    if (!k) return false;
+    if (_isPremiumOnlySection(k.subCategory)) return true;
+    if (k._fhArc && _isPremiumOnlySection(_fhNormCategory(k._fhArc.category))) return true;
+    if (k.mainCategory === 'shiyang' && _isPremiumOnlySection(_fhNormCategory(k.category))) return true;
+    return false;
+}
 function _syLibName(lib) { return lib === 'public' ? '公共文库' : (lib === 'family' ? '家庭文库' : '他人分享'); }
 function _syParentKey(key) { var i = key.lastIndexOf('|'); return i < 0 ? '' : key.substring(0, i); }
 // 同级互斥展开：清除同级兄弟的展开状态
@@ -44442,9 +44474,24 @@ function _syTermGuideHtml(termName, info, items) {
     return html;
 }
 // 右侧内容：按选中节点渲染
+function _premiumLockPageHtml(sec) {
+    var icon = _SY_SECTION_ICONS[sec] || '🔒';
+    return '<div style="text-align:center;padding:34px 20px 26px;background:linear-gradient(180deg,#FFF7ED,#FFFFFF);border:1px solid #FED7AA;border-radius:16px;margin:4px 0 12px;">'
+        + '<div style="font-size:56px;line-height:1.1;">' + icon + '</div>'
+        + '<div style="margin-top:10px;font-size:17px;font-weight:800;color:#9A3412;">' + sec + ' · 全订阅专享</div>'
+        + '<div style="margin-top:8px;font-size:13px;color:#6B7280;line-height:1.8;">该内容为全订阅专享，升级后可解锁海量传统食养方。</div>'
+        + '<button type="button" onclick="openSubscriptionModal(\'premium\')" style="margin-top:16px;border:none;background:linear-gradient(135deg,#F97316,#FB923C);color:#fff;font-size:14px;font-weight:700;border-radius:999px;padding:10px 26px;cursor:pointer;">了解全订阅 · 解锁全部食养内容</button>'
+        + '</div>';
+}
 function _syPaneHtml(libItems, curTerm) {
     var segs = _syTreeSel.split('|');
     var html = '', items = [], crumb = '';
+    // V377: 非全订阅用户进入食育/食方，仅展示分类图标与升级引导
+    var _lockSec = (segs.length >= 2 && _premiumLocked(segs[1])) ? segs[1]
+        : (segs.length >= 3 && _premiumLocked(segs[2]) ? segs[2] : '');
+    if (_lockSec) {
+        return _premiumLockPageHtml(_lockSec) + dietDisclaimerFooterHtml(_shiyangDisclaimerKind(segs));
+    }
     if (_syTreeSel === 'now' || segs.length === 4) {
         // 节气节点（含置顶动态节点直达）：整版节气饮食指南（无面包屑）
         var termName = _syTreeSel === 'now' ? ((curTerm && curTerm.name) || '') : segs[3];
@@ -44590,7 +44637,8 @@ function renderShiyangContent() {
             _SY_SECTIONS.forEach(function (sec) {
                 var sk = lib + '|' + sec;
                 var kids = _sySectionChildren(lib, sec, libItems);
-                html += rowHtml(sk, sec, { branch: !!kids, count: _sySecCount(libItems, sec) });
+                var secLabel = sec + (_premiumLocked(sec) ? ' <span style="font-size:10px;">🔒</span>' : '');
+                html += rowHtml(sk, secLabel, { branch: !!kids, count: _sySecCount(libItems, sec) });
                 if (kids && _syTreeOpen[sk]) {
                     kids.forEach(function (leaf) {
                         var lk = sk + '|' + leaf;
@@ -44614,7 +44662,8 @@ function renderShiyangContent() {
                 html += rowHtml(fk, '🍂 ' + extraSec, { branch: true, count: _sySecCount(libItems, extraSec) });
                 if (_syTreeOpen[fk]) {
                     _FH_TREE_CATS.forEach(function (fc) {
-                        html += rowHtml(fk + '|' + fc, fc, { count: _syLeafCount(libItems, extraSec, fc) });
+                        var _fcl = fc + (_premiumLocked(fc) ? ' <span style="font-size:10px;">🔒</span>' : '');
+                        html += rowHtml(fk + '|' + fc, _fcl, { count: _syLeafCount(libItems, extraSec, fc) });
                     });
                 }
             }
@@ -49337,7 +49386,9 @@ var DEFAULT_CATEGORY_TREE = [
         { id: '食养食谱', name: '食养食谱', type: 'knowledge', order: 6, children: [{ id: '家常', name: '家常', order: 1 }, { id: '家宴', name: '家宴', order: 2 }, { id: '中式', name: '中式', order: 3 }] },
         { id: '当季食材', name: '当季食材', type: 'knowledge', order: 7, children: [] },
         { id: '烹饪技巧', name: '烹饪技巧', type: 'knowledge', order: 8, children: [] },
-        { id: '饮食文化', name: '饮食文化', type: 'knowledge', order: 9, children: [] }
+        { id: '饮食文化', name: '饮食文化', type: 'knowledge', order: 9, children: [] },
+        { id: '食育', name: '食育', type: 'knowledge', order: 10, icon: '📚', children: [] },
+        { id: '食方', name: '食方', type: 'knowledge', order: 11, icon: '📜', children: [] }
     ] },
     { id: 'cooking', name: '烹饪', icon: '🍳', order: 4, children: [
         { id: '烹饪技巧', name: '烹饪技巧', order: 1, children: [] },
@@ -52278,6 +52329,11 @@ function showKnowledgeDetail(id) {
     // 权限硬拦截：无权 view 则拒绝（双保险，列表已过滤但防止控制台直调）
     if (!can('view', item)) {
         showToast('无权查看此条目');
+        return;
+    }
+    // V377: 食育/食方为全订阅专享，非 premium 用户点击统一锁定提示
+    if (_premiumItemLocked(item)) {
+        _premiumLockToast();
         return;
     }
     // 食养拦截条目：含治疗承诺，禁止查看
