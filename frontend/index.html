@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V383-20261106';
+        var APP_VER = 'V384-20261106';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -32992,7 +32992,6 @@ function renderHomeDiaryCard() {
             return '<span class="hd-dish">'
                 + '<input type="checkbox" ' + (confirmed ? 'disabled ' : '') + (checked.indexOf(name) >= 0 ? 'checked' : '') + ' onchange="_hdToggleDish(\'' + escapeAttr(name) + '\', this.checked)">'
                 + '<span class="hd-dish-name" onclick="_hdViewDishByName(\'' + escapeAttr(name) + '\')" title="看做法">' + escapeHtml(name) + '</span>'
-                + '<button class="hd-listen" onclick="_hdListenByName(\'' + escapeAttr(name) + '\')" title="朗读">🔊</button>'
                 + '</span>';
         }).join('') : '<span style="font-size:13px;color:#9CA3AF;">（未计划，点右上角 ＋ 规划）</span>') + '</div>'
         + '</div>'
@@ -33089,8 +33088,8 @@ function _dtRenderCard(tip) {
         + '</span></div>'
         + '<div onclick="_openDailyTipFull()" style="cursor:pointer;">'
         + '<div class="dt-title-row">'
-        + '<button id="dtCardSpeakBtn" onclick="event.stopPropagation(); _dtSpeakTip(\'card\')" class="dt-title-act" style="font-size:16px;" title="语音播报">🔊</button>'
         + '<span class="dt-lesson-tag">今日一课</span>'
+        + '<button id="dtCardSpeakBtn" onclick="event.stopPropagation(); _dtSpeakTip(\'card\')" class="dt-title-act" style="font-size:16px;" title="语音播报">🔊</button>'
         + '<div class="dt-title">' + (tip.title || '') + '</div>'
         // V383: 往期回顾按钮及图标移至文章标题行最右侧
         + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" class="dt-title-act" style="font-size:16px;" title="往期回顾">📅</button>'
@@ -58926,7 +58925,6 @@ function renderDiary() {
                     + ' onchange="diaryToggleDishConfirmed(\'' + escapeAttr(dateKey) + '\',\'' + escapeAttr(meal.key) + '\',\'' + escapeAttr(it.name) + '\', this.checked)"/>'
                     + '<span class="dish-tag-clickable"' + (_isSpecial ? ' style="color:#C2410C;font-weight:700;"' : '') + ' onclick="showDishDetail(\'' + escapeAttr(it.name) + '\',\'' + escapeAttr(dateKey) + '\',\'' + escapeAttr(meal.key) + '\')">' + escapeHtml(it.name) + '</span>'
                     + (typeof specialInterventionBadgesHtml === 'function' ? specialInterventionBadgesHtml(_siList, it.name) : '')
-                    + ('speechSynthesis' in window ? '<button type="button" title="朗读" onclick="event.preventDefault();event.stopPropagation();_dishListenReadDirect(\'' + escapeAttr(it.name) + '\');" style="border:none;background:none;padding:0;font-size:14px;line-height:1;color:#F97316;cursor:pointer;flex-shrink:0;margin-left:2px;vertical-align:middle;">🔊</button>' : '')
                     + '</label>';
             }).join('');
             // V369: 计划区展示 AI 推荐理由（唯一来源 dishMeta.userComment；纯时长文案由 _dishMetaReasonText 过滤）
@@ -58972,7 +58970,7 @@ function renderDiary() {
                 const hasTag = /（外卖）|（外带）|\(外卖\)|\(外带\)/.test(dName);
                 const tag = isDelivery && !hasTag ? '<span style="color:#6B7280;font-size:12px;">（外卖）</span>' : '';
                 const _siHitHere = (typeof specialInterventionsForDish === 'function' && specialInterventionsForDish(_siList, dName).length > 0);
-                return `<span class="dish-tag-clickable"${_siHitHere ? ' style="color:#C2410C;font-weight:700;"' : ''} onclick="showDishDetail('${escapeHtml(dName)}', '${dateKey}', '${meal.key}')">${escapeHtml(dName)}${tag}</span>` + ('speechSynthesis' in window ? `<button type="button" title="朗读" onclick="event.preventDefault();event.stopPropagation();_dishListenReadDirect('${escapeHtml(dName)}');" style="border:none;background:none;padding:0;font-size:14px;line-height:1;color:#F97316;cursor:pointer;flex-shrink:0;margin-left:2px;vertical-align:middle;">🔊</button>` : '');
+                return `<span class="dish-tag-clickable"${_siHitHere ? ' style="color:#C2410C;font-weight:700;"' : ''} onclick="showDishDetail('${escapeHtml(dName)}', '${dateKey}', '${meal.key}')">${escapeHtml(dName)}${tag}</span>`;
             }).join('、');
             // 外卖类型追加金额标注
             if (isDelivery && data.actual.totalCost) {
