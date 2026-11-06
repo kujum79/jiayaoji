@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V388-20261106';
+        var APP_VER = 'V389-20261106';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -19782,6 +19782,16 @@ function renderFridgeRecView() {
     })();
     if (prep.cycleMode !== mode) prep.cycleMode = mode;
 
+    // V389: 一人食模式标识——采购清单改用「超市动线」两列极简布局
+    var _prepSingle = false, _prepSingleSub = '';
+    try {
+        var _smmUi = (typeof getSingleMealMode === 'function') ? getSingleMealMode() : null;
+        if (_smmUi && _smmUi.enabled && (_smmUi.subtype === 'worker' || _smmUi.subtype === 'elder')) {
+            _prepSingle = true;
+            _prepSingleSub = _smmUi.subtype;
+        }
+    } catch (e) { _prepSingle = false; }
+
     // 3) 食材清单：按分类排序 & 分组 —— 5 列：☑ / 食材 / 单价 / 需购量 / 预估价格
     const rows = Object.values(result.ingredientsMap);
     rows.sort((a, b) => (a._catOrder - b._catOrder) || (a.name.localeCompare(b.name, 'zh')));
@@ -19894,6 +19904,44 @@ function renderFridgeRecView() {
         });
     }
 
+    // V389: 一人食极简清单——按超市/菜市场动线归并为两列（蔬菜区 / 肉禽蛋区）
+    var _singleCols = { veg: [], meat: [], other: [] };
+    if (_prepSingle) {
+        rowsRendered.forEach(function (r) {
+            if (r.alreadyHave || prep.deleted[r.name]) return;
+            const ov = prep.overrides[r.name] || {};
+            const unit = r.needBuyUnit || r.totalUnit || '';
+            let needQty;
+            if (typeof ov.needQty === 'number' && !isNaN(ov.needQty)) needQty = Math.max(0, Number(ov.needQty));
+            else if (r.needBuyQty > 0) needQty = Number(r.needBuyQty);
+            else needQty = r.totalQty <= 0 ? 1 : 0;
+            if (needQty <= 0) return;
+            const cat = String(r.category || '');
+            const bucket = /蔬菜|水果|豆制品/.test(cat) ? 'veg' : (/肉蛋奶|水产|冷冻/.test(cat) ? 'meat' : 'other');
+            _singleCols[bucket].push({ r: r, qty: needQty, unit: unit });
+        });
+    }
+    function singleItemRow(it) {
+        const nm = escapeHtml(it.r.name);
+        const nmJs = it.r.name.replace(/'/g, "\\'");
+        const qtyText = _fmtQty(it.qty) + (it.unit || '');
+        return '<label style="display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:1px dashed #FED7AA;cursor:pointer;">'
+            + '<input type="checkbox"' + (isPrepItemSelected(it.r.name) ? ' checked' : '')
+            + ' onchange="onTogglePrepItem(\'' + nmJs + '\', this.checked)" style="flex:0 0 auto;width:15px;height:15px;margin:0;accent-color:#F97316;">'
+            + '<span style="flex:1;min-width:0;font-size:13px;font-weight:600;color:#1F2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + nm + '</span>'
+            + '<span style="flex:0 0 auto;font-size:11px;color:#C2410C;background:#FFF7ED;border:1px solid #FED7AA;border-radius:6px;padding:0 5px;white-space:nowrap;">' + escapeHtml(qtyText) + '</span>'
+            + '</label>';
+    }
+    function singleColCard(icon, title, items) {
+        return '<div style="flex:1 1 0;min-width:0;border:1px solid #FED7AA;border-radius:12px;padding:8px 10px;background:#FFFCF8;">'
+            + '<div style="font-size:12px;font-weight:800;color:#C2410C;margin-bottom:2px;">' + icon + ' ' + title + '</div>'
+            + (items.length ? items.map(singleItemRow).join('') : '<div style="font-size:12px;color:#9CA3AF;padding:10px 0;text-align:center;">—</div>')
+            + '</div>';
+    }
+    const _singleTipText = _prepSingleSub === 'elder'
+        ? '💡 肉买回来可以按每顿 100g 分装冷冻，吃的时候拿一包，新鲜又方便。'
+        : '💡 周末买好，洗好切好冷冻，工作日下班直接下锅。';
+
     // 4) 底部按钮文案统计：当前所有非已有+非deleted+已勾选的 项数 / 金额
     let selectedCount = 0, selectedTotal = 0;
     rowsRendered.forEach(r => {
@@ -19970,17 +20018,28 @@ function renderFridgeRecView() {
     }
 
     // 参数区下：总体说明一行（右侧「点击展开/收起」倒三角按钮，控制采购清单折叠）
-    var shopExpanded = prep.shopListExpanded === true; // 默认收起，点击「点击展开 ▼」后显示清单
+    // V389: 一人食极简清单默认展开（用户手动收起后尊重其选择）
+    var shopExpanded = (prep.shopListExpanded === undefined) ? _prepSingle : (prep.shopListExpanded === true);
     html += `<div class="prep-shop-list-header">
-        <span>需采购食材清单（以下为采购周期内用量）</span>
+        <span>${_prepSingle ? '🛒 一人食极简清单（按超市动线排好）' : '需采购食材清单（以下为采购周期内用量）'}</span>
         <button type="button" id="prepShopToggleBtn" class="prep-shop-toggle-btn" onclick="togglePrepShopList()">${shopExpanded ? '点击收起 <span class="prep-shop-toggle-arrow">▲</span>' : '点击展开 <span class="prep-shop-toggle-arrow">▼</span>'}</button>
     </div>
     <div id="prepShopListWrap"${shopExpanded ? '' : ' style="display:none;"'}>
     `;
 
-    // 采购清单表 5 列
-    html += `<div class="prep-card prep-shop-card">
-        <table class="prep-shop-table">
+    // V389: 采购清单——一人食走「超市动线」两列极简卡，其余保留 5 列表格
+    html += `<div class="prep-card prep-shop-card">`;
+    if (_prepSingle) {
+        html += `<div style="margin-bottom:9px;padding:9px 11px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;font-size:12px;line-height:1.65;color:#9A3412;">${_singleTipText}</div>`;
+        html += `<div style="display:flex;gap:8px;align-items:stretch;">
+            ${singleColCard('🥬', '蔬菜区', _singleCols.veg)}
+            ${singleColCard('🥩', '肉禽蛋区', _singleCols.meat)}
+        </div>`;
+        if (_singleCols.other.length) {
+            html += `<div style="margin-top:8px;padding:7px 10px;background:#FAFAF9;border:1px solid #E7E5E4;border-radius:10px;font-size:12px;color:#57534E;line-height:1.7;">🧂 顺路带：${_singleCols.other.map(function (it) { return escapeHtml(it.r.name) + ' ' + escapeHtml(_fmtQty(it.qty) + (it.unit || '')); }).join('、')}</div>`;
+        }
+    } else {
+        html += `<table class="prep-shop-table">
             <thead>
                 <tr>
                     <th style="width:32px;">☑</th>
@@ -19993,8 +20052,9 @@ function renderFridgeRecView() {
             <tbody>
                 ${listHtml}
             </tbody>
-        </table>
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
+        </table>`;
+    }
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
             <span style="display:inline-flex;gap:8px;">
                 <button class="prep-add-item-btn" onclick="openPrepAddItemModal()" style="width:auto;margin:0;padding:8px 16px;">添加食材</button>
                 <button type="button" onclick="prepSelectAllShopping(true)" style="padding:8px 14px;border:1px solid #FDBA74;background:#fff;color:#C2410C;border-radius:10px;font-size:13px;cursor:pointer;">全选</button>
