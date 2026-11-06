@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V387-20261106';
+        var APP_VER = 'V388-20261106';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -19959,6 +19959,16 @@ function renderFridgeRecView() {
         </div>
     </div>`;
 
+    // V388: 老年长者一人食 → 采购建议「菜市场可买半份」
+    var _prepElderHalf = false;
+    try {
+        var _smmPrep = (typeof getSingleMealMode === 'function') ? getSingleMealMode() : null;
+        _prepElderHalf = !!(_smmPrep && _smmPrep.enabled && _smmPrep.subtype === 'elder');
+    } catch (e) { _prepElderHalf = false; }
+    if (_prepElderHalf) {
+        html += '<div style="margin:0 0 10px;padding:9px 12px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;font-size:12px;color:#166534;line-height:1.6;">🥬 采购建议：菜市场可买半份（如白菜半棵、肉 100g），单人份当天吃完更新鲜，避免囤积浪费。</div>';
+    }
+
     // 参数区下：总体说明一行（右侧「点击展开/收起」倒三角按钮，控制采购清单折叠）
     var shopExpanded = prep.shopListExpanded === true; // 默认收起，点击「点击展开 ▼」后显示清单
     html += `<div class="prep-shop-list-header">
@@ -38480,6 +38490,104 @@ function isSingleMealMode() {
 function _singleMealSubtypeLabel(subtype) {
     return subtype === 'elder' ? '👵 老年长者' : '💼 职场青年';
 }
+// V388: 一人食人群标签 → 专属 AI 食谱生成约束（注入规划食谱 / 一周推荐 / 每日推荐 Prompt）
+function _singleMealAiConstraint() {
+    var m = getSingleMealMode();
+    if (!m || !m.enabled) return '';
+    if (m.subtype === 'worker') {
+        return '【一人食·职场青年硬约束（必须遵守）】\n'
+            + '用户是单身职场青年。请只推荐 15 分钟内能完成的快手菜、一锅出或空气炸锅菜谱。\n'
+            + '烹饪步骤不能超过 4 步；菜品必须符合高蛋白、低脂肪，且摆盘配色好看（每餐至少 2 种对比色食材）。\n'
+            + '每道菜的 tag 必须写明「快手≤15分钟·高蛋白低脂」；禁止推荐需要长时间炖煮、发面、烤箱预热的菜。\n\n';
+    }
+    if (m.subtype === 'elder') {
+        return '【一人食·老年长者硬约束（必须遵守）】\n'
+            + '用户是单身老年长者。请推荐一菜一汤的搭配（午餐、晚餐各 1 菜 + 1 汤，早餐可 2 道）。\n'
+            + '所有肉类必须炖煮软烂（炖/煲/蒸并注明软烂），蔬菜必须易嚼（选嫩叶、去皮、切小）。\n'
+            + '绝对禁止高盐、高糖、油炸做法：禁用油煎、油炸、腌制、腊味、糖醋、蜜汁、拔丝。\n'
+            + '食材用量请精确到单人份（如：肉 100g，菜 150g），每道菜 tag 标注单人份用量；\n'
+            + '采购建议中必须提示「菜市场可买半份」。\n\n';
+    }
+    return '';
+}
+// V388: 食材消耗闭环——每日计划生成后，自动提示次日续用剩余食材
+var SINGLE_LEFTOVER_RECIPES = [
+    ['娃娃菜', '娃娃菜豆腐汤'], ['白菜', '白菜豆腐汤'], ['白萝卜', '白萝卜排骨汤'],
+    ['萝卜', '萝卜炖牛腩'], ['冬瓜', '冬瓜虾仁汤'], ['番茄', '番茄蛋花汤'], ['西红柿', '番茄蛋花汤'],
+    ['土豆', '土豆炖牛肉'], ['菠菜', '菠菜蛋花汤'], ['油菜', '油菜豆腐汤'], ['青菜', '青菜豆腐汤'],
+    ['西兰花', '蒜蓉西兰花'], ['胡萝卜', '胡萝卜炒蛋'], ['南瓜', '南瓜小米粥'], ['香菇', '香菇滑鸡'],
+    ['豆腐', '白菜豆腐汤'], ['豆芽', '豆芽炒粉条'], ['芹菜', '芹菜炒香干'], ['洋葱', '洋葱炒蛋'],
+    ['莲藕', '莲藕排骨汤'], ['山药', '山药炖鸡']
+];
+function _singleLeftoverSource(dateKey) {
+    try {
+        if (dateKey !== dateToKey(new Date())) return null; // 仅“今天”的计划生成后提示次日续用
+        var dayData = (typeof getDietCalendar === 'function') ? (getDietCalendar()[dateKey] || {}) : {};
+        var names = [];
+        ['breakfast', 'lunch', 'dinner', 'snack'].forEach(function (mt) {
+            var slot = dayData[mt];
+            if (!slot) return;
+            var arr = (slot.plan && Array.isArray(slot.plan.dishes)) ? slot.plan.dishes
+                : ((slot.actual && Array.isArray(slot.actual.dishes)) ? slot.actual.dishes : []);
+            arr.forEach(function (d) {
+                var n = (typeof d === 'string') ? d : ((d && d.name) || '');
+                if (n) names.push(n);
+            });
+        });
+        if (!names.length) return null;
+        var fridge = [];
+        try { fridge = JSON.parse(lsGet('fridgeItems') || '[]') || []; } catch (e) { fridge = []; }
+        for (var i = 0; i < SINGLE_LEFTOVER_RECIPES.length; i++) {
+            var veg = SINGLE_LEFTOVER_RECIPES[i][0];
+            var dish = SINGLE_LEFTOVER_RECIPES[i][1];
+            var inPlan = names.some(function (n) { return n.indexOf(veg) >= 0; });
+            var fHit = null;
+            for (var j = 0; j < fridge.length; j++) {
+                if (String((fridge[j] && fridge[j].name) || '').indexOf(veg) >= 0) { fHit = fridge[j]; break; }
+            }
+            if (!inPlan && !fHit) continue;
+            return { veg: veg, dish: dish, qty: (fHit && fHit.quantity) ? String(fHit.quantity) : '' };
+        }
+    } catch (e) {}
+    return null;
+}
+function _singleLeftoverTipText(dateKey) {
+    try {
+        var singleOn = (typeof isSingleMealMode === 'function' && isSingleMealMode())
+            || (typeof _isSingleHousehold === 'function' && _isSingleHousehold());
+        if (!singleOn) return '';
+        var src = _singleLeftoverSource(dateKey);
+        if (!src) return '';
+        var bought = '今天买的' + (src.qty ? src.qty + src.veg : src.veg);
+        return bought + '，明天可以用来做' + src.dish + '，避免浪费。';
+    } catch (e) { return ''; }
+}
+function isLeftoverTipDismissed(dateKey) {
+    try {
+        var o = JSON.parse(lsGet('leftoverTipDismissed') || '{}') || {};
+        return !!o[dateKey];
+    } catch (e) { return false; }
+}
+function dismissLeftoverTip(dateKey) {
+    try {
+        var o = JSON.parse(lsGet('leftoverTipDismissed') || '{}') || {};
+        o[dateKey] = 1;
+        lsSet('leftoverTipDismissed', JSON.stringify(o));
+    } catch (e) {}
+    if (typeof renderDiary === 'function') renderDiary();
+}
+function _singleLeftoverTipHtml(dateKey) {
+    var text = _singleLeftoverTipText(dateKey);
+    if (!text || isLeftoverTipDismissed(dateKey)) return '';
+    return '<div style="margin:0 7px 10px;padding:10px 12px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;display:flex;align-items:flex-start;gap:8px;">'
+        + '<span style="font-size:15px;line-height:1.4;">🥬</span>'
+        + '<div style="flex:1;min-width:0;">'
+        +   '<div style="font-size:12px;font-weight:800;color:#15803D;">食材不浪费 · 明日续用建议</div>'
+        +   '<div style="font-size:12px;color:#166534;line-height:1.6;margin-top:2px;">' + escapeHtml(text) + '</div>'
+        + '</div>'
+        + '<button type="button" onclick="dismissLeftoverTip(\'' + escapeAttr(dateKey) + '\')" style="background:none;border:none;color:#86EFAC;font-size:16px;line-height:1;cursor:pointer;padding:0 2px;">✕</button>'
+        + '</div>';
+}
 function saveSingleMealMode(mode) {
     try { lsSetJSON(SINGLE_MEAL_MODE_KEY, mode); } catch (e) {}
 }
@@ -55751,6 +55859,9 @@ async function generateAiMealRecommendation() {
         if (servings2 > 0) {
             userMessage += `【用餐人数】${servings2}人，请按此人数推荐菜品分量和食材用量\n`;
         }
+        // V388: 一人食人群标签专属约束（职场青年 / 老年长者）
+        var _dailySingle = (typeof _singleMealAiConstraint === 'function') ? _singleMealAiConstraint() : '';
+        if (_dailySingle) userMessage += _dailySingle;
         if (historySummary) {
             userMessage += `【维度⑤ 历史记录（近7天）】\n${historySummary}\n`;
         }
@@ -56711,6 +56822,10 @@ function buildRecommendationPrompt(data, weekDatesStr) {
             + `2) 【明令禁止】生冷：不得出现凉拌菜、沙拉、刺身、冰镇、冷面/凉皮/凉粉，全部温热熟食；\n`
             + `3) 富铁菜搭配番茄/青椒/西兰花等富含维C食材促进铁吸收，避免与浓茶/咖啡同餐；\n\n`;
     }
+
+    // V388: 一人食人群标签专属约束（职场青年 / 老年长者）
+    var _weekSingle = (typeof _singleMealAiConstraint === 'function') ? _singleMealAiConstraint() : '';
+    if (_weekSingle) prompt += _weekSingle;
 
     // V245: 订阅勾选的特殊需求也加入一周配餐约束
     if (typeof _subNeedTagsBrief === 'function') {
@@ -59389,7 +59504,9 @@ function renderDiary() {
         }
     })();
 
-    document.getElementById('diaryMeals').innerHTML = _renderParentTasksBar() + _weekendFeastPreviewHtml() + html;
+    document.getElementById('diaryMeals').innerHTML = _renderParentTasksBar()
+        + ((typeof _singleLeftoverTipHtml === 'function') ? _singleLeftoverTipHtml(dateKey) : '')
+        + _weekendFeastPreviewHtml() + html;
 }
 
 // 复制餐次信息到剪贴板
@@ -65485,6 +65602,8 @@ function _buildMealPlanPrompt(dateStr, ctx, styleCount) {
     if (ctx.chatKeywords) p += '【近期关注】'+ctx.chatKeywords+'\n\n';
     p += '【用餐人数】'+ctx.diningCount+'人\n';
     p += '【份量要求】全部菜品按'+ctx.diningCount+'人份设计，菜量、主食份量与采购克数均按实际人数计算；1人食时避免按多人家庭的大份量出菜。\n';
+    // V388: 一人食人群标签专属约束（职场青年 / 老年长者）
+    p += (typeof _singleMealAiConstraint === 'function') ? _singleMealAiConstraint() : '';
     if (ctx.diningMembers.length) {
         p += '【成员信息】'+ctx.diningMembers.map(function(m){return m.name+'('+m.age+'岁,'+m.role+')';}).join('、')+'\n\n';
     }
