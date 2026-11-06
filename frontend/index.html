@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V385-20261106';
+        var APP_VER = 'V386-20261106';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -9069,6 +9069,7 @@ function familyKey(key) {
         'reviewRiskAI',
         'expertAssessments',
         'specialPlans',
+        'singleMealMode',
         'foodDiaries',
         'userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits',
         'systemErrorLogs',
@@ -12934,7 +12935,7 @@ function exportFamilyData() {
         'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
-        'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile'];
+        'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile','singleMealMode'];
     var data = {};
     for (var i = 0; i < familyKeys.length; i++) {
         var k = familyKeys[i];
@@ -19757,6 +19758,12 @@ function renderFridgeRecView() {
     prep.adultCount = (_prepCtx && _prepCtx.count) ? _prepCtx.count : getCurrentServings();
     prep.infantCount = _prepCtx ? (_prepCtx.infantCount || 0) : 0;
     prep.servings = prep.adultCount;
+    // V386: 一人食模式固定单人份（单日），忽略就餐组人数折算
+    if (typeof isSingleMealMode === 'function' && isSingleMealMode()) {
+        prep.adultCount = 1;
+        prep.infantCount = 0;
+        prep.servings = 1;
+    }
     // 自定义上限强制收敛
     if (prep.cycleDays > confirmedInfo.days) {
         prep.cycleDays = Math.max(1, confirmedInfo.days);
@@ -20489,7 +20496,9 @@ function computeIngredientNeeds(daysList, servings, daysCount) {
                 // else：无 dishMeta 元信息且未 legacy confirmed → 不计数（新契约默认未勾选=未确认）
             }
             if (!dishesToCount.length) return;
-            const S_meal = getMealServings(key, meal, servingsFallback);
+            // V386: 一人食模式强制按单人份（单日）计算，不再按就餐组人数/婴儿系数放大
+            const _singleOn = (typeof isSingleMealMode === 'function') && isSingleMealMode();
+            const S_meal = _singleOn ? 1 : getMealServings(key, meal, servingsFallback);
             // V345(D7-08): 采购按「折算份数」而非含婴儿的原始人数——婴儿系数 0、70+×0.8、
             // 4-6岁×0.7、1-3岁×0.5、体力劳动者主食×1.3/蛋白×1.2。
             // plan.servings 等于「就餐组人数（含婴儿）」时视为自动值，直接采用折算份数；
@@ -20533,7 +20542,7 @@ function computeIngredientNeeds(daysList, servings, daysCount) {
                     }
                     // V345(D7-08): 食材按类别取折算份数（主食/蛋白/其他各有权重）
                     const _kind = (_eqM && typeof _ingAmountKind === 'function') ? _ingAmountKind(nm) : 'other';
-                    const _eff = (_eqM && isFinite(_eqM[_kind]) ? _eqM[_kind] : S_meal) * _svRatio;
+                    const _eff = _singleOn ? 1 : ((_eqM && isFinite(_eqM[_kind]) ? _eqM[_kind] : S_meal) * _svRatio);
                     mealSum[norm] = (mealSum[norm] || 0) + _eff;
                     // 累计总需求（量化的加一人份×折算份数；无量化累计人次）
                     if (q1 && q1 > 0) {
@@ -38435,6 +38444,145 @@ function _memberPreferenceSummary(member) {
     return parts.join(' · ');
 }
 
+// ==================== V386: 一人食专属模式 ====================
+var SINGLE_MEAL_MODE_KEY = 'singleMealMode';
+var SINGLE_MEAL_MENUS = {
+    worker: [
+        { breakfast: '牛油果鸡蛋全麦三明治', lunch: '番茄鸡胸意面', dinner: '香煎三文鱼配西兰花' },
+        { breakfast: '燕麦香蕉牛奶杯', lunch: '黑椒牛柳饭', dinner: '虾仁豆腐煲' },
+        { breakfast: '希腊酸奶坚果碗', lunch: '照烧鸡腿饭', dinner: '蒜蓉粉丝蒸虾' },
+        { breakfast: '蔬菜蛋饼', lunch: '咖喱鸡肉饭', dinner: '清蒸鲈鱼配凉拌秋葵' },
+        { breakfast: '豆浆配全麦馒头', lunch: '番茄牛腩面', dinner: '香菇滑鸡' },
+        { breakfast: '花生酱吐司配牛奶', lunch: '三色藜麦沙拉', dinner: '冬瓜排骨汤' },
+        { breakfast: '小米南瓜粥配水煮蛋', lunch: '台式卤肉饭', dinner: '香煎豆腐配清炒时蔬' }
+    ],
+    elder: [
+        { breakfast: '小米南瓜粥配蒸蛋', lunch: '清蒸鲈鱼配软米饭', dinner: '山药炖鸡配炒菠菜' },
+        { breakfast: '燕麦粥配蒸红薯', lunch: '番茄豆腐煲', dinner: '香菇鸡肉粥' },
+        { breakfast: '红枣山药粥', lunch: '清炖排骨配时蔬', dinner: '虾仁蒸蛋配南瓜泥' },
+        { breakfast: '豆浆配软馒头', lunch: '清蒸鳕鱼配西兰花', dinner: '莲藕排骨汤' },
+        { breakfast: '南瓜小米粥', lunch: '芋头蒸肉饼', dinner: '青菜豆腐汤配软米饭' },
+        { breakfast: '鸡蛋羹配燕麦牛奶', lunch: '山药木耳炒肉片', dinner: '清蒸鲳鱼配菠菜' },
+        { breakfast: '红薯粥配水煮蛋', lunch: '萝卜炖牛腩', dinner: '冬瓜虾仁汤配软米饭' }
+    ]
+};
+function getSingleMealMode() {
+    var m = null;
+    try { m = lsGetJSON(SINGLE_MEAL_MODE_KEY, null); } catch (e) {}
+    if (!m || typeof m !== 'object') return null;
+    return m;
+}
+function isSingleMealMode() {
+    var m = getSingleMealMode();
+    return !!(m && m.enabled && (m.subtype === 'worker' || m.subtype === 'elder'));
+}
+function _singleMealSubtypeLabel(subtype) {
+    return subtype === 'elder' ? '👵 老年长者' : '💼 职场青年';
+}
+function saveSingleMealMode(mode) {
+    try { lsSetJSON(SINGLE_MEAL_MODE_KEY, mode); } catch (e) {}
+}
+function chooseSingleMealSubtype(subtype) {
+    if (subtype !== 'worker' && subtype !== 'elder') return;
+    saveSingleMealMode({ enabled: true, subtype: subtype, chosenAt: Date.now() });
+    showToast('🍱 一人食模式已开启 · ' + _singleMealSubtypeLabel(subtype));
+    if (typeof renderFamily === 'function') renderFamily();
+}
+function dismissSingleMealGuide() {
+    saveSingleMealMode({ enabled: false, subtype: '', dismissedAt: Date.now() });
+    if (typeof renderFamily === 'function') renderFamily();
+}
+function _singleMealTodayMenu() {
+    var m = getSingleMealMode();
+    var subtype = (m && m.subtype === 'elder') ? 'elder' : 'worker';
+    var list = SINGLE_MEAL_MENUS[subtype];
+    return list[new Date().getDay() % list.length];
+}
+function _singleMealGuideHtml() {
+    var mode = getSingleMealMode();
+    if (!mode) {
+        return '<div style="background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FDBA74;border-radius:14px;padding:12px;margin-bottom:10px;">'
+            + '<div style="font-size:14px;font-weight:800;color:#C2410C;">🍱 检测到您家只有 1 位成员</div>'
+            + '<div style="font-size:12px;color:#9A3412;line-height:1.7;margin-top:4px;">开启「一人食模式」后，采购清单自动按单人份计算，健康管家也会每天为您推荐独享料理。</div>'
+            + '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">'
+            +   '<button type="button" onclick="chooseSingleMealSubtype(\'worker\')" style="flex:1 1 0;min-width:0;padding:8px 6px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">💼 职场青年</button>'
+            +   '<button type="button" onclick="chooseSingleMealSubtype(\'elder\')" style="flex:1 1 0;min-width:0;padding:8px 6px;border:none;border-radius:10px;background:#EA580C;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">👵 老年长者</button>'
+            +   '<button type="button" onclick="dismissSingleMealGuide()" style="flex:0 0 auto;padding:8px 10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;color:#9A3412;font-size:12px;cursor:pointer;">暂不需要</button>'
+            + '</div>'
+            + '</div>';
+    }
+    if (!mode.enabled) return '';
+    return '<div style="background:#fff;border:1px solid #FED7AA;border-radius:12px;padding:9px 12px;margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+        + '<span style="font-size:13px;font-weight:800;color:#C2410C;">🍱 一人食模式 · ' + _singleMealSubtypeLabel(mode.subtype) + '</span>'
+        + '<span style="font-size:11px;color:#9CA3AF;">采购按单人份（单日）计算</span>'
+        + '<button type="button" onclick="chooseSingleMealSubtype(\'worker\')" style="margin-left:auto;padding:3px 8px;border:1px solid #FDBA74;border-radius:8px;background:#FFF7ED;color:#C2410C;font-size:11px;cursor:pointer;">切职场</button>'
+        + '<button type="button" onclick="chooseSingleMealSubtype(\'elder\')" style="padding:3px 8px;border:1px solid #FDBA74;border-radius:8px;background:#FFF7ED;color:#C2410C;font-size:11px;cursor:pointer;">切长者</button>'
+        + '<button type="button" onclick="dismissSingleMealGuide()" style="padding:3px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#F9FAFB;color:#6B7280;font-size:11px;cursor:pointer;">关闭</button>'
+        + '</div>';
+}
+function _singleMealCardHtml() {
+    if (!isSingleMealMode()) return '';
+    var menu = _singleMealTodayMenu();
+    var label = _singleMealSubtypeLabel(getSingleMealMode().subtype);
+    function row(icon, mealLabel, name) {
+        return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px dashed #FED7AA;">'
+            + '<span style="font-size:11px;color:#9A3412;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;white-space:nowrap;">' + icon + ' ' + mealLabel + '</span>'
+            + '<span style="font-size:13px;color:#1F2937;font-weight:600;flex:1;min-width:0;">' + escapeHtml(name) + '</span>'
+            + '</div>';
+    }
+    return '<div style="padding:0 14px 12px;">'
+        + '<div style="background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FDBA74;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.05);">'
+        +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+        +     '<div style="font-size:15px;font-weight:800;color:#C2410C;">🍱 今天的独享料理</div>'
+        +     '<span style="font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">' + label + '</span>'
+        +   '</div>'
+        +   '<div style="font-size:11px;color:#9A3412;margin-top:4px;">一人食专属搭配，三餐各一道，食材用量按单人份计算。</div>'
+        +   '<div style="margin-top:8px;">'
+        +     row('🌅', '早餐', menu.breakfast)
+        +     row('☀️', '午餐', menu.lunch)
+        +     row('🌙', '晚餐', menu.dinner)
+        +   '</div>'
+        +   '<button type="button" onclick="confirmSingleMealToday()" style="width:100%;margin-top:10px;padding:10px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:13px;font-weight:800;cursor:pointer;">✅ 确认融入今日三餐</button>'
+        +   '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">确认后仅加入今日计划，采购清单同步按单人份（单日）计算。</div>'
+        + '</div></div>';
+}
+function confirmSingleMealToday() {
+    var menu = _singleMealTodayMenu();
+    var dateKey = dateToKey(new Date());
+    var calendar = getDietCalendar();
+    if (!calendar[dateKey]) calendar[dateKey] = {};
+    var added = 0;
+    ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+        var name = menu[mt];
+        if (!name) return;
+        if (!calendar[dateKey][mt]) calendar[dateKey][mt] = { plan: null, actual: null };
+        var slot = calendar[dateKey][mt];
+        if (slot.actual && Array.isArray(slot.actual.dishes) && slot.actual.dishes.length) return; // 已记录实际，跳过
+        var old = slot.plan || {};
+        var dishes = Array.isArray(old.dishes) ? old.dishes.slice() : [];
+        var exists = dishes.some(function (d) {
+            var n = (typeof d === 'string') ? d : String((d && d.name) || '');
+            return n === name;
+        });
+        if (!exists) { dishes.push(name); added++; }
+        var meta = Object.assign({}, old.dishMeta || {});
+        meta[name] = { source: 'single', confirmed: true, addedAt: Date.now() };
+        var note = String(old.note || '');
+        if (note.indexOf('一人食') < 0) note = (note ? note + '；' : '') + '🍱 一人食独享料理';
+        slot.plan = Object.assign({}, old, {
+            dishes: dishes,
+            dishMeta: meta,
+            servings: 1,
+            state: old.state || 'pending',
+            note: note
+        });
+    });
+    saveDietCalendar(calendar);
+    showToast(added ? '🍱 已融入今日三餐，采购按单人份计算' : '今日三餐已包含一人食料理，采购按单人份计算');
+    closeSpecialPlanBoard();
+    focusTodayDiaryMeals();
+}
+
 function renderFamily() {
     try {
     // 未登录浏览模式: 不渲染任何家庭成员/就餐组/家庭码信息(默认成员含"老公、儿子", 属于演示数据,
@@ -38582,7 +38730,9 @@ function renderFamily() {
         var _xjWrap = document.createElement('div');
         _xjWrap.id = 'familyMembersAnchor';
         _xjWrap.style.cssText = 'margin-bottom:10px;';
-        _xjWrap.innerHTML = `
+        // V386: 家庭仅 1 人时自动展示「一人食模式」引导 / 已开启状态条
+        var _smmBanner = (familyData.length === 1) ? _singleMealGuideHtml() : '';
+        _xjWrap.innerHTML = _smmBanner + `
             <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px 8px;gap:8px;">
                 <span style="font-weight:600;color:#374151;font-size:13px;flex-shrink:0;">👪 小家 · ${xiaojiaMembers.length} 人</span>
                 ${xiaojiaMembers.length > 1 ? `<select id="xjMemberSelect" aria-label="切换当前操作人" style="max-width:110px;height:26px;padding:0 6px;border:1px solid #FDBA74;border-radius:13px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;outline:none;cursor:pointer;">
@@ -38624,7 +38774,7 @@ function renderFamily() {
             });
         }
     } else {
-        familyList.insertAdjacentHTML('beforeend', `<div style="text-align:center;padding:20px;color:#9CA3AF;font-size:14px;">暂无小家成员，请添加</div>`);
+        familyList.insertAdjacentHTML('beforeend', (familyData.length === 1 ? _singleMealGuideHtml() : '') + `<div style="text-align:center;padding:20px;color:#9CA3AF;font-size:14px;">暂无小家成员，请添加</div>`);
     }
 
     // V138: 去掉 addEventListener 绑定（onclick 内联已 100% 可靠，双重绑定导致两次调用互相抵消：第一次创建表单→第二次删除表单）
@@ -75177,7 +75327,7 @@ function openSpecialPlanBoard() {
         + '<div style="font-size:17px;font-weight:700;color:#C2410C;">健康管家</div>'
         + (plan ? '<button type="button" id="spBoardEndBtn" style="margin-left:auto;padding:6px 10px;border:1px solid #FED7AA;border-radius:10px;background:#fff;color:#C2410C;font-size:12px;cursor:pointer;">结束计划</button>' : '')
         + '</div>'
-        + '<div style="flex:1;overflow-y:auto;min-height:0;">' + bodyHtml + seasonCardHtml + gutCardHtml + '</div>'
+        + '<div style="flex:1;overflow-y:auto;min-height:0;">' + _singleMealCardHtml() + bodyHtml + seasonCardHtml + gutCardHtml + '</div>'
         + (plan ? '<div style="flex-shrink:0;padding:12px 14px;background:#FFF7ED;border-top:1px solid #FED7AA;">'
             + '<button type="button" id="spBoardTodayBtn" style="width:100%;padding:12px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">🍽️ 查看今日融合食谱</button>'
             + '</div>' : '');
