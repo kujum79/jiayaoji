@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V384-20261106';
+        var APP_VER = 'V385-20261106';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -286,6 +286,9 @@
         /* V140: 标题行 flex——左侧标题、右侧"读完整/收藏"按钮贴右边框；换一条已移除 */
         .dt-head { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #F97316; padding-bottom: 8px; border-bottom: 1px solid #F3F4F6; margin-bottom: 8px; }
         .dt-head-btns { margin-left: auto; display: flex; gap: 6px; flex: 0 0 auto; }
+        /* V385: 食养堂标题栏「食神盲盒」入口 */
+        .dt-quiz-btn { border: none; cursor: pointer; flex: 0 0 auto; font-size: 11px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #FB923C, #F97316); border-radius: 999px; padding: 3px 9px; line-height: 1.4; white-space: nowrap; box-shadow: 0 2px 6px rgba(249, 115, 22, 0.35); animation: dtQuizFloat 2.4s ease-in-out infinite; }
+        @keyframes dtQuizFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
         .dt-title { font-size: 16px; font-weight: 700; color: #1F2937; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         /* V383: 今日一课标签、语音播报、往期回顾统一并入文章标题行 */
         .dt-title-row { display: flex; align-items: center; gap: 6px; }
@@ -33084,6 +33087,7 @@ function _dtRenderCard(tip) {
     el.innerHTML = '<div class="dt-head"><span>📚 食养堂' + exclusiveBadge + '</span>'
         + '<span class="dt-head-btns" onclick="event.stopPropagation()">'
         + adminCtl
+        + '<button class="dt-quiz-btn" onclick="openFoodGodQuiz()" title="每日食神问答">🎮 食神盲盒</button>'
         + subBtnHtml
         + '</span></div>'
         + '<div onclick="_openDailyTipFull()" style="cursor:pointer;">'
@@ -75760,6 +75764,308 @@ window.openCommunityPhoneAuthModal = openCommunityPhoneAuthModal;
 window.closeCommunityPhoneAuthModal = closeCommunityPhoneAuthModal;
 window._communitySendAuthCode = _communitySendAuthCode;
 
+// ========== V385: 每日食神问答（食养堂小游戏） ==========
+var FG_QUESTIONS_KEY = 'foodGodQuestions';
+var FG_DAILY_KEY = 'foodGodDaily';
+var FG_QUESTIONS = [
+    { id: 'q_001', question: '秋冬季节，哪种食材富含膳食纤维且有助于排便？', options: ['A. 糯米', 'B. 红薯', 'C. 肥肉'], answer: 'B', explanation: '红薯富含膳食纤维，能促进肠胃蠕动，是秋冬防便秘的佳品。' },
+    { id: 'q_002', question: '霜降时节，吃哪种水果最润肺？', options: ['A. 榴莲', 'B. 雪梨', 'C. 荔枝'], answer: 'B', explanation: '雪梨性凉味甘，能生津润燥、清热化痰，最适合霜降后的秋燥天气。' },
+    { id: 'q_003', question: '下列哪种食材的铁含量较高，适合补铁？', options: ['A. 猪肝', 'B. 冬瓜', 'C. 白糖'], answer: 'A', explanation: '猪肝富含血红素铁，吸收率高，是食补铁的常见食材（高血脂人群要适量）。' },
+    { id: 'q_004', question: '早餐想补充优质蛋白，优先选哪一样？', options: ['A. 粉丝', 'B. 鸡蛋', 'C. 藕粉'], answer: 'B', explanation: '鸡蛋蛋白质氨基酸组成接近人体需要，吸收利用率高，是优质蛋白的代表。' },
+    { id: 'q_005', question: '想要补钙，日常最适合多喝什么？', options: ['A. 牛奶', 'B. 可乐', 'C. 浓茶'], answer: 'A', explanation: '牛奶钙含量高且钙磷比例合适，吸收好；可乐和浓茶反而可能影响钙吸收。' },
+    { id: 'q_006', question: '哪道菜的维生素 C 含量最丰富？', options: ['A. 白米饭', 'B. 猪油拌饭', 'C. 彩椒炒肉'], answer: 'C', explanation: '彩椒的维生素 C 含量在蔬菜中名列前茅，快炒能减少维C流失。' },
+    { id: 'q_007', question: '秋燥时节，哪碗甜品更适合润燥？', options: ['A. 银耳雪梨羹', 'B. 炸鸡', 'C. 麻辣火锅'], answer: 'A', explanation: '银耳富含植物胶质，搭配雪梨能润肺生津，正适合缓解秋燥。' },
+    { id: 'q_008', question: '下列哪种属于粗粮，适合替换部分精米白面？', options: ['A. 蛋糕', 'B. 燕麦', 'C. 油条'], answer: 'B', explanation: '燕麦保留麸皮和胚芽，膳食纤维丰富，升糖速度比精米白面慢。' },
+    { id: 'q_009', question: '想控制钠摄入、减轻水肿，应该多吃什么？', options: ['A. 咸菜', 'B. 火腿', 'C. 新鲜蔬菜'], answer: 'C', explanation: '新鲜蔬菜钠低钾高，有助于平衡钠钾；咸菜、火腿含盐量高，应少吃。' },
+    { id: 'q_010', question: '哪种油脂以不饱和脂肪酸为主，更适合日常凉拌？', options: ['A. 橄榄油', 'B. 猪油', 'C. 黄油'], answer: 'A', explanation: '橄榄油以单不饱和脂肪酸为主，适合凉拌或低温烹调，对心血管更友好。' },
+    { id: 'q_011', question: '冬至进补，哪种肉类最常用来温补？', options: ['A. 冰淇淋', 'B. 羊肉', 'C. 凉茶'], answer: 'B', explanation: '羊肉性温，冬至炖羊肉汤能温中暖身，是传统的冬令进补食材。' },
+    { id: 'q_012', question: '盛夏清热解暑，最适合煮什么汤？', options: ['A. 绿豆汤', 'B. 桂圆红枣汤', 'C. 麻辣羊汤'], answer: 'A', explanation: '绿豆性凉，能清热解暑、利尿，是夏季经典的消暑汤品。' },
+    { id: 'q_013', question: '立秋「贴秋膘」，哪种做法更健康？', options: ['A. 暴饮暴食', 'B. 只吃水果', 'C. 适量增加瘦肉和薯类'], answer: 'C', explanation: '贴秋膘应循序渐进，适量增加优质蛋白和根茎类，避免暴饮暴食和单一饮食。' },
+    { id: 'q_014', question: '下列哪种水果富含钾，适合运动后补充？', options: ['A. 白糖', 'B. 香蕉', 'C. 白粥'], answer: 'B', explanation: '香蕉钾含量高，能帮助维持电解质平衡，适合运动后快速补充能量。' },
+    { id: 'q_015', question: '想增加膳食纤维摄入，优先选哪道菜？', options: ['A. 芹菜炒香干', 'B. 鱼翅羹', 'C. 猪油拌饭'], answer: 'A', explanation: '芹菜膳食纤维丰富，搭配香干还能补充植物蛋白，是清爽的家常选择。' },
+    { id: 'q_016', question: '哪种搭配能实现蛋白质互补，提高利用率？', options: ['A. 糖配油', 'B. 水果配糖', 'C. 米面配豆类'], answer: 'C', explanation: '谷物缺少赖氨酸、豆类缺少蛋氨酸，米面与豆类同吃可互补氨基酸，提高蛋白质利用率。' },
+    { id: 'q_017', question: '下列哪种属于深色蔬菜，建议每天吃？', options: ['A. 白萝卜', 'B. 菠菜', 'C. 冬瓜'], answer: 'B', explanation: '菠菜等深色蔬菜富含叶酸、维生素 K 和类胡萝卜素，营养价值高于浅色蔬菜。' },
+    { id: 'q_018', question: '想补充维生素 D，最有效的方式是？', options: ['A. 晒太阳 + 深海鱼', 'B. 只吃水果', 'C. 多喝糖水'], answer: 'A', explanation: '维生素 D 主要靠日照在皮肤合成，深海鱼和蛋黄也能提供，单靠水果糖水无法补充。' },
+    { id: 'q_019', question: '日常控糖，最应该减少的是？', options: ['A. 白开水', 'B. 绿叶菜', 'C. 含糖饮料'], answer: 'C', explanation: '含糖饮料升糖快、热量高，是隐形的糖负担，控糖第一步就是少喝甜饮。' },
+    { id: 'q_020', question: '按照膳食指南，成人每天食盐摄入建议控制在？', options: ['A. 越多越有味道', 'B. 不超过 5 克', 'C. 10 克以上'], answer: 'B', explanation: '《中国居民膳食指南》建议成人每天食盐不超过 5 克，有助于降低高血压风险。' },
+    { id: 'q_021', question: '秋冬干燥，正确的喝水方式是？', options: ['A. 少量多次', 'B. 口渴才喝', 'C. 一次猛灌一大瓶'], answer: 'A', explanation: '少量多次补水更利于吸收，等口渴再喝身体已经轻度缺水了。' },
+    { id: 'q_022', question: '春分前后，哪种时令蔬菜最鲜嫩？', options: ['A. 西瓜', 'B. 柿子', 'C. 荠菜'], answer: 'C', explanation: '荠菜是春季时令野菜，鲜嫩清香，包饺子、做羹都很合适。' },
+    { id: 'q_023', question: '小满时节湿气重，哪种食材有助于祛湿？', options: ['A. 核桃', 'B. 薏米', 'C. 芝麻'], answer: 'B', explanation: '薏米性凉，利水渗湿，搭配赤小豆煮汤是南方常见的祛湿吃法。' },
+    { id: 'q_024', question: '大暑天出汗多，哪道汤最适合补水解暑？', options: ['A. 冬瓜汤', 'B. 麻辣火锅', 'C. 烤肉'], answer: 'A', explanation: '冬瓜含水量高、性凉，煮汤清淡补水，适合大暑天消暑。' },
+    { id: 'q_025', question: '处暑之后燥气渐起，哪种食材适合润燥安神？', options: ['A. 辣椒', 'B. 炸鸡', 'C. 百合'], answer: 'C', explanation: '百合甘凉，能润肺止咳、清心安神，适合处暑后的干燥天气。' },
+    { id: 'q_026', question: '寒露时节早餐养胃，优先选哪一样？', options: ['A. 冰镇饮料', 'B. 小米粥', 'C. 麻辣烫'], answer: 'B', explanation: '小米粥温和易消化，能护胃暖身，是寒露时节经典的养胃早餐。' },
+    { id: 'q_027', question: '小雪进补，哪道菜兼顾温补与易消化？', options: ['A. 山药炖鸡', 'B. 冰淇淋', 'C. 凉拌黄瓜'], answer: 'A', explanation: '山药健脾、鸡肉温补，炖煮后软烂易消化，适合小雪时节全家进补。' },
+    { id: 'q_028', question: '大雪时节，哪种搭配更适合补肾御寒？', options: ['A. 冰西瓜', 'B. 冷饮', 'C. 黑豆核桃粥'], answer: 'C', explanation: '黑豆和核桃富含优质脂肪与微量元素，煮粥温润，适合大雪时节御寒补肾。' },
+    { id: 'q_029', question: '下列哪种属于优质碳水，适合代替白米饭？', options: ['A. 白糖', 'B. 糙米', 'C. 奶茶'], answer: 'B', explanation: '糙米保留麸皮，膳食纤维和 B 族维生素更丰富，饱腹感强、升糖更平稳。' },
+    { id: 'q_030', question: '冰箱储存食材，哪种做法最安全？', options: ['A. 生熟分开冷藏', 'B. 生熟混放', 'C. 反复解冻'], answer: 'A', explanation: '生熟分开能避免交叉污染；反复解冻会加速细菌繁殖，解冻后应尽快吃完。' }
+];
+var _fgState = null;
+var _fgFeedback = null;
+var _fgPoster = null;
+function seedFoodGodQuestions() {
+    try {
+        var cur = lsGetJSON(FG_QUESTIONS_KEY, null);
+        if (!Array.isArray(cur) || cur.length < FG_QUESTIONS.length) lsSetJSON(FG_QUESTIONS_KEY, FG_QUESTIONS);
+    } catch (e) {}
+}
+seedFoodGodQuestions();
+function getFoodGodQuestions() {
+    try {
+        var arr = lsGetJSON(FG_QUESTIONS_KEY, null);
+        if (Array.isArray(arr) && arr.length >= 3) return arr;
+    } catch (e) {}
+    return FG_QUESTIONS;
+}
+function _fgFindQ(id) {
+    var arr = getFoodGodQuestions();
+    for (var i = 0; i < arr.length; i++) { if (arr[i] && arr[i].id === id) return arr[i]; }
+    return arr[0];
+}
+function _fgTodayQuestions() {
+    var qs = getFoodGodQuestions();
+    var d = new Date();
+    var seed = d.getFullYear() * 372 + (d.getMonth() + 1) * 31 + d.getDate();
+    var out = [];
+    for (var i = 0; i < 3; i++) out.push(qs[(seed + i * 10) % qs.length]);
+    return out;
+}
+function _fgGetDaily() {
+    var today = _pointsDateStr();
+    var o = null;
+    try { o = lsGetJSON(FG_DAILY_KEY, null); } catch (e) {}
+    if (!o || o.date !== today) {
+        var qs = _fgTodayQuestions();
+        o = { date: today, qids: qs.map(function (q) { return q.id; }), answers: [], awarded: [], score: 0, completed: false };
+    }
+    if (!Array.isArray(o.qids) || o.qids.length !== 3) o.qids = _fgTodayQuestions().map(function (q) { return q.id; });
+    if (!Array.isArray(o.answers)) o.answers = [];
+    if (!Array.isArray(o.awarded)) o.awarded = [];
+    if (!Number(o.score)) o.score = 0;
+    return o;
+}
+function _fgSaveDaily(d) { try { lsSetJSON(FG_DAILY_KEY, d); } catch (e) {} }
+function _fgReset() {
+    var d = _fgGetDaily();
+    d.date = _pointsDateStr();
+    d.qids = _fgTodayQuestions().map(function (q) { return q.id; });
+    d.answers = [];
+    d.awarded = [];
+    d.score = 0;
+    d.completed = false;
+    _fgSaveDaily(d);
+    _fgState = d;
+    _fgFeedback = null;
+    _fgPoster = null;
+}
+function openFoodGodQuiz() {
+    if (!getFamilyId()) { showToast('请先登录家庭账号'); return; }
+    var old = document.getElementById('foodGodOverlay');
+    if (old) old.remove();
+    _fgState = _fgGetDaily();
+    _fgFeedback = null;
+    _fgPoster = null;
+    var ov = document.createElement('div');
+    ov.id = 'foodGodOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10016;background:rgba(17,24,39,0.62);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    ov.innerHTML = '<div style="width:100%;max-width:392px;max-height:92vh;background:#FFF7ED;border-radius:20px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,0.28);display:flex;flex-direction:column;">'
+        + '<div style="background:linear-gradient(135deg,#F97316,#FB923C);padding:14px 16px;display:flex;align-items:center;gap:8px;color:#fff;">'
+        +   '<div style="flex:1;font-size:16px;font-weight:800;">🎮 每日食神问答</div>'
+        +   '<div id="foodGodProgress" style="font-size:12px;background:rgba(255,255,255,0.22);border-radius:999px;padding:3px 9px;font-weight:700;">今日 0/3</div>'
+        +   '<button type="button" onclick="closeFoodGodQuiz()" style="border:none;background:transparent;color:#fff;font-size:20px;cursor:pointer;padding:0 0 0 4px;line-height:1;">✕</button>'
+        + '</div>'
+        + '<div id="foodGodBody" style="padding:16px;overflow-y:auto;"></div>'
+        + '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) closeFoodGodQuiz(); });
+    document.body.appendChild(ov);
+    _fgRender();
+}
+function closeFoodGodQuiz() {
+    var ov = document.getElementById('foodGodOverlay');
+    if (ov) ov.remove();
+}
+function _fgRender() {
+    var body = document.getElementById('foodGodBody');
+    var prog = document.getElementById('foodGodProgress');
+    if (!body || !_fgState) return;
+    var d = _fgState;
+    var done = d.answers.length >= 3;
+    if (prog) prog.textContent = '今日 ' + (done ? 3 : d.answers.length) + '/3';
+    var idx = _fgFeedback ? (d.answers.length - 1) : d.answers.length;
+    if (done) { _fgRenderResult(body, d); return; }
+    var q = _fgFindQ(d.qids[idx]);
+    var dots = '';
+    for (var i = 0; i < 3; i++) {
+        var cls = i < d.answers.length ? (d.answers[i].correct ? '#16A34A' : '#DC2626') : (i === idx ? '#F97316' : '#E5E7EB');
+        dots += '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + cls + ';margin-right:4px;"></span>';
+    }
+    var optsHtml = q.options.map(function (opt, oi) {
+        var letter = 'ABC'[oi];
+        var border = '#FED7AA', bg = '#fff', color = '#374151', tail = '';
+        if (_fgFeedback) {
+            if (letter === q.answer) { border = '#86EFAC'; bg = '#F0FDF4'; color = '#166534'; tail = ' ✅'; }
+            else if (letter === _fgFeedback.choice) { border = '#FCA5A5'; bg = '#FEF2F2'; color = '#B91C1C'; tail = ' ❌'; }
+            else { color = '#9CA3AF'; border = '#F3F4F6'; }
+        }
+        return '<button type="button" onclick="fgChoose(' + oi + ')" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:11px 12px;border-radius:12px;border:1px solid ' + border + ';background:' + bg + ';color:' + color + ';font-size:14px;line-height:1.45;cursor:pointer;' + (_fgFeedback ? 'pointer-events:none;' : '') + '">' + escapeHtml(opt) + tail + '</button>';
+    }).join('');
+    var feedbackHtml = '';
+    if (_fgFeedback) {
+        var ok = _fgFeedback.correct;
+        feedbackHtml = '<div style="margin-top:6px;border-radius:12px;padding:11px 12px;font-size:13px;line-height:1.6;background:' + (ok ? '#F0FDF4' : '#FEF2F2') + ';border:1px solid ' + (ok ? '#BBF7D0' : '#FECACA') + ';color:' + (ok ? '#166534' : '#991B1B') + ';">'
+            + '<div style="font-weight:800;margin-bottom:4px;">' + (ok ? '✅ 答对啦，+10 积分' : '❌ 答错了，正确答案是 ' + q.answer) + '</div>'
+            + '<div>💡 ' + escapeHtml(q.explanation || '') + '</div>'
+            + '</div>'
+            + '<button type="button" onclick="fgNext()" style="width:100%;margin-top:12px;border:none;border-radius:12px;padding:12px;background:linear-gradient(135deg,#F97316,#FB923C);color:#fff;font-size:15px;font-weight:800;cursor:pointer;">' + (d.answers.length >= 3 ? '查看今日战绩 🏆' : '下一题 →') + '</button>';
+    }
+    body.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
+        + '<div style="font-size:12px;color:#9A3412;font-weight:700;">第 ' + (idx + 1) + ' / 3 题</div>'
+        + '<div>' + dots + '</div>'
+        + '</div>'
+        + '<div style="font-size:16px;font-weight:800;color:#1F2937;line-height:1.55;margin-bottom:12px;">' + escapeHtml(q.question) + '</div>'
+        + optsHtml + feedbackHtml;
+}
+function fgChoose(oi) {
+    if (!_fgState || _fgFeedback) return;
+    var d = _fgState;
+    if (d.answers.length >= 3) return;
+    var q = _fgFindQ(d.qids[d.answers.length]);
+    var choice = 'ABC'[oi];
+    if (!choice) return;
+    var correct = choice === q.answer;
+    d.answers.push({ id: q.id, choice: choice, correct: correct });
+    if (correct && d.awarded.indexOf(q.id) < 0) {
+        d.awarded.push(q.id);
+        d.score = (Number(d.score) || 0) + 10;
+        try { _pointsAdd(10, 'foodgod'); } catch (e) {}
+    }
+    d.completed = d.answers.length >= 3;
+    _fgSaveDaily(d);
+    _fgFeedback = { choice: choice, correct: correct };
+    _fgRender();
+    if (correct) showToast('答对啦，+10 积分已入账');
+}
+function fgNext() {
+    if (!_fgState) return;
+    if (_fgState.answers.length >= 3) { _fgFeedback = null; _fgRender(); return; }
+    _fgFeedback = null;
+    _fgRender();
+}
+function _fgRoundRect(g, x, y, w, h, r, fill) {
+    g.beginPath();
+    g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r);
+    g.closePath();
+    if (fill) { g.fillStyle = fill; g.fill(); }
+}
+function _fgBuildPoster(score) {
+    var W = 640, H = 900;
+    var c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    var g = c.getContext('2d');
+    var bg = g.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, '#FFF7ED');
+    bg.addColorStop(0.55, '#FFEDD5');
+    bg.addColorStop(1, '#FDE68A');
+    g.fillStyle = bg;
+    g.fillRect(0, 0, W, H);
+    g.globalAlpha = 0.5;
+    g.fillStyle = '#FDBA74';
+    g.beginPath(); g.arc(90, 110, 70, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(W - 60, H - 150, 90, 0, Math.PI * 2); g.fill();
+    g.globalAlpha = 1;
+    _fgRoundRect(g, 44, 60, W - 88, H - 160, 30, 'rgba(255,255,255,0.94)');
+    g.textAlign = 'center';
+    g.fillStyle = '#C2410C';
+    g.font = 'bold 24px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.fillText('家肴记 · 食养堂', W / 2, 118);
+    g.fillStyle = '#1F2937';
+    g.font = 'bold 38px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.fillText('每日食神问答', W / 2, 180);
+    g.font = '64px "Segoe UI Emoji","Apple Color Emoji",sans-serif';
+    g.fillText('🎮', W / 2, 285);
+    g.fillStyle = '#F97316';
+    g.font = 'bold 108px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.fillText(String(score), W / 2 - 26, 430);
+    g.fillStyle = '#9A3412';
+    g.font = 'bold 32px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.fillText('分', W / 2 + 96, 422);
+    g.fillStyle = '#1F2937';
+    g.font = 'bold 26px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.fillText('恭喜您，今日食神得分 ' + score + ' 分', W / 2, 505);
+    g.fillStyle = '#C2410C';
+    g.font = 'bold 30px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.fillText('击败了 99% 的家庭主厨！', W / 2, 558);
+    g.fillStyle = '#6B7280';
+    g.font = '22px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.fillText('每日 3 题 · 答对 1 题得 10 积分', W / 2, 640);
+    g.fillStyle = '#9A3412';
+    g.font = 'bold 20px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.fillText('今日 ' + _pointsDateStr(), W / 2, 690);
+    _fgRoundRect(g, 80, 730, W - 160, 56, 28, '#FFF7ED');
+    g.fillStyle = '#C2410C';
+    g.font = 'bold 17px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.fillText('打开家肴记 → 食养堂 → 食神盲盒', W / 2, 765);
+    g.fillStyle = '#9CA3AF';
+    g.font = '16px "PingFang SC","Microsoft YaHei",sans-serif';
+    g.fillText('和家人一起挑战，看看谁是今日食神', W / 2, 823);
+    return c.toDataURL('image/png');
+}
+function _fgRenderResult(body, d) {
+    var score = Number(d.score) || 0;
+    var key = d.date + '_' + score + '_' + d.answers.length;
+    if (!_fgPoster || _fgPoster.key !== key) {
+        try { _fgPoster = { key: key, url: _fgBuildPoster(score) }; } catch (e) { _fgPoster = null; }
+    }
+    var listHtml = d.answers.map(function (a, i) {
+        var q = _fgFindQ(a.id);
+        return '<div style="display:flex;align-items:flex-start;gap:6px;font-size:12px;color:' + (a.correct ? '#166534' : '#B91C1C') + ';margin-bottom:6px;">'
+            + '<span>' + (a.correct ? '✅' : '❌') + '</span>'
+            + '<span style="flex:1;">' + escapeHtml(q.question) + '<br><span style="color:#6B7280;">正确答案：' + q.answer + ' · ' + escapeHtml(q.explanation || '') + '</span></span>'
+            + '</div>';
+    }).join('');
+    body.innerHTML = '<div style="text-align:center;">'
+        + '<div style="font-size:38px;line-height:1.2;">🏆</div>'
+        + '<div style="font-size:15px;font-weight:800;color:#1F2937;margin-top:4px;">恭喜您，今日食神得分 <span style="color:#F97316;font-size:22px;">' + score + '</span> 分</div>'
+        + '<div style="font-size:13px;color:#C2410C;font-weight:700;margin-top:2px;">击败了 99% 的家庭主厨！</div>'
+        + (_fgPoster ? '<div style="margin-top:12px;border-radius:14px;overflow:hidden;box-shadow:0 8px 20px rgba(0,0,0,0.12);"><img src="' + _fgPoster.url + '" alt="食神海报" style="width:100%;display:block;"></div>' : '<div style="margin-top:12px;color:#B91C1C;font-size:12px;">海报生成失败，请重试</div>')
+        + '<div style="display:flex;gap:8px;margin-top:12px;">'
+        +   '<button type="button" onclick="fgSavePoster()" style="flex:1;border:none;border-radius:12px;padding:11px;background:#fff;color:#C2410C;font-size:13px;font-weight:800;cursor:pointer;border:1px solid #FED7AA;">⬇️ 保存海报</button>'
+        +   '<button type="button" onclick="fgSharePoster()" style="flex:1;border:none;border-radius:12px;padding:11px;background:linear-gradient(135deg,#F97316,#FB923C);color:#fff;font-size:13px;font-weight:800;cursor:pointer;">📤 分享给家人</button>'
+        + '</div>'
+        + '<div style="margin-top:14px;text-align:left;background:#fff;border:1px solid #F3F4F6;border-radius:12px;padding:12px;">'
+        +   '<div style="font-size:12px;font-weight:800;color:#374151;margin-bottom:8px;">今日答题回顾</div>'
+        +   listHtml
+        + '</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;margin-top:10px;">每天 3 题，明天再来挑战吧 · 答对积分可在「我的积分」抵扣订阅费或兑换好物</div>'
+        + '</div>';
+}
+function fgSavePoster() {
+    if (!_fgPoster || !_fgPoster.url) { showToast('海报还没生成好'); return; }
+    var a = document.createElement('a');
+    a.href = _fgPoster.url;
+    a.download = '食神海报-' + _pointsDateStr() + '.png';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
+function fgSharePoster() {
+    var score = _fgState ? (Number(_fgState.score) || 0) : 0;
+    var text = '我在家肴记「每日食神问答」拿了 ' + score + ' 分，击败了 99% 的家庭主厨！你也来挑战吧～';
+    if (navigator.share) {
+        navigator.share({ title: '家肴记 · 每日食神问答', text: text }).catch(function () {});
+        return;
+    }
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function () { showToast('分享文案已复制，去粘贴给家人吧'); });
+            return;
+        }
+    } catch (e) {}
+    showToast(text);
+}
 // ========== V255: 积分中心（userPoints / pointRecords / checkinStatus） ==========
 var _POINT_ACTION_LABELS = {
     checkin: '每日打卡',
@@ -75773,7 +76079,8 @@ var _POINT_ACTION_LABELS = {
     redeem_ai: '兑换AI专家评估',
     redeem_spatula: '兑换定制木铲',
     comment: '发布评论',
-    library_promote: '文库被收录奖励'
+    library_promote: '文库被收录奖励',
+    foodgod: '每日食神问答'
 };
 // V256: 防刷限制——每日总分上限 100，食谱 5 次/日，文库 2 次/日，分享 1 次/日
 var _POINT_DAILY_TOTAL_CAP = 100;
