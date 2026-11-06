@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V390-20261106';
+        var APP_VER = 'V392-20261107';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','audiobookLibrary','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -11058,7 +11058,7 @@ function _openClassroomCourse(id, kind) {
     var quiz = _CLASSROOM_QUIZ_BANK[id] || null;
     var ov = document.createElement('div');
     ov.id = 'classroomCourseOverlay';
-    ov.style.cssText = 'position:fixed;inset:0;background:#f0f0f0;z-index:10001;display:flex;flex-direction:column;align-items:center;';
+    ov.style.cssText = 'position:fixed;inset:0;background:#f0f0f0;z-index:' + (document.getElementById('fhHallOv') ? 100007 : 10001) + ';display:flex;flex-direction:column;align-items:center;';
     ov.innerHTML =
         '<div style="width:100%;max-width:430px;flex:1;display:flex;flex-direction:column;background:#F7F5F2;box-shadow:0 0 30px rgba(0,0,0,0.12);min-height:0;">' +
         '<div style="flex:0 0 auto;background:#fff;border-bottom:1px solid #EDE9E3;display:flex;align-items:center;padding:10px 14px;gap:8px;">' +
@@ -33155,7 +33155,7 @@ function _dtRenderCard(tip) {
     }
     // V390: 订阅按钮——短文案（请订阅 / 食养会员 / 伴听会员），置于小喇叭右侧
     var _subState = (typeof _subTierState === 'function') ? _subTierState() : 'none';
-    var _subMeta = (typeof _subBtnMeta === 'function') ? _subBtnMeta(_subState) : { text: '请订阅', style: '' };
+    var _subMeta = (typeof _subBtnMeta === 'function') ? _subBtnMeta(_subState) : { text: '订阅', style: '' };
     var subBtnHtml = '<button class="dt-btn" data-substate="' + _subState + '" style="white-space:nowrap;line-height:1.3;font-size:11px;padding:3px 9px;border-radius:9px;margin-left:4px;' + _subMeta.style + '"'
         + ' onclick="event.stopPropagation(); openSubscriptionModal(\'' + _subState + '\')">' + _subMeta.text + '</button>';
     // V206.4: 移除「订阅专享内容」徽标（订阅状态已由按钮表达，不再重复标注）
@@ -33169,7 +33169,7 @@ function _dtRenderCard(tip) {
         + '</span></div>'
         + '<div onclick="_openDailyTipFull()" style="cursor:pointer;">'
         + '<div class="dt-title-row">'
-        + '<span class="dt-lesson-tag">今日一课</span>'
+        + '<span class="dt-lesson-tag" onclick="event.stopPropagation(); _fhOpenHall(\'edu\')" style="cursor:pointer;" title="进入食养堂">今日一课</span>'
         + '<button id="dtCardSpeakBtn" onclick="event.stopPropagation(); _dtSpeakTip(\'card\')" class="dt-title-act" style="font-size:16px;" title="语音播报">🔊</button>'
         + '<div class="dt-title">' + (tip.title || '') + '</div>'
         // V383: 往期回顾按钮及图标移至文章标题行最右侧
@@ -33595,7 +33595,7 @@ function _subBtnMeta(state) {
         };
     }
     return {
-        text: '请订阅',
+        text: '订阅',
         style: 'background:#FFF7ED;color:#F97316;border:1px solid #FED7AA;font-weight:600;'
     };
 }
@@ -34196,6 +34196,602 @@ function _openDailyTipFull(tip) {
     // 滑入动画（下一帧再归位，触发 transition）
     requestAnimationFrame(function () { requestAnimationFrame(function () { sheet.style.transform = 'translateY(0)'; }); });
 }
+// ==================== V392: 饭后听书（audiobookLibrary + 播放器） ====================
+var _AB_LIBRARY_SEED = [
+    {
+        id: 'ab_001',
+        title: '红楼梦·第一回（精简版）',
+        category: '名著',
+        audioUrl: '',
+        textScript: '此开卷第一回也。作者自云：因曾历过一番梦幻之后，故将真事隐去，而借通灵之说，撰此《石头记》一书也。\n\n却说那女娲氏炼石补天之时，于大荒山无稽崖炼成高经十二丈、方经二十四丈顽石三万六千五百零一块。娲皇氏只用了三万六千五百块，只单单剩了一块未用，便弃在此山青埂峰下。\n\n谁知此石自经煅炼之后，灵性已通，因见众石俱得补天，独自己无材不堪入选，遂自怨自叹，日夜悲号惭愧。\n\n一日，正当嗟悼之际，俄见一僧一道远远而来，生得骨格不凡，丰神迥异，说说笑笑来至峰下，坐于石边高谈快论。',
+        duration: 600,
+        coverImage: ''
+    },
+    {
+        id: 'ab_002',
+        title: '三国演义·桃园三结义',
+        category: '名著',
+        audioUrl: '',
+        textScript: '话说天下大势，分久必合，合久必分。周末七国分争，并入于秦；及秦灭之后，楚汉分争，又并入于汉；汉朝自高祖斩白蛇而起义，一统天下，后来光武中兴，传至献帝，遂分为三国。\n\n推其致乱之由，殆始于桓、灵二帝。桓帝禁锢善类，崇信宦官。及桓帝崩，灵帝即位，大将军窦武、太傅陈蕃共相辅佐。\n\n时有宦官曹节等弄权，窦武、陈蕃谋诛之，机事不密，反为所害。中涓自此愈横。\n\n建宁二年四月望日，帝御温德殿。方升座，殿角狂风骤起，只见一条大青蛇，从梁上飞将下来，蟠于椅上。帝惊倒，左右急救入宫，百官俱奔避。',
+        duration: 540,
+        coverImage: ''
+    },
+    {
+        id: 'ab_003',
+        title: '论语·学而篇',
+        category: '国学',
+        audioUrl: '',
+        textScript: '子曰：学而时习之，不亦说乎？有朋自远方来，不亦乐乎？人不知而不愠，不亦君子乎？\n\n这一章讲的是学习的三重境界。第一重，学了并且时常温习实践，心里生出真切的喜悦；第二重，志同道合的朋友从远方来，彼此印证，快乐加倍；第三重，别人不了解自己，也不恼怒，这是君子的气度。\n\n曾子曰：吾日三省吾身。为人谋而不忠乎？与朋友交而不信乎？传不习乎？\n\n每天问自己三件事：替别人办事有没有尽心？和朋友交往有没有守信？老师传授的道理有没有复习实践？这三问，放在今天依然不过时。',
+        duration: 420,
+        coverImage: ''
+    },
+    {
+        id: 'ab_004',
+        title: '道德经·上善若水',
+        category: '国学',
+        audioUrl: '',
+        textScript: '上善若水。水善利万物而不争，处众人之所恶，故几于道。\n\n最高的善，像水一样。水滋养万物，却不与万物争高下；它总是流向低处，停留在人们不愿意去的地方，所以最接近“道”。\n\n居善地，心善渊，与善仁，言善信，政善治，事善能，动善时。\n\n居处善于选择地方，心胸善于保持沉静，待人善于真诚仁爱，说话善于恪守信用，为政善于精简治理，办事善于发挥所长，行动善于把握时机。\n\n夫唯不争，故无尤。正因为不争，所以没有过失，也没有怨咎。\n\n放到一日三餐里，这句话也说得通：不追奇珍异味，不争多寡浓淡，顺着时令与身体的节奏，反而吃得安稳。',
+        duration: 480,
+        coverImage: ''
+    },
+    {
+        id: 'ab_005',
+        title: '二十四节气与饮食养生',
+        category: '健康养生',
+        audioUrl: '',
+        textScript: '中国人吃饭，讲究一个“顺时”。二十四节气，就是古人给一年划分的二十四个时间刻度。\n\n春天，阳气升发。饮食上可以适当多吃芽苗、绿叶菜，口味清淡一些，少一点油腻厚味。春笋、荠菜、豌豆尖，都是这个时节的鲜味。\n\n夏天，暑热夹湿。冬瓜、丝瓜、黄瓜、绿豆汤，都是家常的选择。天热胃口差，可以用番茄、醋、柠檬提味，不必靠重盐重辣来下饭。\n\n秋天，燥气渐起。莲藕、山药、百合、银耳，适合煮汤炖羹。梨子、葡萄当季，饭后吃一点，比冰饮舒服。\n\n冬天，天寒地冻。白菜、萝卜、土豆耐存放，炖菜、砂锅最合适。肉类可以适当增加，搭配萝卜、白菜解腻。\n\n需要提醒的是：节气饮食是一般规律，不是硬性处方。家里有老人、孩子或慢性病成员，仍要结合个人情况调整。',
+        duration: 600,
+        coverImage: ''
+    },
+    {
+        id: 'ab_006',
+        title: '睡得好，才有好胃口',
+        category: '健康养生',
+        audioUrl: '',
+        textScript: '很多人以为睡不好只是精神问题，其实它和吃饭关系很密切。睡不好，第二天更容易想吃高糖、高油的东西，也更容易吃过量。\n\n第一，晚饭时间尽量提前。睡前 three 小时吃完，给胃留出排空的时间。吃得太晚、太饱，躺下容易反酸、腹胀。\n\n第二，晚饭七八分饱就好。主食不必完全不吃，一小碗米饭或半碗杂粮饭，比彻底断碳水更稳妥。\n\n第三，少刺激。晚饭后不喝浓茶、咖啡、可乐，也不要用酒“助眠”。酒精让人更快入睡，却容易在后半夜醒来。\n\n第四，可以常备一些温和食材：小米、山药、百合、莲子、桂圆。煮一碗小米山药粥，或者百合莲子羹，当作晚餐或睡前小点都合适。\n\n最后提醒：如果失眠持续数周，明显影响白天状态，请及时就医。食养是日常辅助，不替代医疗建议。',
+        duration: 480,
+        coverImage: ''
+    },
+    {
+        id: 'ab_007',
+        title: '苏轼与东坡肉',
+        category: '饮食文化',
+        audioUrl: '',
+        textScript: '说到吃，苏轼是绕不开的人。他被贬到黄州时，写下一首《猪肉颂》：净洗铛，少著水，柴头罨烟焰不起。待他自熟莫催他，火候足时他自美。\n\n几句话，把慢火炖肉的要领说透了：锅洗净，水少放，火不要大，时间到了自然好吃。\n\n黄州好猪肉，价贱如泥土。贵者不肯吃，贫者不解煮。早起挂起，饱得自家君莫管。\n\n当时的猪肉便宜，富贵人家看不上，穷人家又不会做。苏轼把做法写下来，让普通人也吃得上。东坡肉的名声，就这样一点点传开。\n\n今天做东坡肉，讲究五花三层、先焯后煨、小火慢炖。真正好吃的关键，仍然是那四个字：火候足时。\n\n一道菜背后，是一个人对生活的耐心。',
+        duration: 480,
+        coverImage: ''
+    },
+    {
+        id: 'ab_008',
+        title: '随园食单·戒单',
+        category: '饮食文化',
+        audioUrl: '',
+        textScript: '袁枚的《随园食单》里，有一篇“戒单”，专讲做菜要避开的毛病。\n\n第一戒，外加油。有些菜本来清爽，出锅前再淋一勺厚油，反而腻口。\n\n第二戒，同锅炒。不同火候、不同味道的食材硬凑在一锅，谁也做不好。该分开炒的，就分开。\n\n第三戒，频翻动。火候未到就反复翻搅，食材容易碎，香味也散了。\n\n第四戒，明明鲜活之物，却用重味掩盖。好食材，吃的是本味，不必用大量酱料压住。\n\n第五戒，一味求多。菜不必多，够吃就好；样数太多，反而每样都剩。\n\n这些话写于两百多年前，今天听来仍然实用。家常做饭，少一点花样，多一点火候和本味，往往更好吃。',
+        duration: 540,
+        coverImage: ''
+    }
+];
+function _abSeedCopy() {
+    try { return JSON.parse(JSON.stringify(_AB_LIBRARY_SEED)); } catch (e) { return _AB_LIBRARY_SEED.slice(); }
+}
+function _abNormItem(it) {
+    if (!it || !it.id) return null;
+    return {
+        id: String(it.id),
+        title: String(it.title || '未命名音频'),
+        category: String(it.category || '其他'),
+        audioUrl: String(it.audioUrl || ''),
+        textScript: String(it.textScript || ''),
+        duration: Number(it.duration) || 0,
+        coverImage: String(it.coverImage || '')
+    };
+}
+function _abGetLibrary() {
+    try {
+        var raw = lsGet('audiobookLibrary');
+        var list = raw ? JSON.parse(raw) : null;
+        if (Array.isArray(list) && list.length) {
+            var out = [];
+            list.forEach(function (it) { var n = _abNormItem(it); if (n) out.push(n); });
+            if (out.length) return out;
+        }
+    } catch (e) {}
+    return _abSeedCopy();
+}
+function _abEnsureLibrary() {
+    try { if (!lsGet('audiobookLibrary')) lsSet('audiobookLibrary', JSON.stringify(_abSeedCopy())); } catch (e) {}
+}
+// 无音频文件时按逐字稿估算时长（中文约 4.2 字/秒）
+function _abEstSec(it) {
+    if (it && it.audioUrl) return Number(it.duration) || 600;
+    var n = String((it && it.textScript) || '').replace(/\s+/g, '').length;
+    return Math.max(30, Math.round(n / 4.2));
+}
+function _abFmt(sec) {
+    sec = Math.max(0, Math.round(Number(sec) || 0));
+    return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+}
+function _abCatEmoji(cat) {
+    var c = String(cat || '');
+    if (/养生|健康/.test(c)) return '🍵';
+    if (/国学/.test(c)) return '📜';
+    if (/名著/.test(c)) return '📖';
+    if (/饮食|文化/.test(c)) return '🥢';
+    return '🎧';
+}
+
+var _FH_HALL_TAB = 'edu';
+var _AB_LIST_CAT = '全部';
+function _fhTabBtn(key, label) {
+    var on = (_FH_HALL_TAB === key);
+    return '<button type="button" id="fhTabBtn_' + key + '" onclick="_fhHallTab(\'' + key + '\')" style="flex:1;height:38px;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;'
+        + (on ? 'background:#F97316;color:#fff;' : 'background:#FFF7ED;color:#9A6A45;') + '">' + label + '</button>';
+}
+function _fhOpenHall(tab) {
+    _abStop();
+    var old = document.getElementById('fhHallOv');
+    if (old) old.remove();
+    _FH_HALL_TAB = (tab === 'listen') ? 'listen' : 'edu';
+    var ov = document.createElement('div');
+    ov.id = 'fhHallOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100006;background:#FFF7ED;display:flex;flex-direction:column;max-width:430px;margin:0 auto;';
+    ov.innerHTML = '<div style="flex:0 0 auto;background:#fff;border-bottom:1px solid #FED7AA;padding:12px 14px 10px;">'
+        + '<div style="display:flex;align-items:center;gap:8px;padding-bottom:10px;">'
+        + '<button type="button" onclick="_fhCloseHall()" style="border:none;background:none;font-size:17px;color:#6B7280;cursor:pointer;padding:2px 4px;line-height:1;">←</button>'
+        + '<div style="font-size:16px;font-weight:700;color:#1F2937;">📚 食养堂</div>'
+        + '</div>'
+        + '<div style="display:flex;gap:8px;">' + _fhTabBtn('edu', '📖 食养教育') + _fhTabBtn('listen', '🎧 饭后听书') + '</div>'
+        + '</div>'
+        + '<div id="fhHallBody" style="flex:1;overflow-y:auto;padding:14px 14px 30px;"></div>';
+    document.body.appendChild(ov);
+    document.body.style.overflow = 'hidden';
+    _fhHallTab(_FH_HALL_TAB);
+}
+function _fhCloseHall() {
+    if (document.getElementById('abDetailOv')) _abCloseDetail();
+    var ov = document.getElementById('fhHallOv');
+    if (ov) ov.remove();
+    if (!document.getElementById('classroomCourseOverlay')) document.body.style.overflow = '';
+}
+function _fhHallTab(tab) {
+    _FH_HALL_TAB = (tab === 'listen') ? 'listen' : 'edu';
+    ['edu', 'listen'].forEach(function (k) {
+        var b = document.getElementById('fhTabBtn_' + k);
+        if (!b) return;
+        b.style.background = (k === _FH_HALL_TAB) ? '#F97316' : '#FFF7ED';
+        b.style.color = (k === _FH_HALL_TAB) ? '#fff' : '#9A6A45';
+    });
+    var body = document.getElementById('fhHallBody');
+    if (!body) return;
+    if (_FH_HALL_TAB === 'listen') {
+        _abEnsureLibrary();
+        body.innerHTML = _fhListenHtml();
+    } else {
+        body.innerHTML = _fhEduHtml();
+    }
+    body.scrollTop = 0;
+}
+function _fhMemberArticles(m, folders, arts) {
+    var tags = getFamilyTags([m]).map(function (t) { return _tagNorm(t); }).filter(function (t) { return t && t !== '全家'; });
+    var age = Number(m && m.age) || 0;
+    var out = [];
+    arts.forEach(function (a) {
+        if (!a || !a.title) return;
+        var f = null;
+        for (var i = 0; i < folders.length; i++) {
+            if (folders[i] && folders[i].folderId === a.folderId) { f = folders[i]; break; }
+        }
+        if (!f) return;
+        var ft = Array.isArray(f.targetTags) ? f.targetTags : [];
+        var blob = String(a.title || '') + ' ' + ft.join(' ');
+        if (age > 1 && /辅食|第一口|6个月|婴儿|宝宝/.test(blob)) return;
+        if (age >= 18 && /儿童|婴幼儿|宝宝|辅食/.test(blob)) return;
+        if (age > 0 && age < 18 && /老人|老年|银发/.test(blob)) return;
+        var hit = [];
+        ft.forEach(function (t) {
+            var k = _tagNorm(t);
+            if (k && tags.indexOf(k) >= 0) hit.push(String(t));
+        });
+        if (!hit.length) return;
+        out.push({ type: 'article', title: a.title, minutes: Number(a.duration) || 5, reason: hit.slice(0, 2).join('、'), folderId: a.folderId, articleId: a.articleId });
+    });
+    if (!out.length) {
+        getEduCourses().forEach(function (c) {
+            if (!c || !c.title) return;
+            var aud = Array.isArray(c.targetAudience) ? c.targetAudience : [c.targetAudience || 'all'];
+            var cblob = String(c.title || '') + ' ' + aud.join(' ');
+            if (age > 1 && /辅食|第一口|6个月|婴儿|宝宝/.test(cblob)) return;
+            if (age >= 18 && /儿童|婴幼儿|宝宝|辅食/.test(cblob)) return;
+            if (age > 0 && age < 18 && /老人|老年|银发/.test(cblob)) return;
+            var ok = c.targetAudience === 'all';
+            aud.forEach(function (t) { if (tags.indexOf(_tagNorm(t)) >= 0) ok = true; });
+            if (ok) out.push({ type: 'classic', title: c.title, minutes: Number(c.duration) || 5, reason: c.targetAudience === 'all' ? '适合全家' : String(c.targetAudience), id: c.id });
+        });
+    }
+    if (!out.length) {
+        getEduCourses().slice(0, 2).forEach(function (c) {
+            out.push({ type: 'classic', title: c.title, minutes: Number(c.duration) || 5, reason: '基础食养', id: c.id });
+        });
+    }
+    return out;
+}
+function _fhEduHtml() {
+    var members = [];
+    try { members = getFamilyMembers() || []; } catch (e) { members = []; }
+    var folders = [], arts = [];
+    try { folders = getCourseFolders() || []; } catch (e) { folders = []; }
+    try { arts = getCourseArticles() || []; } catch (e) { arts = []; }
+    var html = '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.6;">按家庭成员的健康标签与年龄，匹配合适的食养课程</div>';
+    if (!members.length) {
+        html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:16px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;margin-bottom:12px;">还没有家庭成员档案<br>在「我家」补充成员年龄与健康标签后，可获得专属课程推荐</div>';
+    }
+    members.slice(0, 6).forEach(function (m, idx) {
+        var recs = _fhMemberArticles(m, folders, arts);
+        if (recs.length && recs[0].type === 'classic') recs = [recs[idx % recs.length]];
+        var nm = escapeHtml(m.name || m.nickname || ('成员' + (idx + 1)));
+        var age = Number(m.age) || 0;
+        html += '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:12px 14px;margin-bottom:10px;">'
+            + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin-bottom:7px;">👤 为 ' + nm + (age ? (' · ' + age + '岁') : '') + ' 推荐</div>';
+        if (!recs.length) {
+            html += '<div style="font-size:12px;color:#9CA3AF;">暂无匹配课程</div>';
+        } else {
+            recs.forEach(function (r) {
+                var act = (r.type === 'article')
+                    ? "_myClassroomOpenArticle('" + escapeAttr(r.folderId) + "','" + escapeAttr(r.articleId) + "')"
+                    : "_openClassroomCourse('" + escapeAttr(r.id) + "','classic')";
+                html += '<div onclick="' + act + '" style="display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid #F5F1EC;cursor:pointer;">'
+                    + '<div style="flex:1;min-width:0;font-size:13px;color:#374151;line-height:1.5;">' + escapeHtml(r.title) + '</div>'
+                    + (r.reason ? '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#FEF3C7;border-radius:999px;padding:2px 7px;">' + escapeHtml(r.reason) + '</span>' : '')
+                    + '<span style="flex-shrink:0;font-size:11px;color:#9CA3AF;">⏱ ' + (Number(r.minutes) || 5) + ' 分钟</span>'
+                    + '<span style="flex-shrink:0;color:#D1D5DB;">›</span>'
+                    + '</div>';
+            });
+        }
+        html += '</div>';
+    });
+    html += '<div style="font-size:13px;font-weight:700;color:#1F2937;margin:16px 2px 8px;">🏠 全家都能学</div>';
+    var groups = [];
+    try { groups = (getRecommendedCourses(members) || {}).list || []; } catch (e) { groups = []; }
+    if (groups.length) {
+        groups.slice(0, 3).forEach(function (g) {
+            var f = g.folder || {};
+            var gl = (g.articles || []).slice(0, 3);
+            html += '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:12px 14px;margin-bottom:10px;">'
+                + '<div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:6px;">📁 ' + escapeHtml(f.folderName || '系列课程') + '</div>';
+            gl.forEach(function (a) {
+                html += '<div onclick="_myClassroomOpenArticle(\'' + escapeAttr(f.folderId) + '\',\'' + escapeAttr(a.articleId) + '\')" style="display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid #F5F1EC;cursor:pointer;">'
+                    + '<div style="flex:1;min-width:0;font-size:13px;color:#374151;line-height:1.5;">' + escapeHtml(a.title || '未命名文章') + '</div>'
+                    + '<span style="flex-shrink:0;font-size:11px;color:#9CA3AF;">⏱ ' + (Number(a.duration) || 5) + ' 分钟</span>'
+                    + '<span style="flex-shrink:0;color:#D1D5DB;">›</span>'
+                    + '</div>';
+            });
+            html += '</div>';
+        });
+    } else {
+        getEduCourses().forEach(function (c) {
+            html += '<div onclick="_openClassroomCourse(\'' + escapeAttr(c.id) + '\',\'classic\')" style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #EDE9E3;border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;">'
+                + '<div style="flex:1;min-width:0;font-size:13px;color:#374151;line-height:1.5;">' + escapeHtml(c.title || '') + '</div>'
+                + '<span style="flex-shrink:0;font-size:11px;color:#9CA3AF;">⏱ ' + (Number(c.duration) || 5) + ' 分钟</span>'
+                + '<span style="flex-shrink:0;color:#D1D5DB;">›</span>'
+                + '</div>';
+        });
+    }
+    html += '<div style="text-align:center;font-size:11px;color:#B0AAA2;line-height:1.7;padding:8px 12px;">课程内容为日常饮食参考，不替代医疗建议。</div>';
+    return html;
+}
+function _abMemberCat(m) {
+    var age = Number(m && m.age) || 0;
+    if (age >= 60) return '健康养生';
+    if (age > 0 && age <= 12) return '名著';
+    return '国学';
+}
+function _fhListenFilter(cat) {
+    _AB_LIST_CAT = cat || '全部';
+    var body = document.getElementById('fhHallBody');
+    if (body) { body.innerHTML = _fhListenHtml(); body.scrollTop = 0; }
+}
+function _abRow(it) {
+    var cover = it.coverImage
+        ? '<div style="flex:0 0 auto;width:56px;height:56px;border-radius:12px;background-image:url(' + escapeAttr(it.coverImage) + ');background-size:cover;background-position:center;"></div>'
+        : '<div style="flex:0 0 auto;width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,#FDE68A,#F59E0B);display:flex;align-items:center;justify-content:center;font-size:26px;">' + _abCatEmoji(it.category) + '</div>';
+    return '<div onclick="_abOpenDetail(\'' + escapeAttr(it.id) + '\')" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:10px 12px;margin-bottom:9px;cursor:pointer;">'
+        + cover
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:14px;font-weight:600;color:#374151;line-height:1.45;">' + escapeHtml(it.title) + '</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;margin-top:3px;">' + escapeHtml(it.category) + ' · ⏱ ' + _abFmt(_abEstSec(it)) + '</div>'
+        + '</div>'
+        + '<div style="flex:0 0 auto;width:30px;height:30px;border-radius:50%;background:#FFF7ED;color:#F97316;display:flex;align-items:center;justify-content:center;font-size:13px;">▶</div>'
+        + '</div>';
+}
+function _fhListenHtml() {
+    var lib = _abGetLibrary();
+    var cats = [];
+    lib.forEach(function (it) { if (cats.indexOf(it.category) < 0) cats.push(it.category); });
+    var html = '';
+    var members = [];
+    try { members = getFamilyMembers() || []; } catch (e) { members = []; }
+    if (members.length) {
+        html += '<div style="font-size:12px;color:#B45309;margin:0 2px 6px;">为家人推荐</div>'
+            + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">';
+        members.slice(0, 6).forEach(function (m, idx) {
+            var cat = _abMemberCat(m);
+            var nm = String(m.name || m.nickname || ('家人' + (idx + 1)));
+            html += '<button type="button" onclick="_fhListenFilter(\'' + escapeAttr(cat) + '\')" style="border:1px solid #FDE68A;background:#FFFBEB;color:#B45309;border-radius:999px;padding:5px 10px;font-size:11px;cursor:pointer;">' + escapeHtml(nm) + ' · ' + escapeHtml(cat) + '</button>';
+        });
+        html += '</div>';
+    }
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">';
+    ['全部'].concat(cats).forEach(function (cat) {
+        var on = (_AB_LIST_CAT === cat);
+        html += '<button type="button" onclick="_fhListenFilter(\'' + escapeAttr(cat) + '\')" style="border:none;border-radius:999px;padding:6px 12px;font-size:12px;cursor:pointer;'
+            + (on ? 'background:#F97316;color:#fff;font-weight:700;' : 'background:#fff;color:#6B7280;border:1px solid #EDE9E3;') + '">' + escapeHtml(cat) + '</button>';
+    });
+    html += '</div>';
+    if (!lib.length) {
+        html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:18px;text-align:center;font-size:13px;color:#6B7280;">暂无音频内容</div>';
+        return html;
+    }
+    if (_AB_LIST_CAT === '全部') {
+        cats.forEach(function (cat) {
+            var items = lib.filter(function (it) { return it.category === cat; });
+            if (!items.length) return;
+            html += '<div style="display:flex;align-items:baseline;gap:6px;margin:14px 2px 8px;">'
+                + '<span style="font-size:14px;font-weight:700;color:#1F2937;">' + _abCatEmoji(cat) + ' ' + escapeHtml(cat) + '</span>'
+                + '<span style="font-size:11px;color:#9CA3AF;">' + items.length + ' 讲</span>'
+                + '</div>';
+            items.forEach(function (it) { html += _abRow(it); });
+        });
+    } else {
+        var list = lib.filter(function (it) { return it.category === _AB_LIST_CAT; });
+        if (!list.length) {
+            html += '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:18px;text-align:center;font-size:13px;color:#6B7280;">这个分类还没有内容</div>';
+        } else {
+            list.forEach(function (it) { html += _abRow(it); });
+        }
+    }
+    return html;
+}
+
+var _AB_PLAY = null;
+var _AB_RATES = [0.75, 1, 1.25, 1.5, 2];
+function _abSplitSentences(text) {
+    var raw = String(text || '').replace(/\r/g, '');
+    var parts = raw.match(/[^。！？；\n]+[。！？；\n]?/g) || [];
+    var out = [];
+    parts.forEach(function (s) {
+        s = String(s || '').trim();
+        if (!s) return;
+        while (s.length > 90) { out.push(s.slice(0, 90)); s = s.slice(90); }
+        if (s) out.push(s);
+    });
+    if (!out.length) out.push(raw || '暂无内容');
+    return out;
+}
+function _abSentenceAt(p, ratio) {
+    var n = (p && p.sentences) ? p.sentences.length : 0;
+    if (!n) return 0;
+    return Math.max(0, Math.min(n - 1, Math.floor(ratio * n)));
+}
+function _abOpenDetail(id) {
+    _abStop();
+    var lib = _abGetLibrary(), item = null;
+    for (var i = 0; i < lib.length; i++) { if (lib[i].id === id) { item = lib[i]; break; } }
+    if (!item) { showToast && showToast('音频不存在'); return; }
+    var ov = document.createElement('div');
+    ov.id = 'abDetailOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100008;background:#FFF7ED;display:flex;flex-direction:column;max-width:430px;margin:0 auto;';
+    var cover = item.coverImage
+        ? '<div style="height:190px;background-image:url(' + escapeAttr(item.coverImage) + ');background-size:cover;background-position:center;"></div>'
+        : '<div style="height:190px;background:linear-gradient(135deg,#FDE68A 0%,#FBBF24 55%,#F59E0B 100%);display:flex;align-items:center;justify-content:center;font-size:66px;line-height:1;">' + _abCatEmoji(item.category) + '</div>';
+    ov.innerHTML = '<div style="flex:0 0 auto;background:#fff;border-bottom:1px solid #FED7AA;display:flex;align-items:center;gap:8px;padding:10px 14px;">'
+        + '<button type="button" onclick="_abCloseDetail()" style="border:none;background:none;font-size:17px;color:#6B7280;cursor:pointer;padding:2px 4px;line-height:1;">←</button>'
+        + '<div style="flex:1;min-width:0;font-size:15px;font-weight:700;color:#1F2937;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">饭后听书</div>'
+        + '</div>'
+        + '<div style="flex:1;overflow-y:auto;">'
+        + cover
+        + '<div style="padding:16px 18px 0;">'
+        + '<div style="font-size:19px;font-weight:700;color:#1F2937;line-height:1.5;">' + escapeHtml(item.title) + '</div>'
+        + '<div style="font-size:12px;color:#9CA3AF;margin-top:4px;">' + escapeHtml(item.category) + ' · ⏱ ' + _abFmt(_abEstSec(item)) + '</div>'
+        + '</div>'
+        + '<div style="background:#fff;border-radius:16px;padding:16px;margin:14px 14px 0;box-shadow:0 2px 12px rgba(0,0,0,0.05);">'
+        + '<input id="abSeek" type="range" min="0" max="1000" value="0" oninput="_abSeek(this.value)" style="width:100%;accent-color:#F97316;margin:0;">'
+        + '<div style="display:flex;justify-content:space-between;font-size:11px;color:#9CA3AF;margin-top:2px;"><span id="abCurTime">00:00</span><span id="abTotTime">00:00</span></div>'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">'
+        + '<span id="abModeTip" style="font-size:11px;color:#B45309;background:#FFFBEB;border-radius:999px;padding:4px 9px;">' + (item.audioUrl ? '🎧 音频播放' : '🔊 文字转语音') + '</span>'
+        + '<div style="display:flex;align-items:center;gap:8px;">'
+        + '<button type="button" onclick="_abSeekStep(-15)" style="border:none;background:#FFF7ED;color:#C2410C;border-radius:9px;padding:7px 8px;font-size:11px;cursor:pointer;">↺15</button>'
+        + '<button type="button" id="abPlayBtn" onclick="_abToggle()" style="width:46px;height:46px;border-radius:50%;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:18px;cursor:pointer;">▶</button>'
+        + '<button type="button" onclick="_abSeekStep(15)" style="border:none;background:#FFF7ED;color:#C2410C;border-radius:9px;padding:7px 8px;font-size:11px;cursor:pointer;">15↻</button>'
+        + '<button type="button" id="abRateBtn" onclick="_abCycleRate()" style="border:1px solid #FED7AA;background:#fff;color:#C2410C;border-radius:9px;padding:6px 7px;font-size:11px;cursor:pointer;min-width:44px;">1.0x</button>'
+        + '</div></div></div>'
+        + '<div style="padding:14px 18px 30px;">'
+        + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin-bottom:8px;">📄 逐字稿</div>'
+        + '<div style="background:#fff;border:1px solid #FDE68A;border-radius:14px;padding:14px;font-size:14px;color:#374151;line-height:1.9;white-space:pre-wrap;">' + escapeHtml(item.textScript || '暂无逐字稿') + '</div>'
+        + '</div></div>';
+    document.body.appendChild(ov);
+    document.body.style.overflow = 'hidden';
+    _abSetup(item);
+}
+function _abSetup(item) {
+    var text = String(item.textScript || '');
+    var p = {
+        item: item, id: item.id, mode: item.audioUrl ? 'audio' : 'tts',
+        playing: false, rate: 1, elapsed: 0, token: 0, timer: null, idx: 0,
+        sentences: _abSplitSentences(text), duration: _abEstSec(item)
+    };
+    _AB_PLAY = p;
+    if (p.mode === 'audio') {
+        var a = new Audio(item.audioUrl);
+        a.preload = 'metadata';
+        p.audio = a;
+        a.addEventListener('loadedmetadata', function () {
+            if (a.duration && isFinite(a.duration) && a.duration > 0) { p.duration = a.duration; _abPaint(); }
+        });
+        a.addEventListener('timeupdate', function () {
+            if (!p.playing) return;
+            p.elapsed = a.currentTime || 0;
+            _abPaint();
+        });
+        a.addEventListener('ended', function () {
+            p.playing = false; p.elapsed = p.duration; _abPaint(); _abPlayIcon();
+        });
+        a.addEventListener('error', function () {
+            p.mode = 'tts'; p.audio = null;
+            var tip = document.getElementById('abModeTip');
+            if (tip) tip.textContent = '🔊 音频源不可用，已切换文字转语音';
+            _abPaint();
+        });
+    }
+    _abPaint();
+}
+function _abPaint() {
+    var p = _AB_PLAY;
+    if (!p) return;
+    var seek = document.getElementById('abSeek');
+    if (!seek) return;
+    var ratio = p.duration ? Math.max(0, Math.min(1, p.elapsed / p.duration)) : 0;
+    seek.value = Math.round(ratio * 1000);
+    var c = document.getElementById('abCurTime');
+    if (c) c.textContent = _abFmt(p.elapsed);
+    var t = document.getElementById('abTotTime');
+    if (t) t.textContent = _abFmt(p.duration);
+    var r = document.getElementById('abRateBtn');
+    if (r) r.textContent = (p.rate === 1 ? '1.0' : String(p.rate)) + 'x';
+    _abPlayIcon();
+}
+function _abPlayIcon() {
+    var b = document.getElementById('abPlayBtn');
+    if (!b) return;
+    b.textContent = (_AB_PLAY && _AB_PLAY.playing) ? '⏸' : '▶';
+}
+function _abToggle() {
+    var p = _AB_PLAY;
+    if (!p) return;
+    if (p.mode === 'audio' && p.audio) {
+        if (p.playing) {
+            try { p.audio.pause(); } catch (e) {}
+            p.playing = false;
+        } else {
+            if (p.audio.ended) { try { p.audio.currentTime = 0; } catch (e) {} p.elapsed = 0; }
+            var pr = null;
+            try { pr = p.audio.play(); } catch (e) {}
+            if (pr && pr.catch) pr.catch(function () { p.playing = false; _abPlayIcon(); showToast && showToast('播放失败，请检查音频链接'); });
+            p.playing = true;
+        }
+        _abPlayIcon();
+        return;
+    }
+    if (p.playing) _abPauseTts();
+    else {
+        if (p.elapsed >= p.duration - 0.5) { p.elapsed = 0; p.idx = 0; }
+        _abTtsStart();
+    }
+}
+function _abSpeakSentence(p) {
+    if (!p || !p.playing) return;
+    if (p.idx >= p.sentences.length) { _abTtsEnd(p); return; }
+    var token = p.token;
+    try { speechSynthesis.cancel(); } catch (e) {}
+    var u = new SpeechSynthesisUtterance(p.sentences[p.idx]);
+    u.lang = 'zh-CN'; u.rate = p.rate; u.pitch = 1; u.volume = 1;
+    u.onend = function () {
+        if (_AB_PLAY !== p || !p.playing || token !== p.token) return;
+        p.idx++;
+        _abSpeakSentence(p);
+    };
+    u.onerror = function () {
+        if (_AB_PLAY !== p || !p.playing || token !== p.token) return;
+        p.idx++;
+        _abSpeakSentence(p);
+    };
+    try { speechSynthesis.speak(u); } catch (e) { _abTtsEnd(p); }
+}
+function _abTtsStart() {
+    var p = _AB_PLAY;
+    if (!p) return;
+    if (!('speechSynthesis' in window)) { showToast && showToast('当前浏览器不支持语音合成'); return; }
+    p.playing = true;
+    p.startAt = Date.now() - p.elapsed * 1000;
+    p.token = (p.token || 0) + 1;
+    _abSpeakSentence(p);
+    if (p.timer) clearInterval(p.timer);
+    p.timer = setInterval(function () {
+        if (_AB_PLAY !== p || !p.playing) return;
+        p.elapsed = Math.min(p.duration, (Date.now() - p.startAt) / 1000);
+        _abPaint();
+    }, 300);
+    _abPlayIcon();
+}
+function _abPauseTts() {
+    var p = _AB_PLAY;
+    if (!p) return;
+    p.elapsed = Math.min(p.duration, (Date.now() - (p.startAt || Date.now())) / 1000);
+    p.playing = false;
+    p.token = (p.token || 0) + 1;
+    try { speechSynthesis.cancel(); } catch (e) {}
+    if (p.timer) { clearInterval(p.timer); p.timer = null; }
+    _abPaint();
+    _abPlayIcon();
+}
+function _abTtsEnd(p) {
+    p.playing = false;
+    p.elapsed = p.duration;
+    if (p.timer) { clearInterval(p.timer); p.timer = null; }
+    _abPaint();
+}
+function _abSeek(val) {
+    var p = _AB_PLAY;
+    if (!p) return;
+    var ratio = Math.max(0, Math.min(1, (Number(val) || 0) / 1000));
+    p.elapsed = ratio * p.duration;
+    if (p.mode === 'audio' && p.audio) {
+        try { p.audio.currentTime = p.elapsed; } catch (e) {}
+    } else {
+        p.idx = _abSentenceAt(p, ratio);
+        if (p.playing) {
+            p.startAt = Date.now() - p.elapsed * 1000;
+            p.token = (p.token || 0) + 1;
+            _abSpeakSentence(p);
+        }
+    }
+    _abPaint();
+}
+function _abSeekStep(sec) {
+    var p = _AB_PLAY;
+    if (!p) return;
+    var t = Math.max(0, Math.min(p.duration, p.elapsed + Number(sec || 0)));
+    _abSeek(Math.round((t / (p.duration || 1)) * 1000));
+}
+function _abCycleRate() {
+    var p = _AB_PLAY;
+    if (!p) return;
+    var i = _AB_RATES.indexOf(p.rate);
+    p.rate = _AB_RATES[(i + 1) % _AB_RATES.length] || 1;
+    if (p.audio) { try { p.audio.playbackRate = p.rate; } catch (e) {} }
+    if (p.mode !== 'audio' && p.playing) {
+        p.token = (p.token || 0) + 1;
+        _abSpeakSentence(p);
+    }
+    _abPaint();
+}
+function _abStop() {
+    var p = _AB_PLAY;
+    if (p) {
+        p.playing = false;
+        p.token = (p.token || 0) + 1;
+        if (p.timer) { clearInterval(p.timer); p.timer = null; }
+        if (p.audio) { try { p.audio.pause(); } catch (e) {} }
+    }
+    try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {}
+}
+function _abCloseDetail() {
+    _abStop();
+    _AB_PLAY = null;
+    var ov = document.getElementById('abDetailOv');
+    if (ov) ov.remove();
+    if (!document.getElementById('fhHallOv') && !document.getElementById('classroomCourseOverlay')) document.body.style.overflow = '';
+}
+
 function _dtFavFromFull() {
     var tip = _dtCurTip;
     if (!tip) return;
