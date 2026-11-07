@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V397-20261108';
+        var APP_VER = 'V398-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -38827,12 +38827,18 @@ function renderFamily() {
                         系统监控<span id="monitorBadge" style="display:none;position:absolute;top:-6px;right:-4px;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;background:#DC2626;color:#fff;border-radius:9px;font-size:11px;font-weight:700;line-height:18px;text-align:center;">0</span>
                     </button>
                 </div>
+                <div style="display:flex;margin-bottom:12px;">
+                    <button type="button" onclick="_openCommunityAuditConsole()" style="width:100%;box-sizing:border-box;padding:9px 8px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:12px;font-weight:600;color:#9A3412;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+                        🤝 社区服务审核<span id="communityAuditBadge" style="display:none;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;background:#DC2626;color:#fff;border-radius:9px;font-size:11px;font-weight:700;line-height:18px;text-align:center;">0</span>
+                    </button>
+                </div>
             `);
             var _libBtn = document.getElementById('superLibMgrBtn');
             if (_libBtn) _libBtn.addEventListener('click', function() {
                 openSuperLibraryManager();
             });
             if (typeof _refreshMonitorBadge === 'function') _refreshMonitorBadge();
+            if (typeof _refreshCommunityAuditBadge === 'function') _refreshCommunityAuditBadge();
         }
     }
     // ============ 小家成员区（V135: 「👪 小家」并入成员卡行首；原标题栏与「当前操作/家人」下拉删除，身份切换走成员卡下拉） ============
@@ -77361,6 +77367,7 @@ async function submitCommunityPost() {
     _communityFilter = 'all';
     renderCommunityList();
     renderHomeCommunityBar();
+    _refreshCommunityAuditBadge();
     showToast && showToast(needSuperAudit ? '提交成功，待超管审核通过后展示给邻居' : '发布成功，已通过审核并展示给邻居');
 }
 window.openCommunityPublishModal = openCommunityPublishModal;
@@ -77615,8 +77622,9 @@ function _communityPostCardHtml(p, opts) {
     var auditBtnsHtml = '';
     if (opts.audit) {
         auditBtnsHtml = '<div style="display:flex;gap:8px;margin-top:10px;">'
-            + '<button type="button" data-audit-reject="' + escapeHtml(String(p.id || '')) + '" style="flex:1;padding:9px;border:1px solid #FECACA;border-radius:10px;background:#FEF2F2;color:#B91C1C;font-size:13px;font-weight:700;cursor:pointer;">❌ 驳回</button>'
-            + '<button type="button" data-audit-pass="' + escapeHtml(String(p.id || '')) + '" style="flex:1.6;padding:9px;border:none;border-radius:10px;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">✅ 通过并展示</button>'
+            + '<button type="button" data-audit-reject="' + escapeHtml(String(p.id || '')) + '" style="flex:1;padding:9px;border:1px solid #FECACA;border-radius:10px;background:#FEF2F2;color:#B91C1C;font-size:12px;font-weight:700;cursor:pointer;">❌ 驳回</button>'
+            + '<button type="button" data-cert="' + escapeHtml(String(p.id || '')) + '" style="flex:1;padding:9px;border:1px solid #DDD6FE;border-radius:10px;background:#F5F3FF;color:#6D28D9;font-size:12px;font-weight:700;cursor:pointer;">🔍 查看资质图</button>'
+            + '<button type="button" data-audit-pass="' + escapeHtml(String(p.id || '')) + '" style="flex:1.4;padding:9px;border:none;border-radius:10px;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff;font-size:12px;font-weight:700;cursor:pointer;">✅ 通过并发布</button>'
             + '</div>';
     }
     // V397: 线下活动报名 / 专家咨询预约（模拟支付，平台抽成 30%）
@@ -77735,17 +77743,38 @@ function _communityOpenPayConfirm(postId) {
         +   '<span style="font-size:24px;font-weight:800;color:#F97316;">' + _communityMoney(amount) + '</span>'
         + '</div>'
         + '<div style="margin-top:8px;font-size:11px;color:#9CA3AF;line-height:1.7;">支付金额：' + _communityMoney(amount) + '，将由系统代收并自动结算。</div>'
+        + '<label style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-size:11px;color:#9CA3AF;line-height:1.65;cursor:pointer;">'
+        +   '<input type="checkbox" id="communityPayAgree" style="flex-shrink:0;width:14px;height:14px;margin:2px 0 0;accent-color:#F97316;cursor:pointer;" />'
+        +   '<span>我已阅读并同意《免责协议》。本平台仅提供信息撮合与官方活动SOP，线下活动的食品安全与人身安全由招募者与参与者自行承担。营养师建议仅供饮食参考，不替代医疗诊断。</span>'
+        + '</label>'
         + '<div style="display:flex;gap:10px;margin-top:18px;">'
         +   '<button type="button" id="communityPayCancel" style="flex:1;padding:11px;border:1px solid #E5E7EB;border-radius:11px;background:#fff;color:#6B7280;font-size:14px;font-weight:600;cursor:pointer;">取消</button>'
-        +   '<button type="button" id="communityPayOk" style="flex:1.6;padding:11px;border:none;border-radius:11px;background:#F97316;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">确认支付</button>'
+        +   '<button type="button" id="communityPayOk" disabled style="flex:1.6;padding:11px;border:none;border-radius:11px;background:#E5E7EB;color:#9CA3AF;font-size:14px;font-weight:700;cursor:not-allowed;">确认支付</button>'
         + '</div>'
         + '</div>';
     document.body.appendChild(ov);
     document.getElementById('communityPayCancel').onclick = function () { ov.remove(); };
     document.getElementById('communityPayOk').onclick = _communityPaySubmit;
+    // V398: 未勾选《免责协议》时支付按钮保持禁用
+    var agreeEl = document.getElementById('communityPayAgree');
+    var okEl = document.getElementById('communityPayOk');
+    if (agreeEl && okEl) {
+        agreeEl.onchange = function () {
+            var on = !!agreeEl.checked;
+            okEl.disabled = !on;
+            okEl.style.background = on ? '#F97316' : '#E5E7EB';
+            okEl.style.color = on ? '#fff' : '#9CA3AF';
+            okEl.style.cursor = on ? 'pointer' : 'not-allowed';
+        };
+    }
 }
 function _communityPaySubmit() {
     var box = document.getElementById('communityPayOverlay');
+    var agreeEl = document.getElementById('communityPayAgree');
+    if (agreeEl && !agreeEl.checked) {
+        showToast && showToast('请先阅读并勾选《免责协议》');
+        return;
+    }
     var p = _communityFindPost(_communityPayTargetId);
     if (!p) {
         if (box) box.remove();
@@ -77844,9 +77873,39 @@ function _communityAuditDecision(id, action) {
     lsSetJSON('communityPosts', posts);
     renderCommunityList();
     renderHomeCommunityBar();
+    _refreshCommunityAuditBadge();
     showToast && showToast(action === 'pass' ? '✅ 已通过审核，帖子已展示给邻居' : '已驳回该帖子');
 }
 window._communityAuditDecision = _communityAuditDecision;
+// V398: 超管后台「🤝 社区服务审核」入口——直接打开邻聚审核视图
+function _openCommunityAuditConsole() {
+    if (!(typeof isSuperAdmin === 'function' && isSuperAdmin())) { showToast && showToast('仅超级管理员可访问'); return; }
+    if (!document.getElementById('communityPageOverlay')) openCommunityPage();
+    _communityView = 'audit';
+    _communityFilter = 'all';
+    renderCommunityList();
+}
+window._openCommunityAuditConsole = _openCommunityAuditConsole;
+// 超管快捷条上的待审核数量角标
+function _refreshCommunityAuditBadge() {
+    var el = document.getElementById('communityAuditBadge');
+    if (!el) return;
+    var n = 0;
+    try {
+        n = getCommunityPosts().filter(function (p) { return String(p.auditStatus || '') === 'pending_audit'; }).length;
+    } catch (e) {}
+    el.style.display = n ? 'inline-block' : 'none';
+    el.textContent = String(n);
+}
+window._refreshCommunityAuditBadge = _refreshCommunityAuditBadge;
+// 审核台查看资质图：仅专家服务有资质证明，其余给出提示
+function _communityAuditViewCert(id) {
+    var p = _communityFindPost(id);
+    var src = (p && p.type === 'expert') ? String(p.expertCertImage || '').trim() : '';
+    if (!src) { _communityAlert(p && p.type === 'activity' ? '活动招募帖没有资质图，可查看官方方案' : '该帖子未上传资质证明'); return; }
+    _communityShowImage(src);
+}
+window._communityAuditViewCert = _communityAuditViewCert;
 function renderCommunityList() {
     var body = document.getElementById('communityBody');
     if (!body) return;
@@ -77862,9 +77921,9 @@ function renderCommunityList() {
         + '">我的发布</button>';
     if (canAudit) {
         var pendingCount = getCommunityPosts().filter(function (p) { return String(p.auditStatus || '') === 'pending_audit'; }).length;
-        tabs += '<button type="button" onclick="_communitySetView(\'audit\')" style="flex:1;padding:8px;border:none;border-radius:9px;font-size:13px;cursor:pointer;'
+        tabs += '<button type="button" onclick="_communitySetView(\'audit\')" style="flex:1;padding:8px 4px;border:none;border-radius:9px;font-size:11px;white-space:nowrap;cursor:pointer;'
             + (isAudit ? 'background:#7C3AED;color:#fff;font-weight:700;' : 'background:transparent;color:#6B7280;')
-            + '">待审核' + (pendingCount ? '(' + pendingCount + ')' : '') + '</button>';
+            + '">🤝 社区服务审核' + (pendingCount ? '(' + pendingCount + ')' : '') + '</button>';
     }
     tabs += '</div>';
     var chips = '<div style="display:flex;gap:6px;padding-bottom:10px;">';
@@ -77967,6 +78026,9 @@ function renderCommunityList() {
     });
     body.querySelectorAll('[data-audit-reject]').forEach(function (btn) {
         btn.onclick = function () { _communityAuditDecision(btn.getAttribute('data-audit-reject'), 'reject'); };
+    });
+    body.querySelectorAll('[data-cert]').forEach(function (btn) {
+        btn.onclick = function () { _communityAuditViewCert(btn.getAttribute('data-cert')); };
     });
     body.querySelectorAll('[data-report]').forEach(function (btn) {
         btn.onclick = function () { openCommunityReportModal(btn.getAttribute('data-report')); };
