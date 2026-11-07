@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V395-20261107';
+        var APP_VER = 'V396-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -34538,14 +34538,23 @@ function _dtArcSwitch(tab) {
     _dtArcRender();
 }
 function _dtArcFilter(cat) { _dtArcCat = cat; _dtArcRender(); }
+// V396: 食育 / 食方 仅食养会员可见（分类筛选与列表内容同时隐藏）
+var _DT_PREMIUM_CATS = ['食育', '食方'];
+function _dtArcIsMember() { try { return typeof isFoodMember === 'function' && isFoodMember(); } catch (e) { return false; } }
+function _dtArcVisibleCats() {
+    var member = _dtArcIsMember();
+    return _DT_CATS.filter(function (c) { return member || _DT_PREMIUM_CATS.indexOf(c) < 0; });
+}
+function _dtArcIsPremiumCat(cat) { return _DT_PREMIUM_CATS.indexOf(String(cat || '')) >= 0; }
 function _dtArcRender() {
     var body = document.getElementById('dtArcBody');
     var filterRow = document.getElementById('dtArcFilterRow');
     if (!body) return;
+    if (!_dtArcIsMember() && _dtArcIsPremiumCat(_dtArcCat)) _dtArcCat = '';
     // V394: 往期回顾页移除「我的收藏」，仅保留历史内容与分类筛选
     if (filterRow) {
         filterRow.style.display = 'flex';
-        filterRow.innerHTML = _DT_CATS.map(function (c) {
+        filterRow.innerHTML = _dtArcVisibleCats().map(function (c) {
             var on = _dtArcCat === c;
             var label = c || '全部';
             return '<button type="button" onclick="_dtArcFilter(\'' + c + '\')" style="border:1px solid ' + (on ? '#F97316' : '#EADFD0') + ';background:' + (on ? '#FEF3C7' : 'white') + ';color:' + (on ? '#9A3412' : '#6B7280') + ';font-size:12px;font-weight:' + (on ? '700' : '500') + ';border-radius:999px;padding:4px 10px;cursor:pointer;">' + label + '</button>';
@@ -34569,12 +34578,15 @@ function _dtArcRenderHistory() {
     var q = '';
     try { q = String((document.getElementById('dtArcSearch') || {}).value || '').trim(); } catch (e) {}
     // V142: 数据源从 foodHallArticles.published（超管审核发布的权威内容）
-    var all = _fhRead().filter(function (x) { return x && x.status === 'published' && x.title; });
+    var published = _fhRead().filter(function (x) { return x && x.status === 'published' && x.title; });
+    // V396: 非会员看不到食育 / 食方内容
+    var visibleSource = _dtArcIsMember() ? published : published.filter(function (x) { return !_dtArcIsPremiumCat(x.category); });
+    var all = visibleSource;
     if (_dtArcCat) all = all.filter(function (x) { return (x.category || '') === _dtArcCat; });
     if (q) all = all.filter(function (x) { return (x.title || '').indexOf(q) >= 0 || (x.content || '').indexOf(q) >= 0; });
     all.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
     if (!all.length) {
-        if (_fhRead().filter(function (x) { return x && x.status === 'published'; }).length === 0) {
+        if (visibleSource.length === 0) {
             body.innerHTML = _dtArcEmpty('📭', '暂无往期内容', '超管在食养堂管理发布后会自动积累');
         } else {
             body.innerHTML = _dtArcEmpty('🔍', '没有匹配内容', '换个关键词或筛选试试');
@@ -77662,7 +77674,7 @@ function openCommunityPage() {
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
     document.getElementById('communityCloseBtn').onclick = closeCommunityPage;
-    _communityFilter = 'all';
+    _communityFilter = 'mutual';
     _communityView = 'feed';
     renderCommunityList();
 }
@@ -77718,14 +77730,14 @@ function renderCommunityList() {
             + '">待审核' + (pendingCount ? '(' + pendingCount + ')' : '') + '</button>';
     }
     tabs += '</div>';
-    var chips = '<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;">';
-    chips += '<button type="button" onclick="_communitySetFilter(\'all\')" style="flex-shrink:0;padding:6px 12px;border-radius:16px;font-size:12px;cursor:pointer;'
+    var chips = '<div style="display:flex;gap:6px;padding-bottom:10px;">';
+    chips += '<button type="button" onclick="_communitySetFilter(\'all\')" style="flex:1;min-width:0;padding:6px 4px;border-radius:16px;font-size:11px;white-space:nowrap;text-align:center;cursor:pointer;'
         + (_communityFilter === 'all' ? 'border:1px solid #F97316;background:#F97316;color:#fff;font-weight:700;' : 'border:1px solid #E5E7EB;background:#fff;color:#6B7280;')
         + '">全部</button>';
     _COMMUNITY_TYPES.forEach(function (t) {
-        chips += '<button type="button" onclick="_communitySetFilter(\'' + t.key + '\')" style="flex-shrink:0;padding:6px 12px;border-radius:16px;font-size:12px;cursor:pointer;'
+        chips += '<button type="button" onclick="_communitySetFilter(\'' + t.key + '\')" style="flex:1;min-width:0;padding:6px 4px;border-radius:16px;font-size:11px;white-space:nowrap;text-align:center;cursor:pointer;'
             + (_communityFilter === t.key ? 'border:1px solid #F97316;background:#F97316;color:#fff;font-weight:700;' : 'border:1px solid #E5E7EB;background:#fff;color:#6B7280;')
-            + '">' + t.emoji + ' ' + t.label + '</button>';
+            + '">' + t.label + '</button>';
     });
     chips += '</div>';
 
