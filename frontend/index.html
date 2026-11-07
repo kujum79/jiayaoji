@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V396-20261108';
+        var APP_VER = 'V397-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode','commissionRecords'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -77619,6 +77619,16 @@ function _communityPostCardHtml(p, opts) {
             + '<button type="button" data-audit-pass="' + escapeHtml(String(p.id || '')) + '" style="flex:1.6;padding:9px;border:none;border-radius:10px;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">✅ 通过并展示</button>'
             + '</div>';
     }
+    // V397: 线下活动报名 / 专家咨询预约（模拟支付，平台抽成 30%）
+    var payBtnHtml = '';
+    if (!opts.audit && !opts.mine && (p.type === 'activity' || p.type === 'expert')) {
+        var payAmt = _communityPayAmount(p);
+        var payLabel = p.type === 'activity'
+            ? ('🎟 立即报名 ' + (payAmt > 0 ? '¥' + payAmt + '/人' : '· 免费'))
+            : ('💬 预约咨询 ¥' + payAmt + '/次');
+        var payBg = p.type === 'activity' ? 'linear-gradient(135deg,#3B82F6,#1D4ED8)' : 'linear-gradient(135deg,#8B5CF6,#6D28D9)';
+        payBtnHtml = '<button type="button" data-pay="' + escapeHtml(String(p.id || '')) + '" style="display:block;width:100%;margin-top:10px;padding:11px;border:none;border-radius:11px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;background:' + payBg + ';">' + payLabel + '</button>';
+    }
     return '<div style="position:relative;overflow:hidden;background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
         + watermarkHtml
         + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap;">'
@@ -77638,12 +77648,139 @@ function _communityPostCardHtml(p, opts) {
         + qrHtml
         + rejectHtml
         + auditBtnsHtml
+        + payBtnHtml
         + '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;">'
         +   contactBtns
         +   buyBtnHtml
         +   '<button type="button" data-report="' + escapeHtml(String(p.id || '')) + '" title="举报这条信息" style="margin-left:auto;padding:2px 4px;border:none;background:transparent;color:#9CA3AF;font-size:11px;cursor:pointer;">🚩 举报</button>'
         + '</div>'
         + '</div>';
+}
+// ========== V397: 线下活动报名 / 专家咨询预约（模拟支付 + 平台分润） ==========
+var _COMMUNITY_PLATFORM_RATE = 0.3; // 平台服务费 30%，其余 70% 归招募者 / 专家
+var _communityPayTargetId = '';
+function getCommissionRecords() {
+    var list = lsGetJSON('commissionRecords', []);
+    return Array.isArray(list) ? list : [];
+}
+// 支付金额：活动按票价；专家按咨询费（未填时按 199 元/次）
+function _communityPayAmount(p) {
+    var price = Math.max(0, Number(p && p.price) || 0);
+    if (p && p.type === 'expert') return price > 0 ? price : 199;
+    return price;
+}
+function _communityCommissionSplit(amount) {
+    var amt = Math.max(0, Number(amount) || 0);
+    var platformFee = Math.round(amt * _COMMUNITY_PLATFORM_RATE * 100) / 100;
+    var providerFee = Math.round((amt - platformFee) * 100) / 100;
+    return { amount: amt, platformFee: platformFee, providerFee: providerFee };
+}
+function _communityFindPost(id) {
+    var posts = lsGetJSON('communityPosts', []);
+    if (!Array.isArray(posts)) return null;
+    var hit = null;
+    posts.forEach(function (p) { if (p && String(p.id) === String(id)) hit = p; });
+    return hit;
+}
+// 收益流水 id：cr_001 递增
+function _communityCommissionNextId(list) {
+    var max = 0;
+    (list || []).forEach(function (r) {
+        var m = String((r && r.id) || '').match(/(\d+)/);
+        if (m) max = Math.max(max, parseInt(m[1], 10) || 0);
+    });
+    var n = String(max + 1);
+    while (n.length < 3) n = '0' + n;
+    return 'cr_' + n;
+}
+// 买家（付款家庭）名称
+function _communityBuyerName() {
+    try {
+        if (window.__demoMode) return window.__demoName || '演示家庭';
+        var fam = getLoginFamily();
+        if (fam && fam.name) return String(fam.name);
+        var u = getLoginUser();
+        if (u && (u.familyName || u.name)) return String(u.familyName || u.name);
+        var fid = getFamilyId();
+        if (fid) {
+            var fn = localStorage.getItem('familyName_' + fid);
+            if (fn) return String(fn);
+        }
+    } catch (e) {}
+    return '我';
+}
+function _communityMoney(n) {
+    var v = Math.round((Number(n) || 0) * 100) / 100;
+    return '¥' + (v % 1 === 0 ? String(v) : v.toFixed(2));
+}
+function _communityOpenPayConfirm(postId) {
+    var p = _communityFindPost(postId);
+    if (!p) { _communityAlert('未找到该信息，可能已被删除'); return; }
+    _communityPayTargetId = String(p.id || '');
+    var isExpert = p.type === 'expert';
+    var amount = _communityPayAmount(p);
+    var old = document.getElementById('communityPayOverlay');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'communityPayOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10025;background:rgba(17,24,39,0.55);display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:330px;padding:20px;box-sizing:border-box;">'
+        + '<div style="font-size:16px;font-weight:700;color:#1F2937;text-align:center;">' + (isExpert ? '预约咨询确认' : '活动报名确认') + '</div>'
+        + '<div style="margin-top:14px;padding:12px;background:#F9FAFB;border-radius:12px;">'
+        +   '<div style="font-size:13px;color:#374151;font-weight:600;line-height:1.5;">' + escapeHtml(p.title || '') + '</div>'
+        +   '<div style="font-size:12px;color:#6B7280;margin-top:4px;">' + escapeHtml(p.authorName || '邻居') + (isExpert ? ' · 专家' : ' · 招募者') + '</div>'
+        + '</div>'
+        + '<div style="margin-top:14px;display:flex;align-items:baseline;justify-content:space-between;">'
+        +   '<span style="font-size:13px;color:#6B7280;">支付金额</span>'
+        +   '<span style="font-size:24px;font-weight:800;color:#F97316;">' + _communityMoney(amount) + '</span>'
+        + '</div>'
+        + '<div style="margin-top:8px;font-size:11px;color:#9CA3AF;line-height:1.7;">支付金额：' + _communityMoney(amount) + '，将由系统代收并自动结算。</div>'
+        + '<div style="display:flex;gap:10px;margin-top:18px;">'
+        +   '<button type="button" id="communityPayCancel" style="flex:1;padding:11px;border:1px solid #E5E7EB;border-radius:11px;background:#fff;color:#6B7280;font-size:14px;font-weight:600;cursor:pointer;">取消</button>'
+        +   '<button type="button" id="communityPayOk" style="flex:1.6;padding:11px;border:none;border-radius:11px;background:#F97316;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">确认支付</button>'
+        + '</div>'
+        + '</div>';
+    document.body.appendChild(ov);
+    document.getElementById('communityPayCancel').onclick = function () { ov.remove(); };
+    document.getElementById('communityPayOk').onclick = _communityPaySubmit;
+}
+function _communityPaySubmit() {
+    var box = document.getElementById('communityPayOverlay');
+    var p = _communityFindPost(_communityPayTargetId);
+    if (!p) {
+        if (box) box.remove();
+        _communityAlert('未找到该信息，可能已被删除');
+        return;
+    }
+    var isExpert = p.type === 'expert';
+    var split = _communityCommissionSplit(_communityPayAmount(p));
+    if (split.amount > 0) {
+        var list = getCommissionRecords();
+        list.push({
+            id: _communityCommissionNextId(list),
+            postId: String(p.id || ''),
+            buyer: _communityBuyerName(),
+            amount: split.amount,
+            platformFee: split.platformFee,
+            providerFee: split.providerFee,
+            createdAt: Math.floor(Date.now() / 1000)
+        });
+        lsSetJSON('commissionRecords', list);
+    }
+    if (box) {
+        box.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:330px;padding:22px 20px;box-sizing:border-box;text-align:center;">'
+            + '<div style="font-size:18px;font-weight:800;color:#047857;">' + (isExpert ? '✅ 预约成功！' : '✅ 报名成功！') + '</div>'
+            + '<div style="font-size:12px;color:#6B7280;margin-top:6px;line-height:1.6;">' + escapeHtml(p.title || '') + '</div>'
+            + '<div style="margin-top:16px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:12px;padding:12px;text-align:left;">'
+            +   '<div style="display:flex;justify-content:space-between;font-size:13px;color:#065F46;line-height:2;"><span>平台服务费（30%）</span><strong>' + _communityMoney(split.platformFee) + '</strong></div>'
+            +   '<div style="display:flex;justify-content:space-between;font-size:13px;color:#065F46;line-height:2;"><span>' + (isExpert ? '专家收益（70%）' : '招募者收益（70%）') + '</span><strong>' + _communityMoney(split.providerFee) + '</strong></div>'
+            + '</div>'
+            + '<div style="margin-top:10px;font-size:11px;color:#9CA3AF;line-height:1.7;">（注：款项将在' + (isExpert ? '咨询完成后' : '活动结束后') + '结算）</div>'
+            + '<button type="button" id="communityPayDone" style="width:100%;margin-top:16px;padding:11px;border:none;border-radius:11px;background:#F97316;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">完成</button>'
+            + '</div>';
+        document.getElementById('communityPayDone').onclick = function () { box.remove(); };
+    }
+    showToast && showToast(isExpert ? '✅ 预约成功，已生成分润记录' : '✅ 报名成功，已生成分润记录');
 }
 function _communitySelectorHtml() {
     var names = _communityAllNames();
@@ -77674,7 +77811,7 @@ function openCommunityPage() {
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
     document.getElementById('communityCloseBtn').onclick = closeCommunityPage;
-    _communityFilter = 'mutual';
+    _communityFilter = 'all';
     _communityView = 'feed';
     renderCommunityList();
 }
@@ -77836,6 +77973,10 @@ function renderCommunityList() {
     });
     body.querySelectorAll('[data-sop]').forEach(function (btn) {
         btn.onclick = function () { _communityOpenBuy(btn.getAttribute('data-sop')); };
+    });
+    // V397: 活动报名 / 专家咨询预约（模拟支付 + 分润）
+    body.querySelectorAll('[data-pay]').forEach(function (btn) {
+        btn.onclick = function () { _communityOpenPayConfirm(btn.getAttribute('data-pay')); };
     });
 }
 window.renderHomeCommunityBar = renderHomeCommunityBar;
