@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V398-20261108';
+        var APP_VER = 'V399-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode','commissionRecords'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode','commissionRecords','expertConsultations'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -77214,6 +77214,10 @@ function _renderCommunityPublishModal(verifiedPhone) {
         +     '<input id="communityPubSop" type="text" maxlength="500" placeholder="https://… 活动方案 PDF/文档链接" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;" />'
         +   '</div>'
         +   '<div id="communityPubExpertExtra" style="display:none;">'
+        +     '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">证书编号（必填）</div>'
+        +     '<input id="communityPubCertNo" type="text" maxlength="40" placeholder="例如：CN-2023-123456" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:10px;" />'
+        +     '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">发证机构（必填）</div>'
+        +     '<input id="communityPubCertIssuer" type="text" maxlength="60" placeholder="例如：中国营养学会" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:10px;" />'
         +     '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">资质证明上传（必填）</div>'
         +     '<div id="communityPubCertBox" style="margin-bottom:4px;"></div>'
         +     '<div style="font-size:11px;color:#9CA3AF;margin:4px 0 10px;">支持 jpg / png，证书仅用于超管审核，不公开展示原图</div>'
@@ -77281,6 +77285,8 @@ async function submitCommunityPost() {
     var maxEl = document.getElementById('communityPubMax');
     var sopEl = document.getElementById('communityPubSop');
     var bioEl = document.getElementById('communityPubExpertBio');
+    var certNoEl = document.getElementById('communityPubCertNo');
+    var certIssuerEl = document.getElementById('communityPubCertIssuer');
     var title = String((titleEl && titleEl.value) || '').trim();
     var content = String((contentEl && contentEl.value) || '').trim();
     var phone = String((phoneEl && phoneEl.value) || '').trim();
@@ -77290,6 +77296,8 @@ async function submitCommunityPost() {
     var maxParticipants = Math.max(0, Math.round(Number((maxEl && maxEl.value) || 0) || 0));
     var officialSopUrl = _communityNormalizeBuyLink((sopEl && sopEl.value) || '');
     var expertBio = String((bioEl && bioEl.value) || '').trim();
+    var expertCertNo = String((certNoEl && certNoEl.value) || '').trim();
+    var expertCertIssuer = String((certIssuerEl && certIssuerEl.value) || '').trim();
     var needSuperAudit = (_communityPubType === 'activity' || _communityPubType === 'expert');
     // V252: 已认证手机号为准，避免只读字段被脚本篡改或为空
     var authInfo = _communityPhoneAuth();
@@ -77299,6 +77307,8 @@ async function submitCommunityPost() {
     if (phone && !/^[0-9+\-\s]{6,20}$/.test(phone)) { showToast && showToast('电话号码格式不正确'); phoneEl && phoneEl.focus(); return; }
     if (!phone && !wechat && !_communityPubQr) { showToast && showToast('请至少填写电话、微信号或上传二维码'); wechatEl && wechatEl.focus(); return; }
     if (_communityPubType === 'expert') {
+        if (!expertCertNo) { showToast && showToast('专家服务需填写证书编号'); certNoEl && certNoEl.focus(); return; }
+        if (!expertCertIssuer) { showToast && showToast('专家服务需填写发证机构'); certIssuerEl && certIssuerEl.focus(); return; }
         if (!_communityPubCert) { showToast && showToast('专家服务需上传资质证明'); return; }
         if (!expertBio) { showToast && showToast('专家服务需填写资历介绍'); bioEl && bioEl.focus(); return; }
     }
@@ -77353,6 +77363,8 @@ async function submitCommunityPost() {
         maxParticipants: maxParticipants,
         officialSopUrl: officialSopUrl,
         expertCertImage: (_communityPubType === 'expert') ? _communityPubCert : '',
+        expertCertNo: (_communityPubType === 'expert') ? expertCertNo : '',
+        expertCertIssuer: (_communityPubType === 'expert') ? expertCertIssuer : '',
         expertBio: (_communityPubType === 'expert') ? expertBio : '',
         commissionRate: 0.3,
         auditStatus: needSuperAudit ? 'pending_audit' : 'passed',
@@ -77607,11 +77619,16 @@ function _communityPostCardHtml(p, opts) {
         }
     } else if (p.type === 'expert') {
         tradeHtml = '<div style="margin-top:8px;font-size:12px;color:#5B21B6;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:9px;padding:8px 10px;line-height:1.7;">'
-            + '<div style="font-weight:700;">🩺 咨询费：' + (priceVal > 0 ? '¥' + priceVal + '/次' : '面议') + ' · ✅ 资质已核验</div>'
+            + '<div style="font-weight:700;">🩺 咨询费：' + (priceVal > 0 ? '¥' + priceVal + '/次' : '面议') + ' · ✅ 资质已核验'
+            + (status === 'passed' ? ' <span style="display:inline-block;font-size:10px;font-weight:800;color:#047857;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;padding:1px 5px;vertical-align:1px;">✅ 平台认证</span>' : '')
+            + '</div>'
             + (p.expertBio ? '<div style="margin-top:3px;color:#6D28D9;">' + escapeHtml(p.expertBio) + '</div>' : '')
             + '</div>';
     }
     // 超管审核视图：展示专家资质原图，供人工核验
+    if (opts.audit && p.type === 'expert') {
+        tradeHtml += '<div style="margin-top:8px;font-size:11px;color:#6B7280;line-height:1.7;">证书编号：' + escapeHtml(p.expertCertNo || '未填写') + '<br>发证机构：' + escapeHtml(p.expertCertIssuer || '未填写') + '</div>';
+    }
     if (opts.audit && p.type === 'expert' && p.expertCertImage) {
         tradeHtml += '<div style="margin-top:8px;">'
             + '<div style="font-size:11px;color:#6B7280;margin-bottom:4px;">资质证明（仅超管可见）</div>'
@@ -77721,9 +77738,96 @@ function _communityMoney(n) {
     var v = Math.round((Number(n) || 0) * 100) / 100;
     return '¥' + (v % 1 === 0 ? String(v) : v.toFixed(2));
 }
+// ========== V399: 专家咨询问卷（支付前必填）+ 咨询留痕 ==========
+var _communityConsultDraft = null;   // {height, weight, needs}
+var _communityConsultPostId = '';
+function _expertConsultNextId(list) {
+    var max = 0;
+    (list || []).forEach(function (r) {
+        var m = String((r && r.id) || '').match(/(\d+)/);
+        if (m) max = Math.max(max, parseInt(m[1], 10) || 0);
+    });
+    var n = String(max + 1);
+    while (n.length < 3) n = '0' + n;
+    return 'ec_' + n;
+}
+function _communityConsultFormValid() {
+    var h = Number((document.getElementById('consultHeight') || {}).value || 0);
+    var w = Number((document.getElementById('consultWeight') || {}).value || 0);
+    var needs = String((document.getElementById('consultNeeds') || {}).value || '').trim();
+    var agree = document.getElementById('consultAgree');
+    return h >= 80 && h <= 250 && w >= 20 && w <= 300 && needs.length >= 2 && !!(agree && agree.checked);
+}
+function _communityConsultSyncBtn() {
+    var ok = _communityConsultFormValid();
+    var btn = document.getElementById('consultNextBtn');
+    if (!btn) return;
+    btn.disabled = !ok;
+    btn.style.background = ok ? '#7C3AED' : '#E5E7EB';
+    btn.style.color = ok ? '#fff' : '#9CA3AF';
+    btn.style.cursor = ok ? 'pointer' : 'not-allowed';
+}
+function _communityOpenConsultForm(postId) {
+    var p = _communityFindPost(postId);
+    if (!p) { _communityAlert('未找到该信息，可能已被删除'); return; }
+    _communityConsultPostId = String(p.id || '');
+    var old = document.getElementById('communityConsultOverlay');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'communityConsultOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10024;background:rgba(17,24,39,0.55);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:350px;max-height:88vh;overflow-y:auto;padding:20px;box-sizing:border-box;">'
+        + '<div style="font-size:16px;font-weight:700;color:#1F2937;text-align:center;">预约咨询 · 健康信息</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;text-align:center;margin-top:4px;">' + escapeHtml(p.title || '') + '</div>'
+        + '<div style="display:flex;gap:10px;margin-top:14px;">'
+        +   '<div style="flex:1;"><div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:5px;">身高（cm）</div>'
+        +   '<input id="consultHeight" type="number" min="80" max="250" placeholder="170" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;" /></div>'
+        +   '<div style="flex:1;"><div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:5px;">体重（kg）</div>'
+        +   '<input id="consultWeight" type="number" min="20" max="300" placeholder="75" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;" /></div>'
+        + '</div>'
+        + '<div style="font-size:12px;font-weight:700;color:#374151;margin:12px 0 5px;">主要诉求</div>'
+        + '<textarea id="consultNeeds" maxlength="200" rows="3" placeholder="例如：减脂 / 控糖 / 孕期营养 / 儿童挑食" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;resize:vertical;"></textarea>'
+        + '<label style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-size:11px;color:#9CA3AF;line-height:1.65;cursor:pointer;">'
+        +   '<input type="checkbox" id="consultAgree" style="flex-shrink:0;width:14px;height:14px;margin:2px 0 0;accent-color:#7C3AED;cursor:pointer;" />'
+        +   '<span>本人知悉，本服务仅提供日常膳食建议，不替代医生诊断与治疗。如有疾病，请遵医嘱。</span>'
+        + '</label>'
+        + '<div style="display:flex;gap:10px;margin-top:16px;">'
+        +   '<button type="button" id="consultCancelBtn" style="flex:1;padding:11px;border:1px solid #E5E7EB;border-radius:11px;background:#fff;color:#6B7280;font-size:14px;font-weight:600;cursor:pointer;">取消</button>'
+        +   '<button type="button" id="consultNextBtn" disabled style="flex:1.6;padding:11px;border:none;border-radius:11px;background:#E5E7EB;color:#9CA3AF;font-size:14px;font-weight:700;cursor:not-allowed;">下一步：去支付</button>'
+        + '</div>'
+        + '</div>';
+    document.body.appendChild(ov);
+    ['consultHeight', 'consultWeight', 'consultNeeds'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.oninput = _communityConsultSyncBtn;
+    });
+    var ag = document.getElementById('consultAgree');
+    if (ag) ag.onchange = _communityConsultSyncBtn;
+    document.getElementById('consultCancelBtn').onclick = function () {
+        _communityConsultDraft = null;
+        _communityConsultPostId = '';
+        ov.remove();
+    };
+    document.getElementById('consultNextBtn').onclick = function () {
+        if (!_communityConsultFormValid()) { showToast && showToast('请完整填写并勾选知情同意'); return; }
+        _communityConsultDraft = {
+            height: Number(document.getElementById('consultHeight').value) || 0,
+            weight: Number(document.getElementById('consultWeight').value) || 0,
+            needs: String(document.getElementById('consultNeeds').value || '').trim()
+        };
+        ov.remove();
+        _communityOpenPayConfirm(_communityConsultPostId);
+    };
+    _communityConsultSyncBtn();
+}
 function _communityOpenPayConfirm(postId) {
     var p = _communityFindPost(postId);
     if (!p) { _communityAlert('未找到该信息，可能已被删除'); return; }
+    // V399: 专家咨询必须先完成健康问卷
+    if (p.type === 'expert' && !(_communityConsultDraft && _communityConsultPostId === String(p.id || ''))) {
+        _communityOpenConsultForm(String(p.id || ''));
+        return;
+    }
     _communityPayTargetId = String(p.id || '');
     var isExpert = p.type === 'expert';
     var amount = _communityPayAmount(p);
@@ -77753,7 +77857,11 @@ function _communityOpenPayConfirm(postId) {
         + '</div>'
         + '</div>';
     document.body.appendChild(ov);
-    document.getElementById('communityPayCancel').onclick = function () { ov.remove(); };
+    document.getElementById('communityPayCancel').onclick = function () {
+        _communityConsultDraft = null;
+        _communityConsultPostId = '';
+        ov.remove();
+    };
     document.getElementById('communityPayOk').onclick = _communityPaySubmit;
     // V398: 未勾选《免责协议》时支付按钮保持禁用
     var agreeEl = document.getElementById('communityPayAgree');
@@ -77795,6 +77903,27 @@ function _communityPaySubmit() {
             createdAt: Math.floor(Date.now() / 1000)
         });
         lsSetJSON('commissionRecords', list);
+    }
+    // V399: 专家咨询留痕（问卷 + 待回复状态）
+    if (isExpert && _communityConsultDraft) {
+        var cons = lsGetJSON('expertConsultations', []);
+        if (!Array.isArray(cons)) cons = [];
+        cons.push({
+            id: _expertConsultNextId(cons),
+            expertId: String(p.id || ''),
+            userId: String(getFamilyId() || ''),
+            userProfile: {
+                height: Number(_communityConsultDraft.height) || 0,
+                weight: Number(_communityConsultDraft.weight) || 0,
+                needs: String(_communityConsultDraft.needs || '')
+            },
+            status: 'pending',
+            expertReport: '',
+            createdAt: Math.floor(Date.now() / 1000)
+        });
+        lsSetJSON('expertConsultations', cons);
+        _communityConsultDraft = null;
+        _communityConsultPostId = '';
     }
     if (box) {
         box.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:330px;padding:22px 20px;box-sizing:border-box;text-align:center;">'
