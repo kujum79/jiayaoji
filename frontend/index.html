@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V394-20261107';
+        var APP_VER = 'V395-20261107';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -75584,13 +75584,16 @@ function focusTodayDiaryMeals() {
 window.focusTodayDiaryMeals = focusTodayDiaryMeals;
 
 // ========== V246: 食邦邻聚（社区互助 / 拼购 / 活动） ==========
-// 数据结构：communityPosts = [{ id, type, community, authorName, authorKey, title, content, contactPhone, contactWechat, contactInfo, images, buyLink, volunteer, auditStatus, rejectReason, createdAt }]
-// type: mutual 互助 / group_buy 拼购 / activity 活动；auditStatus: pending 审核中 / passed 已通过 / rejected 未通过
+// 数据结构：communityPosts = [{ id, type, community, authorName, authorKey, title, content, contactPhone, contactWechat, contactInfo, images, buyLink, volunteer, auditStatus, rejectReason, createdAt,
+//   price, maxParticipants, officialSopUrl, expertCertImage, expertBio, commissionRate }]
+// type: mutual 互助 / group_buy 拼购 / activity 活动招募 / expert 专家服务
+// auditStatus: pending 审核中 / pending_audit 待超管审核 / passed 已通过 / rejected 未通过
 // 数据按家庭码前缀隔离存储并纳入云备份
 var _COMMUNITY_TYPES = [
     { key: 'mutual', label: '邻里互助', emoji: '🤝', color: '#EA580C', bg: '#FFF7ED', border: '#FED7AA' },
     { key: 'group_buy', label: '社区拼购', emoji: '🛒', color: '#047857', bg: '#ECFDF5', border: '#A7F3D0' },
-    { key: 'activity', label: '社区活动', emoji: '🎉', color: '#1D4ED8', bg: '#EFF6FF', border: '#BFDBFE' }
+    { key: 'activity', label: '活动招募', emoji: '🎪', color: '#1D4ED8', bg: '#EFF6FF', border: '#BFDBFE' },
+    { key: 'expert', label: '专家服务', emoji: '🩺', color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' }
 ];
 var _communityFilter = 'all';
 var _communitySelectedName = ''; // V247: 当前查看的小区（可在顶部下拉切换）
@@ -75953,6 +75956,56 @@ function _communityPubRemoveQr() {
 }
 window._communityPubPickQr = _communityPubPickQr;
 window._communityPubRemoveQr = _communityPubRemoveQr;
+// V395: 专家资质证明（独立上传位，仅超管审核可见）
+var _communityPubCert = '';
+function _communityPubPickCert(input) {
+    var file = input && input.files && input.files[0];
+    if (!file || !/^image\//.test(file.type || '')) { if (input) input.value = ''; return; }
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+        var img = new Image();
+        img.onload = function () {
+            var data = '';
+            try {
+                var maxW = 640;
+                var scale = Math.min(1, maxW / (img.width || maxW));
+                var canvas = document.createElement('canvas');
+                canvas.width = Math.round((img.width || maxW) * scale);
+                canvas.height = Math.round((img.height || maxW) * scale);
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                data = canvas.toDataURL('image/jpeg', 0.8);
+            } catch (e) {
+                data = String(ev.target.result || '');
+            }
+            _communityPubCert = data;
+            _communityPubRenderCert();
+        };
+        img.src = String(ev.target.result || '');
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+}
+function _communityPubRenderCert() {
+    var box = document.getElementById('communityPubCertBox');
+    if (!box) return;
+    if (!_communityPubCert) {
+        box.innerHTML = '<label style="display:inline-flex;align-items:center;gap:6px;padding:10px 14px;border:1px dashed #C4B5FD;border-radius:10px;background:#F5F3FF;color:#6D28D9;font-size:12px;font-weight:600;cursor:pointer;">'
+            + '<span>⬆️ 上传资质证明</span>'
+            + '<input type="file" accept="image/*" onchange="_communityPubPickCert(this)" style="display:none;" />'
+            + '</label>';
+        return;
+    }
+    box.innerHTML = '<div style="position:relative;width:96px;height:96px;">'
+        + '<img src="' + escapeAttr(_communityPubCert) + '" alt="资质证明" style="width:100%;height:100%;object-fit:cover;background:#fff;border-radius:10px;border:1px solid #C4B5FD;display:block;" />'
+        + '<button type="button" onclick="_communityPubRemoveCert()" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border:none;border-radius:50%;background:#EF4444;color:#fff;font-size:12px;line-height:1;cursor:pointer;">×</button>'
+        + '</div>';
+}
+function _communityPubRemoveCert() {
+    _communityPubCert = '';
+    _communityPubRenderCert();
+}
+window._communityPubPickCert = _communityPubPickCert;
+window._communityPubRemoveCert = _communityPubRemoveCert;
 // 二维码大图：长按可识别/保存后微信扫一扫
 function _communityShowQr(src) {
     var old = document.getElementById('communityImgViewer');
@@ -76007,6 +76060,16 @@ function _communityPubSelectType(key) {
         btn.style.color = on ? '#fff' : '#6B7280';
         btn.style.fontWeight = on ? '700' : '400';
     });
+    // V395: 活动招募 / 专家服务 追加费用与专属字段
+    var isTrade = (_communityPubType === 'activity' || _communityPubType === 'expert');
+    var trade = document.getElementById('communityPubTradeFields');
+    if (trade) trade.style.display = isTrade ? 'block' : 'none';
+    var act = document.getElementById('communityPubActivityExtra');
+    if (act) act.style.display = (_communityPubType === 'activity') ? 'block' : 'none';
+    var expert = document.getElementById('communityPubExpertExtra');
+    if (expert) expert.style.display = (_communityPubType === 'expert') ? 'block' : 'none';
+    var priceLabel = document.getElementById('communityPubPriceLabel');
+    if (priceLabel) priceLabel.textContent = (_communityPubType === 'expert') ? '咨询费（元/次）' : '票价（元/人）';
 }
 function closeCommunityPublishModal() {
     var ov = document.getElementById('communityPublishOverlay');
@@ -77105,6 +77168,7 @@ function _renderCommunityPublishModal(verifiedPhone) {
     _communityPubType = 'mutual';
     _communityPubImages = [];
     _communityPubQr = '';
+    _communityPubCert = '';
     var typeBtns = _COMMUNITY_TYPES.map(function (t) {
         return '<button type="button" data-ptype="' + t.key + '" onclick="_communityPubSelectType(\'' + t.key + '\')" '
             + 'style="flex:1;padding:8px 4px;border-radius:10px;font-size:12px;cursor:pointer;border:1px solid #E5E7EB;background:#fff;color:#6B7280;">'
@@ -77122,6 +77186,23 @@ function _renderCommunityPublishModal(verifiedPhone) {
         + '</div>'
         + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">选择分类</div>'
         + '<div id="communityPubTypes" style="display:flex;gap:8px;margin-bottom:12px;">' + typeBtns + '</div>'
+        + '<div id="communityPubTradeFields" style="display:none;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;padding:10px;margin-bottom:12px;">'
+        +   '<div id="communityPubPriceLabel" style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">费用（元）</div>'
+        +   '<input id="communityPubPrice" type="number" min="0" step="1" value="0" placeholder="0 表示免费/面议" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:10px;" />'
+        +   '<div id="communityPubActivityExtra" style="display:none;">'
+        +     '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">招募人数上限</div>'
+        +     '<input id="communityPubMax" type="number" min="0" step="1" value="0" placeholder="0 表示不限人数" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:10px;" />'
+        +     '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">官方方案下载链接（选填）</div>'
+        +     '<input id="communityPubSop" type="text" maxlength="500" placeholder="https://… 活动方案 PDF/文档链接" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;" />'
+        +   '</div>'
+        +   '<div id="communityPubExpertExtra" style="display:none;">'
+        +     '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">资质证明上传（必填）</div>'
+        +     '<div id="communityPubCertBox" style="margin-bottom:4px;"></div>'
+        +     '<div style="font-size:11px;color:#9CA3AF;margin:4px 0 10px;">支持 jpg / png，证书仅用于超管审核，不公开展示原图</div>'
+        +     '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">资历介绍（必填）</div>'
+        +     '<textarea id="communityPubExpertBio" maxlength="300" rows="3" placeholder="例如：注册营养师，10 年母婴营养咨询经验…" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;resize:vertical;"></textarea>'
+        +   '</div>'
+        + '</div>'
         + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">标题</div>'
         + '<input id="communityPubTitle" type="text" maxlength="40" placeholder="例如：代包手工饺子 / 土鸡蛋拼购" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;" />'
         + '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;">详细说明</div>'
@@ -77163,6 +77244,7 @@ function _renderCommunityPublishModal(verifiedPhone) {
     document.body.appendChild(ov);
     _communityPubSelectType('mutual');
     _communityPubRenderQr();
+    _communityPubRenderCert();
     document.getElementById('communityPubCancelBtn').onclick = closeCommunityPublishModal;
     document.getElementById('communityPubSubmitBtn').onclick = submitCommunityPost;
 }
@@ -77177,11 +77259,20 @@ async function submitCommunityPost() {
     var wechatEl = document.getElementById('communityPubWechat');
     var linkEl = document.getElementById('communityPubLink');
     var volEl = document.getElementById('communityPubVolunteer');
+    var priceEl = document.getElementById('communityPubPrice');
+    var maxEl = document.getElementById('communityPubMax');
+    var sopEl = document.getElementById('communityPubSop');
+    var bioEl = document.getElementById('communityPubExpertBio');
     var title = String((titleEl && titleEl.value) || '').trim();
     var content = String((contentEl && contentEl.value) || '').trim();
     var phone = String((phoneEl && phoneEl.value) || '').trim();
     var wechat = String((wechatEl && wechatEl.value) || '').trim();
     var buyLink = _communityNormalizeBuyLink((linkEl && linkEl.value) || '');
+    var price = Math.max(0, Math.round(Number((priceEl && priceEl.value) || 0) || 0));
+    var maxParticipants = Math.max(0, Math.round(Number((maxEl && maxEl.value) || 0) || 0));
+    var officialSopUrl = _communityNormalizeBuyLink((sopEl && sopEl.value) || '');
+    var expertBio = String((bioEl && bioEl.value) || '').trim();
+    var needSuperAudit = (_communityPubType === 'activity' || _communityPubType === 'expert');
     // V252: 已认证手机号为准，避免只读字段被脚本篡改或为空
     var authInfo = _communityPhoneAuth();
     if (authInfo.phoneVerified && authInfo.phoneNumber) phone = authInfo.phoneNumber;
@@ -77189,24 +77280,35 @@ async function submitCommunityPost() {
     if (!content) { showToast && showToast('请填写详细说明'); contentEl && contentEl.focus(); return; }
     if (phone && !/^[0-9+\-\s]{6,20}$/.test(phone)) { showToast && showToast('电话号码格式不正确'); phoneEl && phoneEl.focus(); return; }
     if (!phone && !wechat && !_communityPubQr) { showToast && showToast('请至少填写电话、微信号或上传二维码'); wechatEl && wechatEl.focus(); return; }
-    // V251: 发布前先走 AI 审核，通过才入库
+    if (_communityPubType === 'expert') {
+        if (!_communityPubCert) { showToast && showToast('专家服务需上传资质证明'); return; }
+        if (!expertBio) { showToast && showToast('专家服务需填写资历介绍'); bioEl && bioEl.focus(); return; }
+    }
+    if (_communityPubType === 'activity' && sopEl && String(sopEl.value || '').trim() && !officialSopUrl) {
+        showToast && showToast('官方方案链接需以 http:// 或 https:// 开头');
+        sopEl.focus();
+        return;
+    }
+    // V251: 普通分类发布前先走 AI 审核；V395: 活动招募/专家服务转超管人工审核
     var submitBtn = document.getElementById('communityPubSubmitBtn');
-    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '审核中…'; }
-    var audit = null;
-    try {
-        audit = await _communityAuditPost(title, content, _communityPubType);
-    } catch (e) {
-        audit = null;
-    }
-    if (!audit || typeof audit.passed === 'undefined') {
-        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '发布'; }
-        _communityAlert('审核服务暂时不可用，请稍后再试');
-        return;
-    }
-    if (!audit.passed) {
-        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '发布'; }
-        _communityAlert('发布失败：' + (audit.reason || '内容不符合社区发布规范') + '，请修改后再试');
-        return;
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = needSuperAudit ? '提交中…' : '审核中…'; }
+    var audit = { passed: true };
+    if (!needSuperAudit) {
+        try {
+            audit = await _communityAuditPost(title, content, _communityPubType);
+        } catch (e) {
+            audit = null;
+        }
+        if (!audit || typeof audit.passed === 'undefined') {
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '发布'; }
+            _communityAlert('审核服务暂时不可用，请稍后再试');
+            return;
+        }
+        if (!audit.passed) {
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '发布'; }
+            _communityAlert('发布失败：' + (audit.reason || '内容不符合社区发布规范') + '，请修改后再试');
+            return;
+        }
     }
     var posts = lsGetJSON('communityPosts', []) || [];
     if (!Array.isArray(posts)) posts = [];
@@ -77229,7 +77331,13 @@ async function submitCommunityPost() {
         wechatQr: _communityPubQr || '',
         buyLink: buyLink,
         volunteer: !!(volEl && volEl.checked),
-        auditStatus: 'passed',
+        price: price,
+        maxParticipants: maxParticipants,
+        officialSopUrl: officialSopUrl,
+        expertCertImage: (_communityPubType === 'expert') ? _communityPubCert : '',
+        expertBio: (_communityPubType === 'expert') ? expertBio : '',
+        commissionRate: 0.3,
+        auditStatus: needSuperAudit ? 'pending_audit' : 'passed',
         rejectReason: '',
         createdAt: Math.floor(Date.now() / 1000)
     });
@@ -77241,7 +77349,7 @@ async function submitCommunityPost() {
     _communityFilter = 'all';
     renderCommunityList();
     renderHomeCommunityBar();
-    showToast && showToast('发布成功，已通过审核并展示给邻居');
+    showToast && showToast(needSuperAudit ? '提交成功，待超管审核通过后展示给邻居' : '发布成功，已通过审核并展示给邻居');
 }
 window.openCommunityPublishModal = openCommunityPublishModal;
 window.closeCommunityPublishModal = closeCommunityPublishModal;
@@ -77448,14 +77556,15 @@ function _communityPostCardHtml(p, opts) {
     if (opts.mine) {
         var stMap = {
             pending: { text: '⏳ 审核中', color: '#B45309', bg: '#FFFBEB', border: '#FDE68A' },
+            pending_audit: { text: '⏳ 待超管审核', color: '#6D28D9', bg: '#F5F3FF', border: '#DDD6FE' },
             passed: { text: '✅ 已通过', color: '#047857', bg: '#ECFDF5', border: '#A7F3D0' },
             rejected: { text: '❌ 未通过', color: '#B91C1C', bg: '#FEF2F2', border: '#FECACA' },
             reported: { text: '🚩 已下架', color: '#B91C1C', bg: '#FEF2F2', border: '#FECACA' }
         };
         var st = stMap[status] || stMap.pending;
         statusHtml = '<span style="font-size:10px;font-weight:700;color:' + st.color + ';background:' + st.bg + ';border:1px solid ' + st.border + ';border-radius:8px;padding:1px 6px;">' + st.text + '</span>';
-        if (status === 'pending') {
-            watermarkHtml = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-18deg);font-size:28px;font-weight:900;letter-spacing:4px;color:rgba(217,119,6,0.18);pointer-events:none;white-space:nowrap;">审核中</div>';
+        if (status === 'pending' || status === 'pending_audit') {
+            watermarkHtml = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-18deg);font-size:28px;font-weight:900;letter-spacing:4px;color:rgba(217,119,6,0.18);pointer-events:none;white-space:nowrap;">' + (status === 'pending_audit' ? '待审核' : '审核中') + '</div>';
         } else if (status === 'rejected') {
             watermarkHtml = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-18deg);font-size:28px;font-weight:900;letter-spacing:4px;color:rgba(220,38,38,0.18);pointer-events:none;white-space:nowrap;">未通过</div>';
         } else if (status === 'reported') {
@@ -77464,6 +77573,39 @@ function _communityPostCardHtml(p, opts) {
         if (status === 'rejected' && p.rejectReason) {
             rejectHtml = '<div style="margin-top:8px;padding:8px 10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#B91C1C;line-height:1.6;">未通过原因：' + escapeHtml(p.rejectReason) + '</div>';
         }
+    }
+    // V395: 活动招募 / 专家服务的价格、人数、方案与资质信息
+    var priceVal = Math.max(0, Number(p.price) || 0);
+    var maxVal = Math.max(0, Number(p.maxParticipants) || 0);
+    var tradeHtml = '';
+    if (p.type === 'activity') {
+        tradeHtml = '<div style="margin-top:8px;font-size:12px;font-weight:700;color:#1D4ED8;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:9px;padding:7px 10px;">'
+            + '🎟 ' + (priceVal > 0 ? '¥' + priceVal + '/人' : '免费')
+            + ' · 👥 ' + (maxVal > 0 ? '限 ' + maxVal + ' 人' : '不限人数')
+            + '</div>';
+        if (p.officialSopUrl) {
+            tradeHtml += '<button type="button" data-sop="' + escapeAttr(p.officialSopUrl) + '" style="display:inline-flex;align-items:center;gap:4px;margin-top:8px;padding:6px 12px;border:1px solid #BFDBFE;border-radius:9px;background:#EFF6FF;color:#1D4ED8;font-size:12px;font-weight:600;cursor:pointer;">📄 查看官方方案</button>';
+        }
+    } else if (p.type === 'expert') {
+        tradeHtml = '<div style="margin-top:8px;font-size:12px;color:#5B21B6;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:9px;padding:8px 10px;line-height:1.7;">'
+            + '<div style="font-weight:700;">🩺 咨询费：' + (priceVal > 0 ? '¥' + priceVal + '/次' : '面议') + ' · ✅ 资质已核验</div>'
+            + (p.expertBio ? '<div style="margin-top:3px;color:#6D28D9;">' + escapeHtml(p.expertBio) + '</div>' : '')
+            + '</div>';
+    }
+    // 超管审核视图：展示专家资质原图，供人工核验
+    if (opts.audit && p.type === 'expert' && p.expertCertImage) {
+        tradeHtml += '<div style="margin-top:8px;">'
+            + '<div style="font-size:11px;color:#6B7280;margin-bottom:4px;">资质证明（仅超管可见）</div>'
+            + '<button type="button" data-img="' + escapeAttr(p.expertCertImage) + '" style="width:120px;height:120px;padding:0;border:1px solid #DDD6FE;border-radius:10px;overflow:hidden;background:#F9FAFB;cursor:pointer;">'
+            + '<img src="' + escapeAttr(p.expertCertImage) + '" alt="资质证明" style="width:100%;height:100%;object-fit:cover;display:block;" />'
+            + '</button></div>';
+    }
+    var auditBtnsHtml = '';
+    if (opts.audit) {
+        auditBtnsHtml = '<div style="display:flex;gap:8px;margin-top:10px;">'
+            + '<button type="button" data-audit-reject="' + escapeHtml(String(p.id || '')) + '" style="flex:1;padding:9px;border:1px solid #FECACA;border-radius:10px;background:#FEF2F2;color:#B91C1C;font-size:13px;font-weight:700;cursor:pointer;">❌ 驳回</button>'
+            + '<button type="button" data-audit-pass="' + escapeHtml(String(p.id || '')) + '" style="flex:1.6;padding:9px;border:none;border-radius:10px;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">✅ 通过并展示</button>'
+            + '</div>';
     }
     return '<div style="position:relative;overflow:hidden;background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
         + watermarkHtml
@@ -77479,9 +77621,11 @@ function _communityPostCardHtml(p, opts) {
         + '</div>'
         + '<div style="font-size:14px;font-weight:700;color:#1F2937;line-height:1.5;">' + escapeHtml(p.title || '') + '</div>'
         + '<div style="font-size:12px;color:#4B5563;line-height:1.8;margin-top:4px;">' + escapeHtml(p.content || '') + '</div>'
+        + tradeHtml
         + imagesHtml
         + qrHtml
         + rejectHtml
+        + auditBtnsHtml
         + '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;">'
         +   contactBtns
         +   buyBtnHtml
@@ -77528,20 +77672,51 @@ function _communitySetFilter(key) {
 }
 // V250: 切换「小区帖子 / 我的发布」
 function _communitySetView(view) {
-    _communityView = view === 'mine' ? 'mine' : 'feed';
+    _communityView = (view === 'mine' || view === 'audit') ? view : 'feed';
+    if (_communityView === 'audit' && !(typeof isSuperAdmin === 'function' && isSuperAdmin())) _communityView = 'feed';
     renderCommunityList();
 }
+// V395: 超管审核活动招募 / 专家服务
+function _communityAuditDecision(id, action) {
+    if (!(typeof isSuperAdmin === 'function' && isSuperAdmin())) { _communityAlert('仅超管可执行审核操作'); return; }
+    var posts = lsGetJSON('communityPosts', []) || [];
+    if (!Array.isArray(posts)) posts = [];
+    var target = null;
+    posts.forEach(function (p) { if (String(p.id) === String(id)) target = p; });
+    if (!target) { _communityAlert('未找到该帖子，可能已被删除'); return; }
+    if (action === 'pass') {
+        target.auditStatus = 'passed';
+        target.rejectReason = '';
+    } else {
+        target.auditStatus = 'rejected';
+        target.rejectReason = '超管审核未通过：内容不符合邻聚发布规范';
+    }
+    target.auditedAt = Math.floor(Date.now() / 1000);
+    lsSetJSON('communityPosts', posts);
+    renderCommunityList();
+    renderHomeCommunityBar();
+    showToast && showToast(action === 'pass' ? '✅ 已通过审核，帖子已展示给邻居' : '已驳回该帖子');
+}
+window._communityAuditDecision = _communityAuditDecision;
 function renderCommunityList() {
     var body = document.getElementById('communityBody');
     if (!body) return;
     var isMine = _communityView === 'mine';
+    var canAudit = (typeof isSuperAdmin === 'function' && isSuperAdmin());
+    var isAudit = _communityView === 'audit' && canAudit;
     var tabs = '<div style="display:flex;background:#fff;border:1px solid #FED7AA;border-radius:12px;padding:3px;margin-bottom:10px;">';
     tabs += '<button type="button" onclick="_communitySetView(\'feed\')" style="flex:1;padding:8px;border:none;border-radius:9px;font-size:13px;cursor:pointer;'
-        + (!isMine ? 'background:#F97316;color:#fff;font-weight:700;' : 'background:transparent;color:#6B7280;')
+        + (!isMine && !isAudit ? 'background:#F97316;color:#fff;font-weight:700;' : 'background:transparent;color:#6B7280;')
         + '">邻居动态</button>';
     tabs += '<button type="button" onclick="_communitySetView(\'mine\')" style="flex:1;padding:8px;border:none;border-radius:9px;font-size:13px;cursor:pointer;'
         + (isMine ? 'background:#F97316;color:#fff;font-weight:700;' : 'background:transparent;color:#6B7280;')
         + '">我的发布</button>';
+    if (canAudit) {
+        var pendingCount = getCommunityPosts().filter(function (p) { return String(p.auditStatus || '') === 'pending_audit'; }).length;
+        tabs += '<button type="button" onclick="_communitySetView(\'audit\')" style="flex:1;padding:8px;border:none;border-radius:9px;font-size:13px;cursor:pointer;'
+            + (isAudit ? 'background:#7C3AED;color:#fff;font-weight:700;' : 'background:transparent;color:#6B7280;')
+            + '">待审核' + (pendingCount ? '(' + pendingCount + ')' : '') + '</button>';
+    }
     tabs += '</div>';
     var chips = '<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;">';
     chips += '<button type="button" onclick="_communitySetFilter(\'all\')" style="flex-shrink:0;padding:6px 12px;border-radius:16px;font-size:12px;cursor:pointer;'
@@ -77557,7 +77732,20 @@ function renderCommunityList() {
     var posts = getCommunityPosts();
     var curCommunity = _communitySelectedName || getCommunityName();
     var listHtml = '';
-    if (isMine) {
+    if (isAudit) {
+        // V395: 超管后台——活动招募 / 专家服务待审核列表（跨小区）
+        var pendingPosts = posts.filter(function (p) { return String(p.auditStatus || '') === 'pending_audit'; });
+        if (!pendingPosts.length) {
+            listHtml = '<div style="padding:52px 24px;text-align:center;">'
+                + '<div style="font-size:40px;">✅</div>'
+                + '<div style="font-size:13px;color:#4B5563;line-height:1.85;margin-top:14px;">暂无待审核的活动招募或专家服务。</div>'
+                + '</div>';
+        } else {
+            pendingPosts.forEach(function (p) {
+                try { listHtml += _communityPostCardHtml(p, { audit: true }); } catch (e) {}
+            });
+        }
+    } else if (isMine) {
         // 我的发布：包含 pending / passed / rejected，不受小区与分类筛选影响
         var myKey = _communityMyAuthorKey();
         var mine = posts.filter(function (p) {
@@ -77625,8 +77813,17 @@ function renderCommunityList() {
     body.querySelectorAll('[data-qr]').forEach(function (btn) {
         btn.onclick = function () { _communityShowQr(btn.getAttribute('data-qr')); };
     });
+    body.querySelectorAll('[data-audit-pass]').forEach(function (btn) {
+        btn.onclick = function () { _communityAuditDecision(btn.getAttribute('data-audit-pass'), 'pass'); };
+    });
+    body.querySelectorAll('[data-audit-reject]').forEach(function (btn) {
+        btn.onclick = function () { _communityAuditDecision(btn.getAttribute('data-audit-reject'), 'reject'); };
+    });
     body.querySelectorAll('[data-report]').forEach(function (btn) {
         btn.onclick = function () { openCommunityReportModal(btn.getAttribute('data-report')); };
+    });
+    body.querySelectorAll('[data-sop]').forEach(function (btn) {
+        btn.onclick = function () { _communityOpenBuy(btn.getAttribute('data-sop')); };
     });
 }
 window.renderHomeCommunityBar = renderHomeCommunityBar;
