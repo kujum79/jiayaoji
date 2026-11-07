@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V393-20261107';
+        var APP_VER = 'V394-20261107';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -33160,7 +33160,6 @@ function _dtRenderCard(tip) {
     var subBtnHtml = '<button class="dt-btn" data-substate="' + _subState + '" style="white-space:nowrap;line-height:1.3;font-size:11px;padding:3px 9px;border-radius:9px;margin-left:4px;' + _subMeta.style + '"'
         + ' onclick="event.stopPropagation(); openSubscriptionModal(\'' + _subState + '\')">' + _subMeta.text + '</button>';
     var isMember = (typeof isFoodMember === 'function') ? isFoodMember() : false;
-    var lockBadge = isMember ? '' : '<span style="position:absolute;top:8px;right:8px;background:rgba(17,24,39,.62);color:#fff;font-size:10px;font-weight:600;border-radius:999px;padding:3px 8px;line-height:1.4;">🔒 会员专享</span>';
     var headHtml = '<div class="dt-head"><span onclick="_fhOpenHall()" style="cursor:pointer;">📚 食养堂</span>'
         + '<span class="dt-head-btns" onclick="event.stopPropagation()">'
         + adminCtl
@@ -33170,17 +33169,17 @@ function _dtRenderCard(tip) {
     var bodyHtml = '';
     if (_fhIsRecipeSlot()) {
         var recipe = _fhRecipeOfDay();
+        var intro = recipe.summary || '';
+        if (recipe.ingredients && recipe.ingredients.length) {
+            intro += ' 主料：' + recipe.ingredients.slice(0, 3).join('、') + '。';
+        }
         bodyHtml = '<div onclick="_fhOpenHomeRecipe()" style="cursor:pointer;">'
             + '<div class="dt-title-row">'
-            + '<span class="dt-lesson-tag" onclick="event.stopPropagation(); _fhOpenHall()" style="cursor:pointer;" title="进入食养堂">今日食谱</span>'
+            + '<span class="dt-lesson-tag" style="cursor:pointer;" title="查看食谱详情">今日食谱</span>'
             + '<div class="dt-title">' + escapeHtml(recipe.title) + '</div>'
             + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" class="dt-title-act" style="font-size:16px;" title="往期回顾">📅</button>'
             + '</div>'
-            + '<div style="position:relative;margin-top:8px;">'
-            + '<img src="' + escapeAttr(recipe.coverImage) + '" alt="' + escapeAttr(recipe.title) + '" style="display:block;width:100%;height:148px;object-fit:cover;border-radius:12px;background:#FDE68A;">'
-            + lockBadge
-            + '</div>'
-            + '<div class="dt-summary" style="margin-top:7px;">' + escapeHtml(recipe.summary) + '</div>'
+            + '<div class="dt-summary" style="margin-top:8px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(intro) + '</div>'
             + '</div>';
     } else {
         var a = _fhArticleList(tip)[0] || {};
@@ -33298,7 +33297,6 @@ function _fhOpenHomeArticle() {
     _fhOpenArticleDetail(_fhArticleList(_fhCachedTip())[0]);
 }
 function _fhOpenHomeRecipe() {
-    if (!isFoodMember()) { _fhShowPaywall(); return; }
     _fhOpenRecipeDetail(_fhRecipeOfDay());
 }
 function _fhOpenHall() {
@@ -34520,15 +34518,12 @@ function _openDailyTipArchive() {
     if (old) old.remove();
     var ov = document.createElement('div');
     ov.id = 'dtArcOv';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:10001;background:#FDF8F2;display:flex;flex-direction:column;';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10001;background:#FDF8F2;display:flex;flex-direction:column;max-width:430px;margin:0 auto;';
     ov.innerHTML = '<div style="flex-shrink:0;background:white;border-bottom:1px solid #F3E9DC;padding:10px 16px;display:flex;align-items:center;gap:8px;">'
         + '<button type="button" onclick="_closeDtArc()" style="border:none;background:none;font-size:18px;color:#6B7280;cursor:pointer;padding:2px 6px;line-height:1;">←</button>'
-        + '<span style="font-size:15px;font-weight:700;color:#1F2937;">🍂 食养堂</span>'
+        + '<span style="font-size:15px;font-weight:700;color:#1F2937;">🍂 食养堂 · 往期回顾</span>'
         + (function () { try { return getCurrentUserContext().isSuperAdmin ? '<button type="button" onclick="_fhManualGen(this)" style="margin-left:auto;border:1px solid #FDBA74;background:#FFF3E2;color:#9A3412;font-size:12px;font-weight:600;border-radius:999px;padding:4px 10px;cursor:pointer;">⚙️ 生成今日草稿</button>' : ''; } catch (e) { return ''; } })()
         + '</div>'
-        + '<div style="flex-shrink:0;display:flex;gap:8px;padding:10px 16px 0;">'
-        + '<button id="dtArcTabH" type="button" onclick="_dtArcSwitch(\'history\')"></button>'
-        + '<button id="dtArcTabF" type="button" onclick="_dtArcSwitch(\'fav\')"></button></div>'
         + '<div id="dtArcFilterRow" style="display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px 0;"></div>'
         + '<div style="flex-shrink:0;padding:10px 16px 0;">'
         + '<input id="dtArcSearch" type="text" placeholder="🔍 搜索标题和正文" oninput="_dtArcRender()" style="width:100%;padding:8px 12px;border:1px solid #EADFD0;border-radius:10px;font-size:13px;outline:none;background:white;box-sizing:border-box;" /></div>'
@@ -34539,12 +34534,7 @@ function _openDailyTipArchive() {
 var _dtArcCat = ''; // 当前筛选的 category（空=全部）
 var _DT_CATS = ['', '节气食养', '天气食养', '当季食材', '厨房技巧', '选材避坑', '家庭宴客', '饮食文化', '食育', '食方'];
 function _dtArcSwitch(tab) {
-    _dtArcTab = tab;
-    var on = 'flex:1;height:34px;border-radius:10px;border:none;background:#F97316;color:white;font-size:13px;font-weight:600;cursor:pointer;';
-    var off = 'flex:1;height:34px;border-radius:10px;border:1px solid #EADFD0;background:white;color:#6B7280;font-size:13px;cursor:pointer;';
-    var th = document.getElementById('dtArcTabH'), tf = document.getElementById('dtArcTabF');
-    if (th) { th.style.cssText = (tab === 'history' ? on : off); th.textContent = '📅 往期回顾'; }
-    if (tf) { tf.style.cssText = (tab === 'fav' ? on : off); tf.textContent = '⭐ 我的收藏'; }
+    _dtArcTab = 'history';
     _dtArcRender();
 }
 function _dtArcFilter(cat) { _dtArcCat = cat; _dtArcRender(); }
@@ -34552,20 +34542,16 @@ function _dtArcRender() {
     var body = document.getElementById('dtArcBody');
     var filterRow = document.getElementById('dtArcFilterRow');
     if (!body) return;
-    // 分类筛选行（仅 history tab 显示）
+    // V394: 往期回顾页移除「我的收藏」，仅保留历史内容与分类筛选
     if (filterRow) {
-        if (_dtArcTab === 'history') {
-            filterRow.style.display = 'flex';
-            filterRow.innerHTML = _DT_CATS.map(function (c) {
-                var on = _dtArcCat === c;
-                var label = c || '全部';
-                return '<button type="button" onclick="_dtArcFilter(\'' + c + '\')" style="border:1px solid ' + (on ? '#F97316' : '#EADFD0') + ';background:' + (on ? '#FEF3C7' : 'white') + ';color:' + (on ? '#9A3412' : '#6B7280') + ';font-size:12px;font-weight:' + (on ? '700' : '500') + ';border-radius:999px;padding:4px 10px;cursor:pointer;">' + label + '</button>';
-            }).join('');
-        } else {
-            filterRow.style.display = 'none';
-        }
+        filterRow.style.display = 'flex';
+        filterRow.innerHTML = _DT_CATS.map(function (c) {
+            var on = _dtArcCat === c;
+            var label = c || '全部';
+            return '<button type="button" onclick="_dtArcFilter(\'' + c + '\')" style="border:1px solid ' + (on ? '#F97316' : '#EADFD0') + ';background:' + (on ? '#FEF3C7' : 'white') + ';color:' + (on ? '#9A3412' : '#6B7280') + ';font-size:12px;font-weight:' + (on ? '700' : '500') + ';border-radius:999px;padding:4px 10px;cursor:pointer;">' + label + '</button>';
+        }).join('');
     }
-    if (_dtArcTab === 'history') _dtArcRenderHistory(); else _dtArcRenderFav();
+    _dtArcRenderHistory();
 }
 function _dtArcRow(dateTxt, cat, title, onclick, extraRight) {
     return '<div onclick="' + onclick + '" style="background:white;border:1px solid #F3E9DC;border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;">'
@@ -34598,22 +34584,6 @@ function _dtArcRenderHistory() {
     body.innerHTML = all.map(function (a) {
         var dtxt = a.date || '';
         return _dtArcRow(dtxt, a.category || '节气食养', a.title, "_dtArcOpenId('" + a.id + "')");
-    }).join('');
-}
-function _dtArcRenderFav() {
-    var body = document.getElementById('dtArcBody');
-    if (!body) return;
-    var q = '';
-    try { q = String((document.getElementById('dtArcSearch') || {}).value || '').trim(); } catch (e) {}
-    var list = _dtFavList();
-    var shown = q ? list.filter(function (x) { return x && (String(x.title || '').indexOf(q) >= 0 || String(x.content || '').indexOf(q) >= 0); }) : list;
-    if (!list.length) { body.innerHTML = _dtArcEmpty('⭐', '还没有收藏', '去首页食养堂卡片或详情弹层点「收藏」吧'); return; }
-    if (!shown.length) { body.innerHTML = _dtArcEmpty('🔍', '没有匹配「' + q + '」的收藏', '换个关键词试试'); return; }
-    body.innerHTML = shown.map(function (t) {
-        var dtxt = t.date || '';
-        if (t.favoritedAt) { var d = new Date(t.favoritedAt); dtxt = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
-        return _dtArcRow(dtxt, t.category || '节气食养', t.title, "_dtArcOpenF('" + t.id + "')",
-            '<span onclick="event.stopPropagation();_dtArcUnfav(\'' + t.id + '\')" style="margin-left:auto;font-size:12px;color:#EF4444;cursor:pointer;">取消收藏</span>');
     }).join('');
 }
 function _dtArcOpenId(id) {
