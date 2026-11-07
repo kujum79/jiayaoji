@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4A150F"/>
+      <stop offset="0.55" stop-color="#9A3412"/>
+      <stop offset="1" stop-color="#5C1A10"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.35" r="0.72">
+      <stop offset="0" stop-color="#FFE0B2" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#FFE0B2" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bowl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFF8EE"/>
+      <stop offset="0.7" stop-color="#F3E2CC"/>
+      <stop offset="1" stop-color="#D9BFA2"/>
+    </linearGradient>
+    <linearGradient id="soup" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E85D3C"/>
+      <stop offset="0.6" stop-color="#C2410C"/>
+      <stop offset="1" stop-color="#8A2A0B"/>
+    </linearGradient>
+    <linearGradient id="tomato" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF8A6A"/>
+      <stop offset="1" stop-color="#D63A22"/>
+    </linearGradient>
+    <linearGradient id="beef" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#A9673F"/>
+      <stop offset="1" stop-color="#6B3620"/>
+    </linearGradient>
+    <filter id="blur8"><feGaussianBlur stdDeviation="8"/></filter>
+  </defs>
+  <rect width="800" height="500" fill="url(#bg)"/>
+  <g opacity="0.16" stroke="#FFE3C4" stroke-width="2">
+    <path d="M0 120 H800"/><path d="M0 250 H800"/><path d="M0 390 H800"/>
+  </g>
+  <rect width="800" height="500" fill="url(#glow)"/>
+  <ellipse cx="400" cy="430" rx="320" ry="50" fill="#000" opacity="0.32" filter="url(#blur8)"/>
+  <ellipse cx="400" cy="305" rx="290" ry="165" fill="#E9D3B8"/>
+  <ellipse cx="400" cy="315" rx="290" ry="150" fill="url(#bowl)"/>
+  <ellipse cx="400" cy="310" rx="246" ry="126" fill="url(#soup)"/>
+  <g>
+    <g fill="url(#beef)">
+      <path d="M270 280 q26 -24 60 -8 q28 18 12 44 q-22 28 -56 14 q-30 -16 -16 -50z"/>
+      <path d="M380 340 q30 -26 66 -8 q30 20 10 48 q-26 30 -64 12 q-28 -18 -12 -52z"/>
+      <path d="M460 250 q28 -22 60 -4 q26 18 8 42 q-24 26 -58 10 q-26 -18 -10 -48z"/>
+      <path d="M510 340 q26 -22 56 -4 q24 18 6 40 q-24 24 -54 8 q-22 -18 -8 -44z"/>
+      <path d="M330 230 q24 -18 52 -2 q22 16 6 36 q-22 22 -50 6 q-20 -16 -8 -40z"/>
+    </g>
+    <g fill="url(#tomato)">
+      <path d="M235 330 q30 -24 62 -4 q24 20 4 44 q-28 26 -60 6 q-22 -20 -6 -46z"/>
+      <path d="M350 270 q28 -22 58 -4 q24 18 4 42 q-26 24 -56 6 q-22 -18 -6 -44z"/>
+      <path d="M445 370 q26 -20 56 -2 q22 16 4 38 q-24 22 -52 6 q-20 -16 -8 -42z"/>
+      <path d="M540 280 q24 -18 50 -2 q20 16 4 36 q-22 20 -48 4 q-18 -16 -6 -38z"/>
+      <path d="M300 380 q22 -16 46 0 q18 14 2 32 q-20 18 -44 4 q-16 -14 -4 -36z"/>
+    </g>
+  </g>
+  <g fill="#FFD9A8" opacity="0.7">
+    <ellipse cx="286" cy="292" rx="10" ry="5"/><ellipse cx="366" cy="278" rx="9" ry="4.5"/>
+    <ellipse cx="500" cy="262" rx="8" ry="4"/><ellipse cx="470" cy="362" rx="8" ry="4"/>
+  </g>
+  <g fill="#3F6B2A">
+    <path d="M330 215 q24 -20 48 -4 q-12 22 -48 18 q-12 -6 0 -14z"/>
+    <path d="M470 405 q26 -18 50 0 q-16 18 -50 14 q-10 -6 0 -14z"/>
+    <path d="M250 265 q20 -16 42 -2 q-10 20 -42 16 q-10 -6 0 -14z"/>
+  </g>
+  <g fill="none" stroke="#FFF" stroke-linecap="round" opacity="0.15">
+    <path d="M330 190 q-22 -48 6 -94" stroke-width="14"/>
+    <path d="M410 178 q-16 -48 12 -90" stroke-width="12"/>
+    <path d="M485 196 q-18 -48 10 -92" stroke-width="12"/>
+  </g>
+  <rect width="800" height="500" fill="none" stroke="#000" stroke-opacity="0.22" stroke-width="18"/>
+</svg>
