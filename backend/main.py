@@ -1435,6 +1435,39 @@ def _fh_solar_term(date_str: str) -> str:
     return ""
 
 
+# V423: 当前所处节气（最近一个已过的节气，任何日期都有值）——用于发布时校验草稿是否过季
+def _fh_current_term(date_str: str) -> str:
+    try:
+        md = date_str[5:10]
+    except (TypeError, IndexError):
+        return ""
+    cur = ""
+    for mmdd, name in _FH_TERMS:
+        if mmdd <= md:
+            cur = name
+    return cur or _FH_TERMS[0][1]
+
+
+def _fh_stale_term(article: Dict[str, Any], date_str: str) -> bool:
+    """V423: 草稿主题若停留在上一个/上上个节气（如立冬后仍写霜降），发布前判为过季。
+
+    正文里提到当前节气即视为当季（允许多提一个未来节气做预告）。
+    """
+    cur = _fh_current_term(date_str)
+    if not cur or cur not in _FH_SOLAR_TERMS:
+        return False
+    blob = "".join([
+        str(article.get("title") or ""), str(article.get("summary") or ""),
+        str(article.get("content") or ""),
+    ])
+    if cur in blob:
+        return False
+    i = _FH_SOLAR_TERMS.index(cur)
+    prev1 = _FH_SOLAR_TERMS[(i - 1) % 24]
+    prev2 = _FH_SOLAR_TERMS[(i - 2) % 24]
+    return prev1 in blob or prev2 in blob
+
+
 def _internal_token() -> str:
     """内部定时任务令牌：环境变量优先，否则首次自动生成落到 data/.internal_token（仅本机定时任务读取）。"""
     env = os.environ.get("JIAYAOJI_INTERNAL_TOKEN", "").strip()
@@ -1773,10 +1806,15 @@ async def _fh_publish_due_track(pub_date: str, content_type: str) -> Dict[str, A
                 candidates.append(d)
 
     generated = False
+    # V423: 预生成草稿可能停留在上一个节气（立冬后仍写霜降），发布前先剔过季稿
+    _fresh = [c for c in candidates if not _fh_stale_term(c, pub_date)]
+    if len(_fresh) < len(candidates):
+        print(f"[foodhall] {pub_date} {content_type} 剔除 {len(candidates) - len(_fresh)} 篇过季节气稿")
+        candidates = _fresh
     if not candidates:
         try:
             drafts, _violations, _regen = await _foodhall_generate_core(
-                pub_date, "", _fh_solar_term(pub_date), {}, content_type
+                pub_date, "", _fh_current_term(pub_date), {}, content_type
             )
         except HTTPException as exc:
             _fh_record_run(pub_date, "error", f"{label}兜底生成失败: {exc.detail}", [])
@@ -1786,7 +1824,12 @@ async def _fh_publish_due_track(pub_date: str, content_type: str) -> Dict[str, A
             _fh_record_run(pub_date, "error", f"{label}兜底生成异常: {exc}", [])
             return {"ok": False, "published": False, "date": pub_date,
                     "contentType": content_type, "error": f"{label}兜底生成异常: {exc}"}
-        candidates = drafts
+        candidates = [c for c in drafts if not _fh_stale_term(c, pub_date)]
+        if not candidates:
+            note = f"{label}到点发布：新生成稿件仍停留在过季节气，暂不上架"
+            _fh_record_run(pub_date, "stale", note, drafts)
+            return {"ok": True, "published": False, "date": pub_date,
+                    "contentType": content_type, "reason": note}
         generated = True
 
     audited: List[Dict[str, Any]] = []
