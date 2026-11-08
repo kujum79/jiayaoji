@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V410-20261108';
+        var APP_VER = 'V411-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4398,7 +4398,8 @@ async function _submitFeedback() {
         <div class="home-card" id="homeFridgeCard" style="margin-top:6px;">
             <div class="home-card-title" style="display:flex;align-items:center;gap:4px;">
                 <span>家中食材</span>
-                <span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;position:relative;"> <!-- V107: 做法/采购/＋ 间距 12→8px -->
+                <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;position:relative;"> <!-- V107: 做法/采购/＋ 间距 12→8px; V411: 残局清理入口移到做法左侧 -->
+                    <button type="button" id="homeFridgeCleanupBtn" onclick="openFridgeCleanup()" style="border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:700;border-radius:999px;padding:4px 10px;cursor:pointer;white-space:nowrap;">🧹 清理冰箱残局</button>
                     <button id="homeRecipeDropBtn" class="hd-pill-btn" onclick="toggleHomeRecipeDropdown(event)" title="食材做法">做法 ▼</button>
                     <button class="hd-plus-btn" onclick="openAddFridgeModal()" title="添加食材">＋</button>
                     <button class="hd-pill-btn" onclick="_homeGotoShopping()" title="打开食材页采购计划">采购</button>
@@ -4410,10 +4411,6 @@ async function _submitFeedback() {
                 </span>
             </div>
             <div class="home-ingr-text" id="homeIngrTags"></div>
-            <!-- V407: 冰箱残局消消乐入口 -->
-            <div style="display:flex;justify-content:flex-end;margin-top:8px;">
-                <button type="button" onclick="openFridgeCleanup()" style="border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:700;border-radius:999px;padding:6px 12px;cursor:pointer;white-space:nowrap;">🧹 清理冰箱残局</button>
-            </div>
         </div>
         <!-- 食记卡片（V56）：◀ 晚餐 ▶ 日期 [2人▼][＋][计划确认] + 计划区/实际区（外出就餐已移出） -->
         <div class="home-card" id="homeDiaryCard">
