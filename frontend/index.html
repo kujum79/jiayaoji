@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V409-20261108';
+        var APP_VER = 'V410-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -14358,6 +14358,8 @@ function updateMealActual(date, mealType, actualData) {
     saveDietCalendar(calendar);
     // 以实际为准，正式扣减/释放/新增食材
     finalizeActualIngredients(date, mealType, oldActual);
+    // V410: 若这餐来自「冰箱残局清理」，记录完成后弹出成就反馈
+    try { _fcAfterMealRecorded(date, mealType); } catch (e) {}
     // V146: 行为统计层——保存实际记录后刷新饮食偏好画像
     try { buildBehaviorProfile(getFamilyId() || 'default'); } catch(e) {}
 }
@@ -18284,6 +18286,13 @@ function _fcRenderSelect() {
 }
 function _fcGeneratePlan() {
     if (!_fcSel) return;
+    // V410: 免费用户每天 1 次；已加入过 1 次后再次生成直接拦截
+    var member = (typeof isFoodMember === 'function') ? isFoodMember() : false;
+    if (!member && _fcJoinTodayCount() >= 1) {
+        if (typeof _fhShowPaywall === 'function') _fhShowPaywall('🔒 今日免费次数已用完。开通食养会员，无限次清理冰箱。');
+        else showToast('🔒 今日免费次数已用完，开通食养会员可无限次清理');
+        return;
+    }
     var selected = [];
     _fcSel.items.forEach(function (it) { if (it.checked) selected.push(it.name); });
     var extras = _fcSel.extras.slice();
@@ -18374,7 +18383,7 @@ function _fcSolutionCardHtml(s, i) {
         + '</div>'
         + '<div id="fcSteps' + i + '" style="display:none;padding:0 12px 10px;"><ol style="margin:0;padding-left:18px;font-size:12px;color:#4B5563;line-height:1.8;">' + steps + '</ol></div>'
         + '<div style="display:flex;gap:8px;padding:0 12px 12px;">'
-        + '<button type="button" onclick="_fcAddSolutionToPlan(' + i + ')" style="flex:1;height:38px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🍳 加入食记计划</button>'
+        + '<button type="button" onclick="_fcOpenJoinPicker(' + i + ')" style="flex:1;height:38px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🍳 加入食记计划</button>'
         + '<button type="button" id="fcStepsBtn' + i + '" onclick="_fcToggleSteps(' + i + ')" style="flex:0 0 auto;height:38px;padding:0 14px;border:1px solid #FDBA74;border-radius:12px;background:#FFF7ED;color:#C2410C;font-size:13px;font-weight:700;cursor:pointer;">看做法</button>'
         + '</div></div>';
 }
@@ -18444,14 +18453,148 @@ function _fcToggleSteps(i) {
     box.style.display = show ? 'block' : 'none';
     if (btn) btn.textContent = show ? '收起做法' : '看做法';
 }
-function _fcAddSolutionToPlan(i) {
+var _fcJoinState = null;
+var _fcAchInfo = null;
+function _fcJoinDate(offset) {
+    var d = new Date();
+    d.setDate(d.getDate() + (Number(offset) || 0));
+    return _fcDateKey(d);
+}
+// 免费额度：按「已加入计划」的清理次数统计，当天第 2 次拦截
+function _fcJoinTodayCount() {
+    var today = _fcDateKey();
+    return fridgeCleanupRecords().filter(function (r) {
+        return r && r.addedToPlan && _fcDateKey(new Date(Number(r.joinedAt) || 0)) === today;
+    }).length;
+}
+function _fcOpenJoinPicker(i) {
     var s = (_fcPlanSolutions || [])[i];
     if (!s || !s.name) return;
-    var now = new Date();
-    var h = now.getHours();
-    var meal = h < 10 ? 'breakfast' : (h < 15 ? 'lunch' : 'dinner');
-    var mealName = meal === 'breakfast' ? '早餐' : (meal === 'lunch' ? '午餐' : '晚餐');
-    var date = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    var member = (typeof isFoodMember === 'function') ? isFoodMember() : false;
+    if (!member && _fcJoinTodayCount() >= 1) {
+        if (typeof _fhShowPaywall === 'function') _fhShowPaywall('🔒 今日免费次数已用完。开通食养会员，无限次清理冰箱。');
+        else showToast('🔒 今日免费次数已用完，开通食养会员可无限次清理');
+        return;
+    }
+    var h = new Date().getHours();
+    _fcJoinState = { idx: i, offset: 0, meal: h < 10 ? 'breakfast' : (h < 15 ? 'lunch' : 'dinner') };
+    _fcRenderJoinPicker();
+}
+function _fcRenderJoinPicker() {
+    if (!_fcJoinState) return;
+    var s = (_fcPlanSolutions || [])[_fcJoinState.idx];
+    if (!s) return;
+    var ov = document.getElementById('fcJoinOv');
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'fcJoinOv';
+        ov.style.cssText = 'position:fixed;inset:0;z-index:100040;background:rgba(17,24,39,.55);display:flex;align-items:flex-end;justify-content:center;';
+        document.body.appendChild(ov);
+    }
+    var dateLabels = ['今天', '明天', '后天'];
+    var dateBtns = dateLabels.map(function (lb, idx) {
+        var on = _fcJoinState.offset === idx;
+        return '<button type="button" data-fc-jdate="' + idx + '" style="flex:1;height:40px;border-radius:12px;border:1px solid ' + (on ? '#F97316' : '#E5E7EB') + ';background:' + (on ? '#FFF7ED' : '#fff') + ';color:' + (on ? '#C2410C' : '#6B7280') + ';font-size:13px;font-weight:' + (on ? '800' : '600') + ';cursor:pointer;">' + lb + '<span style="display:block;font-size:10px;font-weight:500;color:#9CA3AF;">' + _fcJoinDate(idx).slice(5).replace('-', '/') + '</span></button>';
+    }).join('');
+    var mealList = [['breakfast', '🍳 早餐'], ['lunch', '🍱 午餐'], ['dinner', '🍲 晚餐']];
+    var mealBtns = mealList.map(function (m) {
+        var on = _fcJoinState.meal === m[0];
+        return '<button type="button" data-fc-jmeal="' + m[0] + '" style="flex:1;height:40px;border-radius:12px;border:1px solid ' + (on ? '#F97316' : '#E5E7EB') + ';background:' + (on ? '#FFF7ED' : '#fff') + ';color:' + (on ? '#C2410C' : '#6B7280') + ';font-size:13px;font-weight:' + (on ? '800' : '600') + ';cursor:pointer;">' + m[1] + '</button>';
+    }).join('');
+    ov.innerHTML = '<div style="width:100%;max-width:430px;background:#FFF7ED;border-radius:20px 20px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));box-sizing:border-box;">'
+        + '<div style="font-size:16px;font-weight:800;color:#1F2937;">🍳 加入食记计划</div>'
+        + '<div style="font-size:12px;color:#9A3412;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(s.name) + ' · 省 ¥' + (Number(s.savedAmount) || 0) + '</div>'
+        + '<div style="font-size:12px;font-weight:700;color:#7C2D12;margin:14px 2px 8px;">选择日期</div>'
+        + '<div style="display:flex;gap:8px;">' + dateBtns + '</div>'
+        + '<div style="font-size:12px;font-weight:700;color:#7C2D12;margin:14px 2px 8px;">选择餐次</div>'
+        + '<div style="display:flex;gap:8px;">' + mealBtns + '</div>'
+        + '<button type="button" id="fcJoinConfirmBtn" style="width:100%;height:46px;margin-top:18px;border:none;border-radius:14px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:800;cursor:pointer;">确认加入</button>'
+        + '<button type="button" id="fcJoinCancelBtn" style="width:100%;height:40px;margin-top:8px;border:none;border-radius:12px;background:#F3F4F6;color:#6B7280;font-size:13px;font-weight:600;cursor:pointer;">取消</button>'
+        + '</div>';
+    ov.querySelectorAll('[data-fc-jdate]').forEach(function (b) {
+        b.addEventListener('click', function () { _fcJoinState.offset = Number(this.getAttribute('data-fc-jdate')); _fcRenderJoinPicker(); });
+    });
+    ov.querySelectorAll('[data-fc-jmeal]').forEach(function (b) {
+        b.addEventListener('click', function () { _fcJoinState.meal = this.getAttribute('data-fc-jmeal'); _fcRenderJoinPicker(); });
+    });
+    var ok = document.getElementById('fcJoinConfirmBtn');
+    if (ok) ok.addEventListener('click', _fcConfirmJoin);
+    var cancel = document.getElementById('fcJoinCancelBtn');
+    if (cancel) cancel.addEventListener('click', _fcCloseJoin);
+    ov.addEventListener('click', function (e) { if (e.target === ov) _fcCloseJoin(); });
+}
+function _fcCloseJoin() {
+    var ov = document.getElementById('fcJoinOv');
+    if (ov) ov.remove();
+    _fcJoinState = null;
+}
+// 加入计划时立即扣减库存：优先扣数量可量化的那一行，每次清理每样食材扣 1 份
+function _fcDeductFridgeForCleanup(names) {
+    try {
+        var seen = {};
+        (names || []).forEach(function (n) {
+            var key = normalizeIngredientName(n);
+            if (!key || seen[key]) return;
+            seen[key] = 1;
+            var rows = (fridgeItems || []).filter(function (it) {
+                return it && !it.usedUp && (normalizeIngredientName(it.name || '') === key || String(it.name || '').trim() === String(n).trim());
+            });
+            if (!rows.length) return;
+            var row = rows.filter(function (it) {
+                var v = (typeof it.quantityValue === 'number' && isFinite(it.quantityValue)) ? it.quantityValue : parseQuantity(it.quantity).value;
+                return Number(v) > 0;
+            })[0] || rows[0];
+            if (!row) return;
+            var p = parseQuantity(row.quantity);
+            var qv = (typeof row.quantityValue === 'number' && isFinite(row.quantityValue)) ? Number(row.quantityValue) : p.value;
+            var unit = row.quantityUnit || p.unit || '';
+            if (qv > 0) {
+                qv = Math.round((qv - 1) * 100) / 100;
+                if (qv < 0) qv = 0;
+                row.quantityValue = qv;
+                row.quantity = qv + unit;
+                if (qv <= 0) row.usedUp = true;
+            }
+        });
+        saveFridgeItems();
+    } catch (e) {}
+}
+function _fcConfirmJoin() {
+    if (!_fcJoinState) return;
+    var s = (_fcPlanSolutions || [])[_fcJoinState.idx];
+    if (!s || !s.name) { _fcCloseJoin(); return; }
+    var member = (typeof isFoodMember === 'function') ? isFoodMember() : false;
+    if (!member && _fcJoinTodayCount() >= 1) {
+        _fcCloseJoin();
+        if (typeof _fhShowPaywall === 'function') _fhShowPaywall('🔒 今日免费次数已用完。开通食养会员，无限次清理冰箱。');
+        else showToast('🔒 今日免费次数已用完，开通食养会员可无限次清理');
+        return;
+    }
+    var date = _fcJoinDate(_fcJoinState.offset);
+    var meal = _fcJoinState.meal;
+    var saved = Number(s.savedAmount) || 0;
+    var used = (s.existingIngredients || []).slice();
+    // 1) 写入清理记录（同一次方案复用生成阶段创建的记录）
+    var recs = fridgeCleanupRecords();
+    var rec = null;
+    var sid = (_fcPlanCtx && _fcPlanCtx.rec) ? _fcPlanCtx.rec.id : '';
+    if (sid) rec = recs.filter(function (r) { return r.id === sid; })[0] || null;
+    if (!rec) {
+        rec = { id: 'fc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), date: _fcDateKey(), usedIngredients: [], savedAmount: 0, planId: '', status: 'planned', createdAt: Date.now() };
+        recs.push(rec);
+    }
+    rec.planId = rec.planId || ('fp_' + Date.now().toString(36));
+    rec.usedIngredients = used;
+    rec.savedAmount = saved;
+    rec.solutionName = s.name;
+    rec.planDate = date;
+    rec.meal = meal;
+    rec.status = 'planned';
+    rec.addedToPlan = true;
+    rec.joinedAt = Date.now();
+    saveFridgeCleanupRecords(recs);
+    if (_fcPlanCtx) _fcPlanCtx.rec = rec;
+    // 2) 写入膳食日历，并把清理信息挂到 dishMeta 供记录食记后触发成就
     var cal = {};
     try { cal = getDietCalendar() || {}; } catch (e) { cal = {}; }
     var cur = (cal[date] && cal[date][meal] && cal[date][meal].plan) ? cal[date][meal].plan : {};
@@ -18466,8 +18609,13 @@ function _fcAddSolutionToPlan(i) {
     if (Array.isArray(s.steps) && s.steps.length) {
         dm.steps = s.steps.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
     }
+    dm.fridgeCleanup = { planId: rec.planId, recordId: rec.id, savedAmount: saved, usedIngredients: used };
     meta[s.name] = dm;
     updateMealPlan(date, meal, Object.assign({}, cur, { dishes: names, dishMeta: meta, state: 'pending' }));
+    // 3) 扣减库存
+    _fcDeductFridgeForCleanup(used);
+    // 4) 关闭并跳转食记
+    _fcCloseJoin();
     closeFridgeCleanup();
     document.body.style.overflow = '';
     try {
@@ -18476,7 +18624,169 @@ function _fcAddSolutionToPlan(i) {
     } catch (e) {
         try { switchTab('diary'); } catch (_) {}
     }
-    setTimeout(function () { showToast('✅ 已填入今日' + mealName + '：' + s.name); }, 220);
+    setTimeout(function () { showToast('✅ 已加入计划，本次清理库存价值约 ¥' + saved + '！'); }, 220);
+}
+function _fcWeekStats() {
+    var now = new Date();
+    var dow = now.getDay() || 7;
+    var start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (dow - 1)).getTime();
+    var done = fridgeCleanupRecords().filter(function (r) { return r && r.status === 'done'; });
+    var week = done.filter(function (r) { return Number(r.completedAt || r.createdAt || 0) >= start; });
+    return {
+        count: week.length,
+        saved: week.reduce(function (sum, r) { return sum + (Number(r.savedAmount) || 0); }, 0),
+        total: done.length
+    };
+}
+function _fcBadgeInfo(count) {
+    var n = Number(count) || 0;
+    if (n >= 10) return { level: 3, name: '🧹 冰箱清道夫 Lv.3', hint: '已达最高等级' };
+    if (n >= 5) return { level: 2, name: '🧹 冰箱清道夫 Lv.2', hint: '再清理 ' + (10 - n) + ' 次升 Lv.3' };
+    if (n >= 1) return { level: 1, name: '🧹 冰箱清道夫 Lv.1', hint: '再清理 ' + (5 - n) + ' 次升 Lv.2' };
+    return { level: 0, name: '🧹 待解锁', hint: '完成 1 次清理解锁 Lv.1' };
+}
+// 记录食记后调用：若该餐来自残局清理，标记完成并弹成就
+function _fcAfterMealRecorded(date, mealType) {
+    var cal = {};
+    try { cal = getDietCalendar() || {}; } catch (e) { return; }
+    var md = cal[date] && cal[date][mealType];
+    var plan = md && md.plan;
+    if (!plan || !Array.isArray(plan.dishes)) return;
+    var picked = [];
+    plan.dishes.forEach(function (d) {
+        var name = typeof d === 'string' ? d : (d && d.name);
+        if (!name) return;
+        var dm = plan.dishMeta && plan.dishMeta[name];
+        var fc = dm && dm.fridgeCleanup;
+        if (fc && fc.planId) picked.push({ name: name, info: fc });
+    });
+    if (!picked.length) return;
+    var recs = fridgeCleanupRecords();
+    var changed = false;
+    picked.forEach(function (p) {
+        var r = recs.filter(function (x) { return x.planId === p.info.planId; })[0];
+        if (r && r.status !== 'done') {
+            r.status = 'done';
+            r.completedAt = Date.now();
+            changed = true;
+        }
+    });
+    if (!changed) return;
+    saveFridgeCleanupRecords(recs);
+    var ings = [];
+    var saved = 0;
+    picked.forEach(function (p) {
+        (p.info.usedIngredients || []).forEach(function (n) { if (ings.indexOf(n) < 0) ings.push(n); });
+        saved += Number(p.info.savedAmount) || 0;
+    });
+    var st = _fcWeekStats();
+    _fcShowAchievement({
+        ingredients: ings,
+        savedAmount: saved,
+        weekCount: st.count,
+        weekSaved: st.saved,
+        totalCount: st.total,
+        badge: _fcBadgeInfo(st.total)
+    });
+}
+function _fcShowAchievement(info) {
+    _fcAchInfo = info || {};
+    var old = document.getElementById('fcAchOv');
+    if (old) old.remove();
+    var badge = _fcAchInfo.badge || _fcBadgeInfo(0);
+    var ov = document.createElement('div');
+    ov.id = 'fcAchOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100050;background:rgba(17,24,39,.6);display:flex;align-items:center;justify-content:center;padding:22px;box-sizing:border-box;';
+    ov.innerHTML = '<div style="width:360px;max-width:100%;background:linear-gradient(180deg,#FFF7ED,#fff);border-radius:20px;padding:22px 20px;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center;">'
+        + '<div style="font-size:40px;line-height:1.1;">🎉</div>'
+        + '<div style="font-size:18px;font-weight:800;color:#7C2D12;margin-top:6px;">冰箱残局清理成功！</div>'
+        + '<div style="margin-top:14px;background:#fff;border:1px solid #FDE7C8;border-radius:14px;padding:14px;text-align:left;">'
+        + '<div style="font-size:12px;color:#6B7280;line-height:1.9;">本次消耗：<span style="color:#1F2937;font-weight:700;">' + escapeHtml((_fcAchInfo.ingredients || []).join('、') || '—') + '</span></div>'
+        + '<div style="font-size:12px;color:#6B7280;line-height:1.9;">节约金额：<span style="color:#16A34A;font-weight:800;">约 ¥' + (Number(_fcAchInfo.savedAmount) || 0) + '</span></div>'
+        + '<div style="font-size:12px;color:#6B7280;line-height:1.9;">本周累计清理：<span style="color:#C2410C;font-weight:700;">' + (Number(_fcAchInfo.weekCount) || 0) + ' 次 · 省 ¥' + (Number(_fcAchInfo.weekSaved) || 0) + '</span></div>'
+        + '</div>'
+        + '<div style="margin-top:12px;background:#FFEDD5;border-radius:14px;padding:12px;">'
+        + '<div style="font-size:15px;font-weight:800;color:#C2410C;">' + escapeHtml(badge.name) + '</div>'
+        + '<div style="font-size:11px;color:#9A3412;margin-top:4px;">' + escapeHtml(badge.hint) + '</div>'
+        + '</div>'
+        + '<button type="button" id="fcAchShareBtn" style="width:100%;height:44px;margin-top:16px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">分享到家庭群</button>'
+        + '<button type="button" id="fcAchCloseBtn" style="width:100%;height:40px;margin-top:8px;border:none;border-radius:12px;background:#F3F4F6;color:#6B7280;font-size:13px;font-weight:600;cursor:pointer;">太棒了</button>'
+        + '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+    document.body.appendChild(ov);
+    var sb = document.getElementById('fcAchShareBtn');
+    if (sb) sb.addEventListener('click', _fcShareCleanup);
+    var cb = document.getElementById('fcAchCloseBtn');
+    if (cb) cb.addEventListener('click', function () { ov.remove(); });
+}
+function _fcShareCleanup() {
+    var info = _fcAchInfo || {};
+    var badge = info.badge || _fcBadgeInfo(0);
+    var W = 720, H = 960;
+    var canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    var ctx = canvas.getContext('2d');
+    if (!ctx) { showToast('当前环境不支持生成分享图片'); return; }
+    var g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, '#FFF7ED');
+    g.addColorStop(1, '#FFEDD5');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#C2410C';
+    ctx.font = 'bold 32px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('家肴记 · 冰箱残局消消乐', W / 2, 96);
+    ctx.font = '72px sans-serif';
+    ctx.fillText('🎉', W / 2, 210);
+    ctx.fillStyle = '#7C2D12';
+    ctx.font = 'bold 44px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('冰箱残局清理成功！', W / 2, 292);
+    // 白卡
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(56, 340, W - 112, 380, 28);
+    else ctx.rect(56, 340, W - 112, 380);
+    ctx.fill();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#374151';
+    ctx.font = '26px "PingFang SC","Microsoft YaHei",sans-serif';
+    var ingText = (info.ingredients || []).join('、') || '—';
+    if (ingText.length > 22) ingText = ingText.slice(0, 22) + '…';
+    ctx.fillText('本次消耗：' + ingText, 96, 412);
+    ctx.fillStyle = '#16A34A';
+    ctx.font = 'bold 28px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('节约金额：约 ¥' + (Number(info.savedAmount) || 0), 96, 478);
+    ctx.fillStyle = '#374151';
+    ctx.font = '26px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('本周累计清理：' + (Number(info.weekCount) || 0) + ' 次', 96, 544);
+    ctx.fillText('本周累计省下：约 ¥' + (Number(info.weekSaved) || 0), 96, 604);
+    ctx.fillStyle = '#C2410C';
+    ctx.font = 'bold 34px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(badge.name, W / 2, 682);
+    // 页脚
+    ctx.fillStyle = '#9CA3AF';
+    ctx.font = '24px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('少浪费一点，也多省一点', W / 2, 830);
+    ctx.fillText('—— 家肴记 AI 家庭膳食助理 ——', W / 2, 872);
+    var url = '';
+    try { url = canvas.toDataURL('image/png'); } catch (e) { showToast('生成分享图片失败'); return; }
+    var old = document.getElementById('fcShareOv');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'fcShareOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100060;background:rgba(17,24,39,.78);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    ov.innerHTML = '<img src="' + url + '" alt="分享图片" style="width:100%;max-width:320px;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+        + '<div style="display:flex;gap:10px;margin-top:16px;">'
+        + '<a id="fcShareSave" download="jiayaoji-fridge-cleanup.png" href="' + url + '" style="display:inline-flex;align-items:center;height:42px;padding:0 20px;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;text-decoration:none;">保存图片</a>'
+        + '<button type="button" id="fcShareClose" style="height:42px;padding:0 20px;border:none;border-radius:12px;background:#F3F4F6;color:#6B7280;font-size:14px;font-weight:600;cursor:pointer;">关闭</button>'
+        + '</div>'
+        + '<div style="font-size:11px;color:#E5E7EB;margin-top:10px;">长按图片可保存，或转发到家庭群</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+    document.body.appendChild(ov);
+    var closeBtn = document.getElementById('fcShareClose');
+    if (closeBtn) closeBtn.addEventListener('click', function () { ov.remove(); });
 }
 function _fcRenderRecords() {
     var recs = fridgeCleanupRecords();
