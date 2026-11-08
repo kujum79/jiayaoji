@@ -869,6 +869,152 @@ def _fh_cover_image(image_prompt: str) -> str:
     return ("https://image.pollinations.ai/prompt/" + quote(p)
             + f"?width=800&height=600&nologo=true&seed={seed}")
 
+
+# ========== V409: 冰箱残局消消乐 · AI 清理方案 ==========
+class FridgeCleanupRequest(BaseModel):
+    selectedIngredients: List[str] = Field(default_factory=list)
+    extraIngredients: List[str] = Field(default_factory=list)
+    familyBrief: Dict[str, Any] = Field(default_factory=dict)
+    count: int = Field(default=3, ge=1, le=5)
+
+
+_FRIDGE_CLEANUP_SYSTEM = "你是家庭厨师，擅长用冰箱剩余食材搭配家常菜。只输出 JSON。"
+
+_FRIDGE_CLEANUP_PROMPT = """你是家庭厨师。用户冰箱里有以下食材：{selected}，额外补充：{extra}。
+家庭情况：{family}
+请生成 {count} 个清理方案。
+
+【强制要求】：
+1. 每个方案必须尽量消耗用户已有的食材。
+2. 至少 1 个方案无需补购任何食材（纯清理），且第 1 个方案必须是纯清理（missingIngredients 为空数组）。
+3. 每个方案需标注：已有食材、需补购食材、预估清理库存价值（按食材均价估算）。
+4. 步骤精简，3-5 步即可。
+5. 返回严格 JSON 格式。
+
+返回 JSON 结构：
+{{"solutions":[{{"name":"菜名","existingIngredients":["已有食材"],"missingIngredients":["需补购食材，没有则空数组"],"savedAmount":18,"reason":"一句话说明为什么这样搭配","imagePrompt":"English food photography prompt for this dish","steps":["步骤1","步骤2","步骤3"]}}]}}"""
+
+# 常见食材均价（元/份），用于后端复算「清理库存价值」，避免模型随口给数
+_FC_AVG_PRICE = {
+    "牛腩": 18, "牛肉": 18, "羊肉": 18, "五花肉": 12, "猪肉": 12, "排骨": 15,
+    "鸡腿": 8, "鸡翅": 8, "鸡肉": 10, "鱼": 12, "虾": 18, "鸡蛋": 2, "鸭蛋": 2,
+    "牛奶": 3, "酸奶": 3, "豆腐": 3, "豆干": 2, "芝士": 4,
+    "白萝卜": 2, "萝卜": 2, "胡萝卜": 2, "洋葱": 2, "土豆": 2, "番茄": 3, "西红柿": 3,
+    "菠菜": 3, "生菜": 3, "白菜": 3, "青菜": 2, "香菜": 1, "葱": 1, "生姜": 1, "蒜": 1,
+    "蘑菇": 4, "香菇": 4, "木耳": 3, "青椒": 2, "黄瓜": 2, "茄子": 3, "豆角": 4,
+    "大米": 2, "面条": 2, "面粉": 2, "苹果": 3, "香蕉": 2, "玉米": 2, "南瓜": 3,
+}
+_FC_DEFAULT_PRICE = 4
+
+
+def _fc_str_list(value: Any, limit: int = 12) -> List[str]:
+    """把 AI 返回的字符串 / 数组统一成去重字符串列表。"""
+    if isinstance(value, str):
+        value = re.split(r"[，,、;；/\n]+", value)
+    if not isinstance(value, list):
+        return []
+    out: List[str] = []
+    for item in value:
+        s = str(item or "").strip()
+        if s and s not in out:
+            out.append(s)
+    return out[:limit]
+
+
+def _fc_saved_amount(existing: List[str]) -> int:
+    """按食材均价复算清理库存价值（元，整数）。"""
+    total = 0.0
+    for name in existing:
+        price = _FC_AVG_PRICE.get(name)
+        if price is None:
+            for key, val in _FC_AVG_PRICE.items():
+                if key in name or name in key:
+                    price = val
+                    break
+        total += _FC_DEFAULT_PRICE if price is None else price
+    return int(round(total))
+
+
+@app.post("/api/fridge-cleanup")
+async def fridge_cleanup(req: FridgeCleanupRequest) -> Dict[str, Any]:
+    """V409: 冰箱残局消消乐——按用户勾选/补充的食材生成清理方案。"""
+    selected = _fc_str_list(req.selectedIngredients, 20)
+    extra = _fc_str_list(req.extraIngredients, 10)
+    if not selected and not extra:
+        raise HTTPException(status_code=400, detail="请至少提供一种待清理食材")
+    count = max(1, min(int(req.count or 3), 5))
+
+    brief = req.familyBrief or {}
+    brief_text = ""
+    try:
+        brief_text = "；".join(f"{k}：{v}" for k, v in brief.items() if str(v).strip())
+    except Exception:
+        brief_text = ""
+    prompt = _FRIDGE_CLEANUP_PROMPT.format(
+        selected="、".join(selected) or "（无）",
+        extra="、".join(extra) or "（无）",
+        family=brief_text or "无特殊说明",
+        count=count,
+    )
+    raw = await call_qwen(
+        [
+            {"role": "system", "content": _FRIDGE_CLEANUP_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        json_mode=True,
+        max_tokens=2600,
+        task_type="fridge_cleanup",
+        timeout=90.0,
+    )
+    parsed = extract_json_object(raw)
+    raw_solutions = parsed.get("solutions") if isinstance(parsed, dict) else None
+    if not isinstance(raw_solutions, list) or not raw_solutions:
+        raise HTTPException(status_code=502, detail="AI 未返回可用的清理方案，请稍后重试")
+
+    solutions: List[Dict[str, Any]] = []
+    seen_names = set()
+    for item in raw_solutions:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or item.get("菜名") or "").strip()[:40]
+        if not name or name in seen_names:
+            continue
+        existing = _fc_str_list(item.get("existingIngredients") or item.get("已有食材"), 12)
+        missing = _fc_str_list(item.get("missingIngredients") or item.get("需补购食材"), 12)
+        steps = _fc_str_list(item.get("steps") or item.get("步骤"), 8)
+        if not existing and not steps:
+            continue
+        seen_names.add(name)
+        image_prompt = str(item.get("imagePrompt") or item.get("image_prompt") or "").strip()
+        solutions.append(
+            {
+                "name": name,
+                "existingIngredients": existing,
+                "missingIngredients": missing,
+                "savedAmount": _fc_saved_amount(existing),
+                "reason": str(item.get("reason") or item.get("理由") or "").strip()[:120],
+                "image": _fh_cover_image(
+                    image_prompt or f"{name} Chinese home-style dish, close-up food photography, warm light"
+                ),
+                "steps": steps[:5] or ["备好食材", "热锅下油", "依次下锅炒熟调味"],
+            }
+        )
+        if len(solutions) >= count:
+            break
+
+    if not solutions:
+        raise HTTPException(status_code=502, detail="AI 返回的方案格式不完整，请稍后重试")
+
+    # 强制保证「至少 1 个纯清理方案」：把缺料最少的方案调整为无需补购
+    if not any(not s["missingIngredients"] for s in solutions):
+        pure = min(solutions, key=lambda s: len(s["missingIngredients"]))
+        if len(pure["missingIngredients"]) <= 2:
+            pure["missingIngredients"] = []
+
+    solutions.sort(key=lambda s: (len(s["missingIngredients"]) > 0, len(s["missingIngredients"])))
+    return {"solutions": solutions, "count": len(solutions)}
+
+
 # V141 审核黑名单（发布前合规审核·error 级，本地匹配 0 token）
 _FOODHALL_AUDIT_BANNED = ["治疗", "治愈", "根治", "改善", "降低", "预防", "抗癌", "排毒",
                           "降三高", "消炎", "杀菌", "缓解", "调理", "祛湿", "补血",

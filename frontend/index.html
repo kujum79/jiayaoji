@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V408-20261108';
+        var APP_VER = 'V409-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -9081,6 +9081,7 @@ function familyKey(key) {
         'userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits',
         'systemErrorLogs',
         'mealRecords',
+        'fridgeCleanupRecords',
         'shoppingAlert_'];
     for (var i=0; i<familyKeys.length; i++) {
         if (key === familyKeys[i] || key.indexOf(familyKeys[i]) === 0) {
@@ -18283,9 +18284,10 @@ function _fcRenderSelect() {
 }
 function _fcGeneratePlan() {
     if (!_fcSel) return;
-    var names = [];
-    _fcSel.items.forEach(function (it) { if (it.checked) names.push(it.name); });
-    _fcSel.extras.forEach(function (n) { names.push(n); });
+    var selected = [];
+    _fcSel.items.forEach(function (it) { if (it.checked) selected.push(it.name); });
+    var extras = _fcSel.extras.slice();
+    var names = selected.concat(extras);
     var seen = {};
     names = names.filter(function (n) { if (!n || seen[n]) return false; seen[n] = 1; return true; });
     if (!names.length) { showToast('请先勾选或补充至少一种食材'); return; }
@@ -18300,11 +18302,27 @@ function _fcGeneratePlan() {
         rec = addFridgeCleanupRecord({ usedIngredients: names, planId: 'fp_' + Date.now().toString(36), status: 'planned' });
         _fcSel.recordId = rec.id;
     }
-    _fcRenderPlan(names, rec);
+    _fcRenderPlan(selected, extras, rec);
 }
-function _fcRenderPlan(names, rec) {
+var _fcPlanCtx = null;
+var _fcPlanSolutions = [];
+function _fcFamilyBrief() {
+    var brief = {};
+    try {
+        var fam = (typeof familyData !== 'undefined' && familyData) ? familyData : null;
+        var members = [];
+        if (Array.isArray(fam)) members = fam;
+        else if (fam && Array.isArray(fam.members)) members = fam.members;
+        var names = members.map(function (m) { return m && m.name; }).filter(Boolean);
+        if (names.length) brief = { familySize: names.length, members: names.slice(0, 8) };
+    } catch (e) {}
+    return brief;
+}
+function _fcRenderPlan(selected, extras, rec) {
+    _fcPlanCtx = { selected: selected, extras: extras, rec: rec };
+    _fcPlanSolutions = [];
     var ov = _fcEnsureOverlay();
-    var chips = names.map(function (n) {
+    var chips = selected.concat(extras).map(function (n) {
         return '<span style="display:inline-flex;align-items:center;padding:4px 10px;background:#fff;border:1px solid #FDBA74;border-radius:999px;font-size:12px;color:#C2410C;font-weight:600;margin:0 6px 6px 0;">' + escapeHtml(n) + '</span>';
     }).join('');
     ov.innerHTML = '<div style="flex:0 0 auto;background:#fff;border-bottom:1px solid #FED7AA;display:flex;align-items:center;gap:8px;padding:12px 14px;">'
@@ -18313,19 +18331,152 @@ function _fcRenderPlan(names, rec) {
         + '<button type="button" onclick="closeFridgeCleanup()" style="border:none;background:none;font-size:16px;color:#9CA3AF;cursor:pointer;padding:2px 4px;line-height:1;">✕</button>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;padding:14px 16px 10px;">'
-        + '<div style="border-radius:16px;padding:16px;background:linear-gradient(135deg,#FFEDD5,#FED7AA);color:#7C2D12;">'
-        + '<div style="font-size:15px;font-weight:800;">🧊 已锁定 ' + names.length + ' 种待清理食材</div>'
-        + '<div style="margin-top:10px;">' + chips + '</div>'
+        + '<div style="border-radius:16px;padding:14px;background:linear-gradient(135deg,#FFEDD5,#FED7AA);color:#7C2D12;">'
+        + '<div style="font-size:14px;font-weight:800;">🧊 已锁定 ' + (selected.length + extras.length) + ' 种待清理食材</div>'
+        + '<div style="margin-top:8px;">' + chips + '</div>'
         + '</div>'
-        + '<div style="margin-top:14px;background:#fff;border:1px solid #FDE7C8;border-radius:16px;padding:16px;">'
-        + '<div style="font-size:14px;font-weight:800;color:#7C2D12;">🍳 清理方案</div>'
-        + '<div style="font-size:12px;color:#9A3412;line-height:1.8;margin-top:8px;">方案页已创建，菜品搭配与具体做法将在下一步生成。</div>'
-        + (rec && rec.planId ? '<div style="font-size:11px;color:#9CA3AF;margin-top:10px;">计划编号：' + escapeHtml(rec.planId) + '</div>' : '')
+        + '<div id="fcSolutionList" style="margin-top:14px;">'
+        + '<div style="background:#fff;border:1px solid #FDE7C8;border-radius:16px;padding:24px 16px;text-align:center;">'
+        + '<div style="font-size:22px;">🍳</div>'
+        + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin-top:8px;">AI 正在为你搭配清理方案…</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">尽量消耗已有食材，通常需要几秒</div>'
         + '</div></div>'
+        + '</div>'
         + '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #FED7AA;padding:10px 14px calc(10px + env(safe-area-inset-bottom));">'
-        + '<button type="button" onclick="_fcRenderSelect()" style="width:100%;height:46px;border:1px solid #FDBA74;border-radius:14px;background:#FFF7ED;color:#C2410C;font-size:15px;font-weight:800;cursor:pointer;">← 返回调整食材</button>'
+        + '<button type="button" id="fcRefreshBtn" onclick="_fcRefreshSolutions()" style="width:100%;height:46px;border:1px solid #FDBA74;border-radius:14px;background:#FFF7ED;color:#C2410C;font-size:15px;font-weight:800;cursor:pointer;">🔄 换一批方案</button>'
         + '</div>';
     document.body.style.overflow = 'hidden';
+    _fcLoadSolutions();
+}
+function _fcSolutionCardHtml(s, i) {
+    var existing = (s.existingIngredients || []).map(function (n) {
+        return '<span style="display:inline-flex;align-items:center;padding:2px 8px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:999px;font-size:11px;color:#9A3412;margin:0 4px 4px 0;">' + escapeHtml(n) + '</span>';
+    }).join('');
+    var missing = (s.missingIngredients || []).map(function (n) {
+        return '<span style="display:inline-flex;align-items:center;padding:2px 8px;background:#FEE2E2;border:1px solid #FECACA;border-radius:999px;font-size:11px;color:#DC2626;font-weight:600;margin:0 4px 4px 0;">' + escapeHtml(n) + '</span>';
+    }).join('');
+    if (!missing) missing = '<span style="display:inline-flex;align-items:center;padding:2px 8px;background:#DCFCE7;border-radius:999px;font-size:11px;color:#16A34A;font-weight:700;margin:0 4px 4px 0;">无需补购 · 纯清理</span>';
+    var steps = (s.steps || []).map(function (st) {
+        return '<li style="margin-bottom:4px;">' + escapeHtml(st) + '</li>';
+    }).join('');
+    var saved = Number(s.savedAmount) || 0;
+    return '<div style="background:#fff;border:1px solid #FDE7C8;border-radius:16px;overflow:hidden;margin-bottom:12px;">'
+        + '<div style="display:flex;gap:10px;padding:12px 12px 8px;">'
+        + '<img src="' + escapeHtml(s.image || '') + '" alt="" style="flex:0 0 auto;width:86px;height:86px;border-radius:12px;object-fit:cover;background:#FFF7ED;" onerror="this.style.visibility=\'hidden\'">'
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:15px;font-weight:800;color:#1F2937;line-height:1.35;">' + escapeHtml(s.name) + '</div>'
+        + (s.reason ? '<div style="font-size:11px;color:#9A3412;line-height:1.6;margin-top:4px;">' + escapeHtml(s.reason) + '</div>' : '')
+        + '<div style="font-size:13px;font-weight:800;color:#16A34A;margin-top:6px;">省 ¥' + saved + '</div>'
+        + '</div></div>'
+        + '<div style="padding:0 12px 8px;">'
+        + '<div style="display:flex;flex-wrap:wrap;align-items:center;margin-bottom:4px;"><span style="font-size:11px;color:#6B7280;margin-right:4px;">已有</span>' + (existing || '<span style="font-size:11px;color:#9CA3AF;">—</span>') + '</div>'
+        + '<div style="display:flex;flex-wrap:wrap;align-items:center;"><span style="font-size:11px;color:#6B7280;margin-right:4px;">需补购</span>' + missing + '</div>'
+        + '</div>'
+        + '<div id="fcSteps' + i + '" style="display:none;padding:0 12px 10px;"><ol style="margin:0;padding-left:18px;font-size:12px;color:#4B5563;line-height:1.8;">' + steps + '</ol></div>'
+        + '<div style="display:flex;gap:8px;padding:0 12px 12px;">'
+        + '<button type="button" onclick="_fcAddSolutionToPlan(' + i + ')" style="flex:1;height:38px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🍳 加入食记计划</button>'
+        + '<button type="button" id="fcStepsBtn' + i + '" onclick="_fcToggleSteps(' + i + ')" style="flex:0 0 auto;height:38px;padding:0 14px;border:1px solid #FDBA74;border-radius:12px;background:#FFF7ED;color:#C2410C;font-size:13px;font-weight:700;cursor:pointer;">看做法</button>'
+        + '</div></div>';
+}
+function _fcRenderSolutions(sols) {
+    var box = document.getElementById('fcSolutionList');
+    if (!box) return;
+    if (!sols || !sols.length) {
+        box.innerHTML = '<div style="background:#fff;border:1px solid #FDE7C8;border-radius:16px;padding:22px 16px;text-align:center;color:#9CA3AF;font-size:13px;">暂时没有可用的清理方案</div>';
+        return;
+    }
+    box.innerHTML = sols.map(function (s, i) { return _fcSolutionCardHtml(s, i); }).join('');
+}
+function _fcLoadSolutions() {
+    if (!_fcPlanCtx) return;
+    var ctx = _fcPlanCtx;
+    var box = document.getElementById('fcSolutionList');
+    if (box) {
+        box.innerHTML = '<div style="background:#fff;border:1px solid #FDE7C8;border-radius:16px;padding:24px 16px;text-align:center;">'
+            + '<div style="font-size:22px;">🍳</div>'
+            + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin-top:8px;">AI 正在为你搭配清理方案…</div>'
+            + '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">尽量消耗已有食材，通常需要几秒</div>'
+            + '</div>';
+    }
+    var btn = document.getElementById('fcRefreshBtn');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+    // count: 3 —— 少批量生成，避免模型凑数
+    var body = {
+        selectedIngredients: ctx.selected,
+        extraIngredients: ctx.extras,
+        familyBrief: _fcFamilyBrief(),
+        count: 3
+    };
+    fetch(API_BASE + '/api/fridge-cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (j) {
+            if (!res.ok) throw new Error((j && (j.detail || j.message)) || ('HTTP ' + res.status));
+            return j;
+        });
+    }).then(function (j) {
+        var sols = (j && Array.isArray(j.solutions)) ? j.solutions : [];
+        if (!sols.length) throw new Error('AI 没有返回可用方案');
+        _fcPlanSolutions = sols;
+        _fcRenderSolutions(sols);
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+    }).catch(function (e) {
+        if (box) {
+            box.innerHTML = '<div style="background:#fff;border:1px solid #FECACA;border-radius:16px;padding:22px 16px;text-align:center;">'
+                + '<div style="font-size:13px;font-weight:700;color:#DC2626;">方案生成失败</div>'
+                + '<div style="font-size:11px;color:#9CA3AF;line-height:1.7;margin-top:6px;">' + escapeHtml(e && e.message ? e.message : '请稍后重试') + '</div>'
+                + '<button type="button" onclick="_fcRefreshSolutions()" style="margin-top:12px;height:36px;padding:0 18px;border:none;border-radius:12px;background:#F97316;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">重试</button>'
+                + '</div>';
+        }
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+    });
+}
+function _fcRefreshSolutions() {
+    _fcLoadSolutions();
+}
+function _fcToggleSteps(i) {
+    var box = document.getElementById('fcSteps' + i);
+    var btn = document.getElementById('fcStepsBtn' + i);
+    if (!box) return;
+    var show = box.style.display === 'none';
+    box.style.display = show ? 'block' : 'none';
+    if (btn) btn.textContent = show ? '收起做法' : '看做法';
+}
+function _fcAddSolutionToPlan(i) {
+    var s = (_fcPlanSolutions || [])[i];
+    if (!s || !s.name) return;
+    var now = new Date();
+    var h = now.getHours();
+    var meal = h < 10 ? 'breakfast' : (h < 15 ? 'lunch' : 'dinner');
+    var mealName = meal === 'breakfast' ? '早餐' : (meal === 'lunch' ? '午餐' : '晚餐');
+    var date = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    var cal = {};
+    try { cal = getDietCalendar() || {}; } catch (e) { cal = {}; }
+    var cur = (cal[date] && cal[date][meal] && cal[date][meal].plan) ? cal[date][meal].plan : {};
+    var names = (Array.isArray(cur.dishes) ? cur.dishes : []).map(function (x) {
+        return typeof x === 'string' ? x.trim() : String((x && x.name) || '').trim();
+    }).filter(Boolean);
+    if (names.indexOf(s.name) < 0) names.push(s.name);
+    var meta = Object.assign({}, cur.dishMeta || {});
+    var dm = Object.assign({}, meta[s.name] || {}, {
+        source: 'fridge_cleanup', confirmed: false, addedAt: Date.now(), cookSource: 'fridge_cleanup'
+    });
+    if (Array.isArray(s.steps) && s.steps.length) {
+        dm.steps = s.steps.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+    }
+    meta[s.name] = dm;
+    updateMealPlan(date, meal, Object.assign({}, cur, { dishes: names, dishMeta: meta, state: 'pending' }));
+    closeFridgeCleanup();
+    document.body.style.overflow = '';
+    try {
+        if (typeof _hdGotoDiary === 'function') _hdGotoDiary();
+        else switchTab('diary');
+    } catch (e) {
+        try { switchTab('diary'); } catch (_) {}
+    }
+    setTimeout(function () { showToast('✅ 已填入今日' + mealName + '：' + s.name); }, 220);
 }
 function _fcRenderRecords() {
     var recs = fridgeCleanupRecords();
