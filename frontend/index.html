@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V417-20261108';
+        var APP_VER = 'V418-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -41273,7 +41273,7 @@ var WORK_LEVELS = [
     { name: '名厨', minClone: 500, requiresCert: true, icon: '🏆' }
 ];
 function _worksStats() {
-    var works = _getChefWorks();
+    var works = _getChefWorks().filter(function(w) { return !w || w.status !== 'draft'; });
     var cloned = 0, good = 0, bad = 0;
     works.forEach(function(w) { cloned += (w.clonedCount || 0); good += (w.good || 0); bad += (w.bad || 0); });
     var total = good + bad;
@@ -41308,8 +41308,9 @@ function openMyWorksPage() {
         + '<div id="mwLevelCard"></div>'
         + '<div id="mwStatsBar" style="display:flex;background:white;border:1px solid #F3F4F6;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04);padding:12px 0;margin-bottom:12px;text-align:center;"></div>'
         + '<div style="display:flex;gap:6px;margin-bottom:12px;">'
-        + '<button id="mwTabWorks" onclick="_mwSetTab(\'works\')" style="flex:1;padding:9px 0;border-radius:12px;font-size:13px;cursor:pointer;border:1px solid #F97316;background:#F97316;color:white;font-weight:600;">我发布的作品</button>'
-        + '<button id="mwTabClones" onclick="_mwSetTab(\'clones\')" style="flex:1;padding:9px 0;border-radius:12px;font-size:13px;cursor:pointer;border:1px solid #E5E7EB;background:white;color:#4B5563;">我的复刻记录</button>'
+        + '<button id="mwTabWorks" onclick="_mwSetTab(\'works\')" style="flex:1;padding:9px 0;border-radius:12px;font-size:12px;cursor:pointer;border:1px solid #F97316;background:#F97316;color:white;font-weight:600;">我发布的</button>'
+        + '<button id="mwTabDrafts" onclick="_mwSetTab(\'drafts\')" style="flex:1;padding:9px 0;border-radius:12px;font-size:12px;cursor:pointer;border:1px solid #E5E7EB;background:white;color:#4B5563;">📦 草稿箱</button>'
+        + '<button id="mwTabClones" onclick="_mwSetTab(\'clones\')" style="flex:1;padding:9px 0;border-radius:12px;font-size:12px;cursor:pointer;border:1px solid #E5E7EB;background:white;color:#4B5563;">复刻记录</button>'
         + '</div>'
         + '<div id="mwListBody"></div>'
         + '</div>'
@@ -41355,16 +41356,18 @@ function _mwCloneDone() {
 }
 function _mwSetTab(t) {
     window.__mwTab = t;
-    var w = document.getElementById('mwTabWorks'), cl = document.getElementById('mwTabClones');
+    var w = document.getElementById('mwTabWorks'), cl = document.getElementById('mwTabClones'), dr = document.getElementById('mwTabDrafts');
     if (!w || !cl) return;
-    w.style.background = t === 'works' ? '#F97316' : 'white';
-    w.style.color = t === 'works' ? 'white' : '#4B5563';
-    w.style.borderColor = t === 'works' ? '#F97316' : '#E5E7EB';
-    w.style.fontWeight = t === 'works' ? '600' : '400';
-    cl.style.background = t === 'clones' ? '#F97316' : 'white';
-    cl.style.color = t === 'clones' ? 'white' : '#4B5563';
-    cl.style.borderColor = t === 'clones' ? '#F97316' : '#E5E7EB';
-    cl.style.fontWeight = t === 'clones' ? '600' : '400';
+    function paint(el, on) {
+        if (!el) return;
+        el.style.background = on ? '#F97316' : 'white';
+        el.style.color = on ? 'white' : '#4B5563';
+        el.style.borderColor = on ? '#F97316' : '#E5E7EB';
+        el.style.fontWeight = on ? '600' : '400';
+    }
+    paint(w, t === 'works');
+    paint(dr, t === 'drafts');
+    paint(cl, t === 'clones');
     renderMyWorksList();
 }
 function renderMyWorksList() {
@@ -41394,8 +41397,39 @@ function renderMyWorksList() {
     var cur = {};
     try { cur = getCurrentMember() || {}; } catch (e) {}
     var curKey = cur.id || cur.name || '';
+    // V418: 草稿箱（AI 夸夸一键存入，补全食材/步骤后可发布）
+    if (window.__mwTab === 'drafts') {
+        var drafts = _getChefWorks().filter(function (w) {
+            return w && w.status === 'draft' && (w.authorId ? w.authorId === curKey : true);
+        }).sort(function (a, b) { return (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0); });
+        body.innerHTML = drafts.length ? drafts.map(function (w) {
+            var wid = escapeHtml(String(w.id));
+            var cover = w.image || (w.images && w.images[0]) || '';
+            var img = cover
+                ? '<img src="' + cover + '" style="width:54px;height:54px;object-fit:cover;border-radius:10px;flex-shrink:0;">'
+                : '<span style="font-size:22px;flex-shrink:0;">📦</span>';
+            var tags = (w.tags || []).map(function (t) {
+                return '<span style="font-size:10px;padding:1px 7px;background:#EEF2FF;color:#4338CA;border-radius:8px;">' + escapeHtml(t) + '</span>';
+            }).join('');
+            return '<div style="background:white;border:1px solid #F3F4F6;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04);padding:12px 14px;margin-bottom:10px;">'
+                + '<div style="display:flex;gap:10px;">'
+                + img
+                + '<div style="flex:1;min-width:0;">'
+                + '<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:14px;color:#374151;font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + escapeHtml(w.dishName || w.name || '未命名') + '</span>'
+                + '<span style="font-size:10px;padding:1px 6px;background:#FEF3C7;color:#92400E;border-radius:8px;flex-shrink:0;">草稿</span></div>'
+                + '<div style="font-size:12px;color:#6B7280;margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(w.summary || w.desc || '') + '</div>'
+                + '</div></div>'
+                + (tags ? '<div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;">' + tags + '</div>' : '')
+                + '<div style="display:flex;gap:6px;margin-top:10px;">'
+                + '<button onclick="_mwOpenDraftEdit(\'' + wid + '\')" style="flex:1;padding:6px 0;background:#FFF7ED;border:1px solid #FED7AA;color:#C2410C;border-radius:10px;font-size:12px;cursor:pointer;">补充并发布</button>'
+                + '<button onclick="_mwDelDraft(\'' + wid + '\')" style="flex:1;padding:6px 0;background:#FEF2F2;border:1px solid #FECACA;color:#DC2626;border-radius:10px;font-size:12px;cursor:pointer;">删除</button>'
+                + '</div></div>';
+        }).join('') : '<div style="text-align:center;padding:50px 20px;color:#9CA3AF;"><div style="font-size:40px;margin-bottom:10px;">📦</div><div style="font-size:14px;">草稿箱是空的</div><div style="font-size:12px;margin-top:4px;">记录美食后，在 AI 夸夸弹窗点「🚀 发到我的创作」</div></div>';
+        return;
+    }
     // V87: 只显示当前操作人发布的作品（旧数据无 authorId 视为当前用户），按发布时间倒序
-    var works = _getChefWorks().filter(function(w) { return w.authorId ? w.authorId === curKey : true; })
+    var works = _getChefWorks().filter(function(w) { return w.status !== 'draft'; })
+        .filter(function(w) { return w.authorId ? w.authorId === curKey : true; })
         .sort(function(a, b) {
             var d = String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
             if (d !== 0) return d;
@@ -41742,6 +41776,74 @@ function _mwDelWork(id) {
         renderMyWorksPage();
         showToast('已删除');
     });
+}
+
+// ==================== V418: 草稿箱补充并发布 ====================
+function _mwDelDraft(id) {
+    showConfirmDialogTwice('删除后不可恢复，是否确认？', '再次确认：确定删除这条草稿吗？', function () {
+        lsSet('chefWorks', JSON.stringify(_getChefWorks().filter(function (x) { return String(x.id) !== String(id); })));
+        renderMyWorksList();
+        showToast('草稿已删除');
+    });
+}
+function _mwOpenDraftEdit(id) {
+    var w = _getChefWorks().filter(function (x) { return String(x.id) === String(id); })[0];
+    if (!w) { showToast('草稿不存在'); return; }
+    var old = document.getElementById('mwDraftOv');
+    if (old) old.remove();
+    var cover = w.image || (w.images && w.images[0]) || '';
+    var ov = document.createElement('div');
+    ov.id = 'mwDraftOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100008;background:rgba(31,41,55,0.6);display:flex;align-items:flex-end;justify-content:center;';
+    ov.addEventListener('click', function (e) { if (e.target === this) this.remove(); });
+    ov.innerHTML = '<div style="background:white;width:100%;max-width:430px;max-height:90vh;border-radius:20px 20px 0 0;overflow:hidden;display:flex;flex-direction:column;">'
+        + '<div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:linear-gradient(135deg,#F97316,#FB923C);color:white;">'
+        + '<div style="font-size:16px;font-weight:700;">📦 补充并发布</div>'
+        + '<button onclick="document.getElementById(\'mwDraftOv\').remove()" style="background:none;border:none;color:white;font-size:18px;cursor:pointer;">✕</button>'
+        + '</div>'
+        + '<div style="flex:1;overflow-y:auto;padding:16px 20px;">'
+        + (cover ? '<img src="' + cover + '" style="width:100%;max-height:150px;object-fit:cover;border-radius:12px;margin-bottom:12px;">' : '')
+        + '<div style="font-size:13px;color:#374151;font-weight:600;margin-bottom:6px;">菜名</div>'
+        + '<input id="mwDraftName" value="' + escapeHtml(w.dishName || w.name || '') + '" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #FED7AA;border-radius:10px;font-size:14px;outline:none;">'
+        + '<div style="font-size:13px;color:#374151;font-weight:600;margin:12px 0 6px;">食材（每行一种）</div>'
+        + '<textarea id="mwDraftIngredients" rows="3" placeholder="五花肉 500g&#10;冰糖 20g" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #FED7AA;border-radius:10px;font-size:13px;line-height:1.6;resize:none;outline:none;">' + escapeHtml((w.ingredients || []).join('\n')) + '</textarea>'
+        + '<div style="font-size:13px;color:#374151;font-weight:600;margin:12px 0 6px;">步骤（每行一步）</div>'
+        + '<textarea id="mwDraftSteps" rows="5" placeholder="五花肉切块焯水&#10;小火炒糖色后下肉翻炒" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #FED7AA;border-radius:10px;font-size:13px;line-height:1.6;resize:none;outline:none;">' + escapeHtml((w.steps || []).join('\n')) + '</textarea>'
+        + '<div style="font-size:13px;color:#374151;font-weight:600;margin:12px 0 6px;">AI 夸赞（摘要）</div>'
+        + '<textarea id="mwDraftSummary" rows="2" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #FED7AA;border-radius:10px;font-size:13px;line-height:1.6;resize:none;outline:none;">' + escapeHtml(w.summary || w.desc || '') + '</textarea>'
+        + '</div>'
+        + '<div style="flex-shrink:0;display:flex;gap:10px;padding:14px 20px;background:#FFF7ED;border-top:1px solid #FED7AA;">'
+        + '<button onclick="document.getElementById(\'mwDraftOv\').remove()" style="flex:1;padding:10px;background:white;border:1px solid #FED7AA;color:#C2410C;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">取消</button>'
+        + '<button onclick="_mwPublishDraft(\'' + escapeHtml(String(w.id)) + '\')" style="flex:2;padding:10px;background:#F97316;color:white;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">发布</button>'
+        + '</div></div>';
+    document.body.appendChild(ov);
+}
+function _mwPublishDraft(id) {
+    var name = (document.getElementById('mwDraftName').value || '').trim();
+    if (!name) { showToast('请输入菜名'); return; }
+    var steps = (document.getElementById('mwDraftSteps').value || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!steps.length) { showToast('请至少填写 1 个步骤'); return; }
+    var ing = (document.getElementById('mwDraftIngredients').value || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    var summary = (document.getElementById('mwDraftSummary').value || '').trim();
+    var works = _getChefWorks();
+    var w = works.filter(function (x) { return String(x.id) === String(id); })[0];
+    if (!w) { showToast('草稿不存在'); return; }
+    w.name = name;
+    w.dishName = name;
+    w.ingredients = ing;
+    w.steps = steps;
+    w.summary = summary;
+    w.desc = summary || '家庭日记';
+    w.status = 'published';
+    w.createdAt = dateToKey(new Date());
+    w.isPublic = true;
+    lsSet('chefWorks', JSON.stringify(works));
+    var ov = document.getElementById('mwDraftOv');
+    if (ov) ov.remove();
+    renderMyWorksPage();
+    _mwSetTab('works');
+    showToast('🎉 作品「' + name + '」已发布');
+    try { addPointsWithAudit('recipe', name + '\n' + w.desc, 20); } catch (e) {}
 }
 
 // ============ V88: 我的复刻记录（cloneRecords：三状态+评分+查看详情/再次复刻/删除） ============
@@ -47951,7 +48053,8 @@ function _mrShowPraise(record, praise) {
         + img
         + (dishText ? '<div style="font-size:12px;color:#B08968;margin-bottom:8px;">🍽️ ' + escapeHtml(dishText) + '</div>' : '')
         + '<div style="font-size:14px;color:#374151;line-height:1.9;white-space:pre-wrap;">' + escapeHtml(praise) + '</div>'
-        + '<div style="display:flex;gap:8px;margin-top:14px;">'
+        + '<button type="button" onclick="_mrSendToWorks(window._mrPraiseRecord)" style="margin-top:14px;width:100%;padding:11px 0;border:1px solid #C7D2FE;border-radius:12px;background:#EEF2FF;color:#4338CA;font-size:14px;font-weight:700;cursor:pointer;">🚀 发到我的创作</button>'
+        + '<div style="display:flex;gap:8px;margin-top:8px;">'
         + '<button type="button" onclick="_mrGeneratePoster(window._mrPraiseRecord)" style="flex:1;padding:11px 0;border:1px solid #FDBA74;border-radius:12px;background:#FFF7ED;color:#C2410C;font-size:14px;font-weight:700;cursor:pointer;">📸 生成海报</button>'
         + '<button type="button" onclick="document.getElementById(\'mrPraiseOv\').remove()" style="flex:1;padding:11px 0;border:none;border-radius:12px;background:linear-gradient(135deg,#FB923C,#F97316);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">开心收下 ✨</button>'
         + '</div>'
@@ -47960,7 +48063,46 @@ function _mrShowPraise(record, praise) {
     document.body.appendChild(ov);
 }
 
-// ==================== V417: AI 夸夸海报（html2canvas）====================
+// ==================== V418: 夸夸 → 我的创作草稿箱 ====================
+function _mrSendToWorks(record) {
+    if (!record) { showToast('未找到本餐记录'); return; }
+    var cur = {};
+    try { cur = getCurrentMember() || {}; } catch (e) {}
+    var works = _getChefWorks();
+    if (works.some(function (w) { return w && w.sourceRecordId && String(w.sourceRecordId) === String(record.id); })) {
+        showToast('这条已经在你的草稿箱里啦');
+        return;
+    }
+    var imgs = [];
+    if (record.imageBase64) imgs.push(record.imageBase64);
+    if (record.images && record.images.length) {
+        record.images.forEach(function (u) { if (u && imgs.indexOf(u) < 0) imgs.push(u); });
+    }
+    var dishName = (record.dishes || []).map(function (d) { return (d && d.name) || ''; }).filter(Boolean).join('、') || '今日家常菜';
+    works.unshift({
+        id: 'work_' + Date.now(),
+        authorId: cur.id || cur.name || '',
+        authorName: cur.name || '我',
+        dishName: dishName,
+        name: dishName,
+        images: imgs,
+        image: imgs[0] || '',
+        summary: record.aiPraise || '',
+        desc: record.aiPraise || '',
+        steps: [],
+        ingredients: [],
+        tags: ['AI认证佳作', '家庭日记'],
+        status: 'draft',
+        createdAt: Date.now(),
+        sourceRecordId: record.id,
+        isPublic: true,
+        clonedCount: 0, good: 0, bad: 0, favCount: 0, viewCount: 0, daily: {}
+    });
+    lsSet('chefWorks', JSON.stringify(works));
+    showToast('✅ 已自动为您存入【我的创作】草稿箱');
+    try { if (typeof renderMyWorksPage === 'function') renderMyWorksPage(); } catch (e) {}
+}
+
 function _mrPosterLoading(show, text) {
     var ov = document.getElementById('mrPosterLoading');
     if (!show) { if (ov) ov.remove(); return; }
