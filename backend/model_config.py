@@ -52,6 +52,12 @@ AI_QUEUE_TIMEOUT = max(1.0, float(os.getenv("AI_QUEUE_TIMEOUT", "30") or 30))
 AI_RETRY_MAX = max(0, int(os.getenv("AI_RETRY_MAX", "2") or 2))
 # 指数退避基准（秒）：1s → 2s → 4s，附加随机抖动避免惊群
 AI_RETRY_BASE = max(0.2, float(os.getenv("AI_RETRY_BASE", "1.0") or 1.0))
+# V422: 内容生成类任务（食养堂文章/每日一课/审核）用更耐心的退避档：5s → 20s → 60s
+# 交互类任务（聊天/推荐）仍用上面的快档，避免用户端长时间干等
+AI_RETRY_MAX_BG = max(AI_RETRY_MAX, int(os.getenv("AI_RETRY_MAX_BG", "3") or 3))
+AI_RETRY_SCHEDULE = [1.0, 2.0, 4.0]
+AI_RETRY_SCHEDULE_BG = [5.0, 20.0, 60.0]
+_RETRY_BG_TASKS = {"daily_tip", "foodhall_draft", "foodhall_audit", "food_hall", "article", "audit"}
 
 _AI_GATE: Optional[asyncio.Semaphore] = None
 
@@ -578,16 +584,26 @@ def _is_retryable(exc: Exception) -> bool:
     return isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadError))
 
 
-def _retry_after(exc: Exception, fallback: float) -> float:
-    """优先遵从上游 Retry-After，并限幅到 8s，避免被上游拖死。"""
+def _retry_plan(task_type: Optional[str]) -> tuple:
+    """V422: 按任务类型返回 (最大重试次数, 退避等待序列, 单次等待上限)。
+
+    内容生成类任务容忍更久（5s → 20s → 60s），交互类任务保持 1s → 2s → 4s。
+    """
+    if str(task_type or "").strip() in _RETRY_BG_TASKS:
+        return AI_RETRY_MAX_BG, AI_RETRY_SCHEDULE_BG, 60.0
+    return AI_RETRY_MAX, AI_RETRY_SCHEDULE, 8.0
+
+
+def _retry_after(exc: Exception, fallback: float, cap: float = 8.0) -> float:
+    """优先遵从上游 Retry-After，并限幅到 cap，避免被上游拖死。"""
     if isinstance(exc, httpx.HTTPStatusError):
         raw = exc.response.headers.get("retry-after")
         if raw:
             try:
-                return max(0.0, min(float(raw), 8.0))
+                return max(0.0, min(float(raw), cap))
             except ValueError:
                 pass
-    return fallback
+    return max(0.0, min(fallback, cap))
 
 
 async def _call_with_retry(
@@ -597,12 +613,15 @@ async def _call_with_retry(
     messages: List[Dict[str, Any]],
     *,
     queue_timeout: Optional[float] = None,
+    task_type: Optional[str] = None,
     **kwargs: Any,
 ) -> Dict[str, Any]:
-    """D5-01: 单模型调用 + 指数退避重试（默认 2 次，1s/2s + 抖动）。
+    """D5-01: 单模型调用 + 指数退避重试（交互 2 次 1s/2s；内容生成 3 次 5s/20s/60s）。
 
     queue_timeout：本请求剩余可排队时长（跨服务商共享一个总预算），避免逐家等待叠加。
+    task_type：V422 用于选择退避档位。
     """
+    max_retries, schedule, cap = _retry_plan(task_type)
     attempt = 0
     while True:
         try:
@@ -610,12 +629,13 @@ async def _call_with_retry(
         except AIServiceBusy:
             raise  # 闸门排队超时属系统级过载，换服务商无意义，直接上抛
         except Exception as exc:
-            if attempt >= AI_RETRY_MAX or not _is_retryable(exc):
+            if attempt >= max_retries or not _is_retryable(exc):
                 if _is_rate_limited(exc):
                     _cool_down(name, RATE_LIMIT_COOLDOWN_SEC)
                 raise
-            wait = _retry_after(exc, AI_RETRY_BASE * (2 ** attempt) + random.uniform(0, 0.4))
-            print(f"retry {name}/{model} in {wait:.1f}s (attempt {attempt + 1}/{AI_RETRY_MAX}): {type(exc).__name__}")
+            fallback = schedule[attempt] if attempt < len(schedule) else schedule[-1]
+            wait = _retry_after(exc, fallback + random.uniform(0, 0.4), cap)
+            print(f"retry {name}/{model} in {wait:.1f}s (attempt {attempt + 1}/{max_retries}): {type(exc).__name__}")
             await asyncio.sleep(wait)
             attempt += 1
 
@@ -687,6 +707,7 @@ async def call_ai(task_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
                         max_tokens=payload.get("max_tokens"),
                         temperature=payload.get("temperature"),
                         timeout=payload.get("timeout", 60.0),
+                        task_type=payload.get("task_type"),
                         extra_body=config.get("chat_extra"),
                     )
                     # V139: 空 content 视为该服务商失败（如推理模型思维链耗尽 max_tokens 时

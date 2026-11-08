@@ -4022,8 +4022,9 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
     tip = None
     # V285: 整条 AI 链路（含服务商逐个降级）共用 20s 截止时间——旧逻辑每家各自等满 60s，
     # 线上单次请求累积到 60s+ 被网关 504。单家超时压到 8s，留时间给下一家兜底。
-    _ai_deadline = time.time() + 20.0
-    for attempt in range(2 if sub_plan else 1):
+    # V422: 内容生成任务改为 40s 预算、单家 20s，给 429 的 5s/20s 退避留出空间
+    _ai_deadline = time.time() + 40.0
+    for attempt in range(3 if sub_plan else 2):
         _remain = _ai_deadline - time.time()
         if _remain < 4:
             print(f"[daily-tip] AI 截止时间已到，放弃本次生成（attempt {attempt + 1}）")
@@ -4038,7 +4039,7 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
                     json_mode=True,
                     max_tokens=1200,
                     task_type="daily_tip",
-                    timeout=min(8.0, _remain),
+                    timeout=min(20.0, _remain),
                 ),
                 timeout=_remain,
             )

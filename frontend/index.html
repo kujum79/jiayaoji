@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V421-20261109';
+        var APP_VER = 'V422-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -34777,7 +34777,7 @@ async function renderHomeDailyTipCard(force) {
     // AI 结果晚到再替换，避免首屏被 60s 级 AI 请求卡住只显示骨架屏。
     var aiPromise = null;
     if (subPlan) {
-        aiPromise = _fetchDailyTip(undefined, 30000).catch(function (e) {
+        aiPromise = _fetchDailyTip(undefined, 45000).catch(function (e) {
             console.warn('[订阅专享] 生成超时或失败，保留已渲染内容', e);
             return null;
         });
