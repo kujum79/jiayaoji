@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V406-20261108';
+        var APP_VER = 'V407-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode','commissionRecords','expertConsultations'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode','commissionRecords','expertConsultations','fridgeCleanupRecords'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -4410,6 +4410,10 @@ async function _submitFeedback() {
                 </span>
             </div>
             <div class="home-ingr-text" id="homeIngrTags"></div>
+            <!-- V407: 冰箱残局消消乐入口 -->
+            <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+                <button type="button" onclick="openFridgeCleanup()" style="border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:700;border-radius:999px;padding:6px 12px;cursor:pointer;white-space:nowrap;">🧹 清理冰箱残局</button>
+            </div>
         </div>
         <!-- 食记卡片（V56）：◀ 晚餐 ▶ 日期 [2人▼][＋][计划确认] + 计划区/实际区（外出就餐已移出） -->
         <div class="home-card" id="homeDiaryCard">
@@ -4491,6 +4495,8 @@ async function _submitFeedback() {
                 <button class="clear-btn" id="knowledgeResetBtn" style="display:none;" title="重新对话">🔄</button>
                 <!-- V227: 食记页右上角「专项健康饮食计划」看板入口（在 ➕ 左侧） -->
                 <button class="clear-btn" id="diarySpecialPlanBtn" style="display:none;width:auto;height:24px;padding:0 8px;border:1px solid rgba(255,255,255,0.55);border-radius:12px;background:rgba(255,255,255,0.18);color:#fff;font-size:12px;font-weight:600;line-height:1;white-space:nowrap;" onclick="openSpecialPlanBoard()">健康管家</button>
+                <!-- V407: 食材页顶部工具栏「冰箱残局消消乐」入口 -->
+                <button class="clear-btn" id="fridgeCleanupBtn" style="display:none;width:auto;height:24px;padding:0 8px;border:1px solid rgba(255,255,255,0.55);border-radius:12px;background:rgba(255,255,255,0.18);color:#fff;font-size:12px;font-weight:600;line-height:1;white-space:nowrap;" onclick="openFridgeCleanup()">🧹 残局消消乐</button>
                 <button class="clear-btn" id="clearBtn">➕</button>
             </div>
         </div>
@@ -4776,6 +4782,7 @@ async function _submitFeedback() {
                         <button class="fridge-cat-back-btn" type="button" onclick="switchFridgeView('rec')" title="返回食材准备">&lt;</button>
                         <span style="font-size:14px;color:#9CA3AF;margin-left:4px;">返回食材准备</span>
                         <div class="fridge-action-btns" id="fridgeActionBtns">
+                            <button onclick="openFridgeCleanup()">🧹 残局消消乐</button>
                             <button onclick="generateFridgeMealPlan()">📋 基于食材生成菜谱</button>
                         </div>
                     </div>
@@ -17993,6 +18000,87 @@ function formatRecDateLabel(date) {
 }
 
 // 根据当前模式刷新食材视图
+/* ===== V407: 冰箱残局消消乐（基础数据结构与入口） ===== */
+var FRIDGE_CLEANUP_KEY = 'fridgeCleanupRecords';
+
+function _fcDateKey(d) {
+    var x = d || new Date();
+    return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+}
+function fridgeCleanupRecords() {
+    try {
+        var arr = JSON.parse(lsGet(FRIDGE_CLEANUP_KEY) || '[]');
+        return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+}
+function saveFridgeCleanupRecords(arr) {
+    lsSet(FRIDGE_CLEANUP_KEY, JSON.stringify(Array.isArray(arr) ? arr : []));
+}
+function addFridgeCleanupRecord(data) {
+    var arr = fridgeCleanupRecords();
+    var rec = Object.assign({
+        id: 'fc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        date: _fcDateKey(),
+        usedIngredients: [],
+        savedAmount: 0,
+        planId: '',
+        status: 'planned',
+        createdAt: Date.now()
+    }, data || {});
+    arr.push(rec);
+    saveFridgeCleanupRecords(arr);
+    return rec;
+}
+// 初始化：确保 fridgeCleanupRecords 键始终存在（空数组）
+try { if (lsGet(FRIDGE_CLEANUP_KEY) == null) saveFridgeCleanupRecords([]); } catch (e) {}
+
+function closeFridgeCleanup() {
+    var old = document.getElementById('fridgeCleanupOv');
+    if (old) old.remove();
+    if (!document.getElementById('fhRecipeOv') && !document.getElementById('fhHallOv')) {
+        document.body.style.overflow = '';
+    }
+}
+function openFridgeCleanup() {
+    closeFridgeCleanup();
+    var recs = fridgeCleanupRecords();
+    var totalSaved = recs.reduce(function (s, r) { return s + (Number(r.savedAmount) || 0); }, 0);
+    var statusMap = { planned: '待执行', doing: '进行中', done: '已完成' };
+    var listHtml = recs.length
+        ? recs.slice().reverse().map(function (r) {
+            return '<div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #FDE7C8;border-radius:12px;padding:10px 12px;margin-bottom:8px;">'
+                + '<div style="flex:1;min-width:0;">'
+                + '<div style="font-size:13px;font-weight:700;color:#1F2937;">' + escapeHtml(String(r.date || '')) + '</div>'
+                + '<div style="font-size:11px;color:#9CA3AF;margin-top:3px;">' + escapeHtml((r.usedIngredients || []).join('、') || '未记录食材') + '</div>'
+                + '</div>'
+                + '<div style="text-align:right;">'
+                + '<div style="font-size:12px;font-weight:700;color:#C2410C;">' + escapeHtml(statusMap[r.status] || '待执行') + '</div>'
+                + '<div style="font-size:11px;color:#9CA3AF;margin-top:3px;">省 ¥' + (Number(r.savedAmount) || 0) + '</div>'
+                + '</div></div>';
+        }).join('')
+        : '<div style="text-align:center;padding:34px 10px;color:#9CA3AF;font-size:13px;">还没有清理记录<br><span style="font-size:12px;">把冰箱里快要吃不完的食材，凑成一餐消掉吧</span></div>';
+    var ov = document.createElement('div');
+    ov.id = 'fridgeCleanupOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100020;background:#FFF7ED;display:flex;flex-direction:column;max-width:430px;margin:0 auto;';
+    ov.innerHTML = '<div style="flex:0 0 auto;background:#fff;border-bottom:1px solid #FED7AA;display:flex;align-items:center;gap:8px;padding:12px 14px;">'
+        + '<button type="button" onclick="closeFridgeCleanup()" style="border:none;background:none;font-size:18px;color:#6B7280;cursor:pointer;padding:2px 4px;line-height:1;">←</button>'
+        + '<div style="flex:1;min-width:0;font-size:16px;font-weight:800;color:#1F2937;">🧹 冰箱残局消消乐</div>'
+        + '</div>'
+        + '<div style="flex:1;overflow-y:auto;padding:14px 16px calc(18px + env(safe-area-inset-bottom));">'
+        + '<div style="border-radius:16px;padding:16px;background:linear-gradient(135deg,#FFEDD5,#FED7AA);color:#7C2D12;">'
+        + '<div style="font-size:15px;font-weight:800;">把快吃不掉的食材，一次消掉</div>'
+        + '<div style="font-size:12px;line-height:1.7;margin-top:6px;color:#9A3412;">冰箱残局消消乐会帮你把零散食材凑成一餐，少浪费一点，也多省一点。</div>'
+        + '<div style="display:flex;gap:18px;margin-top:12px;">'
+        + '<div><div style="font-size:20px;font-weight:800;">' + recs.length + '</div><div style="font-size:11px;color:#9A3412;">已清理次数</div></div>'
+        + '<div><div style="font-size:20px;font-weight:800;">¥' + totalSaved + '</div><div style="font-size:11px;color:#9A3412;">累计省下</div></div>'
+        + '</div></div>'
+        + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin:18px 2px 10px;">清理记录</div>'
+        + listHtml
+        + '</div>';
+    document.body.appendChild(ov);
+    document.body.style.overflow = 'hidden';
+}
+
 function refreshFridgeView() {
     if (currentFridgeViewMode === 'rec') {
         renderFridgeRecView();
@@ -72564,6 +72652,8 @@ function switchHomePage() {
     if (mb) { mb.textContent = '☰'; mb.style.visibility = 'hidden'; }
     const cb = document.getElementById('clearBtn');
     if (cb) cb.style.visibility = 'hidden';
+    const fcb = document.getElementById('fridgeCleanupBtn');
+    if (fcb) fcb.style.display = 'none';
     const ba = document.querySelector('.bottom-area');
     if (ba) ba.style.display = 'none';
     // 刷新"本月已省"卡片
@@ -72597,6 +72687,9 @@ function switchTab(tab) {
     // V227: 「专项健康饮食计划」入口仅食记页显示
     var diarySpecialPlanBtn = document.getElementById('diarySpecialPlanBtn');
     if (diarySpecialPlanBtn) diarySpecialPlanBtn.style.display = (tab === 'diary') ? 'flex' : 'none';
+    // V407: 「冰箱残局消消乐」入口仅食材页显示
+    var fridgeCleanupBtn = document.getElementById('fridgeCleanupBtn');
+    if (fridgeCleanupBtn) fridgeCleanupBtn.style.display = (tab === 'fridge') ? 'flex' : 'none';
     // 切到食记Tab时渲染
     if (tab === 'diary') {
         try { renderDiary(); } catch(e) { console.error('renderDiary error:', e); }
