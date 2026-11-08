@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V401-20261108';
+        var APP_VER = 'V402-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -33167,22 +33167,35 @@ function _dtRenderCard(tip) {
         + subBtnHtml
         + '</span></div>';
     var bodyHtml = '';
-    if (_fhIsRecipeSlot()) {
-        var recipe = _fhRecipeOfDay();
+    // V402: 双轨分时段——06:00-10:59 食谱 / 11:00-16:29 饮食 / 16:30-20:59 食谱 / 21:00-05:59 饮食
+    var slot = _fhSlotType();
+    var recipe = _fhRecipeOfDay();
+    var diet = _fhArticleList(tip)[0] || null;
+    var hasRecipe = !!(recipe && recipe.title);
+    var hasDiet = !!(diet && diet.title);
+    // 当期轨道没有内容时回落到另一条轨道（卡片底部仍给「今日另一条」入口）
+    if (slot === 'recipe_article' && !hasRecipe) slot = 'diet_article';
+    else if (slot === 'diet_article' && !hasDiet) slot = 'recipe_article';
+    if (slot === 'recipe_article' && hasRecipe) {
         var intro = recipe.summary || '';
         if (recipe.ingredients && recipe.ingredients.length) {
             intro += ' 主料：' + recipe.ingredients.slice(0, 3).join('、') + '。';
         }
+        var rTag = recipe._fallback ? '往期食谱' : '今日食谱';
         bodyHtml = '<div onclick="_fhOpenHomeRecipe()" style="cursor:pointer;">'
+            + (recipe.coverImage ? '<div style="position:relative;margin-bottom:10px;">'
+                + '<img src="' + escapeAttr(recipe.coverImage) + '" alt="' + escapeAttr(recipe.title) + '" loading="lazy" onerror="this.style.display=\'none\'" style="display:block;width:100%;height:130px;object-fit:cover;border-radius:12px;background:linear-gradient(135deg,#FDE68A,#FCA5A5);">'
+                + '<span style="position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.45);color:#fff;font-size:10px;padding:2px 8px;border-radius:999px;">' + (recipe._fallback ? '经典食谱' : 'AI 生成封面') + '</span>'
+                + '</div>' : '')
             + '<div class="dt-title-row">'
-            + '<span class="dt-lesson-tag" style="cursor:pointer;" title="查看食谱详情">今日食谱</span>'
+            + '<span class="dt-lesson-tag" style="cursor:pointer;" title="查看食谱详情">' + rTag + '</span>'
             + '<div class="dt-title">' + escapeHtml(recipe.title) + '</div>'
             + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" class="dt-title-act" style="font-size:16px;" title="往期回顾">📅</button>'
             + '</div>'
             + '<div class="dt-summary" style="margin-top:8px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(intro) + '</div>'
             + '</div>';
     } else {
-        var a = _fhArticleList(tip)[0] || {};
+        var a = diet || {};
         bodyHtml = '<div onclick="_fhOpenHomeArticle()" style="cursor:pointer;">'
             + '<div class="dt-title-row">'
             + '<span class="dt-lesson-tag" onclick="event.stopPropagation(); _fhOpenHall()" style="cursor:pointer;" title="进入食养堂">今日饮食</span>'
@@ -33193,7 +33206,26 @@ function _dtRenderCard(tip) {
             + (isMember ? '' : '<div style="font-size:11px;color:#B45309;margin-top:6px;">🔒 食养会员专享 · 点击解锁全文</div>')
             + '</div>';
     }
-    el.innerHTML = headHtml + bodyHtml;
+    // V402: 卡片底部常驻「今日另一条」入口（另一轨始终可达）
+    var altTitle = '';
+    if (slot === 'recipe_article' && hasDiet) altTitle = '饮食文章 · ' + diet.title;
+    else if (slot === 'diet_article' && hasRecipe) altTitle = '今日食谱 · ' + recipe.title;
+    var altHtml = altTitle
+        ? '<div onclick="event.stopPropagation(); _fhOpenOtherTrack()" style="display:flex;align-items:center;gap:6px;margin-top:10px;padding-top:9px;border-top:1px dashed #FED7AA;font-size:11px;color:#B45309;cursor:pointer;">'
+            + '<span style="flex:0 0 auto;font-weight:700;">🔄 今日另一条</span>'
+            + '<span style="flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:#9A3412;">' + escapeHtml(altTitle) + '</span>'
+            + '<span style="flex:0 0 auto;color:#D1D5DB;">›</span></div>'
+        : '';
+    el.innerHTML = headHtml + bodyHtml + altHtml;
+}
+// V402: 打开另一条轨道（当前食谱→饮食文章；当前饮食→今日食谱）
+function _fhOpenOtherTrack() {
+    if (_fhIsRecipeSlot()) {
+        if (typeof isFoodMember === 'function' && !isFoodMember()) { _fhShowPaywall(); return; }
+        _fhOpenArticleDetail(_fhArticleList(_fhCachedTip())[0]);
+    } else {
+        _fhOpenRecipeDetail(_fhRecipeOfDay());
+    }
 }
 function _dtRenderDegraded(latestDate) {
     var el = document.getElementById('homeDailyTipCard');
@@ -33240,14 +33272,76 @@ var _FHR_RECIPES = [
     }
 ];
 var _FH_HALL_ARTICLES = [];
-function _fhIsRecipeSlot() {
+// ==================== V402: 双轨内容分发（饮食文章 / 新奇特食谱） ====================
+// 分时段：06:00–10:59 食谱；11:00–16:29 饮食；16:30–20:59 食谱；21:00–05:59 饮食
+var _fhTracks = { date: '', diet_article: null, recipe_article: null, ready: false };
+function _fhSlotType() {
     var d = new Date();
-    return (d.getHours() * 60 + d.getMinutes()) >= 990;
+    var m = d.getHours() * 60 + d.getMinutes();
+    if (m >= 360 && m < 660) return 'recipe_article';   // 06:00-10:59 早高峰
+    if (m >= 660 && m < 990) return 'diet_article';     // 11:00-16:29 午间
+    if (m >= 990 && m < 1260) return 'recipe_article';  // 16:30-20:59 晚高峰
+    return 'diet_article';                              // 21:00-05:59 夜间
+}
+function _fhIsRecipeSlot() { return _fhSlotType() === 'recipe_article'; }
+function _fhTrackOf(ct) { try { return _fhTracks && _fhTracks[ct] ? _fhTracks[ct] : null; } catch (e) { return null; } }
+function _fhRecipeFromArticle(a) {
+    if (!a) return null;
+    return {
+        id: a.id || ('fhr_srv_' + (a.date || '')),
+        title: a.title || '',
+        summary: a.summary || '',
+        content: a.content || '',
+        coverImage: a.coverImage || '',
+        ingredients: Array.isArray(a.ingredients) ? a.ingredients : [],
+        steps: Array.isArray(a.steps) ? a.steps : [],
+        tips: Array.isArray(a.tips) ? a.tips.join(' ') : (a.tips || ''),
+        category: a.category || '世界奇味',
+        contentType: 'recipe_article',
+        date: a.date || '',
+        _fallback: false
+    };
 }
 function _fhRecipeOfDay() {
+    // 1) 今日服务端精选食谱
+    var t = _fhTrackOf('recipe_article');
+    if (t && t.title) return _fhRecipeFromArticle(t);
+    // 2) 本地/服务端归档最近一篇食谱
+    try {
+        var arc = (_fhArchiveAll() || []).filter(function (a) { return a && a.title && a.contentType === 'recipe_article'; });
+        if (arc.length) return _fhRecipeFromArticle(arc[0]);
+    } catch (e) {}
+    // 3) 内置经典食谱兜底（标记为往期）
     var d = new Date();
     var n = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
-    return _FHR_RECIPES[((n % _FHR_RECIPES.length) + _FHR_RECIPES.length) % _FHR_RECIPES.length];
+    var r = _FHR_RECIPES[((n % _FHR_RECIPES.length) + _FHR_RECIPES.length) % _FHR_RECIPES.length];
+    var out = {};
+    Object.keys(r).forEach(function (k) { out[k] = r[k]; });
+    out._fallback = true;
+    return out;
+}
+function _fhDietOfDay(tip) { return _fhArticleList(tip)[0] || null; }
+// V402: 食养堂食谱列表 = 今日精选食谱 + 归档食谱 + 内置经典食谱（按标题去重）
+function _fhHallRecipes() {
+    var list = [], seen = {};
+    function push(r) {
+        if (!r || !r.title || seen[r.title]) return;
+        seen[r.title] = 1;
+        list.push(r);
+    }
+    try { push(_fhRecipeOfDay()); } catch (e) {}
+    try {
+        (_fhArchiveAll() || []).forEach(function (a) {
+            if (a && a.contentType === 'recipe_article') push(_fhRecipeFromArticle(a));
+        });
+    } catch (e) {}
+    _FHR_RECIPES.forEach(function (r) { push(r); });
+    return list;
+}
+function _fhFindRecipe(id) {
+    var l = _fhHallRecipes();
+    for (var i = 0; i < l.length; i++) { if (l[i].id === id) return l[i]; }
+    return null;
 }
 function _fhFallbackArticle() {
     var d = new Date();
@@ -33265,10 +33359,13 @@ function _fhArticleList(tip) {
     var list = [], seen = {};
     function push(a) {
         if (!a || !a.title || seen[a.title]) return;
+        if (a.contentType === 'recipe_article') return; // V402: 食谱走独立轨道，不混入饮食文章列表
         seen[a.title] = 1;
         list.push(a);
     }
     if (tip && tip.title) push(tip);
+    // V402: 今日服务端精选饮食文章优先
+    try { push(_fhTrackOf('diet_article')); } catch (e) {}
     try {
         _fhRead().filter(function (a) { return a && a.published !== false && _dtIsNational(a); })
             .sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); })
@@ -33314,9 +33411,11 @@ function _fhOpenHall() {
             + '</div>';
     });
     var recHtml = '';
-    _FHR_RECIPES.forEach(function (r) {
+    _fhHallRecipes().slice(0, 6).forEach(function (r) {
         recHtml += '<div onclick="_fhHallOpenRecipe(\'' + escapeAttr(r.id) + '\')" style="display:flex;gap:10px;align-items:center;background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:9px 10px;margin-bottom:9px;cursor:pointer;">'
-            + '<img src="' + escapeAttr(r.coverImage) + '" alt="' + escapeAttr(r.title) + '" style="flex:0 0 auto;width:86px;height:64px;object-fit:cover;border-radius:10px;background:#FDE68A;">'
+            + (r.coverImage
+                ? '<img src="' + escapeAttr(r.coverImage) + '" alt="' + escapeAttr(r.title) + '" loading="lazy" onerror="this.style.display=\'none\'" style="flex:0 0 auto;width:86px;height:64px;object-fit:cover;border-radius:10px;background:#FDE68A;">'
+                : '')
             + '<div style="flex:1;min-width:0;">'
             + '<div style="font-size:14px;font-weight:700;color:#374151;line-height:1.45;">' + escapeHtml(r.title) + '</div>'
             + '<div style="font-size:11px;color:#9CA3AF;line-height:1.55;margin-top:3px;">' + escapeHtml(r.summary) + '</div>'
@@ -33357,8 +33456,7 @@ function _fhHallOpenArticle(i) {
 }
 function _fhHallOpenRecipe(id) {
     if (!isFoodMember()) { _fhShowPaywall(); return; }
-    var r = null;
-    for (var i = 0; i < _FHR_RECIPES.length; i++) { if (_FHR_RECIPES[i].id === id) { r = _FHR_RECIPES[i]; break; } }
+    var r = _fhFindRecipe(id);
     if (r) _fhOpenRecipeDetail(r);
 }
 function _fhOpenRecipeDetail(r) {
@@ -33382,11 +33480,12 @@ function _fhOpenRecipeDetail(r) {
         + '<div style="flex:1;min-width:0;font-size:15px;font-weight:700;color:#1F2937;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">精美食谱</div>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;">'
-        + '<img src="' + escapeAttr(r.coverImage) + '" alt="' + escapeAttr(r.title) + '" style="display:block;width:100%;height:220px;object-fit:cover;background:#FDE68A;">'
+        + '<img src="' + escapeAttr(r.coverImage) + '" alt="' + escapeAttr(r.title) + '" onerror="this.style.display=\'none\'" style="display:block;width:100%;height:220px;object-fit:cover;background:#FDE68A;">'
         + '<div style="padding:16px 18px 0;">'
         + '<div style="font-size:22px;font-weight:800;color:#1F2937;line-height:1.4;">' + escapeHtml(r.title) + '</div>'
         + '<div style="font-size:13px;color:#6B7280;line-height:1.7;margin-top:6px;">' + escapeHtml(r.summary) + '</div>'
         + '</div>'
+        + (r.content ? '<div style="padding:10px 18px 0;"><div style="font-size:13px;color:#4B5563;line-height:1.9;">' + escapeHtml(r.content) + '</div></div>' : '')
         + '<div style="padding:14px 18px 0;">'
         + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin-bottom:8px;">🧺 食材</div>'
         + '<div>' + ing + '</div>'
@@ -33409,8 +33508,7 @@ function _fhCloseRecipe() {
     if (!document.getElementById('fhHallOv') && !document.getElementById('classroomCourseOverlay')) document.body.style.overflow = '';
 }
 function _fhAddRecipeToPlan(id) {
-    var r = null;
-    for (var i = 0; i < _FHR_RECIPES.length; i++) { if (_FHR_RECIPES[i].id === id) { r = _FHR_RECIPES[i]; break; } }
+    var r = _fhFindRecipe(id);
     if (!r) return;
     var now = new Date();
     var h = now.getHours();
@@ -33616,6 +33714,19 @@ async function renderHomeDailyTipCard(force) {
     _dtLoadedKey = ck;
     _dtSwapCount = 0;
     _dtServerTip = null;
+    // V402: 拉取今日双轨（饮食文章 + 新奇特食谱），分时段卡片各取其一
+    try {
+        var respT = await fetch('/api/food-hall/published?date=' + encodeURIComponent(_dtTodayKey()), { cache: 'no-store' });
+        var outT = await respT.json();
+        if (outT && outT.ok) {
+            _fhTracks = {
+                date: outT.date || _dtTodayKey(),
+                diet_article: outT.diet_article || null,
+                recipe_article: outT.recipe_article || null,
+                ready: !!outT.published
+            };
+        }
+    } catch (e) {}
     var subPlan = _dtSubPlan();
     // V285: 订阅用户的 AI 专属生成改为「并行后台」——先立即渲染已有内容，
     // AI 结果晚到再替换，避免首屏被 60s 级 AI 请求卡住只显示骨架屏。
@@ -33633,6 +33744,9 @@ async function renderHomeDailyTipCard(force) {
     try { fast = _fhTodayPickArticle(); } catch (e) {}
     if (fast) _isTodayPick = true;
     if (fast && !_dtIsNational(fast)) { fast = null; _isTodayPick = false; }   // V296: 含城市/局部天气的旧内容不对外展示
+    // V402: 双轨接口已拿到今日饮食精选时直接用，免重复请求
+    var _trackDiet = _fhTrackOf('diet_article');
+    if (!fast && _trackDiet && _trackDiet.title && _dtIsNational(_trackDiet)) fast = _trackDiet;
     if (!fast) {
         // V145: 服务端 confirmed 文章优先（pending 不展示）
         try {
@@ -34844,12 +34958,13 @@ function _fhPublishedToday() {
 // V299: 今日精选——食养分类下所有文章里 isTodayPick === true 的那篇（不限状态），
 // 没有精选时回落最新一篇已发布文章（allArticles[0]）
 function _fhTodayPickArticle() {
-    var allArticles = _fhRead().filter(function (x) { return x && x.title; });
-    try { (allArticles = allArticles.concat((_fhServerArchive || []).filter(function (a) { return a && a.title; }))); } catch (e) {}
+    // V402: 饮食轨只取非食谱内容（食谱由 _fhRecipeOfDay 独立供给）
+    var allArticles = _fhRead().filter(function (x) { return x && x.title && x.contentType !== 'recipe_article'; });
+    try { (allArticles = allArticles.concat((_fhServerArchive || []).filter(function (a) { return a && a.title && a.contentType !== 'recipe_article'; }))); } catch (e) {}
     for (var i = 0; i < allArticles.length; i++) {
         if (allArticles[i] && allArticles[i].isTodayPick === true) return allArticles[i];
     }
-    var archive = _fhArchiveAll();
+    var archive = _fhArchiveAll().filter(function (a) { return a && a.contentType !== 'recipe_article'; });
     return archive.length ? archive[0] : null;
 }
 // V299/V300: 超管「设为今日精选」——被选中的 1 篇转为 published（草稿箱其余保持 draft），
@@ -35048,7 +35163,7 @@ async function _fhEnsureDailyDrafts(force) {
         } catch (e) {}
         var resp = await fetch('/api/food-hall/generate-drafts', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ date: today, city: _getWeatherCity(), solarTerm: term, weather: w })
+            body: JSON.stringify({ date: today, city: _getWeatherCity(), solarTerm: term, weather: w }) // contentType 留空：饮食 3 篇 + 食谱 3 篇
         });
         var out = await resp.json();
         if (!out || !out.ok || !Array.isArray(out.drafts)) throw new Error((out && out.detail) || '生成失败');
@@ -35058,11 +35173,15 @@ async function _fhEnsureDailyDrafts(force) {
             if (!d || !d.title) return;
             var art = _fhAdd({
                 id: d.id, date: out.date || today, source: 'ai', authorId: 'ai',
-                status: 'draft', isTodayPick: false,   // V300: 新生成的 3 篇默认进草稿箱，等超管挑 1 篇设为今日精选
-                category: d.category || '节气食养', title: d.title, summary: d.summary || '',
+                status: 'draft', isTodayPick: false,   // V300: 新生成的草稿默认进草稿箱，等超管挑 1 篇设为今日精选
+                contentType: d.contentType || 'diet_article',
+                category: d.category || (d.contentType === 'recipe_article' ? '世界奇味' : '节气食养'),
+                title: d.title, summary: d.summary || '',
                 content: d.content || '', tips: d.tips || [],
-                auditStatus: vio.length ? 'pending' : 'pending',
-                auditNote: vio.length ? ('自动校验提示禁词: ' + JSON.stringify(vio)) : ''
+                ingredients: d.ingredients || [], steps: d.steps || [],
+                coverImage: d.coverImage || '', imagePrompt: d.imagePrompt || '',
+                auditStatus: 'pending',
+                auditNote: vio.length ? ('自动校验提示: ' + JSON.stringify(vio)) : ''
             });
             ids.push(art.id);
         });
@@ -35084,13 +35203,27 @@ async function _fhManualGen(btn) {
 }
 
 // ====== V140: 食养堂管理（仅超管；入口：我家→家庭管理员→文库管理下方） ======
-var _fhMgrTab = 'draft';
+var _fhMgrTab = 'diet_review';
 var _FH_MGR_TABS = [
+    { k: 'diet_review', n: '📝 饮食文章审核' },
+    { k: 'recipe_review', n: '🍔 食谱文章审核' },
     { k: 'draft', n: '今日草稿' },
     { k: 'draftbox', n: '📥 草稿箱' },
     { k: 'ai_pending', n: 'AI 待审' }
 ];
 var _fhMgrAiPending = []; var _fhMgrAiPendingAt = 0;
+// V402: 双轨候选池（服务端 /api/food-hall/candidates）
+var _fhMgrCands = null; var _fhMgrCandsAt = 0;
+var _fhMgrCandView = {};  // 合并本地草稿后的当前展示列表（预览/选中按索引取这篇）
+async function _fhMgrLoadCandidates(force) {
+    if (!force && _fhMgrCandsAt && Date.now() - _fhMgrCandsAt < 60 * 1000) return _fhMgrCands;
+    try {
+        var resp = await fetch('/api/food-hall/candidates', { cache: 'no-store' });
+        var out = await resp.json();
+        if (out && out.ok && out.tracks) { _fhMgrCands = out; _fhMgrCandsAt = Date.now(); }
+    } catch (e) { _fhMgrCands = null; }
+    return _fhMgrCands;
+}
 async function _fhMgrLoadAiPending(force) {
     if (!force && _fhMgrAiPendingAt && Date.now() - _fhMgrAiPendingAt < 60 * 1000) return _fhMgrAiPending;
     try {
@@ -35106,7 +35239,7 @@ function _openFoodHallMgr() {
     var ok = false;
     try { ok = !!(isSuperAdmin() || getCurrentUserContext().isSuperAdmin); } catch (e) {} // 双通道与入口显示一致
     if (!ok) { showToast && showToast('仅超级管理员可访问'); return; }
-    _fhMgrTab = 'draft';
+    _fhMgrTab = 'diet_review';
     var ov = document.createElement('div');
     ov.id = 'fhMgrOv';
     ov.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(31,41,55,0.35);display:flex;justify-content:center;';
@@ -35118,7 +35251,7 @@ function _openFoodHallMgr() {
         + '<div id="fhMgrTabs" style="flex-shrink:0;display:flex;background:white;padding:0 8px 0;border-bottom:1px solid #F3E9DC;"></div>'
         + '<div id="fhMgrList" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;"></div>'
         + '<div style="flex-shrink:0;background:white;border-top:1px solid #F3E9DC;padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;flex-wrap:wrap;">'
-        + '<button type="button" onclick="_fhMgrRegen(this)" style="flex:1 1 45%;border:none;background:#FFF3E2;color:#9A3412;font-size:13px;font-weight:600;border-radius:10px;padding:9px 6px;cursor:pointer;">🔄 重新生成 3 篇</button>'
+        + '<button type="button" onclick="_fhMgrRegen(this)" style="flex:1 1 45%;border:none;background:#FFF3E2;color:#9A3412;font-size:13px;font-weight:600;border-radius:10px;padding:9px 6px;cursor:pointer;">🔄 重新生成 3+3 篇</button>'
         + '<button type="button" onclick="_fhMgrEdit(null)" style="flex:1 1 45%;border:none;background:#FFF3E2;color:#9A3412;font-size:13px;font-weight:600;border-radius:10px;padding:9px 6px;cursor:pointer;">✏️ 新编一篇</button>'
         + '<button type="button" onclick="_fhMgrUpload()" style="flex:1 1 45%;border:none;background:#FFF3E2;color:#9A3412;font-size:13px;font-weight:600;border-radius:10px;padding:9px 6px;cursor:pointer;">📤 上传文件</button>'
         + '<input type="file" id="fhMgrFile" accept=".md,.txt" style="display:none" onchange="_fhMgrFileChosen(this)">'
@@ -35126,7 +35259,9 @@ function _openFoodHallMgr() {
     document.body.appendChild(ov);
     _fhMgrRender();
     // V145: 进入管理页时拉取服务端 AI 待审列表
+    // V402: 同时拉取双轨候选池（饮食/食谱各 3 篇）
     _fhMgrLoadAiPending(true).then(function () { _fhMgrRender(); });
+    _fhMgrLoadCandidates(true).then(function () { _fhMgrRender(); });
 }
 function _closeFoodHallMgr() {
     var ov = document.getElementById('fhMgrOv');
@@ -35167,6 +35302,111 @@ async function _fhMgrAiReviewDo(date, action, btn) {
         if (btn) { btn.disabled = false; btn.textContent = (action === 'confirm' ? '✅ 确认发布' : '↩️ 撤回换篇'); }
     }
 }
+// V402: 双轨审核 tab 渲染（饮食/食谱各 3 篇候选，各选 1 篇设为今日精选）
+function _fhMgrRenderReviewTab(listEl, ct) {
+    var isRecipe = ct === 'recipe_article';
+    if (!_fhMgrCands) {
+        listEl.innerHTML = '<div style="padding:56px 20px;text-align:center;color:#9CA3AF;font-size:13px;">正在读取今日 AI 候选…</div>';
+        _fhMgrLoadCandidates(true).then(function () { _fhMgrRender(); });
+        return;
+    }
+    var wrap = _fhMgrCands;
+    var t = wrap.tracks[ct] || { articles: [] };
+    var otherCt = isRecipe ? 'diet_article' : 'recipe_article';
+    var other = wrap.tracks[otherCt] || {};
+    var bothReady = ((t.reviewStatus || '') === 'confirmed' && (other.reviewStatus || '') === 'confirmed');
+    var arts = (t.articles || []).slice();
+    _fhMgrCandView[ct] = arts;
+    // 合并本地 AI 草稿（超管在后台手动重新生成的那批），按标题去重
+    try {
+        var seenTitles = {};
+        arts.forEach(function (a) { seenTitles[a.title] = 1; });
+        _fhRead().forEach(function (x) {
+            if (!x || !x.title || seenTitles[x.title]) return;
+            if ((x.contentType || 'diet_article') !== ct) return;
+            if (!(x.date === _dtTodayKey() && (x.status === 'draft' || x.status === 'rejected'))) return;
+            seenTitles[x.title] = 1;
+            arts.push({
+                id: x.id, contentType: ct, category: x.category, title: x.title,
+                summary: x.summary, content: x.content, tips: x.tips || [],
+                ingredients: x.ingredients || [], steps: x.steps || [],
+                coverImage: x.coverImage || '', imagePrompt: x.imagePrompt || '',
+                passed: true, _local: true
+            });
+        });
+    } catch (e) {}
+    var html = '<div style="padding:12px 14px 4px;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;">'
+        + '<div style="font-size:14px;font-weight:700;color:#7C2D12;">' + (isRecipe ? '🍔 食谱文章审核' : '📝 饮食文章审核') + '</div>'
+        + '<span style="font-size:10px;color:#B45309;background:#FFF3E2;padding:2px 8px;border-radius:999px;">发布日 ' + escapeHtml(wrap.date || '') + '</span>'
+        + '</div>'
+        + '<div style="margin-top:9px;padding:9px 11px;border-radius:11px;font-size:11px;line-height:1.7;background:' + (bothReady ? '#ECFDF5' : '#FFF7ED') + ';color:' + (bothReady ? '#047857' : '#9A3412') + ';">'
+        + (bothReady
+            ? '✅ 今日双轨已就绪：饮食文章 + 食谱各 1 篇'
+            : '⚠️ 今日双轨未就绪：饮食/食谱必须各选 1 篇（本轨' + ((t.reviewStatus || '') === 'confirmed' ? '已选' : '未选') + '）')
+        + '</div></div>';
+    if (!arts.length) {
+        html += '<div style="padding:48px 20px;text-align:center;color:#9CA3AF;font-size:13px;line-height:1.8;">今日暂无 AI 候选<br><span style="font-size:11px;color:#D1D5DB;">每天 22:30 自动生成 3 篇饮食文章 + 3 篇食谱，次日 6:00 保底确认</span></div>';
+    }
+    arts.forEach(function (a, i) {
+        var selected = !!t.selectedId && a.id === t.selectedId && (t.reviewStatus || '') === 'confirmed';
+        html += '<div style="margin:10px 12px 0;background:#fff;border:1.5px solid ' + (selected ? '#F97316' : '#F3E9DC') + ';border-radius:14px;padding:10px;display:flex;gap:10px;">'
+            + (isRecipe
+                ? '<img src="' + escapeAttr(a.coverImage || '') + '" alt="" loading="lazy" onerror="this.style.display=\'none\'" style="flex:0 0 auto;width:78px;height:78px;object-fit:cover;border-radius:10px;background:#FDE68A;">'
+                : '')
+            + '<div style="flex:1;min-width:0;">'
+            + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+            + '<span style="font-size:10px;color:#9A3412;background:#FFF3E2;padding:1px 7px;border-radius:999px;">' + escapeHtml(a.category || (isRecipe ? '世界奇味' : '节气食养')) + '</span>'
+            + (a.passed ? '<span style="font-size:10px;color:#059669;">✅ 已过审</span>' : '<span style="font-size:10px;color:#DC2626;">⚠️ 未过审</span>')
+            + (selected ? '<span style="font-size:10px;color:#F97316;font-weight:700;">⭐ 今日精选</span>' : '')
+            + '</div>'
+            + '<div style="font-size:14px;font-weight:700;color:#1F2937;line-height:1.5;margin-top:4px;">' + escapeHtml(a.title || '') + '</div>'
+            + '<div style="font-size:11px;color:#9CA3AF;line-height:1.6;margin-top:3px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(a.summary || '') + '</div>'
+            + (isRecipe && a.ingredients && a.ingredients.length
+                ? '<div style="font-size:10px;color:#B45309;margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">🧺 ' + escapeHtml(a.ingredients.slice(0, 4).join('、')) + '</div>' : '')
+            + '</div>'
+            + '<div style="flex:0 0 auto;display:flex;flex-direction:column;gap:6px;justify-content:center;">'
+            + '<button type="button" onclick="_fhMgrPreviewCandidate(\'' + ct + '\',' + i + ')" style="border:1px solid #FED7AA;background:#fff;color:#9A3412;font-size:11px;border-radius:8px;padding:5px 8px;cursor:pointer;white-space:nowrap;">预览</button>'
+            + '<button type="button" ' + (selected || !a.passed ? 'disabled' : '') + ' onclick="_fhMgrPickCandidate(\'' + escapeAttr(wrap.date || '') + '\',\'' + ct + '\',' + i + ',this)" style="border:none;background:' + (selected ? '#D1FAE5' : (a.passed ? '#F97316' : '#E5E7EB')) + ';color:' + (selected ? '#047857' : (a.passed ? '#fff' : '#9CA3AF')) + ';font-size:11px;font-weight:700;border-radius:8px;padding:6px 8px;cursor:' + (selected || !a.passed ? 'default' : 'pointer') + ';white-space:nowrap;">' + (selected ? '✅ 已选' : '⭐ 设为精选') + '</button>'
+            + '</div></div>';
+    });
+    listEl.innerHTML = html;
+}
+function _fhMgrPreviewCandidate(ct, idx) {
+    try {
+        var a = (_fhMgrCandView[ct] || [])[idx];
+        if (!a) return;
+        if (ct === 'recipe_article') _fhOpenRecipeDetail(_fhRecipeFromArticle(a));
+        else _openDailyTipFull(a);
+    } catch (e) {}
+}
+async function _fhMgrPickCandidate(date, ct, idx, btn) {
+    var a = null;
+    try { a = (_fhMgrCandView[ct] || [])[idx]; } catch (e) {}
+    if (!a || !date) { showToast && showToast('候选数据已过期，请刷新'); return; }
+    var old = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.textContent = '提交中…'; }
+    try {
+        var resp = await fetch('/api/food-hall/select', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: date, contentType: ct, articleId: a.id, candidate: a })
+        });
+        var out = await resp.json();
+        if (!resp.ok || !out || !out.ok) {
+            showToast && showToast((out && (out.error || out.detail)) || '设为精选失败');
+            if (btn) { btn.disabled = false; btn.innerHTML = old; }
+            return;
+        }
+        showToast && showToast(ct === 'recipe_article' ? '已设为今日食谱' : '已设为今日饮食文章');
+        _fhMgrCandsAt = 0;
+        await _fhMgrLoadCandidates(true);
+        _fhMgrRender();
+        try { _fhTracks = { date: '', diet_article: null, recipe_article: null, ready: false }; renderHomeDailyTipCard(true); } catch (e) {}
+    } catch (e) {
+        showToast && showToast('网络异常，请重试');
+        if (btn) { btn.disabled = false; btn.innerHTML = old; }
+    }
+}
 function _fhMgrRender() {
     var tabsEl = document.getElementById('fhMgrTabs');
     var listEl = document.getElementById('fhMgrList');
@@ -35179,14 +35419,24 @@ function _fhMgrRender() {
     var inWorkbench = function (x) { return (x.status === 'draft' && x.date === today) || x.status === 'rejected' || x.status === 'published'; };
     // V145: AI 待审数量取服务端
     var aiPendingN = _fhMgrAiPending.length;
+    var candN = function (ct) {
+        try { return ((_fhMgrCands.tracks[ct] || {}).articles || []).length; } catch (e) { return 0; }
+    };
     tabsEl.innerHTML = _FH_MGR_TABS.map(function (t) {
         var n = t.k === 'draft' ? arts.filter(function (x) { return x && inWorkbench(x); }).length
             : t.k === 'draftbox' ? arts.filter(function (x) { return x && ['draft', 'archived', 'pending_review'].indexOf(x.status) >= 0; }).length
             : t.k === 'ai_pending' ? aiPendingN
+            : t.k === 'diet_review' ? candN('diet_article')
+            : t.k === 'recipe_review' ? candN('recipe_article')
             : arts.filter(function (x) { return x && x.status === t.k; }).length;
         var on = _fhMgrTab === t.k;
-        return '<button type="button" onclick="_fhMgrSetTab(\'' + t.k + '\')" style="flex:1;border:none;background:none;padding:10px 2px 8px;font-size:13px;font-weight:' + (on ? '700' : '500') + ';color:' + (on ? '#C2410C' : '#6B7280') + ';cursor:pointer;border-bottom:2px solid ' + (on ? '#F97316' : 'transparent') + ';">' + t.n + (n ? ' ' + n : '') + '</button>';
+        return '<button type="button" onclick="_fhMgrSetTab(\'' + t.k + '\')" style="flex:1;min-width:0;border:none;background:none;padding:10px 2px 8px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:' + (on ? '700' : '500') + ';color:' + (on ? '#C2410C' : '#6B7280') + ';cursor:pointer;border-bottom:2px solid ' + (on ? '#F97316' : 'transparent') + ';">' + t.n + (n ? ' ' + n : '') + '</button>';
     }).join('');
+    // V402: 双轨审核 tab——每轨 3 篇 AI 候选，各选 1 篇设为「今日精选」
+    if (_fhMgrTab === 'diet_review' || _fhMgrTab === 'recipe_review') {
+        _fhMgrRenderReviewTab(listEl, _fhMgrTab === 'recipe_review' ? 'recipe_article' : 'diet_article');
+        return;
+    }
     // V145: AI 待审 tab 渲染——pending-list 内容（服务端自动备稿）
     if (_fhMgrTab === 'ai_pending') {
         if (aiPendingN === 0) {

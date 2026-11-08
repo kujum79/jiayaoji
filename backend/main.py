@@ -782,6 +782,8 @@ class FoodHallDraftRequest(BaseModel):
     city: str = ""
     solarTerm: str = ""
     weather: dict = Field(default_factory=dict)
+    # V402: diet_article 饮食文章 / recipe_article 新奇特食谱；留空=两类各生成 3 篇
+    contentType: str = ""
 
 
 class FoodHallAuditRequest(BaseModel):
@@ -818,9 +820,48 @@ _FOODHALL_SYSTEM = (
     "articles 必须恰好 3 个元素。"
 )
 
+# V402: 食谱类 Prompt——"新奇特食谱"轨道，强制菜名/视觉描述/核心食材/简化做法 + AI 绘图 Prompt
+_FOODHALL_RECIPE_SYSTEM = (
+    '请为家肴记"食养堂"栏目生成 3 篇「新奇特食谱」候选内容。\n'
+    "【日期】{date}\n"
+    "【节气】{solar_term}\n"
+    "\n"
+    "请推荐一道世界各地的奇特美食或罕见小吃。必须包含：菜名、惊艳的视觉描述、核心食材、简化版做法。\n"
+    "并且，请生成一段用于 AI 绘图的 Prompt（如：'拉丝的芝士炸猪排，微距镜头，暖色调，令人垂涎欲滴，食物摄影'），"
+    "我将用这段 Prompt 去生成诱人的封面图。\n"
+    "\n"
+    "生成要求：\n"
+    "1. 3 篇必须来自不同国家/地区，风格拉开差距（如街头小吃、节庆食物、发酵风味、甜点等），不得重复同一道菜；\n"
+    "2. 标题=菜名，12 字内，可直接做卡片标题；\n"
+    "3. 摘要=惊艳的视觉描述，60 字内，写得让人流口水（颜色、质感、拉丝/爆汁/焦香等画面感）；\n"
+    "4. 正文 200-300 字，介绍这道菜是什么、来自哪里、风味特点，语言口语化；\n"
+    "5. ingredients：核心食材数组，4-8 项，每项带大致用量（如「马苏里拉芝士 200g」）；\n"
+    "6. steps：简化版做法数组，3-5 步，每步 30 字内，家庭可操作；\n"
+    "7. tips：2 条小贴士，每条 25 字内；\n"
+    "8. imagePrompt：一段中文 AI 绘图中文提示词，必须包含主体食物 + 镜头/光线 + 氛围，"
+    "参考格式「拉丝的芝士炸猪排，微距镜头，暖色调，令人垂涎欲滴，食物摄影」，不得出现文字、logo、人物正脸；\n"
+    "9. 主题必须全国通用，不得指定或暗示某座城市/地区，不得绑定某地天气；\n"
+    "\n"
+    "严格禁止出现这些词：治疗、治愈、改善、降低、预防、功效、食疗、润肺、止咳、降三高、祛湿、排毒。"
+    "禁止提及疾病名称，禁止承诺任何功效。\n"
+    "\n"
+    '返回严格 JSON：{{"articles":[{{"category":"世界奇味","title":"...","summary":"...","content":"...",'
+    '"ingredients":["..."],"steps":["..."],"tips":["...","..."],"imagePrompt":"..."}}]}}，'
+    "articles 必须恰好 3 个元素。"
+)
+
 # 验收禁词表（命中自动重试 1 次，仍命中则随响应返回 violations 供前端记 auditNote）
 _FOODHALL_BANNED = ["治疗", "治愈", "改善", "降低", "预防", "功效", "食疗",
                     "润肺", "止咳", "降三高", "祛湿", "排毒"]
+
+# V402: 两类内容标识（与前端 contentType 一致）
+_FH_CONTENT_TYPES = ("diet_article", "recipe_article")
+
+
+def _fh_cover_image(image_prompt: str) -> str:
+    """V402: 用 AI 绘图 Prompt 生成封面图 URL（pollinations，无需 Key，失败由前端 onerror 兜底）。"""
+    p = (image_prompt or "").strip()[:300] or "world street food close up, warm tone, food photography"
+    return "https://image.pollinations.ai/prompt/" + quote(p) + "?width=800&height=600&nologo=true"
 
 # V141 审核黑名单（发布前合规审核·error 级，本地匹配 0 token）
 _FOODHALL_AUDIT_BANNED = ["治疗", "治愈", "根治", "改善", "降低", "预防", "抗癌", "排毒",
@@ -866,35 +907,53 @@ def _foodhall_banned_hits(text: str) -> List[str]:
 
 @app.post("/api/food-hall/generate-drafts")
 async def food_hall_generate_drafts(req: FoodHallDraftRequest) -> Dict[str, Any]:
-    """V140: AI 每日生成 3 篇食养堂草稿。
+    """V140: AI 每日生成食养堂候选稿。V402: 按 contentType 分轨生成。
 
-    入参 date/city/solarTerm/weather 由前端组装（城市/天气/节气均有现成数据源）。
-    禁词命中自动重试 1 次；仍命中则在 violations 标注。前端负责把 drafts 写入
-    localStorage foodHallArticles（status=draft）并记 foodHallDrafts 批次。
-    V143: 主体抽到 _foodhall_generate_core，供 22:30 自动发布流水线复用。
+    入参 contentType = diet_article（3 篇饮食文章）/ recipe_article（3 篇新奇特食谱）；
+    留空=两类各 3 篇（共 6 篇）。禁词命中自动重试 1 次；仍命中在 violations 标注。
+    前端负责把 drafts 写入 localStorage foodHallArticles（status=draft）并记 foodHallDrafts 批次。
     """
     date = (req.date or time.strftime("%Y-%m-%d"))[:10]
     weather = req.weather if isinstance(req.weather, dict) else {}
-    drafts, violations, regenerated = await _foodhall_generate_core(
-        date, req.city, req.solarTerm, weather
-    )
-    return {"ok": True, "date": date, "regenerated": regenerated,
-            "violations": violations, "drafts": drafts}
+    types = [req.contentType] if req.contentType in _FH_CONTENT_TYPES else list(_FH_CONTENT_TYPES)
+    drafts: List[Dict[str, Any]] = []
+    violations: List[Dict[str, Any]] = []
+    regenerated = False
+    for ct in types:
+        d, v, r = await _foodhall_generate_core(
+            date, req.city, req.solarTerm, weather, ct
+        )
+        for item in v:
+            violations.append({**item, "contentType": ct, "index": len(drafts) + item.get("index", 0)})
+        drafts.extend(d)
+        regenerated = regenerated or r
+    return {"ok": True, "date": date, "contentType": req.contentType or "both",
+            "regenerated": regenerated, "violations": violations, "drafts": drafts}
 
 
 async def _foodhall_generate_core(
-    date: str, city: str, solar_term: str, weather: Optional[Dict[str, Any]]
+    date: str, city: str, solar_term: str, weather: Optional[Dict[str, Any]],
+    content_type: str = "diet_article",
 ) -> tuple:
-    """V143: 食养堂 3 篇候选生成核心（端点与自动流水线共用）。
+    """V143: 食养堂候选生成核心（端点与自动流水线共用）。
 
     返回 (drafts, violations, regenerated)；格式异常直接抛 502。
     V145: 选题全国通用——city/weather 入参保留以兼容旧调用，但不再注入 prompt。
+    V402: content_type 区分饮食文章 / 新奇特食谱两套 Prompt 与返回字段。
     """
-    system_prompt = _FOODHALL_SYSTEM.format(
-        date=date, solar_term=solar_term or "无",
-    )
-    user_prompt = (f"日期：{date}；节气：{solar_term or '无'}。请生成 3 篇食养堂候选内容，主题必须全国通用。"
-                   "标题、摘要、正文一律不得出现任何城市/地区名称（如“杭州降温”），请用季节与节气表述。")
+    is_recipe = content_type == "recipe_article"
+    if is_recipe:
+        system_prompt = _FOODHALL_RECIPE_SYSTEM.format(
+            date=date, solar_term=solar_term or "无",
+        )
+        user_prompt = (f"日期：{date}；节气：{solar_term or '无'}。请生成 3 篇世界奇特美食/罕见小吃候选，"
+                       "每篇必须给出 ingredients、steps 与 imagePrompt，主题必须全国通用。")
+    else:
+        system_prompt = _FOODHALL_SYSTEM.format(
+            date=date, solar_term=solar_term or "无",
+        )
+        user_prompt = (f"日期：{date}；节气：{solar_term or '无'}。请生成 3 篇食养堂候选内容，主题必须全国通用。"
+                       "标题、摘要、正文一律不得出现任何城市/地区名称（如“杭州降温”），请用季节与节气表述。")
 
     drafts: List[Dict[str, Any]] = []
     violations: List[Dict[str, Any]] = []
@@ -929,8 +988,8 @@ async def _foodhall_generate_core(
             city_hits = [w for w in _FH_CITY_HINTS if w in blob]
             if city_hits:
                 violations.append({"index": i, "type": "city", "words": city_hits})
-            # V323: 同批主题一致性（D3-01）——标题或摘要必须挂在当天节气上，且不得混入其他节气
-            if solar_term:
+            # V323: 同批主题一致性（D3-01）——仅饮食文章要求挂靠节气；食谱轨是世界奇味，不做节气一致性约束
+            if solar_term and not is_recipe:
                 title_txt = str(item.get("title") or "")
                 summary_txt = str(item.get("summary") or "")
                 if solar_term not in title_txt and solar_term not in summary_txt:
@@ -938,20 +997,28 @@ async def _foodhall_generate_core(
                 other_terms = [t for t in _FH_SOLAR_TERMS if t != solar_term and t in blob]
                 if other_terms:
                     violations.append({"index": i, "type": "theme", "words": other_terms, "reason": "混入其他节气"})
-            drafts.append({
+            image_prompt = str(item.get("imagePrompt") or "").strip()
+            draft = {
                 "id": f"fh_{ts}_{i}",
                 "_idx": i,
-                "category": str(item.get("category") or "节气食养"),
+                "contentType": content_type,
+                "category": str(item.get("category") or ("世界奇味" if is_recipe else "节气食养")),
                 "title": str(item.get("title") or "").strip(),
                 "summary": str(item.get("summary") or "").strip(),
                 "content": str(item.get("content") or "").strip(),
                 "tips": [str(t).strip() for t in (item.get("tips") or []) if str(t).strip()][:2],
-            })
+            }
+            if is_recipe:
+                draft["ingredients"] = [str(x).strip() for x in (item.get("ingredients") or []) if str(x).strip()][:8]
+                draft["steps"] = [str(x).strip() for x in (item.get("steps") or []) if str(x).strip()][:5]
+                draft["imagePrompt"] = image_prompt
+                draft["coverImage"] = _fh_cover_image(image_prompt or draft.get("summary") or draft["title"])
+            drafts.append(draft)
         if drafts and not violations:
             break  # 干净即返回；命中禁词/跑题则再生成一轮
 
     # V323: 重试后仍跑题的文章直接剔除，保证同一批 3 篇主题一致（全部跑题时保留原结果兜底）
-    if solar_term:
+    if solar_term and not is_recipe:
         theme_bad = {v["index"] for v in violations if v.get("type") == "theme"}
         kept = [d for d in drafts if d.get("_idx") not in theme_bad]
         if kept and theme_bad:
@@ -1089,31 +1156,66 @@ def _internal_token() -> str:
     return tok
 
 
-def _fh_db():
-    """SQLite 连接（标准库零依赖），首次调用自动建表。"""
-    _FH_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = _sqlite3.connect(str(_FH_DB_PATH), timeout=10)
-    conn.row_factory = _sqlite3.Row
-    conn.execute(
-        """
+def _fh_table_sql() -> str:
+    """V402: 双轨表结构——每天每轨（饮食/食谱）各一行，主键改为 (publish_date, content_type)。"""
+    return """
         CREATE TABLE IF NOT EXISTS food_hall_pub_days (
-            publish_date   TEXT PRIMARY KEY,
+            publish_date   TEXT NOT NULL,
+            content_type   TEXT NOT NULL DEFAULT 'diet_article',
             category       TEXT DEFAULT '',
             title          TEXT DEFAULT '',
             summary        TEXT DEFAULT '',
             content        TEXT DEFAULT '',
             tips           TEXT DEFAULT '[]',
             related        TEXT DEFAULT '[]',
+            ingredients    TEXT DEFAULT '[]',
+            steps          TEXT DEFAULT '[]',
+            cover_image    TEXT DEFAULT '',
+            image_prompt   TEXT DEFAULT '',
             drafts         TEXT DEFAULT '[]',
             chosen_id      TEXT DEFAULT '',
             auto_published INTEGER DEFAULT 1,
             review_status  TEXT DEFAULT 'pending',
             run_note       TEXT DEFAULT '',
             created_at     TEXT DEFAULT '',
-            updated_at     TEXT DEFAULT ''
+            updated_at     TEXT DEFAULT '',
+            PRIMARY KEY (publish_date, content_type)
         )
+    """
+
+
+def _fh_migrate_v402(conn) -> None:
+    """V402: 旧表（单主键 publish_date）迁移为双轨表，历史行一律视为饮食文章。"""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='food_hall_pub_days'"
+    ).fetchone()
+    if not row:
+        conn.execute(_fh_table_sql())
+        return
+    sql = (row["sql"] or "").lower()
+    if "content_type" in sql:
+        return  # 已是新结构
+    conn.execute("ALTER TABLE food_hall_pub_days RENAME TO food_hall_pub_days_v401")
+    conn.execute(_fh_table_sql())
+    conn.execute(
+        """
+        INSERT INTO food_hall_pub_days
+          (publish_date, content_type, category, title, summary, content, tips, related,
+           drafts, chosen_id, auto_published, review_status, run_note, created_at, updated_at)
+        SELECT publish_date, 'diet_article', category, title, summary, content, tips, related,
+               drafts, chosen_id, auto_published, review_status, run_note, created_at, updated_at
+        FROM food_hall_pub_days_v401
         """
     )
+    conn.execute("DROP TABLE food_hall_pub_days_v401")
+
+
+def _fh_db():
+    """SQLite 连接（标准库零依赖），首次调用自动建表 + V402 双轨迁移。"""
+    _FH_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    conn = _sqlite3.connect(str(_FH_DB_PATH), timeout=10)
+    conn.row_factory = _sqlite3.Row
+    _fh_migrate_v402(conn)
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS food_hall_runs (
@@ -1157,38 +1259,74 @@ def _fh_record_run(pub_date: str, status: str, note: str, audited: List[Dict[str
 
 def _fh_row_to_article(row) -> Dict[str, Any]:
     """DB 行 → 前端 tip 结构（与 foodHallArticles 卡片渲染字段对齐）。"""
-    try:
-        tips = json.loads(row["tips"] or "[]")
-    except json.JSONDecodeError:
-        tips = []
+    def _arr(key: str) -> List[Any]:
+        try:
+            v = json.loads(row[key] or "[]")
+            return v if isinstance(v, list) else []
+        except (json.JSONDecodeError, IndexError, KeyError):
+            return []
+    ct = "recipe_article" if (row["content_type"] or "") == "recipe_article" else "diet_article"
     return {
-        "id": f"autotip_{(row['publish_date'] or '').replace('-', '')}",
+        "id": f"autotip_{(row['publish_date'] or '').replace('-', '')}_{ct}",
         "date": row["publish_date"],
-        "category": row["category"] or "节气食养",
+        "contentType": ct,
+        "category": row["category"] or ("世界奇味" if ct == "recipe_article" else "节气食养"),
         "title": row["title"] or "",
         "summary": row["summary"] or "",
         "content": row["content"] or "",
-        "tips": tips if isinstance(tips, list) else [],
+        "tips": _arr("tips"),
+        "ingredients": _arr("ingredients"),
+        "steps": _arr("steps"),
+        "coverImage": row["cover_image"] or "",
+        "imagePrompt": row["image_prompt"] or "",
         "relatedIngredients": [],
         "autoPublished": bool(row["auto_published"]),
         "reviewStatus": row["review_status"] or "pending",
+        "chosenId": row["chosen_id"] or "",
     }
 
 
-def _fh_get_published_row(date_str: str):
-    """取某日已发布行（不存在或空内容返回 None）。"""
+def _fh_row_drafts(row) -> List[Dict[str, Any]]:
+    """DB 行的候选池（drafts JSON）→ 列表；坏数据返回空列表。"""
+    try:
+        v = json.loads(row["drafts"] or "[]")
+        return [d for d in v if isinstance(d, dict)] if isinstance(v, list) else []
+    except (json.JSONDecodeError, IndexError, KeyError):
+        return []
+
+
+def _fh_get_published_row(date_str: str, content_type: str = "diet_article"):
+    """取某日某轨已发布行（不存在或空内容返回 None）。"""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str or ""):
+        return None
+    if content_type not in _FH_CONTENT_TYPES:
+        content_type = "diet_article"
+    try:
+        with _fh_db() as conn:
+            return conn.execute(
+                "SELECT * FROM food_hall_pub_days WHERE publish_date=? AND content_type=? "
+                "AND title<>'' AND COALESCE(review_status,'')='confirmed'",
+                (date_str, content_type),
+            ).fetchone()
+    except Exception as exc:
+        print(f"[foodhall] 读取已发布内容失败: {exc}")
+        return None
+
+
+def _fh_get_track_row(date_str: str, content_type: str):
+    """取某日某轨任意状态行（候选/待审/已确认），无则 None。"""
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str or ""):
         return None
     try:
         with _fh_db() as conn:
             return conn.execute(
-                "SELECT * FROM food_hall_pub_days WHERE publish_date=? "
-                "AND title<>'' AND COALESCE(review_status,'')='confirmed'",
-                (date_str,),
+                "SELECT * FROM food_hall_pub_days WHERE publish_date=? AND content_type=?",
+                (date_str, content_type),
             ).fetchone()
     except Exception as exc:
-        print(f"[foodhall] 读取已发布内容失败: {exc}")
+        print(f"[foodhall] 读取轨道内容失败: {exc}")
         return None
+
 
 
 def _fh_pick_score(article: Dict[str, Any], recent_cats: List[str], index: int) -> float:
@@ -1248,117 +1386,144 @@ async def food_hall_auto_publish(
 
     pub_date = (req.date or "").strip()
     if not pub_date:
-        pub_date = (_date_cls.today() + _td_cls(days=1)).strftime("%Y-%m-%d")
+        # V402: 每天凌晨生成"当天"双轨内容（饮食 3 篇 + 食谱 3 篇），超管早晨各选 1 篇
+        pub_date = _date_cls.today().strftime("%Y-%m-%d")
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", pub_date):
         raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
 
     now_iso = _dt_cls.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # 已存在且已被超管确认 → 不覆盖人工干预
-    try:
-        with _fh_db() as conn:
-            existed = conn.execute(
-                "SELECT review_status FROM food_hall_pub_days WHERE publish_date=?",
-                (pub_date,),
-            ).fetchone()
-        if existed and existed["review_status"] == "confirmed" and not req.force:
-            return {"ok": True, "published": False, "skipped": True,
-                    "reason": "超管已确认，跳过自动覆盖", "date": pub_date}
-    except Exception as exc:
-        print(f"[foodhall] 预检失败: {exc}")
-
     term = (req.solarTerm or "").strip() or _fh_solar_term(pub_date)
-    try:
-        drafts, violations, regenerated = await _foodhall_generate_core(
-            pub_date, req.city, term, req.weather if isinstance(req.weather, dict) else {}
-        )
-    except HTTPException as exc:
-        _fh_record_run(pub_date, "error", f"生成失败: {exc.detail}", [])
-        raise
 
-    # 逐篇审核（与超管发布前同一把尺子）
-    audited: List[Dict[str, Any]] = []
-    for d in drafts:
-        audit = await _foodhall_audit_core(
-            d.get("title", ""), d.get("summary", ""), d.get("content", ""), d.get("tips", [])
-        )
-        audited.append({**d, "audit": audit})
+    # V402: 两轨（饮食/食谱）各自独立——都已被超管确认才整体跳过
+    existed = {ct: _fh_get_track_row(pub_date, ct) for ct in _FH_CONTENT_TYPES}
+    if not req.force and all(
+        existed[ct] is not None and (existed[ct]["review_status"] or "") == "confirmed"
+        for ct in _FH_CONTENT_TYPES
+    ):
+        return {"ok": True, "published": False, "skipped": True,
+                "reason": "两轨均已确认，跳过自动覆盖", "date": pub_date}
 
-    passed = [a for a in audited if a.get("audit", {}).get("passed")]
-    note = f"生成{len(drafts)}篇，通过{len(passed)}篇" + ("，触发禁词重试" if regenerated else "")
-    if violations:
-        note += f"，禁词提示{len(violations)}处"
-
-    if not passed:
-        _fh_record_run(pub_date, "no_pass", note + "；无合格候选，不自动发布", audited)
-        return {"ok": True, "published": False, "passed": 0, "total": len(drafts),
-                "date": pub_date, "solarTerm": term, "note": note}
-
-    # 近 3 天已选类别，避免主题/品类连撞
-    recent_cats: List[str] = []
-    try:
-        with _fh_db() as conn:
-            rows = conn.execute(
-                "SELECT category FROM food_hall_pub_days WHERE title<>'' AND publish_date < ? "
-                "ORDER BY publish_date DESC LIMIT 3",
-                (pub_date,),
-            ).fetchall()
-            recent_cats = [r["category"] for r in rows if r["category"]]
-    except Exception:
-        recent_cats = []
-
-    chosen_idx = max(
-        range(len(audited)),
-        key=lambda i: _fh_pick_score(audited[i], recent_cats, i)
-        if audited[i].get("audit", {}).get("passed") else -999,
-    )
-    chosen = dict(audited[chosen_idx])
-    chosen_score = round(_fh_pick_score(chosen, recent_cats, chosen_idx), 2)
-
-    # upsert（重跑同一日期覆盖旧的自动结果）
-    try:
-        with _fh_db() as conn:
-            conn.execute(
-                """
-                INSERT INTO food_hall_pub_days
-                  (publish_date, category, title, summary, content, tips, related, drafts,
-                   chosen_id, auto_published, review_status, run_note, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,1,'pending',?,?,?)
-                ON CONFLICT(publish_date) DO UPDATE SET
-                  category=excluded.category, title=excluded.title, summary=excluded.summary,
-                  content=excluded.content, tips=excluded.tips, related=excluded.related,
-                  drafts=excluded.drafts, chosen_id=excluded.chosen_id, auto_published=1,
-                  review_status='pending', run_note=excluded.run_note, updated_at=excluded.updated_at
-                """,
-                (pub_date, chosen.get("category", ""), chosen.get("title", ""),
-                 chosen.get("summary", ""), chosen.get("content", ""),
-                 json.dumps(chosen.get("tips", []), ensure_ascii=False), "[]",
-                 json.dumps(audited, ensure_ascii=False), chosen.get("id", ""),
-                 note, now_iso, now_iso),
+    tracks: Dict[str, Dict[str, Any]] = {}
+    all_audited: List[Dict[str, Any]] = []
+    notes: List[str] = []
+    for ct in _FH_CONTENT_TYPES:
+        label = "食谱" if ct == "recipe_article" else "饮食"
+        try:
+            drafts, violations, regenerated = await _foodhall_generate_core(
+                pub_date, req.city, term, req.weather if isinstance(req.weather, dict) else {}, ct
             )
-    except Exception as exc:
-        _fh_record_run(pub_date, "error", f"入库失败: {exc}", audited)
-        raise HTTPException(status_code=500, detail=f"自动发布入库失败: {exc}")
+        except HTTPException as exc:
+            notes.append(f"{label}生成失败: {exc.detail}")
+            continue
 
-    _fh_record_run(pub_date, "published", f"{note}；选中《{chosen.get('title')}》", audited)
+        # 逐篇审核（与超管发布前同一把尺子）
+        audited: List[Dict[str, Any]] = []
+        for d in drafts:
+            audit = await _foodhall_audit_core(
+                d.get("title", ""), d.get("summary", ""), d.get("content", ""), d.get("tips", [])
+            )
+            audited.append({**d, "audit": audit})
+        all_audited.extend(audited)
+        passed = [a for a in audited if a.get("audit", {}).get("passed")]
+        note = f"{label}生成{len(drafts)}篇，通过{len(passed)}篇" + ("，触发禁词重试" if regenerated else "")
+        if violations:
+            note += f"，禁词提示{len(violations)}处"
+        notes.append(note)
+        if not passed:
+            notes.append(f"{label}无合格候选，不预选")
+            continue
+
+        # 近 3 天同轨已选类别，避免主题/品类连撞
+        recent_cats: List[str] = []
+        try:
+            with _fh_db() as conn:
+                rows = conn.execute(
+                    "SELECT category FROM food_hall_pub_days WHERE title<>'' AND content_type=? "
+                    "AND publish_date < ? ORDER BY publish_date DESC LIMIT 3",
+                    (ct, pub_date),
+                ).fetchall()
+                recent_cats = [r["category"] for r in rows if r["category"]]
+        except Exception:
+            recent_cats = []
+
+        chosen_idx = max(
+            range(len(audited)),
+            key=lambda i: _fh_pick_score(audited[i], recent_cats, i)
+            if audited[i].get("audit", {}).get("passed") else -999,
+        )
+        chosen = dict(audited[chosen_idx])
+        tracks[ct] = chosen
+
+        # upsert（同日期同轨重跑覆盖旧的自动结果）
+        try:
+            with _fh_db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO food_hall_pub_days
+                      (publish_date, content_type, category, title, summary, content, tips, related,
+                       ingredients, steps, cover_image, image_prompt, drafts, chosen_id,
+                       auto_published, review_status, run_note, created_at, updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'pending',?,?,?)
+                    ON CONFLICT(publish_date, content_type) DO UPDATE SET
+                      category=excluded.category, title=excluded.title, summary=excluded.summary,
+                      content=excluded.content, tips=excluded.tips, related=excluded.related,
+                      ingredients=excluded.ingredients, steps=excluded.steps,
+                      cover_image=excluded.cover_image, image_prompt=excluded.image_prompt,
+                      drafts=excluded.drafts, chosen_id=excluded.chosen_id, auto_published=1,
+                      review_status='pending', run_note=excluded.run_note, updated_at=excluded.updated_at
+                    """,
+                    (pub_date, ct, chosen.get("category", ""), chosen.get("title", ""),
+                     chosen.get("summary", ""), chosen.get("content", ""),
+                     json.dumps(chosen.get("tips", []), ensure_ascii=False), "[]",
+                     json.dumps(chosen.get("ingredients", []), ensure_ascii=False),
+                     json.dumps(chosen.get("steps", []), ensure_ascii=False),
+                     chosen.get("coverImage", ""), chosen.get("imagePrompt", ""),
+                     json.dumps(audited, ensure_ascii=False), chosen.get("id", ""),
+                     note, now_iso, now_iso),
+                )
+        except Exception as exc:
+            _fh_record_run(pub_date, "error", f"入库失败: {exc}", audited)
+            raise HTTPException(status_code=500, detail=f"自动发布入库失败: {exc}")
+
+    if not tracks:
+        note_all = "；".join(notes) + "；两轨均无合格候选，不自动发布"
+        _fh_record_run(pub_date, "no_pass", note_all, all_audited)
+        return {"ok": True, "published": False, "passed": 0, "total": len(all_audited),
+                "date": pub_date, "solarTerm": term, "note": note_all}
+
+    note_all = "；".join(notes)
+    _fh_record_run(pub_date, "published", note_all, all_audited)
     return {
         "ok": True, "published": True, "date": pub_date, "solarTerm": term,
-        "chosen": {"id": chosen.get("id"), "category": chosen.get("category"),
-                   "title": chosen.get("title"), "score": chosen_score},
-        "passed": len(passed), "total": len(drafts), "note": note,
+        "tracks": {ct: {"id": t.get("id"), "category": t.get("category"), "title": t.get("title")}
+                   for ct, t in tracks.items()},
+        "passed": sum(1 for a in all_audited if a.get("audit", {}).get("passed")),
+        "total": len(all_audited), "note": note_all,
     }
 
 
 @app.get("/api/food-hall/published", include_in_schema=False)
 async def food_hall_get_published(date: str = "") -> Dict[str, Any]:
-    """首页读取某日服务端预选内容（超管手动发布在浏览器 localStorage，本接口是自动流水线渠道）。"""
+    """V402: 首页读取某日双轨已确认内容（饮食 + 食谱各一条）。
+
+    兼容旧客户端：article 字段仍返回饮食轨。
+    """
     date = (date or time.strftime("%Y-%m-%d"))[:10]
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
         return {"ok": False, "error": "日期格式应为 YYYY-MM-DD"}
-    row = _fh_get_published_row(date)
-    if not row:
-        return {"ok": True, "published": False, "date": date}
-    return {"ok": True, "published": True, "date": date, "article": _fh_row_to_article(row)}
+    out: Dict[str, Any] = {"ok": True, "published": False, "date": date, "articles": []}
+    for ct in _FH_CONTENT_TYPES:
+        row = _fh_get_published_row(date, ct)
+        if row:
+            art = _fh_row_to_article(row)
+            out[ct] = art
+            out["articles"].append(art)
+    out["published"] = bool(out["articles"])
+    if out.get("diet_article"):
+        out["article"] = out["diet_article"]
+    elif out["articles"]:
+        out["article"] = out["articles"][0]
+    return out
 
 
 @app.get("/api/food-hall/published-list", include_in_schema=False)
@@ -1387,35 +1552,42 @@ async def food_hall_published_list(days: int = 120) -> Dict[str, Any]:
 class FoodHallReviewRequest(BaseModel):
     date: str
     action: str = ""  # confirm 确认保留 | withdraw 撤回换篇
+    contentType: str = ""  # V402: 留空=该日期两轨都处理
 
 
 @app.post("/api/food-hall/review", include_in_schema=False)
 async def food_hall_review(req: FoodHallReviewRequest) -> Dict[str, Any]:
     """V143: 超管次日复核 AI 预选篇——confirm 确认保留 / withdraw 撤回（首页立即不再展示）。
 
+    V402: 可按 contentType 只处理单轨；留空保持旧行为（处理该日期全部轨道）。
     鉴权沿用前端超管口令门（与全站管理操作同一信任模型），每次操作写 food_hall_runs 审计。
     """
     pub_date = (req.date or "").strip()
     action = (req.action or "").strip()
+    ct = (req.contentType or "").strip()
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", pub_date):
         raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
     if action not in ("confirm", "withdraw"):
         raise HTTPException(status_code=400, detail="action 仅支持 confirm/withdraw")
+    if ct and ct not in _FH_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="contentType 仅支持 diet_article/recipe_article")
     new_status = "confirmed" if action == "confirm" else "withdrawn"
     now_iso = _dt_cls.now().strftime("%Y-%m-%d %H:%M:%S")
+    sql = ("UPDATE food_hall_pub_days SET review_status=?, updated_at=? "
+           "WHERE publish_date=? AND title<>''")
+    params: List[Any] = [new_status, now_iso, pub_date]
+    if ct:
+        sql += " AND content_type=?"
+        params.append(ct)
     try:
         with _fh_db() as conn:
-            cur = conn.execute(
-                "UPDATE food_hall_pub_days SET review_status=?, updated_at=? "
-                "WHERE publish_date=? AND title<>''",
-                (new_status, now_iso, pub_date),
-            )
+            cur = conn.execute(sql, tuple(params))
             if cur.rowcount == 0:
                 return {"ok": False, "error": "该日期没有可复核的自动发布内容"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"复核操作失败: {exc}")
-    _fh_record_run(pub_date, f"review_{new_status}", f"超管执行 {action}", [])
-    return {"ok": True, "date": pub_date, "reviewStatus": new_status}
+    _fh_record_run(pub_date, f"review_{new_status}", f"超管执行 {action}（{ct or '全部'}）", [])
+    return {"ok": True, "date": pub_date, "contentType": ct or "all", "reviewStatus": new_status}
 
 
 @app.get("/api/food-hall/pending-list", include_in_schema=False)
@@ -1423,18 +1595,166 @@ async def food_hall_pending_list() -> Dict[str, Any]:
     """V145: 超管审稿——返回所有 review_status='pending' 的自动备稿（含今天与明天）。
 
     供超管管理页"AI 待审" tab 展示。无鉴权（沿用前端超管口令门信任模型）。
+    V402: 每行自带 contentType，双轨待审分别展示。
     """
     try:
         with _fh_db() as conn:
             rows = conn.execute(
                 "SELECT * FROM food_hall_pub_days WHERE title<>'' "
                 "AND COALESCE(review_status,'')='pending' "
-                "ORDER BY publish_date DESC",
+                "ORDER BY publish_date DESC, content_type",
             ).fetchall()
     except Exception as exc:
         print(f"[foodhall] 待审列表读取失败: {exc}")
         return {"ok": False, "error": "待审列表读取失败"}
     return {"ok": True, "articles": [_fh_row_to_article(r) for r in rows]}
+
+
+@app.get("/api/food-hall/candidates", include_in_schema=False)
+async def food_hall_candidates(date: str = "") -> Dict[str, Any]:
+    """V402: 超管「双轨审核」页数据源——某日每轨的 3 篇 AI 候选 + 当前已选篇。
+
+    date 缺省=今天；当天没有备稿时回落到最近有备稿的日期（先往前找，再往后找）。
+    """
+    date = (date or "").strip() or _date_cls.today().strftime("%Y-%m-%d")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        return {"ok": False, "error": "日期格式应为 YYYY-MM-DD"}
+    try:
+        with _fh_db() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM food_hall_pub_days WHERE publish_date=? LIMIT 1", (date,)
+            ).fetchone()
+            if not row:
+                # 当天还没有备稿时不回看历史（避免超管误选往期），只向后找已提前生成的日期
+                near = conn.execute(
+                    "SELECT publish_date FROM food_hall_pub_days WHERE publish_date>=? "
+                    "ORDER BY publish_date ASC LIMIT 1", (date,)
+                ).fetchone()
+                if near:
+                    date = near["publish_date"]
+    except Exception as exc:
+        print(f"[foodhall] 候选日期定位失败: {exc}")
+        return {"ok": False, "error": "候选读取失败"}
+
+    out: Dict[str, Any] = {"ok": True, "date": date, "tracks": {}}
+    for ct in _FH_CONTENT_TYPES:
+        row = _fh_get_track_row(date, ct)
+        items: List[Dict[str, Any]] = []
+        if row:
+            for d in _fh_row_drafts(row):
+                items.append({
+                    "id": d.get("id", ""),
+                    "contentType": ct,
+                    "category": d.get("category", ""),
+                    "title": d.get("title", ""),
+                    "summary": d.get("summary", ""),
+                    "content": d.get("content", ""),
+                    "tips": d.get("tips", []),
+                    "ingredients": d.get("ingredients", []),
+                    "steps": d.get("steps", []),
+                    "coverImage": d.get("coverImage", ""),
+                    "imagePrompt": d.get("imagePrompt", ""),
+                    "passed": bool((d.get("audit") or {}).get("passed")),
+                })
+        out["tracks"][ct] = {
+            "date": date,
+            "reviewStatus": (row["review_status"] if row else ""),
+            "selectedId": (row["chosen_id"] if row else ""),
+            "chosen": (_fh_row_to_article(row) if row and row["title"] else None),
+            "articles": items,
+        }
+    out["ready"] = all(
+        (out["tracks"][ct]["reviewStatus"] or "") == "confirmed" for ct in _FH_CONTENT_TYPES
+    )
+    return out
+
+
+class FoodHallSelectRequest(BaseModel):
+    date: str
+    contentType: str
+    articleId: str = ""
+    candidate: Optional[Dict[str, Any]] = None  # 可选：直接提交候选对象（兼容前端本地草稿）
+
+
+@app.post("/api/food-hall/select", include_in_schema=False)
+async def food_hall_select(req: FoodHallSelectRequest) -> Dict[str, Any]:
+    """V402: 超管把某轨某篇候选设为「今日精选」（每轨每天仅 1 篇，天然由主键保证）。
+
+    优先按 articleId 从该日该轨 drafts 里取；找不到时允许前端传 candidate 完整对象。
+    选中即 review_status='confirmed'，首页该轨立即生效；另一轨不受影响。
+    """
+    pub_date = (req.date or "").strip()
+    ct = (req.contentType or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", pub_date):
+        raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
+    if ct not in _FH_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="contentType 仅支持 diet_article/recipe_article")
+    now_iso = _dt_cls.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    row = _fh_get_track_row(pub_date, ct)
+    chosen: Optional[Dict[str, Any]] = None
+    if row and req.articleId:
+        for d in _fh_row_drafts(row):
+            if d.get("id") == req.articleId:
+                chosen = d
+                break
+    if not chosen and isinstance(req.candidate, dict) and (req.candidate.get("title") or "").strip():
+        chosen = req.candidate
+    if not chosen:
+        raise HTTPException(status_code=404, detail="未找到该候选文章，请刷新后重试")
+
+    title = str(chosen.get("title") or "").strip()
+    summary = str(chosen.get("summary") or "").strip()
+    content = str(chosen.get("content") or "").strip()
+    # 选中前再走一次合规审核，避免绕过审核直接上首页
+    audit = await _foodhall_audit_core(title, summary, content, chosen.get("tips") or [])
+    if not audit.get("passed"):
+        reason = "；".join(i.get("message", "") for i in audit.get("issues", []) if i.get("level") == "error")
+        return {"ok": False, "error": reason or "该篇未通过合规审核，不能设为今日精选"}
+
+    is_recipe = ct == "recipe_article"
+    image_prompt = str(chosen.get("imagePrompt") or "").strip()
+    cover_image = str(chosen.get("coverImage") or "").strip()
+    if is_recipe and not cover_image:
+        cover_image = _fh_cover_image(image_prompt or summary or title)
+    # 保留候选池，方便超管改选另一篇（选中只是把 chosen_id 指向其中一篇）
+    chosen = dict(chosen)
+    chosen["coverImage"] = cover_image
+    chosen["imagePrompt"] = image_prompt
+    drafts_json = row["drafts"] if row and row["drafts"] and row["drafts"] != "[]" \
+        else json.dumps([chosen], ensure_ascii=False)
+
+    try:
+        with _fh_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO food_hall_pub_days
+                  (publish_date, content_type, category, title, summary, content, tips, related,
+                   ingredients, steps, cover_image, image_prompt, drafts, chosen_id,
+                   auto_published, review_status, run_note, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'confirmed',?,?,?)
+                ON CONFLICT(publish_date, content_type) DO UPDATE SET
+                  category=excluded.category, title=excluded.title, summary=excluded.summary,
+                  content=excluded.content, tips=excluded.tips, ingredients=excluded.ingredients,
+                  steps=excluded.steps, cover_image=excluded.cover_image,
+                  image_prompt=excluded.image_prompt, chosen_id=excluded.chosen_id,
+                  review_status='confirmed', run_note=excluded.run_note, updated_at=excluded.updated_at
+                """,
+                (pub_date, ct, chosen.get("category", ""), title, summary, content,
+                 json.dumps(chosen.get("tips") or [], ensure_ascii=False), "[]",
+                 json.dumps(chosen.get("ingredients") or [], ensure_ascii=False),
+                 json.dumps(chosen.get("steps") or [], ensure_ascii=False),
+                 cover_image, image_prompt, drafts_json,
+                 chosen.get("id", ""), "超管设为今日精选", now_iso, now_iso),
+            )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"设为今日精选失败: {exc}")
+
+    _fh_record_run(pub_date, "selected", f"超管把《{title}》设为{ct}今日精选", [])
+    art = _fh_get_track_row(pub_date, ct)
+    return {"ok": True, "date": pub_date, "contentType": ct,
+            "article": _fh_row_to_article(art) if art else None}
+
 
 
 class FoodHallAutoConfirmRequest(BaseModel):

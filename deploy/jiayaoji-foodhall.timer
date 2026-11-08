@@ -1,9 +1,9 @@
 [Unit]
-Description=Run JiaYaoJi FoodHall auto-publish nightly at 22:30
+Description=Run JiaYaoJi FoodHall auto-publish (3 diet + 3 recipe) nightly at 00:10
 
 [Timer]
-# 每天 22:30 执行；服务器关机错过则开机后补跑一次（Persistent）
-OnCalendar=*-*-* 22:30:00
+# V402: 每天 00:10 生成当天双轨内容（饮食 3 篇 + 新奇特食谱 3 篇）；服务器关机错过则开机后补跑一次（Persistent）
+OnCalendar=*-*-* 00:10:00
 Persistent=true
 Unit=jiayaoji-foodhall.service
 

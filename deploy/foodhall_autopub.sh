@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # V143/V145 家肴记·食养堂自动备稿流水线
-# 每天 22:30 由 systemd timer(jiayaoji-foodhall.timer) 调用：
-# 生成明天的 3 篇候选 -> 合规审核 -> 打分选 1 篇 -> 入库为 pending，
-# 次日 6:00 由 jiayaoji-foodhall-confirm.timer 保底转 confirmed，超管可在中间手动审。
+# 每天 00:10 由 systemd timer(jiayaoji-foodhall.timer) 调用：
+# 生成当天的 3 篇饮食文章 + 3 篇新奇特食谱候选 -> 合规审核 -> 每轨打分选 1 篇 -> 入库为 pending，
+# 当日 6:00 由 jiayaoji-foodhall-confirm.timer 保底转 confirmed，超管可在中间手动各选 1 篇。
 # V145: 选题全国通用，不再传 city/weather。
 set -euo pipefail
 
