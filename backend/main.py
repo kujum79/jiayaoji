@@ -1016,9 +1016,13 @@ async def fridge_cleanup(req: FridgeCleanupRequest) -> Dict[str, Any]:
 
 
 class PraiseRequest(BaseModel):
+    # V416: 单菜契约（dishName / userComment / rating）
+    dishName: str = ""
+    userComment: str = ""
+    rating: int = Field(default=0, ge=0, le=5)
+    # V415: 兼容原「整餐」契约（食记一键记录仍在用）
     dishes: List[str] = Field(default_factory=list)
     meal: str = ""
-    rating: int = Field(default=0, ge=0, le=5)
     comment: str = ""
     diningType: str = ""
     familyBrief: Dict[str, Any] = Field(default_factory=dict)
@@ -1040,6 +1044,19 @@ _PRAISE_PROMPT = """用户刚记录了一餐：{meal}。
 
 返回严格 JSON：{{"praise":"夸赞语"}}"""
 
+# V416: 单菜夸赞 Prompt（只要纯文本，不要 JSON）
+_PRAISE_ONE_SYSTEM = "你是一位高情商的美食评论家和家庭心理师。"
+_PRAISE_ONE_PROMPT = """你是一位高情商的美食评论家和家庭心理师。请根据以下用户的做饭记录，写一句 30-50 字的彩虹屁夸赞。
+【菜名】{dishName}
+【用户的评价】{userComment}
+【星级】{rating}
+
+要求：
+1. 语气要温暖、俏皮，绝对不要像 AI 机器人。
+2. 如果用户评价带抱怨（如盐多了、太甜了），请用鼓励和安慰的口吻（如：咸一点更下饭，或者家人依然吃光了）。
+3. 结合家庭的温馨场景（如：孩子吃得好）。
+4. 只返回文字，不要其他多余的解释。"""
+
 
 def _praise_fallback(dishes: List[str], rating: int) -> str:
     """AI 不可用时的兜底夸赞，保证前端体验不断档。"""
@@ -1049,9 +1066,46 @@ def _praise_fallback(dishes: List[str], rating: int) -> str:
     return f"又认真吃了一餐{dish_text}，好好吃饭本身就是最踏实的照顾，给今天的你点个赞 👏"
 
 
+def _praise_clean(text: str) -> str:
+    """清洗模型纯文本输出：去引号/前缀/多余空行。"""
+    s = str(text or "").strip()
+    s = re.sub(r"^(夸赞|彩虹屁|回答|输出)\s*[:：]\s*", "", s)
+    s = s.split("\n")[0].strip()
+    return s.strip(" \"'“”「」")
+
+
 @app.post("/api/generate-praise")
 async def generate_praise(req: PraiseRequest) -> Dict[str, Any]:
-    """V415: 食记「记录实际」保存后，为本餐生成 AI 夸夸语。"""
+    """V415/V416: 为做饭记录生成 AI 夸夸语（单菜契约优先，兼容整餐契约）。"""
+    # ---------- 单菜模式（V416 契约）----------
+    dish_name = str(req.dishName or "").strip()[:40]
+    user_comment = str(req.userComment or "").strip()[:200]
+    if dish_name or user_comment:
+        prompt = _PRAISE_ONE_PROMPT.format(
+            dishName=dish_name or "（未填）",
+            userComment=user_comment or "（未填）",
+            rating=int(req.rating or 0),
+        )
+        praise = ""
+        try:
+            raw = await call_qwen(
+                [
+                    {"role": "system", "content": _PRAISE_ONE_SYSTEM},
+                    {"role": "user", "content": prompt},
+                ],
+                json_mode=False,
+                max_tokens=200,
+                task_type="meal_praise",
+                timeout=45.0,
+            )
+            praise = _praise_clean(raw)
+        except Exception as exc:  # 模型超时/未配置 Key 时降级为本地文案
+            print(f"[praise] AI 生成失败，使用兜底文案: {exc}")
+        if not praise:
+            return {"praise": _praise_fallback([dish_name], int(req.rating or 0)), "source": "local"}
+        return {"praise": praise[:120], "source": "ai"}
+
+    # ---------- 整餐模式（V415 兼容）----------
     dishes = _fc_str_list(req.dishes, 8)
     comment = str(req.comment or "").strip()[:120]
     if not dishes and not comment:
