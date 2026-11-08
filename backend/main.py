@@ -1015,6 +1015,84 @@ async def fridge_cleanup(req: FridgeCleanupRequest) -> Dict[str, Any]:
     return {"solutions": solutions, "count": len(solutions)}
 
 
+class PraiseRequest(BaseModel):
+    dishes: List[str] = Field(default_factory=list)
+    meal: str = ""
+    rating: int = Field(default=0, ge=0, le=5)
+    comment: str = ""
+    diningType: str = ""
+    familyBrief: Dict[str, Any] = Field(default_factory=dict)
+
+
+_PRAISE_SYSTEM = "你是温暖的家庭美食陪伴官，擅长用真诚、具体的夸赞给认真吃饭的人正向反馈。只输出 JSON。"
+
+_PRAISE_PROMPT = """用户刚记录了一餐：{meal}。
+菜品：{dishes}
+用户评价：{comment}
+评分：{rating} 分（0 表示未评分）
+用餐方式：{dining}
+家庭情况：{family}
+
+请写一段 40~80 字的夸赞，要求：
+1. 具体提到本次菜品或做法细节，不要空泛套话。
+2. 肯定用心与营养搭配，语气温暖口语化，最多用 1 个 emoji。
+3. 不得出现疾病、疗效、减肥、治疗等医疗或夸大表述。
+
+返回严格 JSON：{{"praise":"夸赞语"}}"""
+
+
+def _praise_fallback(dishes: List[str], rating: int) -> str:
+    """AI 不可用时的兜底夸赞，保证前端体验不断档。"""
+    dish_text = "、".join(dishes[:3]) or "这顿饭"
+    if rating >= 4:
+        return f"太会了！今天的{dish_text}火候和搭配都在线，把家的温度稳稳端上了桌 👏"
+    return f"又认真吃了一餐{dish_text}，好好吃饭本身就是最踏实的照顾，给今天的你点个赞 👏"
+
+
+@app.post("/api/generate-praise")
+async def generate_praise(req: PraiseRequest) -> Dict[str, Any]:
+    """V415: 食记「记录实际」保存后，为本餐生成 AI 夸夸语。"""
+    dishes = _fc_str_list(req.dishes, 8)
+    comment = str(req.comment or "").strip()[:120]
+    if not dishes and not comment:
+        raise HTTPException(status_code=400, detail="请至少提供菜品或评价")
+
+    brief = req.familyBrief or {}
+    try:
+        brief_text = "；".join(f"{k}：{v}" for k, v in brief.items() if str(v).strip())
+    except Exception:
+        brief_text = ""
+    prompt = _PRAISE_PROMPT.format(
+        meal=str(req.meal or "一餐")[:10],
+        dishes="、".join(dishes) or "（未填）",
+        comment=comment or "（未填）",
+        rating=int(req.rating or 0),
+        dining=str(req.diningType or "")[:10] or "在家",
+        family=brief_text or "无特殊说明",
+    )
+    praise = ""
+    try:
+        raw = await call_qwen(
+            [
+                {"role": "system", "content": _PRAISE_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
+            json_mode=True,
+            max_tokens=400,
+            task_type="meal_praise",
+            timeout=45.0,
+        )
+        parsed = extract_json_object(raw)
+        if isinstance(parsed, dict):
+            praise = str(parsed.get("praise") or parsed.get("夸赞") or "").strip()
+    except Exception as exc:  # 模型超时/未配置 Key 时降级为本地文案
+        print(f"[praise] AI 生成失败，使用兜底文案: {exc}")
+
+    if not praise:
+        return {"praise": _praise_fallback(dishes, int(req.rating or 0)), "source": "local"}
+    return {"praise": praise[:200], "source": "ai"}
+
+
 # V141 审核黑名单（发布前合规审核·error 级，本地匹配 0 token）
 _FOODHALL_AUDIT_BANNED = ["治疗", "治愈", "根治", "改善", "降低", "预防", "抗癌", "排毒",
                           "降三高", "消炎", "杀菌", "缓解", "调理", "祛湿", "补血",

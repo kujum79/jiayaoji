@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V414-20261108';
+        var APP_VER = 'V415-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -38176,6 +38176,12 @@ function saveFoodDiaries(arr) {
     try {
         var fid = (typeof getFamilyId === 'function') ? getFamilyId() : '';
         if (!fid) return;
+        // V415: 统一补全 AI 夸夸字段（历史日记缺省视为未生成）
+        (arr || []).forEach(function (d) {
+            if (!d) return;
+            if (typeof d.aiPraise !== 'string') d.aiPraise = '';
+            if (typeof d.posterGenerated !== 'boolean') d.posterGenerated = false;
+        });
         localStorage.setItem(fid + '_foodDiaries', JSON.stringify(arr || []));
     } catch (e) {}
 }
@@ -47766,7 +47772,10 @@ function submitAddRecord() {
         overallComment: overallComment,
         createdAt: Date.now(),
         solarTerm: solarTerm.name,
-        source: tonightShopping ? 'shopping' : ''
+        source: tonightShopping ? 'shopping' : '',
+        // V415: AI 夸夸——保存后异步生成；posterGenerated 记录是否已生成过分享海报
+        aiPraise: '',
+        posterGenerated: false
     };
     
     // 仅对有评价的菜品生成AI复盘
@@ -47831,10 +47840,116 @@ function submitAddRecord() {
     if (autoBankCount > 0) toast += '（含从现购清单入库 ' + autoBankCount + ' 道后再扣）';
     if (tonightShopping && record.source === 'shopping') toast += '｜来源标记：现购食材 ✓';
     showToast(toast);
+    // V415: 带图片的记录保存后 → Loading「AI 正在为你撰写夸夸...」→ 夸夸弹窗
+    try { if (record.imageBase64) _mrGeneratePraise(record, mealKey); } catch (e) { console.warn('[V415] AI 夸夸触发失败:', e); }
     // V373: 晚餐记录后询问就餐时间（复盘「晚餐作息」用），已有选择则不再打扰
     if (typeof _maybeAskDinnerTime === 'function') {
         try { _maybeAskDinnerTime(date, mealKey); } catch (e) { console.warn('[V373] 晚餐时段询问失败:', e); }
     }
+}
+
+// ==================== V415: 食记「记录实际」AI 夸夸 ====================
+function _mrPraiseLoading(show) {
+    var ov = document.getElementById('mrPraiseLoading');
+    if (!show) { if (ov) ov.remove(); return; }
+    if (ov) return;
+    if (!document.getElementById('mrPraiseStyle')) {
+        var st = document.createElement('style');
+        st.id = 'mrPraiseStyle';
+        st.textContent = '@keyframes mrpSpin{to{transform:rotate(360deg)}}';
+        document.head.appendChild(st);
+    }
+    ov = document.createElement('div');
+    ov.id = 'mrPraiseLoading';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(31,41,55,0.55);display:flex;align-items:center;justify-content:center;padding:24px;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:18px;padding:24px 22px;text-align:center;max-width:300px;box-shadow:0 12px 36px rgba(0,0,0,.2);">'
+        + '<div style="width:44px;height:44px;margin:0 auto 14px;border:4px solid #FFEDD5;border-top-color:#F97316;border-radius:50%;animation:mrpSpin .9s linear infinite;"></div>'
+        + '<div style="font-size:15px;font-weight:700;color:#374151;">AI 正在为你撰写夸夸...</div>'
+        + '<div style="font-size:12px;color:#9CA3AF;margin-top:6px;">马上就好，先别走开～</div>'
+        + '</div>';
+    document.body.appendChild(ov);
+}
+function _mrGeneratePraise(record, mealKey) {
+    var mealNames = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '加餐' };
+    _mrPraiseLoading(true);
+    var body = {
+        dishes: (record.dishes || []).map(function (d) { return String((d && d.name) || '').trim(); }).filter(Boolean),
+        meal: mealNames[mealKey] || '',
+        rating: 0,
+        comment: record.overallComment || (record.dishes || []).map(function (d) { return (d && d.userComment) || ''; }).filter(Boolean).join('；'),
+        diningType: record.diningType || '',
+        familyBrief: {}
+    };
+    try {
+        (familyData || []).slice(0, 4).forEach(function (m) {
+            if (m && m.name) body.familyBrief[m.name] = (m.age ? m.age + '岁' : '') + (m.taste ? '·' + m.taste : '');
+        });
+    } catch (e) {}
+    var settled = false;
+    var timer = setTimeout(function () { finish(''); }, 20000);
+    function finish(praise) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        _mrPraiseLoading(false);
+        if (!praise) { showToast('AI 夸夸暂时没写出来，稍后再试试～'); return; }
+        _mrSavePraise(record, praise);
+        _mrShowPraise(record, praise);
+    }
+    fetch(API_BASE + '/api/generate-praise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); }).then(function (j) {
+        finish(j && j.praise ? String(j.praise) : '');
+    }).catch(function () { finish(''); });
+}
+function _mrSavePraise(record, praise) {
+    try {
+        var records = JSON.parse(lsGet('mealRecords')) || [];
+        records.forEach(function (r) {
+            if (r && String(r.id) === String(record.id)) {
+                r.aiPraise = praise;
+                if (typeof r.posterGenerated !== 'boolean') r.posterGenerated = false;
+            }
+        });
+        lsSet('mealRecords', JSON.stringify(records));
+    } catch (e) { console.warn('[V415] 写入 mealRecords.aiPraise 失败:', e); }
+    try {
+        var list = getFoodDiaries();
+        var hit = false;
+        (list || []).forEach(function (d) {
+            if (d && d.type === 'meal' && d.relatedDate === record.date && d.relatedMealType === record.mealType) {
+                d.aiPraise = praise;
+                if (typeof d.posterGenerated !== 'boolean') d.posterGenerated = false;
+                hit = true;
+            }
+        });
+        if (hit) saveFoodDiaries(list);
+    } catch (e) { console.warn('[V415] 写入 foodDiaries.aiPraise 失败:', e); }
+}
+function _mrShowPraise(record, praise) {
+    var old = document.getElementById('mrPraiseOv');
+    if (old) old.remove();
+    var dishText = (record.dishes || []).map(function (d) { return (d && d.name) || ''; }).filter(Boolean).slice(0, 3).join('、');
+    var img = record.imageBase64
+        ? '<img src="' + record.imageBase64 + '" alt="本餐照片" style="display:block;width:100%;max-height:210px;object-fit:cover;border-radius:14px;margin-bottom:12px;">'
+        : '';
+    var ov = document.createElement('div');
+    ov.id = 'mrPraiseOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100003;background:rgba(31,41,55,0.6);display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:20px;padding:16px;width:100%;max-width:330px;box-shadow:0 16px 44px rgba(0,0,0,.24);">'
+        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">'
+        + '<span style="font-size:16px;font-weight:800;color:#C2410C;">🎉 今日夸夸</span>'
+        + '<span style="font-size:11px;color:#9CA3AF;">AI 为你写</span>'
+        + '</div>'
+        + img
+        + (dishText ? '<div style="font-size:12px;color:#B08968;margin-bottom:8px;">🍽️ ' + escapeHtml(dishText) + '</div>' : '')
+        + '<div style="font-size:14px;color:#374151;line-height:1.9;white-space:pre-wrap;">' + escapeHtml(praise) + '</div>'
+        + '<button type="button" onclick="document.getElementById(\'mrPraiseOv\').remove()" style="margin-top:14px;width:100%;padding:11px 0;border:none;border-radius:12px;background:linear-gradient(135deg,#FB923C,#F97316);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">开心收下 ✨</button>'
+        + '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+    document.body.appendChild(ov);
 }
 
 // ==================== 食录模态框事件绑定 ====================
