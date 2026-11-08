@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V419-20261109';
+        var APP_VER = 'V420-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -17020,6 +17020,9 @@ function _savingRestaurantFallback(name) {
     if (/蛋/.test(n)) return 12;
     if (/豆腐|豆干|千张|香干/.test(n)) return 12;
     if (/汤|羹|粥/.test(n)) return 9;
+    // V420: 粗粮/薯类蒸烤单品（蒸红薯、烤地瓜、蒸玉米、蒸山药）是几块钱的粗粮小食，
+    // 原来落到素菜兜底 ¥13/人 × 人数，把「蒸红薯 + 煎蛋」算成外食 ¥41，明显离谱
+    if (/红薯|地瓜|紫薯|芋头|山药|玉米|南瓜(?!饼)/.test(n)) return 5;
     if (/炒饭|炒面|面|粉|馒头|包子|饼|吐司|面包|饭/.test(n)) return 11;
     if (/沙拉|拌菜|拌/.test(n)) return 13;
     return 13; // 素菜及其它家常菜
