@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V405-20261108';
+        var APP_VER = 'V406-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -33180,31 +33180,19 @@ function _dtRenderCard(tip) {
     _fhCardDiet = diet || null;
     _fhCardRecipe = recipe || null;
 
-    // 标题右侧的「🎓 食养教育」胶囊（会员拦截由 _fhOpenEdu 内部处理）
-    var eduPill = '<button onclick="event.stopPropagation(); _fhOpenEdu()" style="flex:0 0 auto;border:none;border-radius:999px;background:rgba(249,115,22,.14);color:#C2410C;font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer;white-space:nowrap;">🎓 食养教育</button>';
-
+    // V406: 首页饮食卡不再显示「晨读 / 饮食文章 / 食养教育 / 06:00 已上架 / 会员专享」，标题直接置顶
     var dietCard = '';
     if (diet && diet.title) {
         dietCard = '<div onclick="_fhOpenCardDiet()" style="cursor:pointer;border-radius:14px;padding:11px 12px;background:linear-gradient(135deg,#FFFBF3,#FFF2DF);border:1px solid #FDE7C8;">'
-            + '<div style="display:flex;align-items:center;gap:6px;">'
-            + '<span style="font-size:10px;font-weight:700;color:#B45309;background:#FDE68A;border-radius:999px;padding:2px 8px;">🌅 晨读</span>'
-            + '<span style="font-size:10px;color:#B45309;">饮食文章</span>'
-            + '<span style="flex:1;"></span>'
-            + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" style="border:none;background:none;font-size:14px;color:#C08457;cursor:pointer;padding:0 2px;" title="往期回顾">📅</button>'
-            + '</div>'
-            + '<div style="display:flex;align-items:flex-start;gap:8px;margin-top:7px;">'
+            + '<div style="display:flex;align-items:flex-start;gap:8px;">'
             + '<div style="flex:1;min-width:0;font-size:15px;font-weight:800;color:#3F2A14;line-height:1.5;">' + escapeHtml(diet.title) + '</div>'
-            + eduPill
+            + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" style="flex:0 0 auto;border:none;background:none;font-size:14px;color:#C08457;cursor:pointer;padding:0 2px;" title="往期回顾">📅</button>'
             + '</div>'
             + '<div style="font-size:12px;color:#9A7B5A;line-height:1.65;margin-top:4px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(diet.summary || '') + '</div>'
-            + '<div style="display:flex;align-items:center;margin-top:7px;font-size:10px;color:#C08457;">'
-            + '<span>06:00 已上架</span><span style="flex:1;"></span>'
-            + '<span>' + (isMember ? '阅读全文 ›' : '🔒 会员专享 ›') + '</span>'
-            + '</div></div>';
+            + '</div>';
     } else {
         dietCard = '<div style="border-radius:14px;padding:11px 12px;background:#FFFBF3;border:1px dashed #FDE7C8;">'
-            + '<div style="font-size:10px;font-weight:700;color:#B45309;">🌅 晨读</div>'
-            + '<div style="font-size:12px;color:#B08968;margin-top:5px;">' + (dietDue ? '今日晨读暂未更新，稍后自动补发' : '今日 06:00 自动上架') + '</div>'
+            + '<div style="font-size:12px;color:#B08968;">' + (dietDue ? '今日饮食文章暂未更新，稍后自动补发' : '今日 06:00 自动更新') + '</div>'
             + '</div>';
     }
     var recipeCard = '';
@@ -33223,10 +33211,7 @@ function _dtRenderCard(tip) {
             + '<span style="font-size:10px;color:rgba(255,255,255,.8);">' + (recipe._fallback ? '往期寻味' : '今日寻味') + '</span>'
             + '</div>'
             + '<div style="position:absolute;left:12px;right:12px;bottom:10px;">'
-            + '<div style="display:flex;align-items:flex-start;gap:8px;">'
-            + '<div style="flex:1;min-width:0;font-size:15px;font-weight:800;color:#fff;line-height:1.45;">' + escapeHtml(recipe.title) + '</div>'
-            + eduPill
-            + '</div>'
+            + '<div style="font-size:15px;font-weight:800;color:#fff;line-height:1.45;">' + escapeHtml(recipe.title) + '</div>'
             + '<div style="font-size:11px;color:rgba(255,255,255,.82);line-height:1.6;margin-top:3px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden;">' + escapeHtml(rIntro) + '</div>'
             + '<div style="display:flex;align-items:center;margin-top:6px;font-size:10px;color:#FDE68A;">'
             + '<span>点击看做法 · 多道菜单独加入食记</span><span style="flex:1;"></span><span>›</span></div>'
