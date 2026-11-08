@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V418-20261108';
+        var APP_VER = 'V419-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -48188,6 +48188,8 @@ function _mrBuildPoster(record) {
 }
 function _mrMarkPosterGenerated(record) {
     record.posterGenerated = true;
+    // V419: 记录页预览海报不落库（尚未保存的记录没有真实 id）
+    if (String(record.id || '').indexOf('preview_') === 0) return;
     try {
         var records = JSON.parse(lsGet('mealRecords')) || [];
         records.forEach(function (r) { if (r && String(r.id) === String(record.id)) r.posterGenerated = true; });
@@ -73004,8 +73006,9 @@ function openMealRecordModal(mealKey, opts) {
         +   '</div>'
         +   '<div id="umrSplitPanel" style="padding:0 16px 14px;display:none;"></div>'
         + '</div>'
-        + '<div id="umrFamilyFooter" style="flex-shrink:0;display:flex;gap:8px;padding:10px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid #F3F4F6;background:white;">'
-        +   '<button id="umrQuickBtn" type="button" style="flex:1;padding:12px 0;border:1px solid #FDBA74;background:#FFFBEB;color:#C2410C;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">⚡ 快速记录</button>'
+        + '<div id="umrFamilyFooter" style="flex-shrink:0;display:flex;gap:6px;padding:10px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid #F3F4F6;background:white;">'
+        +   '<button id="umrPosterBtn" type="button" style="flex:0 0 auto;padding:12px 10px;border:1px solid #FED7AA;background:white;color:#C2410C;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">📸 生成海报</button>'
+        +   '<button id="umrQuickBtn" type="button" style="flex:1;padding:12px 0;border:1px solid #FDBA74;background:#FFFBEB;color:#C2410C;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">⚡ 快速记录</button>'
         +   '<button id="umrSaveBtn" type="button" style="flex:1;padding:12px 0;background:#F97316;color:white;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">保存</button>'
         + '</div>';
     overlay.appendChild(modal);
@@ -73328,6 +73331,29 @@ function openMealRecordModal(mealKey, opts) {
     $('umrEatOutBtn').addEventListener('click', toggleEatOut);
     $('umrQuickBtn').addEventListener('click', function () { doSave(true); });
     $('umrSaveBtn').addEventListener('click', function () { doSave(false); });
+    // V419: 实际记录页底部「生成海报」——用当前已填内容即时出图，无需先保存
+    $('umrPosterBtn').addEventListener('click', function () {
+        var dishes = fDishes.filter(function (n) { return fDishChecked[n] !== false; });
+        if (!dishes.length) dishes = fDishes.slice();
+        if (!dishes.length) { showToast('请先添加或勾选菜品'); return; }
+        var comment = ($('umrFComment') && $('umrFComment').value ? $('umrFComment').value.trim() : '');
+        var savedPraise = '';
+        try {
+            var recs = JSON.parse(lsGet('mealRecords')) || [];
+            var hit = recs.filter(function (r) { return r && r.date === dateKey && r.mealType === mealKey; })[0];
+            if (hit && hit.aiPraise) savedPraise = hit.aiPraise;
+        } catch (e) {}
+        _mrGeneratePoster({
+            id: 'preview_' + Date.now(),
+            date: dateKey,
+            mealType: mealKey,
+            dishes: dishes.map(function (n) { return { name: n }; }),
+            rating: fRating,
+            diningType: fEatingOut ? '外出就餐' : '在家做饭',
+            imageBase64: '',
+            aiPraise: savedPraise || comment || '这一餐的用心，家人都尝到了 ❤'
+        });
+    });
 
     renderFDishTags();
     renderFSpecial();
