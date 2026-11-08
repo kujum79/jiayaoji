@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V400-20261108';
+        var APP_VER = 'V401-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -38827,9 +38827,12 @@ function renderFamily() {
                         系统监控<span id="monitorBadge" style="display:none;position:absolute;top:-6px;right:-4px;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;background:#DC2626;color:#fff;border-radius:9px;font-size:11px;font-weight:700;line-height:18px;text-align:center;">0</span>
                     </button>
                 </div>
-                <div style="display:flex;margin-bottom:12px;">
-                    <button type="button" onclick="_openCommunityAuditConsole()" style="width:100%;box-sizing:border-box;padding:9px 8px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:12px;font-weight:600;color:#9A3412;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+                <div style="display:flex;gap:8px;margin-bottom:12px;">
+                    <button type="button" onclick="_openCommunityAuditConsole()" style="flex:1;box-sizing:border-box;padding:9px 6px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:12px;font-weight:600;color:#9A3412;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
                         🤝 社区服务审核<span id="communityAuditBadge" style="display:none;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;background:#DC2626;color:#fff;border-radius:9px;font-size:11px;font-weight:700;line-height:18px;text-align:center;">0</span>
+                    </button>
+                    <button type="button" onclick="_openCommunityTradePanel()" style="flex:1;box-sizing:border-box;padding:9px 6px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;font-size:12px;font-weight:600;color:#166534;cursor:pointer;">
+                        💰 社区交易与风控
                     </button>
                 </div>
             `);
@@ -77270,6 +77273,15 @@ function _renderCommunityPublishModal(verifiedPhone) {
     document.getElementById('communityPubCancelBtn').onclick = closeCommunityPublishModal;
     document.getElementById('communityPubSubmitBtn').onclick = submitCommunityPost;
 }
+// ========== V401: 社区交易风控（私下交易敏感词拦截） ==========
+var _COMMUNITY_BANNED_WORDS = ['加我微信私聊', '加微信', '绕过平台', '直接转账', '私下交易'];
+function _communityHitBannedWord(text) {
+    var s = String(text || '');
+    for (var i = 0; i < _COMMUNITY_BANNED_WORDS.length; i++) {
+        if (s.indexOf(_COMMUNITY_BANNED_WORDS[i]) >= 0) return _COMMUNITY_BANNED_WORDS[i];
+    }
+    return '';
+}
 async function submitCommunityPost() {
     if (!getFamilyId()) {
         showToast && showToast('请先登录家庭账号后再发布');
@@ -77299,6 +77311,11 @@ async function submitCommunityPost() {
     var expertCertNo = String((certNoEl && certNoEl.value) || '').trim();
     var expertCertIssuer = String((certIssuerEl && certIssuerEl.value) || '').trim();
     var needSuperAudit = (_communityPubType === 'activity' || _communityPubType === 'expert');
+    // V401: 标题/内容命中私下交易敏感词直接拦截
+    if (_communityHitBannedWord(title + ' ' + content)) {
+        showToast && showToast('为保障双方权益，请勿在平台内发布私下交易的联系方式。');
+        return;
+    }
     // V252: 已认证手机号为准，避免只读字段被脚本篡改或为空
     var authInfo = _communityPhoneAuth();
     if (authInfo.phoneVerified && authInfo.phoneNumber) phone = authInfo.phoneNumber;
@@ -78140,6 +78157,98 @@ function _communityAuditViewCert(id) {
     _communityShowImage(src);
 }
 window._communityAuditViewCert = _communityAuditViewCert;
+// ========== V401: 超管「社区交易与风控」面板 ==========
+function _communityTradeTime(ts) {
+    var d = new Date((Number(ts) || 0) * 1000);
+    function p(n) { return n < 10 ? '0' + n : String(n); }
+    return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function _communityTradePanelBody() {
+    var recs = getCommissionRecords().slice().sort(function (a, b) {
+        return (Number(b && b.createdAt) || 0) - (Number(a && a.createdAt) || 0);
+    });
+    var total = 0, platform = 0, provider = 0;
+    var groups = {};
+    recs.forEach(function (r) {
+        var amt = Number(r && r.amount) || 0;
+        total += amt;
+        platform += Number(r && r.platformFee) || 0;
+        provider += Number(r && r.providerFee) || 0;
+        var pid = String((r && r.postId) || '');
+        if (!groups[pid]) {
+            var p = _communityFindPost(pid);
+            groups[pid] = { title: (p && p.title) || (pid || '未知服务'), count: 0, provider: 0 };
+        }
+        groups[pid].count += 1;
+        groups[pid].provider += Number(r && r.providerFee) || 0;
+    });
+    function statCard(label, value, color, bg) {
+        return '<div style="flex:1;min-width:0;background:' + bg + ';border-radius:12px;padding:10px 8px;text-align:center;">'
+            + '<div style="font-size:10px;color:#6B7280;line-height:1.5;">' + label + '</div>'
+            + '<div style="font-size:15px;font-weight:800;color:' + color + ';margin-top:2px;word-break:break-all;">' + value + '</div>'
+            + '</div>';
+    }
+    var html = '<div style="display:flex;gap:8px;">'
+        + statCard('平台留存（30%）', _communityMoney(platform), '#B45309', '#FFFBEB')
+        + statCard('待结算（70%）', _communityMoney(provider), '#047857', '#ECFDF5')
+        + statCard('累计交易', _communityMoney(total), '#1D4ED8', '#EFF6FF')
+        + '</div>'
+        + '<div style="margin-top:6px;font-size:11px;color:#9CA3AF;">共 ' + recs.length + ' 笔订单，待结算金额将在活动结束 / 咨询完成后打给招募者与专家。</div>';
+    html += '<div style="margin-top:16px;font-size:13px;font-weight:700;color:#1F2937;">待结算明细（按服务方）</div>';
+    var gkeys = Object.keys(groups);
+    if (!gkeys.length) {
+        html += '<div style="margin-top:8px;padding:18px;background:#fff;border-radius:12px;text-align:center;font-size:12px;color:#9CA3AF;">暂无交易流水</div>';
+    } else {
+        gkeys.forEach(function (k) {
+            var g = groups[k];
+            html += '<div style="margin-top:8px;background:#fff;border-radius:12px;padding:11px 12px;display:flex;align-items:center;gap:8px;">'
+                + '<div style="flex:1;min-width:0;">'
+                +   '<div style="font-size:12px;font-weight:700;color:#1F2937;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(g.title) + '</div>'
+                +   '<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">' + g.count + ' 笔 · 服务方 ID：' + escapeHtml(k || '-') + '</div>'
+                + '</div>'
+                + '<div style="font-size:15px;font-weight:800;color:#047857;white-space:nowrap;">' + _communityMoney(g.provider) + '</div>'
+                + '</div>';
+        });
+    }
+    html += '<div style="margin-top:16px;font-size:13px;font-weight:700;color:#1F2937;">全部交易流水（' + recs.length + '）</div>';
+    if (!recs.length) {
+        html += '<div style="margin-top:8px;padding:18px;background:#fff;border-radius:12px;text-align:center;font-size:12px;color:#9CA3AF;">暂无交易流水</div>';
+    } else {
+        recs.forEach(function (r) {
+            var p = _communityFindPost(String(r.postId || ''));
+            html += '<div style="margin-top:8px;background:#fff;border-radius:12px;padding:11px 12px;">'
+                + '<div style="display:flex;align-items:center;gap:8px;">'
+                +   '<div style="flex:1;min-width:0;font-size:12px;font-weight:700;color:#1F2937;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml((p && p.title) || String(r.postId || '未知服务')) + '</div>'
+                +   '<div style="font-size:12px;font-weight:700;color:#B45309;">' + _communityMoney(r.amount) + '</div>'
+                + '</div>'
+                + '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;line-height:1.7;">' + escapeHtml(r.buyer || '—') + ' · ' + _communityTradeTime(r.createdAt) + ' · ' + escapeHtml(String(r.id || '')) + '</div>'
+                + '<div style="display:flex;gap:10px;margin-top:4px;font-size:11px;color:#6B7280;">'
+                +   '<span>平台 30%：<strong style="color:#B45309;">' + _communityMoney(r.platformFee) + '</strong></span>'
+                +   '<span>待结算 70%：<strong style="color:#047857;">' + _communityMoney(r.providerFee) + '</strong></span>'
+                + '</div>'
+                + '</div>';
+        });
+    }
+    return html;
+}
+function _openCommunityTradePanel() {
+    if (!(typeof isSuperAdmin === 'function' && isSuperAdmin())) { showToast && showToast('仅超级管理员可访问'); return; }
+    var old = document.getElementById('communityTradeOverlay');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'communityTradeOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10026;background:#f0f0f0;display:flex;justify-content:center;';
+    ov.innerHTML = '<div style="width:100%;max-width:430px;background:#F9FAFB;display:flex;flex-direction:column;box-shadow:0 0 24px rgba(0,0,0,0.12);">'
+        + '<div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:14px 12px;background:#fff;border-bottom:1px solid #E5E7EB;">'
+        +   '<button type="button" id="communityTradeCloseBtn" style="width:34px;height:34px;border:none;background:#F3F4F6;border-radius:10px;font-size:18px;color:#374151;cursor:pointer;line-height:1;">＜</button>'
+        +   '<div style="font-size:17px;font-weight:700;color:#111827;">💰 社区交易与风控</div>'
+        + '</div>'
+        + '<div style="flex:1;overflow-y:auto;min-height:0;padding:14px 14px 30px;">' + _communityTradePanelBody() + '</div>'
+        + '</div>';
+    document.body.appendChild(ov);
+    document.getElementById('communityTradeCloseBtn').onclick = function () { ov.remove(); };
+}
+window._openCommunityTradePanel = _openCommunityTradePanel;
 function renderCommunityList() {
     var body = document.getElementById('communityBody');
     if (!body) return;
