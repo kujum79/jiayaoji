@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V407-20261108';
+        var APP_VER = 'V408-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -18034,15 +18034,300 @@ function addFridgeCleanupRecord(data) {
 // 初始化：确保 fridgeCleanupRecords 键始终存在（空数组）
 try { if (lsGet(FRIDGE_CLEANUP_KEY) == null) saveFridgeCleanupRecords([]); } catch (e) {}
 
+var _FC_DAY_MS = 86400000;
+var _fcSel = null;
+var _fcVoiceRec = null;
+
 function closeFridgeCleanup() {
     var old = document.getElementById('fridgeCleanupOv');
     if (old) old.remove();
+    if (_fcVoiceRec) { try { _fcVoiceRec.stop(); } catch (e) {} _fcVoiceRec = null; }
+    _fcSel = null;
     if (!document.getElementById('fhRecipeOv') && !document.getElementById('fhHallOv')) {
         document.body.style.overflow = '';
     }
 }
-function openFridgeCleanup() {
-    closeFridgeCleanup();
+function _fcEnsureOverlay() {
+    var ov = document.getElementById('fridgeCleanupOv');
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'fridgeCleanupOv';
+        ov.style.cssText = 'position:fixed;inset:0;z-index:100020;background:#FFF7ED;display:flex;flex-direction:column;max-width:430px;margin:0 auto;';
+        document.body.appendChild(ov);
+    }
+    document.body.style.overflow = 'hidden';
+    return ov;
+}
+// 剩余可存放天数：优先 expiryDate，其次按购买/入库日期 + 品类保鲜天数估算；无法判断返回 null
+function _fcDaysLeft(it) {
+    try {
+        if (it && it.expiryDate) {
+            var ed = new Date(String(it.expiryDate).replace(/-/g, '/'));
+            if (!isNaN(ed.getTime())) return Math.ceil((ed.getTime() - Date.now()) / _FC_DAY_MS);
+        }
+        var base = null;
+        if (it && it.purchaseDate) {
+            var pd = new Date(String(it.purchaseDate).replace(/-/g, '/'));
+            if (!isNaN(pd.getTime())) base = pd.getTime();
+        }
+        if (base === null && it && it.addedAt) {
+            var t = Number(it.addedAt);
+            if (t > 0) base = t;
+        }
+        if (base !== null) {
+            var shelf = _freshnessDaysByCategory(it.name, it.category);
+            return Math.ceil((base + shelf * _FC_DAY_MS - Date.now()) / _FC_DAY_MS);
+        }
+    } catch (e) {}
+    return null;
+}
+// 库存数量：无法量化时 value 返回 null（不参与「库存 ≤1」自动勾选）
+function _fcQtyOf(it) {
+    var raw = it ? it.quantity : '';
+    var q = parseQuantity(raw);
+    var text = '';
+    if (raw !== null && raw !== undefined && String(raw).trim() !== '') {
+        text = (typeof raw === 'object') ? formatQuantity(q.value, q.unit) : String(raw).trim();
+    }
+    return { value: text ? (Number(q.value) || 0) : null, text: text || '—' };
+}
+// 构建选择页状态：临期（≤3 天）或库存 ≤1 的食材默认勾选
+function _fcBuildState() {
+    var arr = [];
+    try { arr = _loadFridgeItemsForAi() || []; } catch (e) { arr = []; }
+    var rows = [];
+    arr.forEach(function (it, i) {
+        if (!it || !it.name) return;
+        if (it.usedUp || it.status === 'usedUp' || it.status === 'used_up') return;
+        var days = _fcDaysLeft(it);
+        var q = _fcQtyOf(it);
+        var auto = (days !== null && days <= 3) || (q.value !== null && q.value <= 1);
+        rows.push({
+            key: 'k' + i,
+            name: String(it.name),
+            emoji: it.emoji || '🥬',
+            qty: q.text,
+            days: days,
+            auto: auto,
+            checked: auto
+        });
+    });
+    rows.sort(function (a, b) {
+        if (a.checked !== b.checked) return a.checked ? -1 : 1;
+        var ad = (a.days === null) ? 99999 : a.days;
+        var bd = (b.days === null) ? 99999 : b.days;
+        if (ad !== bd) return ad - bd;
+        return a.name.localeCompare(b.name, 'zh');
+    });
+    return { items: rows, extras: [], recordId: '' };
+}
+function _fcExtraChipsHtml() {
+    return (_fcSel ? _fcSel.extras : []).map(function (n, i) {
+        return '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:999px;font-size:12px;color:#C2410C;font-weight:600;margin:0 6px 6px 0;">'
+            + escapeHtml(n)
+            + '<span onclick="_fcRemoveExtra(' + i + ')" style="cursor:pointer;color:#EF4444;font-weight:800;padding:0 1px;">×</span>'
+            + '</span>';
+    }).join('');
+}
+function _fcRenderExtras() {
+    var wrap = document.getElementById('fcExtraWrap');
+    var box = document.getElementById('fcExtraChips');
+    if (!wrap || !box) return;
+    var has = !!(_fcSel && _fcSel.extras.length);
+    wrap.style.display = has ? 'block' : 'none';
+    box.innerHTML = has ? _fcExtraChipsHtml() : '';
+}
+function _fcRemoveExtra(i) {
+    if (!_fcSel) return;
+    _fcSel.extras.splice(i, 1);
+    _fcRenderExtras();
+}
+// 把用户输入的自由文本拆成食材名：去掉「还有 / 一小把 / 两根」等前缀与标点
+function _fcCleanExtraName(s) {
+    var v = String(s || '').trim();
+    if (!v) return '';
+    v = v.replace(/^((还有|剩下|剩|有|再来点|再来|一小把|一小撮|一把|一撮|一点|少许|少量|一些|半根|半颗|半个|几根|几颗|几个)\s*)+/, '');
+    v = v.replace(/^[一二两三四五六七八九十百0-9半]+\s*(小把|小撮|把|撮|根|颗|个|块|片|袋|盒|瓶|斤|克|只|条|棵|勺|碗|杯|份)/, '');
+    v = v.replace(/[。．.!！?？,，、;；:：]+$/g, '').trim();
+    return v;
+}
+function _fcAddExtras(text) {
+    if (!_fcSel) _fcSel = _fcBuildState();
+    var raw = String(text || '').trim();
+    if (!raw) return 0;
+    var parts = raw.split(/[、,，;；\/\n]+|\s+|以及|和/).map(_fcCleanExtraName).filter(Boolean);
+    var added = 0;
+    parts.forEach(function (n) {
+        if (!n) return;
+        var exists = _fcSel.extras.some(function (x) { return x === n; })
+            || _fcSel.items.some(function (it) { return it.name === n; });
+        if (!exists) { _fcSel.extras.push(n); added++; }
+    });
+    if (added) _fcRenderExtras();
+    return added;
+}
+function _fcStartVoice() {
+    var input = document.getElementById('fcExtraInput');
+    var btn = document.getElementById('fcVoiceBtn');
+    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var secure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    if (!SpeechRecognition || !secure) {
+        showToast('当前环境不支持语音识别，请手动输入');
+        if (input) input.focus();
+        return;
+    }
+    if (_fcVoiceRec) {
+        try { _fcVoiceRec.stop(); } catch (e) {}
+        _fcVoiceRec = null;
+        if (btn) btn.textContent = '🎤';
+        return;
+    }
+    if (!_fcSel) _fcSel = _fcBuildState();
+    var rec = new SpeechRecognition();
+    _fcVoiceRec = rec;
+    rec.lang = 'zh-CN';
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onstart = function () { if (btn) btn.textContent = '⏺️'; showToast('🎤 请说出要补充的食材'); };
+    rec.onresult = function (ev) {
+        var txt = '';
+        for (var i = 0; i < ev.results.length; i++) txt += (ev.results[i] && ev.results[i][0] ? ev.results[i][0].transcript : '') || '';
+        txt = txt.trim();
+        if (!txt) return;
+        if (input) input.value = txt;
+        var n = _fcAddExtras(txt);
+        showToast(n ? '✅ 已补充：' + txt : '识别到「' + txt + '」，已在清单中');
+    };
+    rec.onerror = function (ev) {
+        if (ev && ev.error === 'not-allowed') showToast('麦克风权限被拒绝，请手动输入');
+        else if (ev && ev.error !== 'aborted') showToast('语音识别失败，请手动输入');
+    };
+    rec.onend = function () { if (btn) btn.textContent = '🎤'; _fcVoiceRec = null; };
+    try {
+        rec.start();
+    } catch (e) {
+        _fcVoiceRec = null;
+        if (btn) btn.textContent = '🎤';
+        showToast('语音识别启动失败，请手动输入');
+    }
+}
+function _fcRenderSelect() {
+    if (!_fcSel) _fcSel = _fcBuildState();
+    var state = _fcSel;
+    var ov = _fcEnsureOverlay();
+    var rowsHtml = state.items.map(function (it, i) {
+        var tag;
+        if (it.days === null) {
+            tag = '<span style="flex:0 0 auto;font-size:11px;font-weight:700;color:#6B7280;background:#F3F4F6;border-radius:999px;padding:3px 8px;white-space:nowrap;">期限未知</span>';
+        } else if (it.days < 0) {
+            tag = '<span style="flex:0 0 auto;font-size:11px;font-weight:700;color:#DC2626;background:#FEE2E2;border-radius:999px;padding:3px 8px;white-space:nowrap;">已过期</span>';
+        } else if (it.days === 0) {
+            tag = '<span style="flex:0 0 auto;font-size:11px;font-weight:700;color:#DC2626;background:#FEE2E2;border-radius:999px;padding:3px 8px;white-space:nowrap;">今天到期</span>';
+        } else {
+            tag = '<span style="flex:0 0 auto;font-size:11px;font-weight:700;color:#DC2626;background:#FEE2E2;border-radius:999px;padding:3px 8px;white-space:nowrap;">剩 ' + it.days + ' 天</span>';
+        }
+        return '<label style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #FDE7C8;border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer;">'
+            + '<input type="checkbox" data-fc-idx="' + i + '"' + (it.checked ? ' checked' : '') + ' style="flex:0 0 auto;width:18px;height:18px;accent-color:#F97316;">'
+            + '<span style="flex:0 0 auto;font-size:18px;line-height:1;">' + escapeHtml(it.emoji) + '</span>'
+            + '<div style="flex:1;min-width:0;">'
+            + '<div style="font-size:14px;font-weight:700;color:#1F2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(it.name) + '</div>'
+            + '<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">剩余 ' + escapeHtml(it.qty) + '</div>'
+            + '</div>' + tag + '</label>';
+    }).join('');
+    var footerHtml = '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #FED7AA;padding:10px 14px calc(10px + env(safe-area-inset-bottom));">'
+        + '<div style="display:flex;align-items:center;gap:8px;">'
+        + '<button type="button" id="fcVoiceBtn" title="语音补充食材" style="flex:0 0 auto;width:40px;height:38px;border:1px solid #FDBA74;border-radius:12px;background:#FFF7ED;font-size:17px;line-height:1;cursor:pointer;">🎤</button>'
+        + '<input id="fcExtraInput" type="text" placeholder="还有一小把香菜…" style="flex:1;min-width:0;height:38px;padding:0 12px;border:1px solid #E5E7EB;border-radius:12px;font-size:13px;color:#1F2937;background:#F9FAFB;outline:none;">'
+        + '<button type="button" id="fcAddExtraBtn" style="flex:0 0 auto;height:38px;padding:0 14px;border:none;border-radius:12px;background:#FFEDD5;color:#C2410C;font-size:13px;font-weight:700;cursor:pointer;">添加</button>'
+        + '</div>'
+        + '<button type="button" id="fcGenBtn" style="width:100%;margin-top:10px;height:46px;border:none;border-radius:14px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:800;cursor:pointer;">✨ 生成清理方案</button>'
+        + '</div>';
+    ov.innerHTML = '<div style="flex:0 0 auto;background:#fff;border-bottom:1px solid #FED7AA;display:flex;align-items:center;gap:8px;padding:12px 14px;">'
+        + '<button type="button" onclick="closeFridgeCleanup()" style="border:none;background:none;font-size:18px;color:#6B7280;cursor:pointer;padding:2px 4px;line-height:1;">←</button>'
+        + '<div style="flex:1;min-width:0;font-size:16px;font-weight:800;color:#1F2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🧹 冰箱残局消消乐</div>'
+        + '<button type="button" onclick="_fcRenderRecords()" title="清理记录" style="border:1px solid #FED7AA;background:#FFF7ED;border-radius:999px;font-size:12px;color:#C2410C;font-weight:700;padding:4px 10px;cursor:pointer;white-space:nowrap;">📋 记录</button>'
+        + '</div>'
+        + '<div style="flex:1;overflow-y:auto;padding:14px 16px 8px;">'
+        + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin:0 2px 10px;">检测到以下待清理食材（已为您勾选）：</div>'
+        + (state.items.length ? rowsHtml : '<div style="text-align:center;padding:28px 10px;color:#9CA3AF;font-size:13px;background:#fff;border:1px solid #FDE7C8;border-radius:12px;">冰箱里暂时没有可清理的食材<br><span style="font-size:12px;">可在下方手动补充</span></div>')
+        + '<div id="fcExtraWrap" style="display:none;margin-top:14px;">'
+        + '<div style="font-size:12px;font-weight:700;color:#7C2D12;margin:0 2px 8px;">手动补充的食材</div>'
+        + '<div id="fcExtraChips" style="display:flex;flex-wrap:wrap;"></div>'
+        + '</div>'
+        + '</div>'
+        + footerHtml;
+    // 勾选状态回写到 state，返回本页时可保留
+    ov.querySelectorAll('input[data-fc-idx]').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            var i = Number(this.getAttribute('data-fc-idx'));
+            if (_fcSel && _fcSel.items[i]) _fcSel.items[i].checked = !!this.checked;
+        });
+    });
+    var inputEl = document.getElementById('fcExtraInput');
+    var addBtn = document.getElementById('fcAddExtraBtn');
+    var doAdd = function () {
+        var v = inputEl ? inputEl.value : '';
+        var n = _fcAddExtras(v);
+        if (n) showToast('✅ 已补充 ' + n + ' 种食材');
+        else if (String(v || '').trim()) showToast('这些食材已经在清单里了');
+        if (inputEl) { inputEl.value = ''; inputEl.focus(); }
+    };
+    if (addBtn) addBtn.addEventListener('click', doAdd);
+    if (inputEl) inputEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doAdd(); } });
+    var voiceBtn = document.getElementById('fcVoiceBtn');
+    if (voiceBtn) voiceBtn.addEventListener('click', _fcStartVoice);
+    var genBtn = document.getElementById('fcGenBtn');
+    if (genBtn) genBtn.addEventListener('click', _fcGeneratePlan);
+    _fcRenderExtras();
+}
+function _fcGeneratePlan() {
+    if (!_fcSel) return;
+    var names = [];
+    _fcSel.items.forEach(function (it) { if (it.checked) names.push(it.name); });
+    _fcSel.extras.forEach(function (n) { names.push(n); });
+    var seen = {};
+    names = names.filter(function (n) { if (!n || seen[n]) return false; seen[n] = 1; return true; });
+    if (!names.length) { showToast('请先勾选或补充至少一种食材'); return; }
+    var recs = fridgeCleanupRecords();
+    var rec = null;
+    if (_fcSel.recordId) rec = recs.filter(function (r) { return r.id === _fcSel.recordId; })[0] || null;
+    if (rec) {
+        rec.usedIngredients = names;
+        rec.planId = rec.planId || ('fp_' + Date.now().toString(36));
+        saveFridgeCleanupRecords(recs);
+    } else {
+        rec = addFridgeCleanupRecord({ usedIngredients: names, planId: 'fp_' + Date.now().toString(36), status: 'planned' });
+        _fcSel.recordId = rec.id;
+    }
+    _fcRenderPlan(names, rec);
+}
+function _fcRenderPlan(names, rec) {
+    var ov = _fcEnsureOverlay();
+    var chips = names.map(function (n) {
+        return '<span style="display:inline-flex;align-items:center;padding:4px 10px;background:#fff;border:1px solid #FDBA74;border-radius:999px;font-size:12px;color:#C2410C;font-weight:600;margin:0 6px 6px 0;">' + escapeHtml(n) + '</span>';
+    }).join('');
+    ov.innerHTML = '<div style="flex:0 0 auto;background:#fff;border-bottom:1px solid #FED7AA;display:flex;align-items:center;gap:8px;padding:12px 14px;">'
+        + '<button type="button" onclick="_fcRenderSelect()" style="border:none;background:none;font-size:18px;color:#6B7280;cursor:pointer;padding:2px 4px;line-height:1;">←</button>'
+        + '<div style="flex:1;min-width:0;font-size:16px;font-weight:800;color:#1F2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🍳 清理方案</div>'
+        + '<button type="button" onclick="closeFridgeCleanup()" style="border:none;background:none;font-size:16px;color:#9CA3AF;cursor:pointer;padding:2px 4px;line-height:1;">✕</button>'
+        + '</div>'
+        + '<div style="flex:1;overflow-y:auto;padding:14px 16px 10px;">'
+        + '<div style="border-radius:16px;padding:16px;background:linear-gradient(135deg,#FFEDD5,#FED7AA);color:#7C2D12;">'
+        + '<div style="font-size:15px;font-weight:800;">🧊 已锁定 ' + names.length + ' 种待清理食材</div>'
+        + '<div style="margin-top:10px;">' + chips + '</div>'
+        + '</div>'
+        + '<div style="margin-top:14px;background:#fff;border:1px solid #FDE7C8;border-radius:16px;padding:16px;">'
+        + '<div style="font-size:14px;font-weight:800;color:#7C2D12;">🍳 清理方案</div>'
+        + '<div style="font-size:12px;color:#9A3412;line-height:1.8;margin-top:8px;">方案页已创建，菜品搭配与具体做法将在下一步生成。</div>'
+        + (rec && rec.planId ? '<div style="font-size:11px;color:#9CA3AF;margin-top:10px;">计划编号：' + escapeHtml(rec.planId) + '</div>' : '')
+        + '</div></div>'
+        + '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #FED7AA;padding:10px 14px calc(10px + env(safe-area-inset-bottom));">'
+        + '<button type="button" onclick="_fcRenderSelect()" style="width:100%;height:46px;border:1px solid #FDBA74;border-radius:14px;background:#FFF7ED;color:#C2410C;font-size:15px;font-weight:800;cursor:pointer;">← 返回调整食材</button>'
+        + '</div>';
+    document.body.style.overflow = 'hidden';
+}
+function _fcRenderRecords() {
     var recs = fridgeCleanupRecords();
     var totalSaved = recs.reduce(function (s, r) { return s + (Number(r.savedAmount) || 0); }, 0);
     var statusMap = { planned: '待执行', doing: '进行中', done: '已完成' };
@@ -18059,12 +18344,10 @@ function openFridgeCleanup() {
                 + '</div></div>';
         }).join('')
         : '<div style="text-align:center;padding:34px 10px;color:#9CA3AF;font-size:13px;">还没有清理记录<br><span style="font-size:12px;">把冰箱里快要吃不完的食材，凑成一餐消掉吧</span></div>';
-    var ov = document.createElement('div');
-    ov.id = 'fridgeCleanupOv';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:100020;background:#FFF7ED;display:flex;flex-direction:column;max-width:430px;margin:0 auto;';
+    var ov = _fcEnsureOverlay();
     ov.innerHTML = '<div style="flex:0 0 auto;background:#fff;border-bottom:1px solid #FED7AA;display:flex;align-items:center;gap:8px;padding:12px 14px;">'
-        + '<button type="button" onclick="closeFridgeCleanup()" style="border:none;background:none;font-size:18px;color:#6B7280;cursor:pointer;padding:2px 4px;line-height:1;">←</button>'
-        + '<div style="flex:1;min-width:0;font-size:16px;font-weight:800;color:#1F2937;">🧹 冰箱残局消消乐</div>'
+        + '<button type="button" onclick="_fcRenderSelect()" style="border:none;background:none;font-size:18px;color:#6B7280;cursor:pointer;padding:2px 4px;line-height:1;">←</button>'
+        + '<div style="flex:1;min-width:0;font-size:16px;font-weight:800;color:#1F2937;">🧹 清理记录</div>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;padding:14px 16px calc(18px + env(safe-area-inset-bottom));">'
         + '<div style="border-radius:16px;padding:16px;background:linear-gradient(135deg,#FFEDD5,#FED7AA);color:#7C2D12;">'
@@ -18077,8 +18360,11 @@ function openFridgeCleanup() {
         + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin:18px 2px 10px;">清理记录</div>'
         + listHtml
         + '</div>';
-    document.body.appendChild(ov);
     document.body.style.overflow = 'hidden';
+}
+function openFridgeCleanup() {
+    _fcSel = null;
+    _fcRenderSelect();
 }
 
 function refreshFridgeView() {
