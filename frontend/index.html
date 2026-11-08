@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V420-20261109';
+        var APP_VER = 'V421-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -34028,6 +34028,8 @@ function _dtRenderCard(tip) {
     var diet = (dietToday && dietToday.title) ? dietToday
         : ((tip && tip.title && tip.contentType !== 'recipe_article') ? tip : _fhTodayPickArticle());
     if (!diet && !_fhTracksOk) diet = _fhArticleList(tip)[0] || _fhFallbackArticle();
+    // V421: 过季内容兜底拦截——立冬后仍讲霜降的旧稿不再当作今日饮食内容
+    if (diet && !_dtTermFresh(diet)) diet = null;
     var recipe = (recipeToday && recipeToday.title) ? _fhRecipeFromArticle(recipeToday) : null;
     if (!recipe && (!_fhTracksOk || recipeDue)) recipe = _fhRecipeOfDay();
     _fhCardDiet = diet || null;
@@ -34667,6 +34669,23 @@ function _dtIsNational(a) {
     for (var i = 0; i < _DT_CITY_WORDS.length; i++) { if (t.indexOf(_DT_CITY_WORDS[i]) >= 0) return false; }
     return true;
 }
+// V421: 过季守卫——内容若停留在上一个/上上个节气（如立冬后仍在讲霜降），不再作为「今日」展示
+function _dtTermFresh(a) {
+    if (!a) return false;
+    var cur = '';
+    try {
+        var t = getSolarTermForDate(new Date());
+        if (t && t.name) cur = String(t.name);
+    } catch (e) {}
+    if (!cur) cur = String(window.__currentSolarTerm || '');
+    var order = ['小寒','大寒','立春','雨水','惊蛰','春分','清明','谷雨','立夏','小满','芒种','夏至','小暑','大暑','立秋','处暑','白露','秋分','寒露','霜降','立冬','小雪','大雪','冬至'];
+    var i = order.indexOf(cur);
+    if (i < 0) return true;
+    var txt = String(a.title || '') + ' ' + String(a.summary || '') + ' ' + String(a.content || '');
+    if (txt.indexOf(cur) >= 0) return true;
+    var prev = order[(i - 1 + 24) % 24], prev2 = order[(i - 2 + 24) % 24];
+    return !(txt.indexOf(prev) >= 0 || txt.indexOf(prev2) >= 0);
+}
 function _dtFamilyBrief() {
     try {
         var fam = (typeof getCurrentFamily === 'function') ? getCurrentFamily() : null;
@@ -34692,7 +34711,17 @@ async function _fetchDailyTip(variant, timeoutMs) {
         familyId: getFamilyId() || 'default',
         city: _getWeatherCity() || '',
         familyBrief: _dtFamilyBrief(),
-        solarTerm: String(window.__currentSolarTerm || '')
+        // V421: 节气必须按「请求当时」的日期现算——页面长期不刷新（微信后台挂几天）时
+        // window.__currentSolarTerm 还停在上次加载时的节气，会把立冬内容写成霜降
+        solarTerm: (function () {
+            try {
+                if (typeof getSolarTermForDate === 'function') {
+                    var t = getSolarTermForDate(new Date());
+                    if (t && t.name) { window.__currentSolarTerm = t.name; return String(t.name); }
+                }
+            } catch (e) {}
+            return String(window.__currentSolarTerm || '');
+        })()
     };
     // V199: 订阅用户传 subscriptionPlan 到后端，后端追加专属 Prompt 指令
     try {
@@ -34759,16 +34788,16 @@ async function renderHomeDailyTipCard(force) {
     var _isTodayPick = false;
     try { fast = _fhTodayPickArticle(); } catch (e) {}
     if (fast) _isTodayPick = true;
-    if (fast && !_dtIsNational(fast)) { fast = null; _isTodayPick = false; }   // V296: 含城市/局部天气的旧内容不对外展示
+    if (fast && (!_dtIsNational(fast) || !_dtTermFresh(fast))) { fast = null; _isTodayPick = false; }   // V296: 含城市/局部天气的旧内容不对外展示（V421: 过季节气内容同样不展示）
     // V402: 双轨接口已拿到今日饮食精选时直接用，免重复请求
     var _trackDiet = _fhTrackOf('diet_article');
-    if (!fast && _trackDiet && _trackDiet.title && _dtIsNational(_trackDiet)) fast = _trackDiet;
+    if (!fast && _trackDiet && _trackDiet.title && _dtIsNational(_trackDiet) && _dtTermFresh(_trackDiet)) fast = _trackDiet;
     if (!fast) {
         // V145: 服务端 confirmed 文章优先（pending 不展示）
         try {
             var resp = await fetch('/api/food-hall/published?date=' + encodeURIComponent(_dtTodayKey()), { cache: 'no-store' });
             var out = await resp.json();
-            if (out && out.published && out.article && out.article.title && _dtIsNational(out.article)) fast = out.article;
+            if (out && out.published && out.article && out.article.title && _dtIsNational(out.article) && _dtTermFresh(out.article)) fast = out.article;
         } catch (e) {}
     }
     if (fast) {
@@ -34782,7 +34811,7 @@ async function renderHomeDailyTipCard(force) {
             var ydKey = yd.getFullYear() + '-' + String(yd.getMonth() + 1).padStart(2, '0') + '-' + String(yd.getDate()).padStart(2, '0');
             var resp2 = await fetch('/api/food-hall/published?date=' + encodeURIComponent(ydKey), { cache: 'no-store' });
             var out2 = await resp2.json();
-            if (out2 && out2.published && out2.article && out2.article.title && _dtIsNational(out2.article)) {
+            if (out2 && out2.published && out2.article && out2.article.title && _dtIsNational(out2.article) && _dtTermFresh(out2.article)) {
                 _dtServerTip = out2.article;
                 _dtRenderCard(_dtServerTip);
             }
@@ -34798,7 +34827,7 @@ async function renderHomeDailyTipCard(force) {
             var out3 = await resp3.json();
             if (out3 && Array.isArray(out3.articles)) {
                 for (var li = 0; li < out3.articles.length; li++) {
-                    if (out3.articles[li] && out3.articles[li].title && _dtIsNational(out3.articles[li])) { _latest = out3.articles[li]; break; }
+                    if (out3.articles[li] && out3.articles[li].title && _dtIsNational(out3.articles[li]) && _dtTermFresh(out3.articles[li])) { _latest = out3.articles[li]; break; }
                 }
             }
         } catch (e) {}
@@ -34810,7 +34839,7 @@ async function renderHomeDailyTipCard(force) {
             // V296: 已发布文章都不满足全国通用要求时，兜底用 AI 生成一条全国通用内容（限时 12s）
             var _natTip = null;
             try { _natTip = await _fetchDailyTip(undefined, 12000); } catch (e) {}
-            if (_natTip && _natTip.title && !_natTip.error && _dtIsNational(_natTip)) {
+            if (_natTip && _natTip.title && !_natTip.error && _dtIsNational(_natTip) && _dtTermFresh(_natTip)) {
                 _dtServerTip = _natTip;
                 _dtRecordHistory(_natTip);
                 _dtRenderCard(_natTip);
@@ -34824,7 +34853,7 @@ async function renderHomeDailyTipCard(force) {
     // V299: 有「今日精选」时，卡片固定展示精选文章，AI 专属结果不再覆盖
     if (aiPromise && !_isTodayPick) {
         var subTip = await aiPromise;
-        if (subTip && subTip.title && !subTip.error) {
+        if (subTip && subTip.title && !subTip.error && _dtTermFresh(subTip)) {
             _dtServerTip = subTip;
             _dtRecordHistory(subTip);
             _dtRenderCard(subTip);
