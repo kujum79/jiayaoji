@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V403-20261108';
+        var APP_VER = 'V404-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -33166,66 +33166,73 @@ function _dtRenderCard(tip) {
         + '<button class="dt-quiz-btn" onclick="openFoodGodQuiz()" title="每日食神问答">🎮 食神盲盒</button>'
         + subBtnHtml
         + '</span></div>';
-    var bodyHtml = '';
-    // V402: 双轨分时段——06:00-10:59 食谱 / 11:00-16:29 饮食 / 16:30-20:59 食谱 / 21:00-05:59 饮食
-    var slot = _fhSlotType();
-    var recipe = _fhRecipeOfDay();
-    var diet = _fhArticleList(tip)[0] || null;
-    var hasRecipe = !!(recipe && recipe.title);
-    var hasDiet = !!(diet && diet.title);
-    // 当期轨道没有内容时回落到另一条轨道（卡片底部仍给「今日另一条」入口）
-    if (slot === 'recipe_article' && !hasRecipe) slot = 'diet_article';
-    else if (slot === 'diet_article' && !hasDiet) slot = 'recipe_article';
-    if (slot === 'recipe_article' && hasRecipe) {
-        var intro = recipe.summary || '';
+    // V404: 早晚双峰——首页同时展示「🌅 晨读」（饮食文章）与「🌙 晚宴」（食谱）两张不同样式的卡
+    // 06:30 自动上架晨读，16:30 自动上架晚宴；到点前显示"待上架"占位，到点后优先展示当日精选
+    var mins = (new Date().getHours() * 60) + new Date().getMinutes();
+    var dietDue = mins >= 390;    // 06:30
+    var recipeDue = mins >= 990;  // 16:30
+    var dietToday = _fhTrackOf('diet_article');
+    var recipeToday = _fhTrackOf('recipe_article');
+    var diet = (dietToday && dietToday.title) ? dietToday
+        : ((tip && tip.title && tip.contentType !== 'recipe_article') ? tip : _fhTodayPickArticle());
+    if (!diet && !_fhTracksOk) diet = _fhArticleList(tip)[0] || _fhFallbackArticle();
+    var recipe = (recipeToday && recipeToday.title) ? _fhRecipeFromArticle(recipeToday) : null;
+    if (!recipe && (!_fhTracksOk || recipeDue)) recipe = _fhRecipeOfDay();
+    _fhCardDiet = diet || null;
+    _fhCardRecipe = recipe || null;
+
+    var dietCard = '';
+    if (diet && diet.title) {
+        dietCard = '<div onclick="_fhOpenCardDiet()" style="cursor:pointer;border-radius:14px;padding:11px 12px;background:linear-gradient(135deg,#FFFBF3,#FFF2DF);border:1px solid #FDE7C8;">'
+            + '<div style="display:flex;align-items:center;gap:6px;">'
+            + '<span style="font-size:10px;font-weight:700;color:#B45309;background:#FDE68A;border-radius:999px;padding:2px 8px;">🌅 晨读</span>'
+            + '<span style="font-size:10px;color:#B45309;">饮食文章</span>'
+            + '<span style="flex:1;"></span>'
+            + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" style="border:none;background:none;font-size:14px;color:#C08457;cursor:pointer;padding:0 2px;" title="往期回顾">📅</button>'
+            + '</div>'
+            + '<div style="font-size:15px;font-weight:800;color:#3F2A14;line-height:1.5;margin-top:7px;">' + escapeHtml(diet.title) + '</div>'
+            + '<div style="font-size:12px;color:#9A7B5A;line-height:1.65;margin-top:4px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(diet.summary || '') + '</div>'
+            + '<div style="display:flex;align-items:center;margin-top:7px;font-size:10px;color:#C08457;">'
+            + '<span>06:30 已上架</span><span style="flex:1;"></span>'
+            + '<span>' + (isMember ? '阅读全文 ›' : '🔒 会员专享 ›') + '</span>'
+            + '</div></div>';
+    } else {
+        dietCard = '<div style="border-radius:14px;padding:11px 12px;background:#FFFBF3;border:1px dashed #FDE7C8;">'
+            + '<div style="font-size:10px;font-weight:700;color:#B45309;">🌅 晨读</div>'
+            + '<div style="font-size:12px;color:#B08968;margin-top:5px;">' + (dietDue ? '今日晨读暂未更新，稍后自动补发' : '今日 06:30 自动上架') + '</div>'
+            + '</div>';
+    }
+    var recipeCard = '';
+    if (recipe && recipe.title) {
+        var rIntro = recipe.summary || '';
         if (recipe.ingredients && recipe.ingredients.length) {
-            intro += ' 主料：' + recipe.ingredients.slice(0, 3).join('、') + '。';
+            rIntro += ' 主料：' + recipe.ingredients.slice(0, 3).join('、') + '。';
         }
-        var rTag = recipe._fallback ? '往期食谱' : '今日食谱';
-        bodyHtml = '<div onclick="_fhOpenHomeRecipe()" style="cursor:pointer;">'
-            + (recipe.coverImage ? '<div style="position:relative;margin-bottom:10px;">'
-                + '<img src="' + escapeAttr(recipe.coverImage) + '" alt="' + escapeAttr(recipe.title) + '" loading="lazy" onerror="this.style.display=\'none\'" style="display:block;width:100%;height:130px;object-fit:cover;border-radius:12px;background:linear-gradient(135deg,#FDE68A,#FCA5A5);">'
-                + '<span style="position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.45);color:#fff;font-size:10px;padding:2px 8px;border-radius:999px;">' + (recipe._fallback ? '经典食谱' : 'AI 生成封面') + '</span>'
-                + '</div>' : '')
-            + '<div class="dt-title-row">'
-            + '<span class="dt-lesson-tag" style="cursor:pointer;" title="查看食谱详情">' + rTag + '</span>'
-            + '<div class="dt-title">' + escapeHtml(recipe.title) + '</div>'
-            + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" class="dt-title-act" style="font-size:16px;" title="往期回顾">📅</button>'
+        recipeCard = '<div onclick="_fhOpenCardRecipe()" style="cursor:pointer;position:relative;min-height:132px;border-radius:14px;overflow:hidden;background:linear-gradient(135deg,#3B2418,#1F130D);">'
+            + (recipe.coverImage
+                ? '<img src="' + escapeAttr(recipe.coverImage) + '" alt="' + escapeAttr(recipe.title) + '" loading="lazy" onerror="this.style.display=\'none\'" style="display:block;width:100%;height:124px;object-fit:cover;opacity:.92;">'
+                : '<div style="height:70px;"></div>')
+            + '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,12,8,.05) 0%,rgba(20,12,8,.55) 46%,rgba(20,12,8,.88) 100%);pointer-events:none;"></div>'
+            + '<div style="position:absolute;left:12px;top:10px;display:flex;align-items:center;gap:6px;">'
+            + '<span style="font-size:10px;font-weight:700;color:#1F130D;background:#FBBF24;border-radius:999px;padding:2px 8px;">🌙 晚宴</span>'
+            + '<span style="font-size:10px;color:rgba(255,255,255,.8);">' + (recipe._fallback ? '往期食谱' : '新奇特食谱') + '</span>'
             + '</div>'
-            + '<div class="dt-summary" style="margin-top:8px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(intro) + '</div>'
-            + '</div>';
+            + '<div style="position:absolute;left:12px;right:12px;bottom:10px;">'
+            + '<div style="font-size:15px;font-weight:800;color:#fff;line-height:1.45;">' + escapeHtml(recipe.title) + '</div>'
+            + '<div style="font-size:11px;color:rgba(255,255,255,.82);line-height:1.6;margin-top:3px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(rIntro) + '</div>'
+            + '<div style="display:flex;align-items:center;margin-top:6px;font-size:10px;color:#FDE68A;">'
+            + '<span>点击看做法 · 一键加入食记</span><span style="flex:1;"></span><span>›</span></div>'
+            + '</div></div>';
     } else {
-        var a = diet || {};
-        bodyHtml = '<div onclick="_fhOpenHomeArticle()" style="cursor:pointer;">'
-            + '<div class="dt-title-row">'
-            + '<span class="dt-lesson-tag" onclick="event.stopPropagation(); _fhOpenHall()" style="cursor:pointer;" title="进入食养堂">今日饮食</span>'
-            + '<div class="dt-title">' + escapeHtml(a.title || '今日食养') + '</div>'
-            + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" class="dt-title-act" style="font-size:16px;" title="往期回顾">📅</button>'
-            + '</div>'
-            + '<div class="dt-summary">' + escapeHtml(a.summary || '') + '</div>'
-            + (isMember ? '' : '<div style="font-size:11px;color:#B45309;margin-top:6px;">🔒 食养会员专享 · 点击解锁全文</div>')
+        recipeCard = '<div style="border-radius:14px;padding:11px 12px;background:#20140E;border:1px dashed #5B3A28;">'
+            + '<div style="font-size:10px;font-weight:700;color:#FBBF24;">🌙 晚宴</div>'
+            + '<div style="font-size:12px;color:#C8A68C;margin-top:5px;">' + (recipeDue ? '今日晚宴暂未更新，稍后自动补发' : '今日 16:30 自动上架') + '</div>'
             + '</div>';
     }
-    // V402: 卡片底部常驻「今日另一条」入口（另一轨始终可达）
-    var altTitle = '';
-    if (slot === 'recipe_article' && hasDiet) altTitle = '饮食文章 · ' + diet.title;
-    else if (slot === 'diet_article' && hasRecipe) altTitle = '今日食谱 · ' + recipe.title;
-    var altHtml = altTitle
-        ? '<div onclick="event.stopPropagation(); _fhOpenOtherTrack()" style="display:flex;align-items:center;gap:6px;margin-top:10px;padding-top:9px;border-top:1px dashed #FED7AA;font-size:11px;color:#B45309;cursor:pointer;">'
-            + '<span style="flex:0 0 auto;font-weight:700;">🔄 今日另一条</span>'
-            + '<span style="flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:#9A3412;">' + escapeHtml(altTitle) + '</span>'
-            + '<span style="flex:0 0 auto;color:#D1D5DB;">›</span></div>'
-        : '';
-    el.innerHTML = headHtml + bodyHtml + altHtml;
-}
-// V402: 打开另一条轨道（当前食谱→饮食文章；当前饮食→今日食谱）
-function _fhOpenOtherTrack() {
-    if (_fhIsRecipeSlot()) {
-        if (typeof isFoodMember === 'function' && !isFoodMember()) { _fhShowPaywall(); return; }
-        _fhOpenArticleDetail(_fhArticleList(_fhCachedTip())[0]);
-    } else {
-        _fhOpenRecipeDetail(_fhRecipeOfDay());
-    }
+    var bodyHtml = '<div style="display:flex;flex-direction:column;gap:10px;">'
+        + (recipeDue ? (recipeCard + dietCard) : (dietCard + recipeCard))
+        + '</div>';
+    el.innerHTML = headHtml + bodyHtml;
 }
 function _dtRenderDegraded(latestDate) {
     var el = document.getElementById('homeDailyTipCard');
@@ -33275,6 +33282,25 @@ var _FH_HALL_ARTICLES = [];
 // ==================== V402: 双轨内容分发（饮食文章 / 新奇特食谱） ====================
 // 分时段：06:00–10:59 食谱；11:00–16:29 饮食；16:30–20:59 食谱；21:00–05:59 饮食
 var _fhTracks = { date: '', diet_article: null, recipe_article: null, ready: false };
+var _fhTracksOk = false;   // 双轨接口是否成功返回（失败时回退本地/内置内容，不显示"待上架"占位）
+var _fhCardDiet = null, _fhCardRecipe = null;
+// V404: AI 绘图——pollinations 免费、无需 Key；按文章 id 生成稳定随机种子，失败由 onerror 兜底
+function _fhSeed(str) {
+    var h = 2166136261, s = String(str || '');
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
+    return h || 1;
+}
+function _fhCoverUrl(prompt, seed) {
+    if (!prompt) return '';
+    return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt)
+        + '?width=800&height=600&nologo=true&seed=' + (seed || Math.floor(Math.random() * 1000000000));
+}
+function _fhOpenCardDiet() {
+    if (!_fhCardDiet) return;
+    if (typeof isFoodMember === 'function' && !isFoodMember()) { _fhShowPaywall(); return; }
+    _fhOpenArticleDetail(_fhCardDiet);
+}
+function _fhOpenCardRecipe() { if (_fhCardRecipe) _fhOpenRecipeDetail(_fhCardRecipe); }
 function _fhSlotType() {
     var d = new Date();
     var m = d.getHours() * 60 + d.getMinutes();
@@ -33287,12 +33313,14 @@ function _fhIsRecipeSlot() { return _fhSlotType() === 'recipe_article'; }
 function _fhTrackOf(ct) { try { return _fhTracks && _fhTracks[ct] ? _fhTracks[ct] : null; } catch (e) { return null; } }
 function _fhRecipeFromArticle(a) {
     if (!a) return null;
+    var cover = a.coverImage || '';
+    if (!cover && a.imagePrompt) cover = _fhCoverUrl(a.imagePrompt, _fhSeed(a.id || a.title));
     return {
         id: a.id || ('fhr_srv_' + (a.date || '')),
         title: a.title || '',
         summary: a.summary || '',
         content: a.content || '',
-        coverImage: a.coverImage || '',
+        coverImage: cover,
         ingredients: Array.isArray(a.ingredients) ? a.ingredients : [],
         steps: Array.isArray(a.steps) ? a.steps : [],
         tips: Array.isArray(a.tips) ? a.tips.join(' ') : (a.tips || ''),
@@ -33730,10 +33758,13 @@ async function renderHomeDailyTipCard(force) {
     _dtSwapCount = 0;
     _dtServerTip = null;
     // V402: 拉取今日双轨（饮食文章 + 新奇特食谱），分时段卡片各取其一
+    // V404: _fhTracksOk 标记接口是否可用——失败时回退本地内容，不显示"16:30 待上架"占位
+    _fhTracksOk = false;
     try {
         var respT = await fetch('/api/food-hall/published?date=' + encodeURIComponent(_dtTodayKey()), { cache: 'no-store' });
         var outT = await respT.json();
         if (outT && outT.ok) {
+            _fhTracksOk = true;
             _fhTracks = {
                 date: outT.date || _dtTodayKey(),
                 diet_article: outT.diet_article || null,
@@ -33741,7 +33772,7 @@ async function renderHomeDailyTipCard(force) {
                 ready: !!outT.published
             };
         }
-    } catch (e) {}
+    } catch (e) { _fhTracksOk = false; }
     var subPlan = _dtSubPlan();
     // V285: 订阅用户的 AI 专属生成改为「并行后台」——先立即渲染已有内容，
     // AI 结果晚到再替换，避免首屏被 60s 级 AI 请求卡住只显示骨架屏。

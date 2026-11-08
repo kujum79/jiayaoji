@@ -1,9 +1,9 @@
 [Unit]
-Description=Run JiaYaoJi FoodHall auto-confirm at 06:00
+Description=Run JiaYaoJi FoodHall diet article publish at 06:30
 
 [Timer]
-# 每天 06:00 保底确认今日 pending 备稿；错过则开机补跑
-OnCalendar=*-*-* 06:00:00
+# V404: 早晚双峰——每天 06:30 只发布「饮食文章（晨读）」；错过则开机补跑
+OnCalendar=*-*-* 06:30:00
 Persistent=true
 Unit=jiayaoji-foodhall-confirm.service
 

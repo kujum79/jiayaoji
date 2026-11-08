@@ -1,5 +1,5 @@
 [Unit]
-Description=JiaYaoJi FoodHall auto-confirm pending drafts at 06:00
+Description=JiaYaoJi FoodHall publish diet article (06:30)
 After=network.target jiayaoji.service
 
 [Service]

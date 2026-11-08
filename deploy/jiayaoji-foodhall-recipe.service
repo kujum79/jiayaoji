@@ -1,0 +1,8 @@
+[Unit]
+Description=JiaYaoJi FoodHall publish recipe article (16:30)
+After=network.target jiayaoji.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/var/www/jiayaoji
+ExecStart=/bin/bash /var/www/jiayaoji/deploy/foodhall_autorecipe.sh

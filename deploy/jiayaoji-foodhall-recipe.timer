@@ -1,0 +1,11 @@
+[Unit]
+Description=Run JiaYaoJi FoodHall recipe article publish at 16:30
+
+[Timer]
+# V404: 早晚双峰——每天 16:30 只发布「新奇特食谱（晚宴）」；错过则开机补跑
+OnCalendar=*-*-* 16:30:00
+Persistent=true
+Unit=jiayaoji-foodhall-recipe.service
+
+[Install]
+WantedBy=timers.target

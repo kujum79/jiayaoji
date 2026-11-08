@@ -827,8 +827,8 @@ _FOODHALL_RECIPE_SYSTEM = (
     "【节气】{solar_term}\n"
     "\n"
     "请推荐一道世界各地的奇特美食或罕见小吃。必须包含：菜名、惊艳的视觉描述、核心食材、简化版做法。\n"
-    "并且，请生成一段用于 AI 绘图的 Prompt（如：'拉丝的芝士炸猪排，微距镜头，暖色调，令人垂涎欲滴，食物摄影'），"
-    "我将用这段 Prompt 去生成诱人的封面图。\n"
+    "并且，请生成一段用于 AI 绘图的英文 Prompt（如：'stretching cheese pork cutlet, macro lens, warm tone, "
+    "mouth-watering, food photography'），我将用这段 Prompt 去生成诱人的封面图。\n"
     "\n"
     "生成要求：\n"
     "1. 3 篇必须来自不同国家/地区，风格拉开差距（如街头小吃、节庆食物、发酵风味、甜点等），不得重复同一道菜；\n"
@@ -838,8 +838,9 @@ _FOODHALL_RECIPE_SYSTEM = (
     "5. ingredients：核心食材数组，4-8 项，每项带大致用量（如「马苏里拉芝士 200g」）；\n"
     "6. steps：简化版做法数组，3-5 步，每步 30 字内，家庭可操作；\n"
     "7. tips：2 条小贴士，每条 25 字内；\n"
-    "8. imagePrompt：一段中文 AI 绘图中文提示词，必须包含主体食物 + 镜头/光线 + 氛围，"
-    "参考格式「拉丝的芝士炸猪排，微距镜头，暖色调，令人垂涎欲滴，食物摄影」，不得出现文字、logo、人物正脸；\n"
+    "8. imagePrompt：一段英文 SDXL 风格绘图提示词（如 \"stretching cheese pork cutlet, macro lens, warm tone, "
+    "mouth-watering, food photography, shallow depth of field\"），必须包含主体食物 + 镜头/光线 + 氛围，"
+    "禁止出现文字、logo、人物正脸；\n"
     "9. 主题必须全国通用，不得指定或暗示某座城市/地区，不得绑定某地天气；\n"
     "\n"
     "严格禁止出现这些词：治疗、治愈、改善、降低、预防、功效、食疗、润肺、止咳、降三高、祛湿、排毒。"
@@ -859,9 +860,13 @@ _FH_CONTENT_TYPES = ("diet_article", "recipe_article")
 
 
 def _fh_cover_image(image_prompt: str) -> str:
-    """V402: 用 AI 绘图 Prompt 生成封面图 URL（pollinations，无需 Key，失败由前端 onerror 兜底）。"""
+    """V402: 用 AI 绘图 Prompt 生成封面图 URL（pollinations，无需 Key，失败由前端 onerror 兜底）。
+    V404: 追加随机 seed —— 同一 Prompt 也能得到不同的随机图，避免每次都是同一张。
+    """
     p = (image_prompt or "").strip()[:300] or "world street food close up, warm tone, food photography"
-    return "https://image.pollinations.ai/prompt/" + quote(p) + "?width=800&height=600&nologo=true"
+    seed = random.randrange(1, 10 ** 9)
+    return ("https://image.pollinations.ai/prompt/" + quote(p)
+            + f"?width=800&height=600&nologo=true&seed={seed}")
 
 # V141 审核黑名单（发布前合规审核·error 级，本地匹配 0 token）
 _FOODHALL_AUDIT_BANNED = ["治疗", "治愈", "根治", "改善", "降低", "预防", "抗癌", "排毒",
@@ -1232,14 +1237,70 @@ def _fh_db():
     return conn
 
 
+# V404: 早晚双峰应用内调度（06:30 饮食 / 16:30 食谱），与 systemd timer 双保险，发布本身幂等
+_FH_SCHEDULE: Tuple[Tuple[str, str], ...] = (("06:30", "diet_article"), ("16:30", "recipe_article"))
+_FH_SCHEDULER_STARTED = False
+_FH_SCHED_DONE: set = set()      # {(YYYY-MM-DD, contentType)} 当天已成功处理
+_FH_SCHED_TRY: Dict[tuple, int] = {}
+_FH_SCHED_NEXT: Dict[tuple, float] = {}
+
+
+async def _fh_publish_scheduler() -> None:
+    """V404: 每 30 秒检查一次——06:30 发布饮食文章，16:30 发布食谱文章，两轨独立。
+
+    到点后即使服务晚于该时间启动，也会在下次检查时补发（catch-up）；
+    发布函数幂等，重复触发不会覆盖超管已确认的篇目。单日单轨最多重试 3 次（间隔 5 分钟）。
+    """
+    while True:
+        try:
+            now = _dt_cls.now()
+            today = now.strftime("%Y-%m-%d")
+            hhmm = now.strftime("%H:%M")
+            now_ts = time.time()
+            for at, ct in _FH_SCHEDULE:
+                if hhmm < at:
+                    continue
+                key = (today, ct)
+                if key in _FH_SCHED_DONE or _FH_SCHED_TRY.get(key, 0) >= 3:
+                    continue
+                if now_ts < _FH_SCHED_NEXT.get(key, 0):
+                    continue
+                _FH_SCHED_TRY[key] = _FH_SCHED_TRY.get(key, 0) + 1
+                try:
+                    res = await _fh_publish_due_track(today, ct)
+                except Exception as exc:
+                    res = {"ok": False, "error": str(exc)}
+                print(f"[foodhall] 定时发布 {at} {ct}: {res}", flush=True)
+                if res.get("ok"):
+                    _FH_SCHED_DONE.add(key)
+                else:
+                    _FH_SCHED_NEXT[key] = now_ts + 300
+            # 清理非当天的调度记录，避免长期运行内存膨胀
+            for k in [k for k in _FH_SCHED_DONE if k[0] != today]:
+                _FH_SCHED_DONE.discard(k)
+            for k in [k for k in _FH_SCHED_TRY if k[0] != today]:
+                _FH_SCHED_TRY.pop(k, None)
+                _FH_SCHED_NEXT.pop(k, None)
+        except Exception as exc:
+            print(f"[foodhall] 定时发布调度异常: {exc}", flush=True)
+        await asyncio.sleep(30)
+
+
 @app.on_event("startup")
-def _fh_startup_init() -> None:
-    """V143: 启动即建表 + 生成内部令牌文件（供本机 22:30 定时任务读取，避免鉴权鸡生蛋问题）。"""
+async def _fh_startup_init() -> None:
+    """V143: 启动即建表 + 生成内部令牌文件（供本机 22:30 定时任务读取，避免鉴权鸡生蛋问题）。
+    V404: 同时拉起早晚双峰应用内调度（06:30 饮食 / 16:30 食谱）。
+    """
+    global _FH_SCHEDULER_STARTED
     try:
         _internal_token()
         _fh_db().close()
     except Exception as exc:
         print(f"[foodhall] 启动初始化失败: {exc}")
+    if not _FH_SCHEDULER_STARTED:
+        _FH_SCHEDULER_STARTED = True
+        asyncio.create_task(_fh_publish_scheduler())
+        print("[foodhall] 早晚双峰调度已启动（06:30 饮食 / 16:30 食谱）", flush=True)
 
 
 def _fh_record_run(pub_date: str, status: str, note: str, audited: List[Dict[str, Any]]) -> None:
@@ -1360,6 +1421,130 @@ _FH_CITY_HINTS = ["北京", "上海", "杭州", "广州", "深圳", "成都", "�
                   "厦门", "福州", "哈尔滨", "沈阳", "长春", "昆明", "郑州", "济南"]
 _FH_WEATHER_HINTS = ["降温", "升温", "暴雨", "大雪", "暴雪", "寒潮", "高温", "酷暑",
                      "梅雨", "台风", "沙尘", "冰雹", "雷雨", "连阴雨", "骤降", "骤升"]
+
+
+def _fh_recent_cats(pub_date: str, content_type: str) -> List[str]:
+    """近 3 天同轨已选类别，避免主题/品类连撞。"""
+    try:
+        with _fh_db() as conn:
+            rows = conn.execute(
+                "SELECT category FROM food_hall_pub_days WHERE title<>'' AND content_type=? "
+                "AND publish_date < ? ORDER BY publish_date DESC LIMIT 3",
+                (content_type, pub_date),
+            ).fetchall()
+        return [r["category"] for r in rows if r["category"]]
+    except Exception:
+        return []
+
+
+async def _fh_publish_due_track(pub_date: str, content_type: str) -> Dict[str, Any]:
+    """V404: 单轨到点发布（06:30 饮食 / 16:30 食谱），与另一轨互不影响。
+
+    1) 该轨今日已 confirmed → 跳过（幂等，重复触发不覆盖超管选择）；
+    2) 有当天候选池 → 逐篇审核后择优确认（已带 audit 的直接复用，省 token）；
+    3) 无候选 → 现场 AI 生成 3 篇 + 审核 + 择优（AI 自动兜底发布）。
+    """
+    label = "食谱" if content_type == "recipe_article" else "饮食"
+    row = _fh_get_track_row(pub_date, content_type)
+    if row and (row["review_status"] or "") == "confirmed" and (row["title"] or "").strip():
+        return {"ok": True, "published": False, "skipped": True,
+                "date": pub_date, "contentType": content_type,
+                "reason": f"{label}今日已发布，跳过"}
+
+    now_iso = _dt_cls.now().strftime("%Y-%m-%d %H:%M:%S")
+    candidates: List[Dict[str, Any]] = []
+    if row:
+        art = _fh_row_to_article(row)
+        if (art.get("title") or "").strip():
+            candidates.append(art)
+        chosen_id = row["chosen_id"] or ""
+        for d in _fh_row_drafts(row):
+            if (d.get("title") or "").strip() and d.get("id") != chosen_id:
+                candidates.append(d)
+
+    generated = False
+    if not candidates:
+        try:
+            drafts, _violations, _regen = await _foodhall_generate_core(
+                pub_date, "", _fh_solar_term(pub_date), {}, content_type
+            )
+        except HTTPException as exc:
+            _fh_record_run(pub_date, "error", f"{label}兜底生成失败: {exc.detail}", [])
+            return {"ok": False, "published": False, "date": pub_date,
+                    "contentType": content_type, "error": f"{label}兜底生成失败: {exc.detail}"}
+        except Exception as exc:
+            _fh_record_run(pub_date, "error", f"{label}兜底生成异常: {exc}", [])
+            return {"ok": False, "published": False, "date": pub_date,
+                    "contentType": content_type, "error": f"{label}兜底生成异常: {exc}"}
+        candidates = drafts
+        generated = True
+
+    audited: List[Dict[str, Any]] = []
+    for c in candidates:
+        audit = c.get("audit") if isinstance(c.get("audit"), dict) else None
+        if not audit:
+            audit = await _foodhall_audit_core(
+                c.get("title", ""), c.get("summary", ""),
+                c.get("content", ""), c.get("tips") or [],
+            )
+        audited.append({**c, "audit": audit})
+    passed = [a for a in audited if a.get("audit", {}).get("passed")]
+    if not passed:
+        note = f"{label}到点发布：{len(audited)} 篇均未通过合规审核，暂不上架"
+        _fh_record_run(pub_date, "no_pass", note, audited)
+        return {"ok": True, "published": False, "date": pub_date,
+                "contentType": content_type, "reason": note}
+
+    recent_cats = _fh_recent_cats(pub_date, content_type)
+    chosen_idx = max(
+        range(len(audited)),
+        key=lambda i: _fh_pick_score(audited[i], recent_cats, i)
+        if audited[i].get("audit", {}).get("passed") else -999,
+    )
+    chosen = dict(audited[chosen_idx])
+    if content_type == "recipe_article" and not chosen.get("coverImage"):
+        chosen["coverImage"] = _fh_cover_image(
+            chosen.get("imagePrompt") or chosen.get("summary") or chosen.get("title") or ""
+        )
+    drafts_json = (row["drafts"] if row and row["drafts"] and row["drafts"] != "[]"
+                   else json.dumps(audited, ensure_ascii=False))
+    note = f"{label}到点自动发布《{chosen.get('title', '')}》" + ("（AI 兜底现生成）" if generated else "")
+    try:
+        with _fh_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO food_hall_pub_days
+                  (publish_date, content_type, category, title, summary, content, tips, related,
+                   ingredients, steps, cover_image, image_prompt, drafts, chosen_id,
+                   auto_published, review_status, run_note, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'confirmed',?,?,?)
+                ON CONFLICT(publish_date, content_type) DO UPDATE SET
+                  category=excluded.category, title=excluded.title, summary=excluded.summary,
+                  content=excluded.content, tips=excluded.tips, ingredients=excluded.ingredients,
+                  steps=excluded.steps, cover_image=excluded.cover_image,
+                  image_prompt=excluded.image_prompt, drafts=excluded.drafts,
+                  chosen_id=excluded.chosen_id, auto_published=1, review_status='confirmed',
+                  run_note=excluded.run_note, updated_at=excluded.updated_at
+                """,
+                (pub_date, content_type, chosen.get("category", ""), chosen.get("title", ""),
+                 chosen.get("summary", ""), chosen.get("content", ""),
+                 json.dumps(chosen.get("tips") or [], ensure_ascii=False), "[]",
+                 json.dumps(chosen.get("ingredients") or [], ensure_ascii=False),
+                 json.dumps(chosen.get("steps") or [], ensure_ascii=False),
+                 chosen.get("coverImage", ""), chosen.get("imagePrompt", ""),
+                 drafts_json, chosen.get("id", ""), note, now_iso, now_iso),
+            )
+    except Exception as exc:
+        _fh_record_run(pub_date, "error", f"{label}到点发布入库失败: {exc}", audited)
+        return {"ok": False, "published": False, "date": pub_date,
+                "contentType": content_type, "error": f"入库失败: {exc}"}
+
+    _fh_record_run(pub_date, "auto_confirmed", note, audited)
+    return {"ok": True, "published": True, "date": pub_date, "contentType": content_type,
+            "generated": generated, "note": note,
+            "article": {"id": chosen.get("id", ""), "title": chosen.get("title", ""),
+                        "category": chosen.get("category", "")}}
+
 
 
 class FoodHallAutoPublishRequest(BaseModel):
@@ -1758,7 +1943,8 @@ async def food_hall_select(req: FoodHallSelectRequest) -> Dict[str, Any]:
 
 
 class FoodHallAutoConfirmRequest(BaseModel):
-    date: str = ""  # 缺省=今天
+    date: str = ""              # 缺省=今天
+    contentType: str = ""       # V404: 指定轨道（缺省=diet_article，06:30 晨读）
 
 
 @app.post("/api/food-hall/auto-confirm", include_in_schema=False)
@@ -1766,13 +1952,17 @@ async def food_hall_auto_confirm(
     req: FoodHallAutoConfirmRequest,
     x_internal_token: str = Header(default=""),
 ) -> Dict[str, Any]:
-    """V145: 保底自动确认——每天 6:00 由 systemd timer 调用。
+    """V145: 保底自动确认——systemd timer 调用。
 
-    把当天 publish_date 还是 pending 的记录转为 confirmed，保证首页 6:00 后一定有内容。
+    V404: 按轨道独立确认——06:30 只确认饮食文章（diet_article），16:30 只确认食谱（recipe_article），
+    两轨互不干扰；不传 contentType 时默认 diet_article（兼容旧定时脚本）。
     幂等：已是 confirmed/withdrawn 的不动。
     """
     if not x_internal_token or not _secrets.compare_digest(x_internal_token, _internal_token()):
         raise HTTPException(status_code=403, detail="禁止访问：内部令牌无效")
+    ct = (req.contentType or "diet_article").strip()
+    if ct not in _FH_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="contentType 仅支持 diet_article/recipe_article")
     pub_date = (req.date or "").strip()
     if not pub_date:
         pub_date = _date_cls.today().strftime("%Y-%m-%d")
@@ -1783,17 +1973,43 @@ async def food_hall_auto_confirm(
         with _fh_db() as conn:
             cur = conn.execute(
                 "UPDATE food_hall_pub_days SET review_status='confirmed', updated_at=? "
-                "WHERE publish_date=? AND title<>'' "
+                "WHERE publish_date=? AND content_type=? AND title<>'' "
                 "AND COALESCE(review_status,'')='pending'",
-                (now_iso, pub_date),
+                (now_iso, pub_date, ct),
             )
             affected = cur.rowcount
     except Exception as exc:
         _fh_record_run(pub_date, "error", f"保底确认失败: {exc}", [])
         raise HTTPException(status_code=500, detail=f"保底确认失败: {exc}")
-    note = f"保底自动确认 {affected} 篇" if affected else "无可确认记录"
+    label = "食谱" if ct == "recipe_article" else "饮食"
+    note = f"{label}保底自动确认 {affected} 篇" if affected else f"{label}无可确认记录"
     _fh_record_run(pub_date, "auto_confirmed", note, [])
-    return {"ok": True, "date": pub_date, "confirmed": affected}
+    return {"ok": True, "date": pub_date, "contentType": ct, "confirmed": affected}
+
+
+class FoodHallPublishDueRequest(BaseModel):
+    contentType: str = ""   # diet_article / recipe_article（必填）
+    date: str = ""          # 缺省=今天
+
+
+@app.post("/api/food-hall/publish-due", include_in_schema=False)
+async def food_hall_publish_due(
+    req: FoodHallPublishDueRequest,
+    x_internal_token: str = Header(default=""),
+) -> Dict[str, Any]:
+    """V404: 早晚双峰到点发布——06:30 饮食 / 16:30 食谱，两轨各自独立、互不干扰。
+
+    已确认则跳过；有候选池则择优确认；没有候选项时现场 AI 生成 3 篇再择优（AI 自动兜底发布）。
+    """
+    if not x_internal_token or not _secrets.compare_digest(x_internal_token, _internal_token()):
+        raise HTTPException(status_code=403, detail="禁止访问：内部令牌无效")
+    ct = (req.contentType or "").strip()
+    if ct not in _FH_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="contentType 仅支持 diet_article/recipe_article")
+    pub_date = (req.date or "").strip() or _date_cls.today().strftime("%Y-%m-%d")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", pub_date):
+        raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
+    return await _fh_publish_due_track(pub_date, ct)
 
 
 def _foodhall_plan_context() -> str:
