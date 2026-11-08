@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V404-20261108';
+        var APP_VER = 'V405-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -276,8 +276,8 @@
             box-sizing: border-box;
         }
         .home-card-title { font-size: 16px; font-weight: 600; color: #1F2937; margin-bottom: 10px; } /* V45: 与"晚餐"字号统一 16px */
-        /* V139: 食养堂·今日一课卡片 */
-        .daily-tip-card { min-height: 110px; max-height: 150px; overflow: hidden; }
+        /* V139: 食养堂·今日一课卡片；V405: 傍晚「寻味天下」大图为 200px，放宽卡片高度避免标题被裁切 */
+        .daily-tip-card { min-height: 110px; max-height: 320px; overflow: hidden; }
         /* V246: 食邦邻聚·首页公告栏 */
         .community-bar-card { padding: 12px 14px; cursor: pointer; }
         .community-bar-text { flex: 1; min-width: 0; font-size: 12px; color: #6B7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -33166,10 +33166,9 @@ function _dtRenderCard(tip) {
         + '<button class="dt-quiz-btn" onclick="openFoodGodQuiz()" title="每日食神问答">🎮 食神盲盒</button>'
         + subBtnHtml
         + '</span></div>';
-    // V404: 早晚双峰——首页同时展示「🌅 晨读」（饮食文章）与「🌙 晚宴」（食谱）两张不同样式的卡
-    // 06:30 自动上架晨读，16:30 自动上架晚宴；到点前显示"待上架"占位，到点后优先展示当日精选
+    // V405: 分时段单卡——06:00-16:29 展示饮食文章；16:30-23:59 展示「🌍 寻味天下」标题与诱人大图
     var mins = (new Date().getHours() * 60) + new Date().getMinutes();
-    var dietDue = mins >= 390;    // 06:30
+    var dietDue = mins >= 360;    // 06:00
     var recipeDue = mins >= 990;  // 16:30
     var dietToday = _fhTrackOf('diet_article');
     var recipeToday = _fhTrackOf('recipe_article');
@@ -33181,6 +33180,9 @@ function _dtRenderCard(tip) {
     _fhCardDiet = diet || null;
     _fhCardRecipe = recipe || null;
 
+    // 标题右侧的「🎓 食养教育」胶囊（会员拦截由 _fhOpenEdu 内部处理）
+    var eduPill = '<button onclick="event.stopPropagation(); _fhOpenEdu()" style="flex:0 0 auto;border:none;border-radius:999px;background:rgba(249,115,22,.14);color:#C2410C;font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer;white-space:nowrap;">🎓 食养教育</button>';
+
     var dietCard = '';
     if (diet && diet.title) {
         dietCard = '<div onclick="_fhOpenCardDiet()" style="cursor:pointer;border-radius:14px;padding:11px 12px;background:linear-gradient(135deg,#FFFBF3,#FFF2DF);border:1px solid #FDE7C8;">'
@@ -33190,16 +33192,19 @@ function _dtRenderCard(tip) {
             + '<span style="flex:1;"></span>'
             + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" style="border:none;background:none;font-size:14px;color:#C08457;cursor:pointer;padding:0 2px;" title="往期回顾">📅</button>'
             + '</div>'
-            + '<div style="font-size:15px;font-weight:800;color:#3F2A14;line-height:1.5;margin-top:7px;">' + escapeHtml(diet.title) + '</div>'
+            + '<div style="display:flex;align-items:flex-start;gap:8px;margin-top:7px;">'
+            + '<div style="flex:1;min-width:0;font-size:15px;font-weight:800;color:#3F2A14;line-height:1.5;">' + escapeHtml(diet.title) + '</div>'
+            + eduPill
+            + '</div>'
             + '<div style="font-size:12px;color:#9A7B5A;line-height:1.65;margin-top:4px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(diet.summary || '') + '</div>'
             + '<div style="display:flex;align-items:center;margin-top:7px;font-size:10px;color:#C08457;">'
-            + '<span>06:30 已上架</span><span style="flex:1;"></span>'
+            + '<span>06:00 已上架</span><span style="flex:1;"></span>'
             + '<span>' + (isMember ? '阅读全文 ›' : '🔒 会员专享 ›') + '</span>'
             + '</div></div>';
     } else {
         dietCard = '<div style="border-radius:14px;padding:11px 12px;background:#FFFBF3;border:1px dashed #FDE7C8;">'
             + '<div style="font-size:10px;font-weight:700;color:#B45309;">🌅 晨读</div>'
-            + '<div style="font-size:12px;color:#B08968;margin-top:5px;">' + (dietDue ? '今日晨读暂未更新，稍后自动补发' : '今日 06:30 自动上架') + '</div>'
+            + '<div style="font-size:12px;color:#B08968;margin-top:5px;">' + (dietDue ? '今日晨读暂未更新，稍后自动补发' : '今日 06:00 自动上架') + '</div>'
             + '</div>';
     }
     var recipeCard = '';
@@ -33208,29 +33213,32 @@ function _dtRenderCard(tip) {
         if (recipe.ingredients && recipe.ingredients.length) {
             rIntro += ' 主料：' + recipe.ingredients.slice(0, 3).join('、') + '。';
         }
-        recipeCard = '<div onclick="_fhOpenCardRecipe()" style="cursor:pointer;position:relative;min-height:132px;border-radius:14px;overflow:hidden;background:linear-gradient(135deg,#3B2418,#1F130D);">'
+        recipeCard = '<div onclick="_fhOpenCardRecipe()" style="cursor:pointer;position:relative;min-height:200px;border-radius:14px;overflow:hidden;background:linear-gradient(135deg,#3B2418,#1F130D);">'
             + (recipe.coverImage
-                ? '<img src="' + escapeAttr(recipe.coverImage) + '" alt="' + escapeAttr(recipe.title) + '" loading="lazy" onerror="this.style.display=\'none\'" style="display:block;width:100%;height:124px;object-fit:cover;opacity:.92;">'
-                : '<div style="height:70px;"></div>')
-            + '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,12,8,.05) 0%,rgba(20,12,8,.55) 46%,rgba(20,12,8,.88) 100%);pointer-events:none;"></div>'
-            + '<div style="position:absolute;left:12px;top:10px;display:flex;align-items:center;gap:6px;">'
-            + '<span style="font-size:10px;font-weight:700;color:#1F130D;background:#FBBF24;border-radius:999px;padding:2px 8px;">🌙 晚宴</span>'
-            + '<span style="font-size:10px;color:rgba(255,255,255,.8);">' + (recipe._fallback ? '往期食谱' : '新奇特食谱') + '</span>'
+                ? '<img src="' + escapeAttr(recipe.coverImage) + '" alt="' + escapeAttr(recipe.title) + '" loading="lazy" onerror="this.style.display=\'none\'" style="display:block;width:100%;height:200px;object-fit:cover;opacity:.92;">'
+                : '<div style="height:120px;"></div>')
+            + '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,12,8,.05) 0%,rgba(20,12,8,.55) 46%,rgba(20,12,8,.9) 100%);pointer-events:none;"></div>'
+            + '<div style="position:absolute;left:12px;right:12px;top:10px;display:flex;align-items:center;gap:6px;">'
+            + '<span style="font-size:10px;font-weight:700;color:#1F130D;background:#FBBF24;border-radius:999px;padding:2px 8px;">🌍 寻味天下</span>'
+            + '<span style="font-size:10px;color:rgba(255,255,255,.8);">' + (recipe._fallback ? '往期寻味' : '今日寻味') + '</span>'
             + '</div>'
             + '<div style="position:absolute;left:12px;right:12px;bottom:10px;">'
-            + '<div style="font-size:15px;font-weight:800;color:#fff;line-height:1.45;">' + escapeHtml(recipe.title) + '</div>'
-            + '<div style="font-size:11px;color:rgba(255,255,255,.82);line-height:1.6;margin-top:3px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(rIntro) + '</div>'
+            + '<div style="display:flex;align-items:flex-start;gap:8px;">'
+            + '<div style="flex:1;min-width:0;font-size:15px;font-weight:800;color:#fff;line-height:1.45;">' + escapeHtml(recipe.title) + '</div>'
+            + eduPill
+            + '</div>'
+            + '<div style="font-size:11px;color:rgba(255,255,255,.82);line-height:1.6;margin-top:3px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden;">' + escapeHtml(rIntro) + '</div>'
             + '<div style="display:flex;align-items:center;margin-top:6px;font-size:10px;color:#FDE68A;">'
-            + '<span>点击看做法 · 一键加入食记</span><span style="flex:1;"></span><span>›</span></div>'
+            + '<span>点击看做法 · 多道菜单独加入食记</span><span style="flex:1;"></span><span>›</span></div>'
             + '</div></div>';
     } else {
         recipeCard = '<div style="border-radius:14px;padding:11px 12px;background:#20140E;border:1px dashed #5B3A28;">'
-            + '<div style="font-size:10px;font-weight:700;color:#FBBF24;">🌙 晚宴</div>'
-            + '<div style="font-size:12px;color:#C8A68C;margin-top:5px;">' + (recipeDue ? '今日晚宴暂未更新，稍后自动补发' : '今日 16:30 自动上架') + '</div>'
+            + '<div style="font-size:10px;font-weight:700;color:#FBBF24;">🌍 寻味天下</div>'
+            + '<div style="font-size:12px;color:#C8A68C;margin-top:5px;">' + (recipeDue ? '今日寻味暂未更新，稍后自动补发' : '今日 16:30 自动上架') + '</div>'
             + '</div>';
     }
     var bodyHtml = '<div style="display:flex;flex-direction:column;gap:10px;">'
-        + (recipeDue ? (recipeCard + dietCard) : (dietCard + recipeCard))
+        + (recipeDue ? recipeCard : dietCard)
         + '</div>';
     el.innerHTML = headHtml + bodyHtml;
 }
@@ -33323,8 +33331,9 @@ function _fhRecipeFromArticle(a) {
         coverImage: cover,
         ingredients: Array.isArray(a.ingredients) ? a.ingredients : [],
         steps: Array.isArray(a.steps) ? a.steps : [],
+        dishes: Array.isArray(a.dishes) ? a.dishes : [],
         tips: Array.isArray(a.tips) ? a.tips.join(' ') : (a.tips || ''),
-        category: a.category || '世界奇味',
+        category: a.category || '寻味天下',
         contentType: 'recipe_article',
         date: a.date || '',
         _fallback: false
@@ -33462,10 +33471,10 @@ function _fhOpenHall() {
         + '</div>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;padding:14px 14px 28px;">'
-        + (isMember ? '' : '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.6;">🔒 食养会员可解锁全部深度文章、精美食谱与食养教育课程</div>')
+        + (isMember ? '' : '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.6;">🔒 食养会员可解锁全部深度文章、🌍 寻味天下与食养教育课程</div>')
         + '<div style="font-size:13px;font-weight:700;color:#1F2937;margin:2px 2px 8px;">📖 今日饮食文章</div>'
         + artHtml
-        + '<div style="font-size:13px;font-weight:700;color:#1F2937;margin:16px 2px 8px;">🍲 今日精美食谱</div>'
+        + '<div style="font-size:13px;font-weight:700;color:#1F2937;margin:16px 2px 8px;">🌍 寻味天下</div>'
         + recHtml
         + '</div>';
     document.body.appendChild(ov);
@@ -33483,14 +33492,16 @@ function _fhHallOpenArticle(i) {
     _fhOpenArticleDetail(_FH_HALL_ARTICLES[i]);
 }
 function _fhHallOpenRecipe(id) {
-    if (!isFoodMember()) { _fhShowPaywall(); return; }
     var r = _fhFindRecipe(id);
     if (r) _fhOpenRecipeDetail(r);
 }
+var _fhCurRecipe = null;   // V405: 当前打开的寻味天下文章（供单品加入食记取 dishes）
 function _fhOpenRecipeDetail(r) {
     if (!r) return;
+    _fhCurRecipe = r;
     var old = document.getElementById('fhRecipeOv');
     if (old) old.remove();
+    var isMember = (typeof isFoodMember === 'function') ? isFoodMember() : false;
     var ing = (r.ingredients || []).map(function (x) {
         return '<span style="display:inline-block;font-size:12px;color:#7C2D12;background:#FFF7ED;border:1px solid #FDE68A;border-radius:999px;padding:4px 9px;margin:0 6px 6px 0;">' + escapeHtml(x) + '</span>';
     }).join('');
@@ -33500,12 +33511,54 @@ function _fhOpenRecipeDetail(r) {
             + '<span style="flex:1;font-size:13px;color:#374151;line-height:1.7;">' + escapeHtml(s) + '</span>'
             + '</div>';
     }).join('');
+    // V405: 未订阅=可见封面大图与文章开头，正文做截断+模糊处理
+    var bodyText = String(r.content || '');
+    var contentHtml = '';
+    if (bodyText) {
+        if (isMember) {
+            contentHtml = '<div style="padding:10px 18px 0;"><div style="font-size:13px;color:#4B5563;line-height:1.9;white-space:pre-wrap;">' + escapeHtml(bodyText) + '</div></div>';
+        } else {
+            contentHtml = '<div style="padding:10px 18px 0;">'
+                + '<div style="font-size:13px;color:#4B5563;line-height:1.9;white-space:pre-wrap;">' + escapeHtml(bodyText.slice(0, 90)) + '…</div>'
+                + '<div style="position:relative;margin-top:8px;">'
+                + '<div style="max-height:118px;overflow:hidden;filter:blur(3.5px);font-size:13px;color:#4B5563;line-height:1.9;white-space:pre-wrap;user-select:none;">' + escapeHtml(bodyText.slice(90, 520)) + '</div>'
+                + '<button type="button" onclick="_fhShowPaywall(\'🔒 订阅食养会员，解锁海量精美图文食谱与健康指导。\')" style="position:absolute;left:0;right:0;bottom:0;border:none;background:linear-gradient(180deg,rgba(255,247,237,0),#FFF7ED 58%);padding:30px 0 6px;font-size:13px;font-weight:700;color:#C2410C;cursor:pointer;">🔒 解锁全文</button>'
+                + '</div></div>';
+        }
+    }
+    // V405: 正文下方渲染 2-4 张菜品卡片，每张右下角独立「加入食记」
+    var dishes = Array.isArray(r.dishes) ? r.dishes : [];
+    var dishHtml = '';
+    if (dishes.length) {
+        dishHtml = '<div style="padding:16px 18px 0;">'
+            + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin-bottom:10px;">🌍 文中好味（' + dishes.length + ' 道）</div>'
+            + dishes.map(function (d, di) {
+                var dname = (d && d.name) || '';
+                var dimg = (d && d.image) || (d && d.imagePrompt ? _fhCoverUrl(d.imagePrompt, _fhSeed(dname + di)) : '');
+                var dsteps = (d && Array.isArray(d.steps)) ? d.steps : [];
+                var dstepsHtml = dsteps.map(function (s, si) {
+                    return '<div style="display:flex;gap:6px;margin-bottom:4px;">'
+                        + '<span style="flex:0 0 auto;color:#F97316;font-size:11px;font-weight:700;line-height:1.7;">' + (si + 1) + '.</span>'
+                        + '<span style="flex:1;font-size:12px;color:#6B7280;line-height:1.7;">' + escapeHtml(s) + '</span>'
+                        + '</div>';
+                }).join('');
+                return '<div style="background:#fff;border:1px solid #FDE7C8;border-radius:14px;overflow:hidden;margin-bottom:12px;">'
+                    + (dimg ? '<img src="' + escapeAttr(dimg) + '" alt="' + escapeAttr(dname) + '" loading="lazy" onerror="this.style.display=\'none\'" style="display:block;width:100%;height:132px;object-fit:cover;background:#FDE68A;">' : '')
+                    + '<div style="padding:10px 12px 11px;">'
+                    + '<div style="font-size:15px;font-weight:800;color:#1F2937;line-height:1.45;">' + escapeHtml(dname) + '</div>'
+                    + (dstepsHtml ? '<div style="margin-top:7px;">' + dstepsHtml + '</div>' : '')
+                    + '<div style="display:flex;justify-content:flex-end;margin-top:9px;">'
+                    + '<button type="button" onclick="event.stopPropagation(); _fhAddDishToPlan(' + di + ')" style="border:none;border-radius:999px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:12px;font-weight:700;padding:7px 13px;cursor:pointer;box-shadow:0 3px 10px rgba(249,115,22,.25);">🍳 加入食记</button>'
+                    + '</div></div></div>';
+            }).join('')
+            + '</div>';
+    }
     var ov = document.createElement('div');
     ov.id = 'fhRecipeOv';
     ov.style.cssText = 'position:fixed;inset:0;z-index:100010;background:#FFF7ED;display:flex;flex-direction:column;max-width:430px;margin:0 auto;';
     ov.innerHTML = '<div style="flex:0 0 auto;background:#fff;border-bottom:1px solid #FED7AA;display:flex;align-items:center;gap:8px;padding:10px 14px;">'
         + '<button type="button" onclick="_fhCloseRecipe()" style="border:none;background:none;font-size:17px;color:#6B7280;cursor:pointer;padding:2px 4px;line-height:1;">←</button>'
-        + '<div style="flex:1;min-width:0;font-size:15px;font-weight:700;color:#1F2937;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">精美食谱</div>'
+        + '<div style="flex:1;min-width:0;font-size:15px;font-weight:700;color:#1F2937;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">🌍 寻味天下</div>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;">'
         + (r.coverImage
@@ -33518,20 +33571,21 @@ function _fhOpenRecipeDetail(r) {
         + '<div style="font-size:22px;font-weight:800;color:#1F2937;line-height:1.4;">' + escapeHtml(r.title) + '</div>'
         + '<div style="font-size:13px;color:#6B7280;line-height:1.7;margin-top:6px;">' + escapeHtml(r.summary) + '</div>'
         + '</div>'
-        + (r.content ? '<div style="padding:10px 18px 0;"><div style="font-size:13px;color:#4B5563;line-height:1.9;">' + escapeHtml(r.content) + '</div></div>' : '')
-        + '<div style="padding:14px 18px 0;">'
+        + contentHtml
+        + dishHtml
+        + (!dishes.length && steps ? '<div style="padding:14px 18px 0;">'
         + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin-bottom:10px;">🍳 做法</div>'
         + steps
-        + '</div>'
-        + (ing ? '<div style="padding:14px 18px 0;">'
+        + '</div>' : '')
+        + (!dishes.length && ing ? '<div style="padding:14px 18px 0;">'
         + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin-bottom:8px;">🧺 食材</div>'
         + '<div>' + ing + '</div>'
         + '</div>' : '')
         + (r.tips ? '<div style="margin:14px 18px 18px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:10px 12px;font-size:12px;color:#92400E;line-height:1.7;">💡 ' + escapeHtml(r.tips) + '</div>' : '')
         + '</div>'
-        + '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #FED7AA;padding:10px 14px calc(12px + env(safe-area-inset-bottom));">'
+        + (dishes.length ? '' : '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #FED7AA;padding:10px 14px calc(12px + env(safe-area-inset-bottom));">'
         + '<button type="button" onclick="_fhAddRecipeToPlan(\'' + escapeAttr(r.id) + '\')" style="width:100%;height:46px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(249,115,22,.28);">🍳 加入我的食记计划</button>'
-        + '</div>';
+        + '</div>');
     document.body.appendChild(ov);
     document.body.style.overflow = 'hidden';
 }
@@ -33540,8 +33594,49 @@ function _fhCloseRecipe() {
     if (ov) ov.remove();
     if (!document.getElementById('fhHallOv') && !document.getElementById('classroomCourseOverlay')) document.body.style.overflow = '';
 }
+// V405: 单品加入食记——只写该道菜（菜名+做法），不改动文章里的其他菜品
+function _fhAddDishToPlan(idx) {
+    if (!isFoodMember()) { _fhShowPaywall('🔒 订阅食养会员，解锁海量精美图文食谱与健康指导。'); return; }
+    var r = _fhCurRecipe;
+    if (!r || !Array.isArray(r.dishes)) return;
+    var d = r.dishes[idx];
+    if (!d || !d.name) return;
+    var now = new Date();
+    var h = now.getHours();
+    var meal = h < 10 ? 'breakfast' : (h < 15 ? 'lunch' : 'dinner');
+    var mealName = meal === 'breakfast' ? '早餐' : (meal === 'lunch' ? '午餐' : '晚餐');
+    var date = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    var cal = {};
+    try { cal = getDietCalendar() || {}; } catch (e) { cal = {}; }
+    var cur = (cal[date] && cal[date][meal] && cal[date][meal].plan) ? cal[date][meal].plan : {};
+    var names = (Array.isArray(cur.dishes) ? cur.dishes : []).map(function (x) {
+        return typeof x === 'string' ? x.trim() : String((x && x.name) || '').trim();
+    }).filter(Boolean);
+    if (names.indexOf(d.name) < 0) names.push(d.name);
+    var meta = Object.assign({}, cur.dishMeta || {});
+    var dm = Object.assign({}, meta[d.name] || {}, {
+        source: 'foodhall', confirmed: false, addedAt: Date.now(), cookSource: 'foodhall'
+    });
+    if (Array.isArray(d.steps) && d.steps.length) {
+        dm.steps = d.steps.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+    }
+    meta[d.name] = dm;
+    updateMealPlan(date, meal, Object.assign({}, cur, { dishes: names, dishMeta: meta, state: 'pending' }));
+    _fhCloseRecipe();
+    try { var hall = document.getElementById('fhHallOv'); if (hall) hall.remove(); } catch (e) {}
+    try { var edu = document.getElementById('fhEduOv'); if (edu) edu.remove(); } catch (e) {}
+    document.body.style.overflow = '';
+    try {
+        if (typeof _hdGotoDiary === 'function') _hdGotoDiary();
+        else switchTab('diary');
+    } catch (e) {
+        try { switchTab('diary'); } catch (_) {}
+    }
+    setTimeout(function () { showToast('✅ 已填入今日' + mealName + '：' + d.name); }, 220);
+}
 function _fhAddRecipeToPlan(id) {
-    var r = _fhFindRecipe(id);
+    if (!isFoodMember()) { _fhShowPaywall('🔒 订阅食养会员，解锁海量精美图文食谱与健康指导。'); return; }
+    var r = (id && _fhCurRecipe && _fhCurRecipe.id === id) ? _fhCurRecipe : _fhFindRecipe(id);
     if (!r) return;
     var now = new Date();
     var h = now.getHours();
@@ -33571,16 +33666,17 @@ function _fhAddRecipeToPlan(id) {
     }
     setTimeout(function () { showToast('✅ 已填入今日' + mealName + '：' + r.title); }, 220);
 }
-function _fhShowPaywall() {
+function _fhShowPaywall(msg) {
     if (isFoodMember()) return;
     var old = document.getElementById('fhPayOv');
     if (old) old.remove();
+    var headText = (msg && String(msg).trim()) || '成为家肴记食养会员（199元/年）';
     var ov = document.createElement('div');
     ov.id = 'fhPayOv';
     ov.style.cssText = 'position:fixed;inset:0;z-index:100012;background:rgba(17,24,39,.55);display:flex;align-items:center;justify-content:center;padding:22px;box-sizing:border-box;';
     ov.innerHTML = '<div style="width:360px;max-width:100%;background:linear-gradient(180deg,#FFF7ED,#fff);border-radius:20px;padding:22px 20px;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
         + '<div style="text-align:center;font-size:34px;line-height:1.1;">👑</div>'
-        + '<div style="text-align:center;font-size:18px;font-weight:800;color:#7C2D12;margin-top:8px;line-height:1.5;">成为家肴记食养会员（199元/年）</div>'
+        + '<div style="text-align:center;font-size:18px;font-weight:800;color:#7C2D12;margin-top:8px;line-height:1.5;">' + escapeHtml(headText) + '</div>'
         + '<div style="margin:16px 0 4px;">'
         + '<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:9px;"><span style="flex:0 0 auto;color:#16A34A;font-weight:700;">✅</span><span style="font-size:13px;color:#374151;line-height:1.65;">解锁每天的精美图文食谱与深度好文</span></div>'
         + '<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:9px;"><span style="flex:0 0 auto;color:#16A34A;font-weight:700;">✅</span><span style="font-size:13px;color:#374151;line-height:1.65;">畅学全站食养教育体系课程</span></div>'
@@ -35221,10 +35317,11 @@ async function _fhEnsureDailyDrafts(force) {
                 id: d.id, date: out.date || today, source: 'ai', authorId: 'ai',
                 status: 'draft', isTodayPick: false,   // V300: 新生成的草稿默认进草稿箱，等超管挑 1 篇设为今日精选
                 contentType: d.contentType || 'diet_article',
-                category: d.category || (d.contentType === 'recipe_article' ? '世界奇味' : '节气食养'),
+                category: d.category || (d.contentType === 'recipe_article' ? '寻味天下' : '节气食养'),
                 title: d.title, summary: d.summary || '',
                 content: d.content || '', tips: d.tips || [],
                 ingredients: d.ingredients || [], steps: d.steps || [],
+                dishes: d.dishes || [],
                 coverImage: d.coverImage || '', imagePrompt: d.imagePrompt || '',
                 auditStatus: 'pending',
                 auditNote: vio.length ? ('自动校验提示: ' + JSON.stringify(vio)) : ''
@@ -35402,7 +35499,7 @@ function _fhMgrRenderReviewTab(listEl, ct) {
                 : '')
             + '<div style="flex:1;min-width:0;">'
             + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
-            + '<span style="font-size:10px;color:#9A3412;background:#FFF3E2;padding:1px 7px;border-radius:999px;">' + escapeHtml(a.category || (isRecipe ? '世界奇味' : '节气食养')) + '</span>'
+            + '<span style="font-size:10px;color:#9A3412;background:#FFF3E2;padding:1px 7px;border-radius:999px;">' + escapeHtml(a.category || (isRecipe ? '寻味天下' : '节气食养')) + '</span>'
             + (a.passed ? '<span style="font-size:10px;color:#059669;">✅ 已过审</span>' : '<span style="font-size:10px;color:#DC2626;">⚠️ 未过审</span>')
             + (selected ? '<span style="font-size:10px;color:#F97316;font-weight:700;">⭐ 今日精选</span>' : '')
             + '</div>'

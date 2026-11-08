@@ -820,35 +820,36 @@ _FOODHALL_SYSTEM = (
     "articles 必须恰好 3 个元素。"
 )
 
-# V402: 食谱类 Prompt——"新奇特食谱"轨道，强制菜名/视觉描述/核心食材/简化做法 + AI 绘图 Prompt
+# V405: 食谱类 Prompt——「🌍 寻味天下」轨道，散文写地方美食，并结构化输出 2-4 道菜品（dishes）
 _FOODHALL_RECIPE_SYSTEM = (
-    '请为家肴记"食养堂"栏目生成 3 篇「新奇特食谱」候选内容。\n'
+    '请为家肴记"食养堂"栏目生成 3 篇「🌍 寻味天下」候选内容。\n'
     "【日期】{date}\n"
     "【节气】{solar_term}\n"
     "\n"
-    "请推荐一道世界各地的奇特美食或罕见小吃。必须包含：菜名、惊艳的视觉描述、核心食材、简化版做法。\n"
-    "并且，请生成一段用于 AI 绘图的英文 Prompt（如：'stretching cheese pork cutlet, macro lens, warm tone, "
-    "mouth-watering, food photography'），我将用这段 Prompt 去生成诱人的封面图。\n"
+    "请推荐一个地方的美食（或新奇特美食）。正文以散文形式展开。\n"
+    "同时，请提取文章中提到的 2-4 道核心美食，结构化为 dishes 数组，包含菜名、AI绘图提示词（用于生成单品图）"
+    "和精简做法步骤。\n"
     "\n"
     "生成要求：\n"
-    "1. 3 篇必须来自不同国家/地区，风格拉开差距（如街头小吃、节庆食物、发酵风味、甜点等），不得重复同一道菜；\n"
-    "2. 标题=菜名，12 字内，可直接做卡片标题；\n"
-    "3. 摘要=惊艳的视觉描述，60 字内，写得让人流口水（颜色、质感、拉丝/爆汁/焦香等画面感）；\n"
-    "4. 正文 200-300 字，介绍这道菜是什么、来自哪里、风味特点，语言口语化；\n"
-    "5. ingredients：核心食材数组，4-8 项，每项带大致用量（如「马苏里拉芝士 200g」）；\n"
-    "6. steps：简化版做法数组，3-5 步，每步 30 字内，家庭可操作；\n"
-    "7. tips：2 条小贴士，每条 25 字内；\n"
-    "8. imagePrompt：一段英文 SDXL 风格绘图提示词（如 \"stretching cheese pork cutlet, macro lens, warm tone, "
-    "mouth-watering, food photography, shallow depth of field\"），必须包含主体食物 + 镜头/光线 + 氛围，"
-    "禁止出现文字、logo、人物正脸；\n"
-    "9. 主题必须全国通用，不得指定或暗示某座城市/地区，不得绑定某地天气；\n"
+    "1. 3 篇分别写不同地方（国内城市或海外街头均可），风格拉开差距，不得重复同一道菜；\n"
+    "2. 标题参考「寻味成都：吃不够的街头烟火气」，16 字内，地名 + 主题；\n"
+    "3. 摘要 60 字内，写出当地最有画面感的一口（颜色、香气、质感），让人流口水；\n"
+    "4. 正文 300-500 字，散文笔触：街巷、人情、气味与吃法，口语化，不要写成攻略清单；\n"
+    "5. dishes：2-4 道文章中提到的核心美食，每道必须包含：\n"
+    "   - name：菜名（如「钟水饺」）；\n"
+    "   - imagePrompt：该单品的英文 SDXL 绘图提示词（如 \"zhong dumplings in red oil, macro lens, steam, "
+    "warm tone, food photography\"），必须包含主体食物 + 镜头/光线 + 氛围，禁止出现文字、logo、人物正脸；\n"
+    "   - steps：精简家庭做法 2-4 步，每步 30 字内；\n"
+    "6. tips：2 条小贴士，每条 25 字内；\n"
+    "7. imagePrompt：整篇文章封面图的英文 SDXL 绘图提示词，要求诱人、有食欲；\n"
     "\n"
     "严格禁止出现这些词：治疗、治愈、改善、降低、预防、功效、食疗、润肺、止咳、降三高、祛湿、排毒。"
     "禁止提及疾病名称，禁止承诺任何功效。\n"
     "\n"
-    '返回严格 JSON：{{"articles":[{{"category":"世界奇味","title":"...","summary":"...","content":"...",'
-    '"ingredients":["..."],"steps":["..."],"tips":["...","..."],"imagePrompt":"..."}}]}}，'
-    "articles 必须恰好 3 个元素。"
+    '返回严格 JSON：{{"articles":[{{"category":"寻味天下","title":"...","summary":"...","content":"...",'
+    '"tips":["...","..."],"imagePrompt":"...",'
+    '"dishes":[{{"name":"...","imagePrompt":"...","steps":["...","..."]}}]}}]}}，'
+    "articles 必须恰好 3 个元素，每篇 dishes 必须 2-4 个元素。"
 )
 
 # 验收禁词表（命中自动重试 1 次，仍命中则随响应返回 violations 供前端记 auditNote）
@@ -951,8 +952,8 @@ async def _foodhall_generate_core(
         system_prompt = _FOODHALL_RECIPE_SYSTEM.format(
             date=date, solar_term=solar_term or "无",
         )
-        user_prompt = (f"日期：{date}；节气：{solar_term or '无'}。请生成 3 篇世界奇特美食/罕见小吃候选，"
-                       "每篇必须给出 ingredients、steps 与 imagePrompt，主题必须全国通用。")
+        user_prompt = (f"日期：{date}；节气：{solar_term or '无'}。请生成 3 篇不同地方的「寻味天下」美食散文候选，"
+                       "每篇必须给出 2-4 道菜的 dishes（菜名 + 单品英文绘图提示词 + 精简做法）与封面 imagePrompt。")
     else:
         system_prompt = _FOODHALL_SYSTEM.format(
             date=date, solar_term=solar_term or "无",
@@ -990,10 +991,11 @@ async def _foodhall_generate_core(
             if hits:
                 violations.append({"index": i, "words": hits})
             # V296: 全国通用把关——标题/摘要/正文出现城市名即判为不合格，触发重生成
-            city_hits = [w for w in _FH_CITY_HINTS if w in blob]
+            # V405: 寻味天下本身就是"写某个地方的美食"，食谱轨不做城市名拦截
+            city_hits = [] if is_recipe else [w for w in _FH_CITY_HINTS if w in blob]
             if city_hits:
                 violations.append({"index": i, "type": "city", "words": city_hits})
-            # V323: 同批主题一致性（D3-01）——仅饮食文章要求挂靠节气；食谱轨是世界奇味，不做节气一致性约束
+            # V323: 同批主题一致性（D3-01）——仅饮食文章要求挂靠节气；V405 食谱轨为「寻味天下」，不做节气一致性约束
             if solar_term and not is_recipe:
                 title_txt = str(item.get("title") or "")
                 summary_txt = str(item.get("summary") or "")
@@ -1007,7 +1009,7 @@ async def _foodhall_generate_core(
                 "id": f"fh_{ts}_{i}",
                 "_idx": i,
                 "contentType": content_type,
-                "category": str(item.get("category") or ("世界奇味" if is_recipe else "节气食养")),
+                "category": str(item.get("category") or ("寻味天下" if is_recipe else "节气食养")),
                 "title": str(item.get("title") or "").strip(),
                 "summary": str(item.get("summary") or "").strip(),
                 "content": str(item.get("content") or "").strip(),
@@ -1018,6 +1020,20 @@ async def _foodhall_generate_core(
                 draft["steps"] = [str(x).strip() for x in (item.get("steps") or []) if str(x).strip()][:5]
                 draft["imagePrompt"] = image_prompt
                 draft["coverImage"] = _fh_cover_image(image_prompt or draft.get("summary") or draft["title"])
+                # V405: 每篇文章拆出 2-4 道核心菜品，单品图用单品 Prompt 单独生成
+                dishes: List[Dict[str, Any]] = []
+                for dj in (item.get("dishes") or [])[:4]:
+                    if not isinstance(dj, dict):
+                        continue
+                    dname = str(dj.get("name") or "").strip()
+                    if not dname:
+                        continue
+                    dprompt = str(dj.get("imagePrompt") or "").strip()
+                    dsteps = [str(x).strip() for x in (dj.get("steps") or []) if str(x).strip()][:4]
+                    dimg = str(dj.get("image") or "").strip() or _fh_cover_image(dprompt or dname)
+                    dishes.append({"name": dname, "image": dimg,
+                                   "imagePrompt": dprompt, "steps": dsteps})
+                draft["dishes"] = dishes
             drafts.append(draft)
         if drafts and not violations:
             break  # 干净即返回；命中禁词/跑题则再生成一轮
@@ -1175,6 +1191,7 @@ def _fh_table_sql() -> str:
             related        TEXT DEFAULT '[]',
             ingredients    TEXT DEFAULT '[]',
             steps          TEXT DEFAULT '[]',
+            dishes         TEXT DEFAULT '[]',
             cover_image    TEXT DEFAULT '',
             image_prompt   TEXT DEFAULT '',
             drafts         TEXT DEFAULT '[]',
@@ -1215,12 +1232,25 @@ def _fh_migrate_v402(conn) -> None:
     conn.execute("DROP TABLE food_hall_pub_days_v401")
 
 
+def _fh_migrate_v405(conn) -> None:
+    """V405: 「🌍 寻味天下」文章增加 dishes（2-4 道菜品：菜名/单品图/做法）字段。"""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='food_hall_pub_days'"
+    ).fetchone()
+    if not row:
+        return
+    if "dishes" in (row["sql"] or "").lower():
+        return
+    conn.execute("ALTER TABLE food_hall_pub_days ADD COLUMN dishes TEXT DEFAULT '[]'")
+
+
 def _fh_db():
-    """SQLite 连接（标准库零依赖），首次调用自动建表 + V402 双轨迁移。"""
+    """SQLite 连接（标准库零依赖），首次调用自动建表 + V402 双轨迁移 + V405 dishes 迁移。"""
     _FH_DATA_DIR.mkdir(parents=True, exist_ok=True)
     conn = _sqlite3.connect(str(_FH_DB_PATH), timeout=10)
     conn.row_factory = _sqlite3.Row
     _fh_migrate_v402(conn)
+    _fh_migrate_v405(conn)
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS food_hall_runs (
@@ -1331,13 +1361,14 @@ def _fh_row_to_article(row) -> Dict[str, Any]:
         "id": f"autotip_{(row['publish_date'] or '').replace('-', '')}_{ct}",
         "date": row["publish_date"],
         "contentType": ct,
-        "category": row["category"] or ("世界奇味" if ct == "recipe_article" else "节气食养"),
+        "category": row["category"] or ("寻味天下" if ct == "recipe_article" else "节气食养"),
         "title": row["title"] or "",
         "summary": row["summary"] or "",
         "content": row["content"] or "",
         "tips": _arr("tips"),
         "ingredients": _arr("ingredients"),
         "steps": _arr("steps"),
+        "dishes": _arr("dishes"),
         "coverImage": row["cover_image"] or "",
         "imagePrompt": row["image_prompt"] or "",
         "relatedIngredients": [],
@@ -1390,7 +1421,8 @@ def _fh_get_track_row(date_str: str, content_type: str):
 
 
 
-def _fh_pick_score(article: Dict[str, Any], recent_cats: List[str], index: int) -> float:
+def _fh_pick_score(article: Dict[str, Any], recent_cats: List[str], index: int,
+                   ignore_city: bool = False) -> float:
     """选篇打分：主题不与近 3 天重复 > 时效性（节气/天气类）> 正文篇幅适中 > 双小贴士。
     同分时靠 index 微差保持生成顺序（第 1 篇通常挂靠节气，时效性最强）。"""
     score = 1.0 - index * 0.01
@@ -1408,7 +1440,7 @@ def _fh_pick_score(article: Dict[str, Any], recent_cats: List[str], index: int) 
     # V145: 城市名/天气词硬扣分（夜间备稿不再注入城市/天气，但 AI 仍可能自塞，需硬扣分兜底）
     blob = (str(article.get("title", "")) + " " + str(article.get("summary", "")) + " "
             + str(article.get("content", "")))
-    if any(w in blob for w in _FH_CITY_HINTS):
+    if not ignore_city and any(w in blob for w in _FH_CITY_HINTS):
         score -= 5.0
     if any(w in blob for w in _FH_WEATHER_HINTS):
         score -= 3.0
@@ -1498,7 +1530,7 @@ async def _fh_publish_due_track(pub_date: str, content_type: str) -> Dict[str, A
     recent_cats = _fh_recent_cats(pub_date, content_type)
     chosen_idx = max(
         range(len(audited)),
-        key=lambda i: _fh_pick_score(audited[i], recent_cats, i)
+        key=lambda i: _fh_pick_score(audited[i], recent_cats, i, content_type == "recipe_article")
         if audited[i].get("audit", {}).get("passed") else -999,
     )
     chosen = dict(audited[chosen_idx])
@@ -1515,13 +1547,13 @@ async def _fh_publish_due_track(pub_date: str, content_type: str) -> Dict[str, A
                 """
                 INSERT INTO food_hall_pub_days
                   (publish_date, content_type, category, title, summary, content, tips, related,
-                   ingredients, steps, cover_image, image_prompt, drafts, chosen_id,
+                   ingredients, steps, dishes, cover_image, image_prompt, drafts, chosen_id,
                    auto_published, review_status, run_note, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'confirmed',?,?,?)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'confirmed',?,?,?)
                 ON CONFLICT(publish_date, content_type) DO UPDATE SET
                   category=excluded.category, title=excluded.title, summary=excluded.summary,
                   content=excluded.content, tips=excluded.tips, ingredients=excluded.ingredients,
-                  steps=excluded.steps, cover_image=excluded.cover_image,
+                  steps=excluded.steps, dishes=excluded.dishes, cover_image=excluded.cover_image,
                   image_prompt=excluded.image_prompt, drafts=excluded.drafts,
                   chosen_id=excluded.chosen_id, auto_published=1, review_status='confirmed',
                   run_note=excluded.run_note, updated_at=excluded.updated_at
@@ -1531,6 +1563,7 @@ async def _fh_publish_due_track(pub_date: str, content_type: str) -> Dict[str, A
                  json.dumps(chosen.get("tips") or [], ensure_ascii=False), "[]",
                  json.dumps(chosen.get("ingredients") or [], ensure_ascii=False),
                  json.dumps(chosen.get("steps") or [], ensure_ascii=False),
+                 json.dumps(chosen.get("dishes") or [], ensure_ascii=False),
                  chosen.get("coverImage", ""), chosen.get("imagePrompt", ""),
                  drafts_json, chosen.get("id", ""), note, now_iso, now_iso),
             )
@@ -1633,7 +1666,7 @@ async def food_hall_auto_publish(
 
         chosen_idx = max(
             range(len(audited)),
-            key=lambda i: _fh_pick_score(audited[i], recent_cats, i)
+            key=lambda i: _fh_pick_score(audited[i], recent_cats, i, ct == "recipe_article")
             if audited[i].get("audit", {}).get("passed") else -999,
         )
         chosen = dict(audited[chosen_idx])
@@ -1646,13 +1679,13 @@ async def food_hall_auto_publish(
                     """
                     INSERT INTO food_hall_pub_days
                       (publish_date, content_type, category, title, summary, content, tips, related,
-                       ingredients, steps, cover_image, image_prompt, drafts, chosen_id,
+                       ingredients, steps, dishes, cover_image, image_prompt, drafts, chosen_id,
                        auto_published, review_status, run_note, created_at, updated_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'pending',?,?,?)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,'pending',?,?,?)
                     ON CONFLICT(publish_date, content_type) DO UPDATE SET
                       category=excluded.category, title=excluded.title, summary=excluded.summary,
                       content=excluded.content, tips=excluded.tips, related=excluded.related,
-                      ingredients=excluded.ingredients, steps=excluded.steps,
+                      ingredients=excluded.ingredients, steps=excluded.steps, dishes=excluded.dishes,
                       cover_image=excluded.cover_image, image_prompt=excluded.image_prompt,
                       drafts=excluded.drafts, chosen_id=excluded.chosen_id, auto_published=1,
                       review_status='pending', run_note=excluded.run_note, updated_at=excluded.updated_at
@@ -1662,6 +1695,7 @@ async def food_hall_auto_publish(
                      json.dumps(chosen.get("tips", []), ensure_ascii=False), "[]",
                      json.dumps(chosen.get("ingredients", []), ensure_ascii=False),
                      json.dumps(chosen.get("steps", []), ensure_ascii=False),
+                     json.dumps(chosen.get("dishes", []), ensure_ascii=False),
                      chosen.get("coverImage", ""), chosen.get("imagePrompt", ""),
                      json.dumps(audited, ensure_ascii=False), chosen.get("id", ""),
                      note, now_iso, now_iso),
@@ -1837,6 +1871,7 @@ async def food_hall_candidates(date: str = "") -> Dict[str, Any]:
                     "tips": d.get("tips", []),
                     "ingredients": d.get("ingredients", []),
                     "steps": d.get("steps", []),
+                    "dishes": d.get("dishes", []),
                     "coverImage": d.get("coverImage", ""),
                     "imagePrompt": d.get("imagePrompt", ""),
                     "passed": bool((d.get("audit") or {}).get("passed")),
@@ -1915,13 +1950,13 @@ async def food_hall_select(req: FoodHallSelectRequest) -> Dict[str, Any]:
                 """
                 INSERT INTO food_hall_pub_days
                   (publish_date, content_type, category, title, summary, content, tips, related,
-                   ingredients, steps, cover_image, image_prompt, drafts, chosen_id,
+                   ingredients, steps, dishes, cover_image, image_prompt, drafts, chosen_id,
                    auto_published, review_status, run_note, created_at, updated_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'confirmed',?,?,?)
                 ON CONFLICT(publish_date, content_type) DO UPDATE SET
                   category=excluded.category, title=excluded.title, summary=excluded.summary,
                   content=excluded.content, tips=excluded.tips, ingredients=excluded.ingredients,
-                  steps=excluded.steps, cover_image=excluded.cover_image,
+                  steps=excluded.steps, dishes=excluded.dishes, cover_image=excluded.cover_image,
                   image_prompt=excluded.image_prompt, chosen_id=excluded.chosen_id,
                   review_status='confirmed', run_note=excluded.run_note, updated_at=excluded.updated_at
                 """,
@@ -1929,6 +1964,7 @@ async def food_hall_select(req: FoodHallSelectRequest) -> Dict[str, Any]:
                  json.dumps(chosen.get("tips") or [], ensure_ascii=False), "[]",
                  json.dumps(chosen.get("ingredients") or [], ensure_ascii=False),
                  json.dumps(chosen.get("steps") or [], ensure_ascii=False),
+                 json.dumps(chosen.get("dishes") or [], ensure_ascii=False),
                  cover_image, image_prompt, drafts_json,
                  chosen.get("id", ""), "超管设为今日精选", now_iso, now_iso),
             )
