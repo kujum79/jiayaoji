@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V411-20261108';
+        var APP_VER = 'V412-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -308,7 +308,7 @@
             .dt-btn { font-size: 11px; padding: 3px 10px; }
             .dt-head-btns { gap: 4px; }
         }
-        .home-ingr-text { font-size: 13px; color: #4B5563; line-height: 1.8; } /* V65: 恢复内联流（去 flex），+N/收起按钮真正嵌在文字后同行；行高 1.8 容纳 24px 按钮 */
+        .home-ingr-text { font-size: 13px; color: #4B5563; line-height: 1.8; position: relative; } /* V412: 按钮改为绝对定位固定在第一行最右，可遮盖左侧文字 */
         .home-recipe-menu-item {
             display: block; width: 100%;
             padding: 9px 14px;
@@ -385,7 +385,8 @@
         .hd-dish { display: inline-flex; align-items: center; gap: 5px; height: 24px; } /* V56: 行高约 24px */
         .hd-dish input[type="checkbox"] { width: 14px; height: 14px; accent-color: #F97316; cursor: pointer; flex-shrink: 0; margin: 0; } /* V56: 14px */
         .hd-dish-name { font-size: 13px; line-height: 1.4; color: #374151; cursor: pointer; margin-left: 1px; } /* V56: 13px 常规深灰；V57: +1px 使勾选框到菜名 6px、菜名到🎧 5px，紧凑成视觉单元 */
-        .ingr-more-btn { border: 1px solid #F97316; background: white; padding: 0 6px; height: 24px; font-size: 12px; font-weight: 600; color: #F97316; border-radius: 10px; cursor: pointer; line-height: 1; margin-left: 8px; vertical-align: middle; display: inline-block; } /* V65: 内联流嵌入文字后——收起态/展开态都与末行文字同行紧接其后 */
+        .ingr-more-btn { border: 1px solid #F97316; background: #fff; padding: 0 8px; height: 24px; font-size: 12px; font-weight: 600; color: #F97316; border-radius: 10px; cursor: pointer; line-height: 1; margin-left: 0; display: block; } /* V412: 绝对定位容器内，固定在食材内容第一行最右 */
+        .ingr-more-wrap { position: absolute; right: 0; top: 0; height: 24px; padding-left: 16px; display: flex; align-items: center; background: linear-gradient(to right, rgba(255,255,255,0) 0%, #fff 16px); } /* V412: 左侧白色渐隐，遮盖按钮下方文字 */
         .hd-listen {
             width: 24px; height: 24px; /* V56: 点击区随行高 24px（原 32px） */
             border: none; background: none;
@@ -33701,7 +33702,11 @@ function renderHomeIngrTags() {
         btn.className = 'ingr-more-btn';
         btn.textContent = _ingrExpanded ? '收起 ▲' : '+' + rest + ' 展开 ▼';
         btn.onclick = function () { _ingrExpanded = !_ingrExpanded; renderHomeIngrTags(); };
-        box.appendChild(btn);
+        // V412: 包一层绝对定位容器，固定在食材内容第一行最右（可遮盖左侧文字）
+        var wrap = document.createElement('div');
+        wrap.className = 'ingr-more-wrap';
+        wrap.appendChild(btn);
+        box.appendChild(wrap);
     }
 }
 
