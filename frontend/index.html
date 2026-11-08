@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V399-20261108';
+        var APP_VER = 'V400-20261108';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -77617,6 +77617,16 @@ function _communityPostCardHtml(p, opts) {
         if (p.officialSopUrl) {
             tradeHtml += '<button type="button" data-sop="' + escapeAttr(p.officialSopUrl) + '" style="display:inline-flex;align-items:center;gap:4px;margin-top:8px;padding:6px 12px;border:1px solid #BFDBFE;border-radius:9px;background:#EFF6FF;color:#1D4ED8;font-size:12px;font-weight:600;cursor:pointer;">📄 查看官方方案</button>';
         }
+        // V400: 官方背书 / 招募者下载 SOP / 同款食材包导购
+        if (!opts.audit) {
+            tradeHtml += '<div style="margin-top:8px;padding:8px 10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:9px;font-size:11px;color:#92400E;line-height:1.65;">✅ 本活动由家肴记官方提供《食育SOP手册》及活动专属防伪物料。</div>';
+        }
+        if (opts.mine) {
+            tradeHtml += '<button type="button" data-sopmd="' + escapeHtml(String(p.id || '')) + '" style="display:block;width:100%;margin-top:8px;padding:9px;border:1px solid #BFDBFE;border-radius:10px;background:#EFF6FF;color:#1D4ED8;font-size:12px;font-weight:700;cursor:pointer;">📥 下载活动SOP与食材采购清单</button>';
+        } else if (!opts.audit) {
+            var packQ = encodeURIComponent('亲子食育活动食材包 ' + String(p.title || ''));
+            tradeHtml += '<button type="button" data-pack="' + escapeAttr(p.materialPackUrl || ('https://s.taobao.com/search?q=' + packQ)) + '" style="display:block;width:100%;margin-top:8px;padding:9px;border:1px solid #FED7AA;border-radius:10px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:700;cursor:pointer;">🛒 购买同款活动食材包（淘宝/京东）</button>';
+        }
     } else if (p.type === 'expert') {
         tradeHtml = '<div style="margin-top:8px;font-size:12px;color:#5B21B6;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:9px;padding:8px 10px;line-height:1.7;">'
             + '<div style="font-weight:700;">🩺 咨询费：' + (priceVal > 0 ? '¥' + priceVal + '/次' : '面议') + ' · ✅ 资质已核验'
@@ -77738,6 +77748,94 @@ function _communityMoney(n) {
     var v = Math.round((Number(n) || 0) * 100) / 100;
     return '¥' + (v % 1 === 0 ? String(v) : v.toFixed(2));
 }
+// ========== V400: 活动核销码 / 官方物料 / 招募者 SOP 下载 / 食材包导购 ==========
+function _communityRedeemCode(p) {
+    var base = String((p && p.id) || 'JJ') + Date.now();
+    var h = 0;
+    for (var i = 0; i < base.length; i++) h = (h * 31 + base.charCodeAt(i)) % 1679616;
+    var s = h.toString(36).toUpperCase();
+    while (s.length < 4) s = '0' + s;
+    return 'JJ-HD-' + s;
+}
+// 伪二维码：按核销码生成 15×15 点阵（含三个定位角），仅作演示
+function _communityFakeQrHtml(code) {
+    var seed = 0;
+    String(code || 'JJ').split('').forEach(function (ch) { seed = (seed * 131 + ch.charCodeAt(0)) % 2147483647; });
+    if (!seed) seed = 20261108;
+    var cells = '';
+    for (var y = 0; y < 15; y++) {
+        for (var x = 0; x < 15; x++) {
+            seed = (seed * 1103515245 + 12345) % 2147483647;
+            var on = (seed % 100) < 48;
+            var inFinder = (x < 5 && y < 5) || (x > 9 && y < 5) || (x < 5 && y > 9);
+            if (inFinder) {
+                var fx = x < 5 ? x : x - 10;
+                var fy = y < 5 ? y : y - 10;
+                on = (fx === 0 || fx === 4 || fy === 0 || fy === 4 || (fx === 2 && fy === 2));
+            }
+            cells += '<i style="display:block;width:100%;height:100%;background:' + (on ? '#111827' : '#fff') + ';"></i>';
+        }
+    }
+    return '<div style="width:150px;height:150px;padding:6px;box-sizing:border-box;background:#fff;border:1px solid #E5E7EB;border-radius:12px;margin:0 auto;">'
+        + '<div style="display:grid;grid-template-columns:repeat(15,1fr);grid-template-rows:repeat(15,1fr);width:100%;height:100%;">' + cells + '</div>'
+        + '</div>';
+}
+// 招募者下载的标准 Markdown：活动 SOP + 本地食材采购清单
+function _communityActivitySopMd(p) {
+    var price = Math.max(0, Number(p && p.price) || 0);
+    var maxVal = Math.max(0, Number(p && p.maxParticipants) || 0);
+    return '# 家肴记 · 亲子食育活动 SOP 与食材采购清单\n\n'
+        + '## 一、活动信息\n'
+        + '- 活动名称：' + (p.title || '') + '\n'
+        + '- 发起人：' + (p.authorName || '') + '\n'
+        + '- 票价：' + (price > 0 ? '¥' + price + '/人' : '免费') + '\n'
+        + '- 计划人数：' + (maxVal > 0 ? maxVal + ' 人' : '不限') + '\n'
+        + (p.officialSopUrl ? '- 官方方案：' + p.officialSopUrl + '\n' : '')
+        + '\n## 二、活动前 3 天准备\n'
+        + '1. 确认场地与桌椅数量，检查电源与消防通道。\n'
+        + '2. 打印签到表与《食育SOP手册》流程页，准备防伪物料（小围裙、食育绘本）。\n'
+        + '3. 提醒家长告知孩子过敏史，活动全程由家长陪同。\n'
+        + '\n## 三、本地食材采购清单（按 6 组家庭估算）\n'
+        + '| 类别 | 食材 | 建议数量 | 挑选要点 |\n'
+        + '| --- | --- | --- | --- |\n'
+        + '| 主食 | 大米 / 小米 | 1.5 kg | 新米、无霉味，优先本地小包装 |\n'
+        + '| 蛋白质 | 鸡蛋 | 18 枚 | 蛋壳完整、生产日期近 |\n'
+        + '| 蛋白质 | 鸡胸肉 / 豆腐 | 1 kg / 2 盒 | 冷链完整，豆腐当日产 |\n'
+        + '| 蔬菜 | 番茄、胡萝卜、西兰花 | 各 1 kg | 当季本地菜，颜色鲜亮无损伤 |\n'
+        + '| 水果 | 苹果 / 香蕉 | 各 1 kg | 成熟度适中，便于孩子操作 |\n'
+        + '| 调味 | 低钠盐、食用油、儿童酱油 | 各 1 份 | 低钠、少添加，查看配料表 |\n'
+        + '| 工具 | 儿童安全刀、围裙、料理盆 | 按人数配齐 | 圆角设计，提前清洗消毒 |\n'
+        + '\n## 四、现场流程（约 90 分钟）\n'
+        + '1. 签到与洗手消毒（10 分钟）。\n'
+        + '2. 食育小课堂：认识今天的食材与营养（15 分钟）。\n'
+        + '3. 亲子协作备菜：洗、切、拌，家长全程陪同（35 分钟）。\n'
+        + '4. 品尝与分享，颁发食育绘本（20 分钟）。\n'
+        + '5. 清洁场地、核销防伪物料（10 分钟）。\n'
+        + '\n## 五、物料与防伪核销\n'
+        + '- 每位报名成功的家庭凭专属核销码领取《家肴记专属小围裙》及《食育绘本》1 份。\n'
+        + '- 核销码仅限本人使用，领取后请在报名记录中标注已核销。\n'
+        + '\n> 本清单由家肴记官方提供，仅作为食育活动参考；食材采购与现场安全由招募者负责。\n';
+}
+function _communityDownloadActivitySop(id) {
+    var p = _communityFindPost(id);
+    if (!p) { _communityAlert('未找到该活动，可能已被删除'); return; }
+    var md = _communityActivitySopMd(p);
+    try {
+        var blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = '家肴记-活动SOP与食材采购清单-' + String(p.title || '活动').replace(/[\\/:*?"<>|]/g, '') + '.md';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 3000);
+        showToast && showToast('✅ 已下载活动 SOP 与食材采购清单');
+    } catch (e) {
+        _communityAlert(md);
+    }
+}
+window._communityDownloadActivitySop = _communityDownloadActivitySop;
 // ========== V399: 专家咨询问卷（支付前必填）+ 咨询留痕 ==========
 var _communityConsultDraft = null;   // {height, weight, needs}
 var _communityConsultPostId = '';
@@ -77904,6 +78002,8 @@ function _communityPaySubmit() {
         });
         lsSetJSON('commissionRecords', list);
     }
+    // V400: 活动报名成功生成专属核销码（伪二维码）
+    var redeemCode = isExpert ? '' : _communityRedeemCode(p);
     // V399: 专家咨询留痕（问卷 + 待回复状态）
     if (isExpert && _communityConsultDraft) {
         var cons = lsGetJSON('expertConsultations', []);
@@ -77926,9 +78026,14 @@ function _communityPaySubmit() {
         _communityConsultPostId = '';
     }
     if (box) {
-        box.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:330px;padding:22px 20px;box-sizing:border-box;text-align:center;">'
+        box.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:330px;max-height:88vh;overflow-y:auto;padding:22px 20px;box-sizing:border-box;text-align:center;">'
             + '<div style="font-size:18px;font-weight:800;color:#047857;">' + (isExpert ? '✅ 预约成功！' : '✅ 报名成功！') + '</div>'
             + '<div style="font-size:12px;color:#6B7280;margin-top:6px;line-height:1.6;">' + escapeHtml(p.title || '') + '</div>'
+            + (isExpert ? '' : (
+                '<div style="margin-top:14px;">' + _communityFakeQrHtml(redeemCode) + '</div>'
+                + '<div style="margin-top:8px;font-size:12px;font-weight:700;color:#065F46;">核销码：' + redeemCode + '</div>'
+                + '<div style="margin-top:4px;font-size:11px;color:#6B7280;line-height:1.7;">请凭此码向活动发起人领取《家肴记专属小围裙》及《食育绘本》1份。</div>'
+            ))
             + '<div style="margin-top:16px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:12px;padding:12px;text-align:left;">'
             +   '<div style="display:flex;justify-content:space-between;font-size:13px;color:#065F46;line-height:2;"><span>平台服务费（30%）</span><strong>' + _communityMoney(split.platformFee) + '</strong></div>'
             +   '<div style="display:flex;justify-content:space-between;font-size:13px;color:#065F46;line-height:2;"><span>' + (isExpert ? '专家收益（70%）' : '招募者收益（70%）') + '</span><strong>' + _communityMoney(split.providerFee) + '</strong></div>'
@@ -78164,6 +78269,12 @@ function renderCommunityList() {
     });
     body.querySelectorAll('[data-sop]').forEach(function (btn) {
         btn.onclick = function () { _communityOpenBuy(btn.getAttribute('data-sop')); };
+    });
+    body.querySelectorAll('[data-pack]').forEach(function (btn) {
+        btn.onclick = function () { _communityOpenBuy(btn.getAttribute('data-pack')); };
+    });
+    body.querySelectorAll('[data-sopmd]').forEach(function (btn) {
+        btn.onclick = function () { _communityDownloadActivitySop(btn.getAttribute('data-sopmd')); };
     });
     // V397: 活动报名 / 专家咨询预约（模拟支付 + 分润）
     body.querySelectorAll('[data-pay]').forEach(function (btn) {
