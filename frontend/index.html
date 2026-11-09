@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V439-20261109';
+        var APP_VER = 'V440-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -17064,7 +17064,9 @@ function _savingRestaurantFallback(name) {
     if (/猪肉|肉丝|肉片|肉末|猪肝/.test(n)) return 19;
     if (/蛋/.test(n)) return 12;
     if (/豆腐|豆干|千张|香干/.test(n)) return 12;
-    if (/汤|羹|粥/.test(n)) return 9;
+    // V440: 粥/稀饭按一碗 6 元计（原与汤同档 9 元，3 人 27 元明显偏高）
+    if (/粥|稀饭/.test(n)) return 6;
+    if (/汤|羹/.test(n)) return 9;
     // V420: 粗粮/薯类蒸烤单品（蒸红薯、烤地瓜、蒸玉米、蒸山药）是几块钱的粗粮小食，
     // 原来落到素菜兜底 ¥13/人 × 人数，把「蒸红薯 + 煎蛋」算成外食 ¥41，明显离谱
     if (/红薯|地瓜|紫薯|芋头|山药|玉米|南瓜(?!饼)/.test(n)) return 5;
@@ -17120,6 +17122,17 @@ function _savingHomeFallbackRatio(name) {
     if (/饭|面|粉|包|饼|馒头|吐司|面包|饺|馄饨/.test(n)) return 0.40;
     return 0.30; // 素菜/凉拌/时蔬
 }
+// V440: 无配方菜的在家成本上限——粥/汤/素菜是几块钱的家常便宜菜，
+// 按餐厅价比例折算会把「杂粮粥+冬瓜虾皮汤+清炒生菜」3 人算成 ¥25.2（实际十几块）
+function _savingHomeCeiling(name, servings) {
+    var sv = Math.max(1, Number(servings) || 1);
+    var n = String(name || '');
+    if (/粥|稀饭|米糊|糊/.test(n)) return Math.round((1.5 + 0.8 * (sv - 1)) * 10) / 10;
+    if (/汤|羹/.test(n)) return Math.round((2.5 + 1.2 * (sv - 1)) * 10) / 10;
+    // 荤菜食材成本差异大（排骨/牛肉/鱼虾），沿用比例估算不设上限
+    if (/肉|鱼|虾|鸡|鸭|鹅|牛|猪|羊|排骨|肘子|海鲜|蛋|豆腐/.test(n)) return null;
+    return Math.round((3 + 1.2 * (sv - 1)) * 10) / 10; // 素菜/凉拌/时蔬
+}
 // 单道菜算账（按人数）：{home, out, saved}
 function calcDishSaving(dishName, servings) {
     var sv = Math.max(1, Number(servings) || 1);
@@ -17129,6 +17142,9 @@ function calcDishSaving(dishName, servings) {
     if (home == null) {
         // V99: 无食材用量表的菜 → 按餐厅价比例估算在家成本（V238 改为按菜品类型取 30%~45%）
         var estHome = Math.round(out * _savingHomeFallbackRatio(dishName) * 10) / 10;
+        // V440: 再按类别封顶（粥/汤/素菜忽略比例折算的虚高）
+        var ceilHome = _savingHomeCeiling(dishName, sv);
+        if (ceilHome != null && estHome > ceilHome) estHome = ceilHome;
         return { name: dishName, home: estHome, out: out, saved: Math.max(0, Math.round((out - estHome) * 10) / 10), noRecipe: true, estimated: true };
     }
     // 在家价不可能高于外面吃，异常数据兜底
@@ -67616,12 +67632,14 @@ function _buildMealPlanPrompt(dateStr, ctx, styleCount) {
     if (hasExisting) {
         p += '方案一：快手风（简单快做，15分钟内可完成）\n';
         p += '方案二：养生风（注重营养搭配，当季养生）\n';
-        p += _mpCountText + '午餐和晚餐必须包含1道主食（如米饭），且主食外至少有' + Math.max(1, _mpDc.lunchNum - 1) + '道菜品（荤素搭配，其中1道为汤或羹）。\n\n';
+        p += _mpCountText + '午餐和晚餐必须包含1道主食（米饭/馒头等干食），主食外至少有' + Math.max(1, _mpDc.lunchNum - 1) + '道菜品（荤素搭配，含1道优质蛋白主菜；干食主食时可配1道汤或羹）。\n'
+          + '【硬性规则·流质互斥】若本餐主食是粥/稀饭/汤面等流食，则不得再出现汤或羹，粥与汤只能二选一，用1道蛋白主菜或素菜补足道数；每餐流质（粥/汤/羹/豆浆/米糊）合计最多1道。\n\n';
     } else {
         p += '方案A：家常风（日常家庭菜品，口味适中，食材易得）\n';
         p += '方案B：快手风（简单快做，15分钟内可完成）\n';
         p += '方案C：养生风（注重营养搭配，当季养生）\n';
-        p += _mpCountText + '午餐和晚餐必须包含1道主食（如米饭），且主食外至少有' + Math.max(1, _mpDc.lunchNum - 1) + '道菜品（荤素搭配，其中1道为汤或羹）。\n\n';
+        p += _mpCountText + '午餐和晚餐必须包含1道主食（米饭/馒头等干食），主食外至少有' + Math.max(1, _mpDc.lunchNum - 1) + '道菜品（荤素搭配，含1道优质蛋白主菜；干食主食时可配1道汤或羹）。\n'
+          + '【硬性规则·流质互斥】若本餐主食是粥/稀饭/汤面等流食，则不得再出现汤或羹，粥与汤只能二选一，用1道蛋白主菜或素菜补足道数；每餐流质（粥/汤/羹/豆浆/米糊）合计最多1道。\n\n';
     }
     p += '请综合参考以下信息进行推荐：\n\n';
     // V352(P1-2): 高龄/慢病硬约束——AI 单日三餐方案同样禁用油煎/腌制，强制软烂低盐
