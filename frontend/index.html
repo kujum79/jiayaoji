@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V444-20261109';
+        var APP_VER = 'V445-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -10210,17 +10210,19 @@ function _classroomTagLabels(c) {
 function _closeMyClassroom() {
     var ov = document.getElementById('myClassroomOverlay');
     if (ov) ov.remove();
-    if (!document.getElementById('classroomCourseOverlay')) document.body.style.overflow = '';
+    if (!document.getElementById('classroomCourseOverlay') && !document.getElementById('fhEduOv') && !document.getElementById('explorePage')) document.body.style.overflow = '';
 }
 
-function _openMyClassroom() {
+function _openMyClassroom(fromEdu) {
     if (typeof isLogined === 'function' && !isLogined()) { showLoginPage(); return; }
     _closeMyClassroom();
     _MY_CLASSROOM_VIEW.folderId = null;
     _MY_CLASSROOM_RECO = null;
+    // V445: 从「食养堂 → 食养教育」打开时需盖在教育层之上
+    var _z = (fromEdu || document.getElementById('fhEduOv')) ? 100008 : 9999;
     var ov = document.createElement('div');
     ov.id = 'myClassroomOverlay';
-    ov.style.cssText = 'position:fixed;inset:0;background:#f0f0f0;z-index:9999;overflow-y:auto;';
+    ov.style.cssText = 'position:fixed;inset:0;background:#f0f0f0;z-index:' + _z + ';overflow-y:auto;';
     ov.innerHTML =
         '<div style="max-width:430px;margin:0 auto;min-height:100%;background:#F7F5F2;box-shadow:0 0 30px rgba(0,0,0,0.12);">' +
         '<div style="position:sticky;top:0;z-index:2;background:#fff;border-bottom:1px solid #EDE9E3;padding:10px 16px 8px;">' +
@@ -11704,12 +11706,14 @@ function getDailyIngredient() {
     var idx = hash % EXPLORE_INGREDIENTS.length;
     return EXPLORE_INGREDIENTS[idx];
 }
-function openExplorePage() {
+function openExplorePage(fromEdu) {
     var old = document.getElementById('explorePage');
     if (old) old.remove();
     var page = document.createElement('div');
+    // V445: 从「食养堂 → 食养教育」打开时需盖在教育层之上
+    var _z = (fromEdu || document.getElementById('fhEduOv')) ? 100008 : 100003;
     page.id = 'explorePage';
-    page.style.cssText = 'position:fixed;inset:0;z-index:100003;background:#FFFBEB;display:flex;flex-direction:column;max-width:430px;margin:0 auto;';
+    page.style.cssText = 'position:fixed;inset:0;z-index:' + _z + ';background:#FFFBEB;display:flex;flex-direction:column;max-width:430px;margin:0 auto;';
     page.innerHTML =
         '<div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:14px 12px;background:linear-gradient(135deg,#FBBF24,#F472B6);color:white;">'
         + '<button onclick="closeExplorePage()" style="width:36px;height:36px;border:none;background:rgba(255,255,255,0.25);border-radius:10px;font-size:20px;color:white;cursor:pointer;display:flex;align-items:center;justify-content:center;">‹</button>'
@@ -34655,7 +34659,7 @@ function _fhPayGo() {
 }
 var _fhEduFolderId = null;
 function _fhOpenEdu() {
-    if (!isFoodMember()) { _fhShowPaywall(); return; }
+    // V445: 教育层本身对所有人开放（少年食趣为全员功能），具体课程文件夹/文章仍逐项校验会员
     var old = document.getElementById('fhEduOv');
     if (old) old.remove();
     _fhEduFolderId = null;
@@ -34712,11 +34716,27 @@ function _fhEduRender() {
         return;
     }
     if (title) title.textContent = '🎓 食养教育';
+    // V445: 顶部「学习入口」——「我的专属课堂」「少年食趣」从「我家 / 我的食记」迁入
+    var _eduEntry = function (icon, name, sub, onclick, badge) {
+        return '<div onclick="' + onclick + '" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:12px 14px;margin-bottom:9px;cursor:pointer;">'
+            + '<span style="font-size:19px;flex:0 0 auto;line-height:1;">' + icon + '</span>'
+            + '<div style="flex:1;min-width:0;">'
+            + '<div style="font-size:14px;font-weight:700;color:#374151;line-height:1.4;">' + name + (badge ? ' ' + badge : '') + '</div>'
+            + '<div style="font-size:11px;color:#9CA3AF;margin-top:3px;line-height:1.5;">' + sub + '</div>'
+            + '</div>'
+            + '<span style="color:#D1D5DB;flex:0 0 auto;font-size:16px;">›</span>'
+            + '</div>';
+    };
+    var _premiumBadge = '<span style="font-size:10px;font-weight:600;color:#B45309;background:#FEF3C7;border-radius:6px;padding:1px 5px;">会员</span>';
+    var entryHtml = '<div style="font-size:12px;font-weight:700;color:#9CA3AF;margin:2px 2px 8px;">学习入口</div>'
+        + _eduEntry('🎓', '我的专属课堂', '每日专属微课 · 按家庭档案匹配课程系列', '_openMyClassroomFromEdu()', _premiumBadge)
+        + _eduEntry('🌱', '少年食趣', '亲子探索 · 食育任务（全员可用）', 'openExplorePageFromEdu()');
     if (!folders.length) {
-        body.innerHTML = '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:22px 16px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">课程正在上架中<br>稍后再来看看，或先在「我的课堂」学习已有课程</div>';
+        body.innerHTML = entryHtml + '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:22px 16px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">课程正在上架中<br>稍后再来看看，或先从上方「我的专属课堂」学习已有课程</div>';
         return;
     }
-    body.innerHTML = '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.6;">按课程文件夹学习，点击进入课程列表</div>'
+    body.innerHTML = entryHtml
+        + '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.6;">按课程文件夹学习，点击进入课程列表</div>'
         + folders.map(function (f) {
             var cnt = arts.filter(function (a) { return a && a.folderId === f.folderId; }).length;
             return '<div onclick="_fhEduOpenFolder(\'' + escapeAttr(f.folderId) + '\')" style="background:#fff;border:1px solid #EDE9E3;border-radius:16px;padding:14px 16px;margin-bottom:10px;cursor:pointer;">'
@@ -34739,6 +34759,9 @@ function _fhEduOpenArticle(fid, aid) {
     if (!isFoodMember()) { _fhShowPaywall(); return; }
     if (typeof _myClassroomOpenArticle === 'function') _myClassroomOpenArticle(fid, aid);
 }
+// V445: 食养教育顶部两个学习入口（从「我家」「我的食记」迁入）
+function _openMyClassroomFromEdu() { _openMyClassroom(true); }
+function openExplorePageFromEdu() { openExplorePage(true); }
 // V296: 公开食养内容的「全国通用」过滤——标题/摘要含城市名的内容不对外展示
 var _DT_CITY_WORDS = ['北京', '上海', '天津', '重庆', '杭州', '广州', '深圳', '成都', '南京', '武汉',
     '西安', '苏州', '长沙', '青岛', '大连', '宁波', '厦门', '福州', '哈尔滨', '沈阳', '长春',
@@ -40391,29 +40414,22 @@ function renderFamily() {
             pendingCnt = lib78.filter(function(x) { return !x.clonedAt; }).length;
             doneCnt = lib78.filter(function(x) { return !!x.clonedAt; }).length;
         } catch (e) {}
-        var cardStyle = 'flex:1 1 0;min-width:0;background:white;border:1px solid #F3F4F6;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04);padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:3px;';
+        var cardStyle = 'flex:1 1 0;min-width:0;background:white;border:1px solid #F3F4F6;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04);padding:9px 10px;cursor:pointer;display:flex;flex-direction:column;gap:3px;';
         function card(icon, title, sub, onclick) {
             return '<div onclick="' + onclick + '" style="' + cardStyle + '">'
-                + '<div style="display:flex;align-items:center;gap:6px;">'
-                + '<span style="font-size:18px;flex:0 0 auto;line-height:1;">' + icon + '</span>'
-                + '<span style="font-size:14px;color:#1F2937;font-weight:600;flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + title + '</span>'
-                + '<span style="color:#D1D5DB;font-size:15px;flex:0 0 auto;line-height:1;">›</span>'
+                + '<div style="display:flex;align-items:center;gap:5px;">'
+                + '<span style="font-size:17px;flex:0 0 auto;line-height:1;">' + icon + '</span>'
+                + '<span style="font-size:13px;color:#1F2937;font-weight:600;flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + title + '</span>'
+                + '<span style="color:#D1D5DB;font-size:14px;flex:0 0 auto;line-height:1;">›</span>'
                 + '</div>'
-                + '<div style="font-size:12px;color:#9CA3AF;line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + sub + '</div>'
+                + '<div style="font-size:11px;color:#9CA3AF;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">' + sub + '</div>'
                 + '</div>';
         }
-        // V217: 「我的专属课堂」入口（我家页），副标题显示已匹配的课程系列数
-        var _myClsCnt = 0;
-        var _myClsSub = (typeof isSubscribed === 'function') ? !!isSubscribed() : false;
-        try { if (_myClsSub) _myClsCnt = (getRecommendedCourses(getFamilyMembers()).list || []).length; } catch(e) {}
-        var _mySub = !_myClsSub ? '订阅后解锁全部课程' : (_myClsCnt ? ('已匹配 ' + _myClsCnt + ' 个课程系列') : '按家庭档案匹配课程');
+        // V445: 「我的专属课堂」「少年食趣」已迁入食养堂 → 食养教育；此处只留三个一层入口并排一行
         familyList.insertAdjacentHTML('beforeend', `
-            <div style="display:flex;gap:10px;margin-bottom:10px;">
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
                 ${card('📔', '膳食日记', '本周已记 ' + weekCnt + ' 篇', 'openDiaryTimeline()')}
                 ${card('💰', '我的积分', (function(){ var t = 0; try { t = _pointsGetTotal(); } catch(e) {} return t ? ('当前 ' + t + ' 积分' + (_pointsCheckedToday() ? ' · 今日已打卡' : ' · 打卡 +2')) : '每日打卡 +2 积分'; })(), 'openPointsCenter()')}
-            </div>
-            <div style="display:flex;gap:10px;margin-bottom:12px;">
-                ${card('🎓', '我的专属课堂', _mySub, '_openMyClassroom()')}
                 ${card('👨‍🍳', '我的创作', worksCnt ? worksCnt + ' 个作品' : '记录你的私房创作', 'openMyWorksPage()')}
             </div>
         `);
@@ -40897,13 +40913,7 @@ window.editMemberCard = function(id) {
                     <span style="font-size:12px;color:#9CA3AF;flex:1 1 auto;min-width:0;text-align:right;">${doneCnt}道</span>
                     <span style="color:#D1D5DB;font-size:14px;flex:0 0 auto;line-height:1;">›</span>
                 </div>
-                <!-- V134：少年食趣自首页「食帮」迁入 -->
-                <div onclick="openExplorePage()" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
-                    <span style="font-size:18px;flex:0 0 auto;line-height:1;">🌱</span>
-                    <span style="font-size:14px;color:#4B5563;font-weight:500;flex:0 0 auto;">少年食趣</span>
-                    <span style="font-size:12px;color:#9CA3AF;flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:right;">亲子探索·食育任务</span>
-                    <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
-                </div>
+                <!-- V445：少年食趣迁入 食养堂 → 食养教育 -->
                 </div>
                 </div>
             </div>
