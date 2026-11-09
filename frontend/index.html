@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V437-20261109';
+        var APP_VER = 'V439-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -360,7 +360,7 @@
         .hd-head { display: flex; align-items: center; gap: 4px; }
         /* V106: 2人▼ 紧跟日期（周一）右侧，不再推右；＋ 与 确认 仍靠行右（margin-left:auto 移至 hd-plus-btn） */
         #homeDiaryDiningSlot { padding-left: 0; }
-        #homeDiaryCard .hd-plus-btn, #hdConfirmBtn { margin-left: 4px; }
+        #homeDiaryCard .hd-plus-btn { margin-left: 4px; }
         /* V125: [3人▼][＋][确认] 整组推右（auto 移到 3人 挂载槽上），与家中食材卡「做法/采购/＋」右缘对齐；组内仍各 8px */
         #homeDiaryCard #homeDiaryDiningSlot { margin-left: auto; }
         /* V124: ＋ 不再单独推右（取消 V106 的 margin-left:auto）——「3人▼」「＋」「确认」各 gap4+margin4=8px 均匀排列 */
@@ -4437,9 +4437,8 @@ async function _submitFeedback() {
                 <span id="hdStatusBadge" style="display:inline-flex;align-items:center;"></span>
                 <!-- 就餐人（V371: 首页仅只读展示人数，选择器只在食记页可点） -->
                 <span id="homeDiaryDiningSlot" style="display:inline-flex;align-items:center;"><span id="homeDiaryDiningReadonly" style="font-size:12px;color:#C2410C;font-weight:600;white-space:nowrap;"></span></span>
-                <!-- V61: ＋ 紧跟 2人▼（间距由 hd-head gap:8px 承担），计划确认 margin-left:auto 推右成按钮组 -->
+                <!-- V61: ＋ 紧跟 2人▼（间距由 hd-head gap:8px 承担）；V439: 去掉首页重复的「确认」入口，确认统一在食记页 -->
                 <button class="hd-plus-btn" onclick="openMealPlanPage()" title="规划食谱">＋</button>
-                <button class="hd-pill-btn" id="hdConfirmBtn" onclick="_hdConfirmPlan()" title="确认本餐计划">确认</button>
             </div>
             <div class="hd-body" id="hdBody"></div>
         </div>
@@ -33820,9 +33819,7 @@ function _hdShift(dir) {
     renderHomeDiaryCard();
 }
 
-// ====== V46: 首页食记卡交互（勾选→实际 / 计划确认 / 🎧边做边听 / 点菜名看做法） ======
-var _hdChecks = {}; // key=日期|餐次 → 已勾选菜名数组（内存态）
-function _hdKey() { return dateToKey(new Date()) + '|' + _hdMeals[_hdCurrentIdx()]; }
+// ====== V46: 首页食记卡交互（点菜名看做法 / 🎧边做边听） ======
 function _hdToast(msg) { if (typeof showToast === 'function') { try { showToast(msg); } catch (e) {} } }
 // V66: 与"三餐计划、记录"页功能完全一致——点菜名 showDishDetail（dishDetailOverlay 详情，含 dishMeta 食材/健康标签）、点🎧 _dishListenReadDirect（一步到位朗读）
 function _hdViewDishByName(name) {
@@ -33831,37 +33828,6 @@ function _hdViewDishByName(name) {
 }
 function _hdListenByName(name) {
     try { _dishListenReadDirect(name); } catch (e) { _hdToast('当前浏览器不支持语音朗读'); }
-}
-function _hdToggleDish(name, isChecked) {
-    var key = _hdKey();
-    var arr = _hdChecks[key] || (_hdChecks[key] = []);
-    if (isChecked) { if (arr.indexOf(name) < 0) arr.push(name); }
-    else { var i = arr.indexOf(name); if (i >= 0) arr.splice(i, 1); }
-    // 勾选即时同步实际区显示（V55: 带「实际：」前缀）
-    var actEl = document.getElementById('hdActText');
-    if (actEl) actEl.innerHTML = '<span class="hd-act-label">实际：</span>' + (arr.length ? escapeHtml(arr.join(' · ')) : '<span class="hd-act-none">（未记录）</span>');
-}
-function _hdConfirmPlan() {
-    if (!requireLogin('确认计划')) return; // V126: 数据操作登录守卫
-    var idx = _hdCurrentIdx();
-    var mealKey = _hdMeals[idx];
-    var dk = dateToKey(new Date());
-    var md = null;
-    try { var cal = getDietCalendar(); md = cal && cal[dk] && cal[dk][mealKey]; } catch (e) { md = null; }
-    var dishesArr = (md && md.plan && md.plan.dishes) ? md.plan.dishes.map(function (d) { return typeof d === 'string' ? d : (d.name || d.dish || ''); }).filter(Boolean) : [];
-    if (!dishesArr.length) { _hdToast('请先点右上角「＋」规划菜品'); return; }
-    var checked = _hdChecks[_hdKey()] || [];
-    var allChecked = dishesArr.every(function (n) { return checked.indexOf(n) >= 0; });
-    if (!allChecked) { _hdToast('请先勾选全部菜品，再点「确认」'); return; }
-    try {
-        var cal2 = getDietCalendar();
-        if (cal2 && cal2[dk] && cal2[dk][mealKey]) {
-            cal2[dk][mealKey].plan = cal2[dk][mealKey].plan || {};
-            cal2[dk][mealKey].plan.confirmed = true;
-            saveDietCalendar(cal2);
-        }
-    } catch (e) {}
-    renderHomeDiaryCard();
 }
 
 // V111: 首页食记卡状态标签——与三餐计划页餐次标签（V104）同规则同样式：
@@ -33910,8 +33876,6 @@ function renderHomeDiaryCard() {
     if (badgeEl) badgeEl.innerHTML = _lgd ? _hdMealStatusBadgeHtml(dateToKey(now), mealKey) : '';
     // V126: 未登录——正文仅显示引导语（计划/实际/费用均不渲染），登录后自动显示
     if (!_lgd) {
-        var _cbtn = document.getElementById('hdConfirmBtn');
-        if (_cbtn) { _cbtn.className = 'hd-pill-btn'; _cbtn.textContent = '确认'; }
         body.innerHTML = '<div style="padding:18px 0 8px;text-align:center;font-size:13px;color:#9CA3AF;">登录后可查看膳食计划与记录，<span onclick="showLoginPage()" style="color:#F97316;font-weight:600;cursor:pointer;">去登录</span></div>';
         return;
     }
@@ -33935,8 +33899,6 @@ function renderHomeDiaryCard() {
     }
     // ====== V46: 计划确认/记录实际 交互结构 ======
     var dishesArr = (md && md.plan && md.plan.dishes) ? md.plan.dishes.map(function (d) { return typeof d === 'string' ? d : (d.name || d.dish || ''); }).filter(Boolean) : [];
-    var confirmed = !!(md && md.plan && md.plan.confirmed);
-    var checked = _hdChecks[(_hdKey())] || [];
     var actualRecorded = '';
     if (md && md.actual) {
         if (md.actual.diningType === '外出就餐') {
@@ -33957,21 +33919,14 @@ function renderHomeDiaryCard() {
             actualRecorded = md.actual.dishes.map(function (d) { return typeof d === 'string' ? d : (d.name || d.dish || ''); }).filter(Boolean).join(' · ');
         }
     }
-    var actInner = actualRecorded || (checked.length ? checked.join(' · ') : '');
+    var actInner = actualRecorded;
     // V55: 「实际：」前缀 #4B5563；未记录「（未记录）」#9CA3AF
     var actHtml = '<span class="hd-act-label">实际：</span>'
         + (actInner ? escapeHtml(actInner) : '<span class="hd-act-none">（未记录）</span>');
-    // V56: 计划确认按钮移到头部（原外出就餐位置），在此同步确认态
-    var cbtn = document.getElementById('hdConfirmBtn');
-    if (cbtn) {
-        cbtn.className = 'hd-pill-btn' + (confirmed ? ' confirmed' : '');
-        cbtn.textContent = confirmed ? '✓ 已确认' : '确认'; // V106: 计划确认→确认
-    }
-    // V48: 菜品区在左、按钮居行右（与菜品列表形成标题关系）
+    // V439: 首页只读展示计划，确认/复核统一在食记页
     body.innerHTML = '<div class="hd-plan-row">'
         + '<div class="hd-dishes">' + (dishesArr.length ? dishesArr.map(function (name) {
             return '<span class="hd-dish">'
-                + '<input type="checkbox" ' + (confirmed ? 'disabled ' : '') + (checked.indexOf(name) >= 0 ? 'checked' : '') + ' onchange="_hdToggleDish(\'' + escapeAttr(name) + '\', this.checked)">'
                 + '<span class="hd-dish-name" onclick="_hdViewDishByName(\'' + escapeAttr(name) + '\')" title="看做法">' + escapeHtml(name) + '</span>'
                 + '</span>';
         }).join('') : '<span style="font-size:13px;color:#9CA3AF;">（未计划，点右上角 ＋ 规划）</span>') + '</div>'
@@ -67333,7 +67288,7 @@ function openMealPlanPage() {
     overlay.innerHTML =
         '<div class="mp-header"><button class="mp-back" onclick="closeMealPlanPage()">＜</button><h2>规划食谱</h2><span class="mp-date"><span class="mp-date-ymd">'+_mpFormatDateYMD(planDate)+'</span><span class="mp-date-week">'+_mpFormatDateWeek(planDate)+' · '+_mealPlanEffectiveServings()+'人份</span></span><div style="flex:1"></div><button class="mp-ai-btn" onclick="document.getElementById(\'mealPlanOverlay\').remove(); openPlanScopeSheet();">✨ 生成饮食计划</button></div>'+
         '<div class="mp-body" id="mpBody"></div>'+
-        '<div class="mp-footer"><span class="mp-selected-count" id="mpSelectedCount">💡 已选 <b>0</b> 道菜</span><button class="mp-done-btn" id="mpDoneBtn" onclick="saveMealPlan()" disabled>完成</button></div>';
+        '<div class="mp-footer"><span class="mp-selected-count" id="mpSelectedCount">💡 已选 <b>0</b> 道菜</span><button class="mp-done-btn" id="mpDoneBtn" onclick="saveMealPlan()" disabled>完成并确认三餐</button></div>';
     var appFrame = document.getElementById('app');
     if (appFrame) { appFrame.appendChild(overlay); } else { document.body.appendChild(overlay); }
 
@@ -68977,7 +68932,7 @@ function saveMealPlan() {
     // 加餐独立条目：标记 isPlanned=true（已默认存储，无需再改）
     _mealPlanState._saved = true;
     closeMealPlanPage(true);
-    showToast('✅ 食谱计划已保存（'+result.total+'道菜+加餐'+ getPlannedSnacks(_mealPlanState.dateKey).length +'项）');
+    showToast('✅ 已保存并确认三餐（'+result.total+'道菜+加餐'+ getPlannedSnacks(_mealPlanState.dateKey).length +'项）');
     if (typeof renderDiary==='function') renderDiary();
 }
 
