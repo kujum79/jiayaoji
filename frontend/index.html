@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V435-20261109';
+        var APP_VER = 'V436-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -35608,30 +35608,7 @@ function _paintDeepPlanCard(data) {
 
 // V393: 语音播报（音频）已下线，本次迭代仅保留图文与课程
 var _dtCurTip = null; // 当前弹层展示的 tip（卡片/往期/收藏三个入口共用）
-// V242: 详情页「我的订阅」卡——卡片按钮上被省略的权益说明在此展开
-function _dtSubInfoHtml() {
-    var st = (typeof _subTierState === 'function') ? _subTierState() : 'none';
-    var days = (typeof _subDaysLeft === 'function') ? _subDaysLeft() : 0;
-    var title, desc, btn, bg, color, border;
-    if (st === 'premium') {
-        title = '食养会员';
-        desc = '已解锁深度健康复盘 · 专项定制 · AI营养师干预 · 每日专属微课（剩余 ' + days + ' 天）';
-        btn = '查看订阅特权';
-        bg = 'linear-gradient(135deg,#FFF7ED,#FEF3C7)'; color = '#C2410C'; border = '1px solid #FED7AA';
-    } else {
-        title = '未订阅';
-        desc = '订阅后可解锁：深度健康复盘与治未病预警 · 孕妇/婴儿/生病/增高专项定制 · AI营养师干预建议 · 全年龄段食养教育 + 每日专属微课';
-        btn = '了解订阅特权';
-        bg = '#F9FAFB'; color = '#6B7280'; border = '1px solid #E5E7EB';
-    }
-    return '<div style="margin-top:20px;padding:14px;border-radius:12px;background:' + bg + ';border:' + border + ';">'
-        + '<div style="display:flex;align-items:center;gap:8px;">'
-        + '<span style="font-size:13px;font-weight:700;color:' + color + ';">我的订阅：' + title + '</span>'
-        + '</div>'
-        + '<div style="margin-top:6px;font-size:12px;color:#4B5563;line-height:1.8;">' + desc + '</div>'
-        + '<button type="button" onclick="event.stopPropagation(); openSubscriptionModal(\'' + st + '\')" style="margin-top:10px;width:100%;height:34px;border-radius:9px;border:none;background:' + (st === 'none' ? '#F97316' : 'rgba(255,255,255,.85)') + ';color:' + (st === 'none' ? '#fff' : color) + ';font-size:12px;font-weight:600;cursor:pointer;">' + btn + '</button>'
-        + '</div>';
-}
+// V436: 食养堂文章/食谱对所有用户开放，详情页不再展示「我的订阅」推广卡
 // V358(P1-8): 食养内容按家庭画像附禁忌注——柿子等高鞣酸/高糖食材，避免把通用内容读成"我家也能吃"
 function _dietProfileRisks() {
     var tags = [];
@@ -35720,8 +35697,7 @@ function _openDailyTipFull(tip) {
         + '<div style="margin-top:14px;font-size:15px;color:#374151;line-height:1.9;white-space:pre-wrap;">' + (tip.content || tip.summary || '') + '</div>'
         + _dietContraNoteHtml(tip.title, tip.content || tip.summary || '')
         + ((tip.tips || []).length ? '<div style="margin-top:18px;"><div style="font-size:14px;font-weight:700;color:#1F2937;">💡 小贴士</div>' + tipsHtml + '</div>' : '')
-        + foodsHtml
-        + _dtSubInfoHtml();
+        + foodsHtml;
     var foot = document.createElement('div');
     foot.style.cssText = 'flex-shrink:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));border-top:1px solid #F3F4F6;background:white;';
     var _repDish = _fhArticleDishName(tip);
@@ -35733,7 +35709,6 @@ function _openDailyTipFull(tip) {
         + '<div style="text-align:center;margin-bottom:8px;"><button type="button" onclick="_fhOpenCorrection(\'article\')" style="border:none;background:none;color:#9CA3AF;font-size:11px;cursor:pointer;text-decoration:underline;padding:2px 6px;">⚠️ 内容有误？反馈给主编</button></div>'
         + '<div style="display:flex;gap:10px;">'
         + '<button type="button" onclick="_closeDtFull()" style="flex:1;height:38px;border-radius:12px;border:none;background:#F3F4F6;color:#4B5563;font-size:14px;cursor:pointer;">关闭</button>'
-        + '<button type="button" onclick="_closeDtFull(); _openSubscribeGuide()" style="flex:1;height:38px;border-radius:12px;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:14px;cursor:pointer;">🔔 订阅食养堂</button>'
         + '</div>';
     sheet.appendChild(hdr);
     sheet.appendChild(body);
