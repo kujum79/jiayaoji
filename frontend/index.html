@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V434-20261109';
+        var APP_VER = 'V435-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -35381,7 +35381,6 @@ function _openSubscribeModal(preferTier) {
         + '<span style="font-size:17px;font-weight:700;color:#1F2937;">订阅中心</span>'
         + '<button onclick="_closeSubscribeModal()" style="margin-left:auto;border:none;background:none;font-size:20px;cursor:pointer;color:#9CA3AF;">✕</button>'
         + '</div>'
-        + '<div style="font-size:12px;color:#6B7280;margin-top:6px;line-height:1.6;">解锁每日精美图文食谱、全站食养课程与家庭健康深度复盘</div>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;">' + body + '</div>';
     ov.appendChild(sheet);
