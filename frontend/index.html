@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V427-20261109';
+        var APP_VER = 'V428-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -6599,7 +6599,7 @@ function _familyAccountsHtml() {
     var fid = getFamilyId();
     var users = getRegisteredUsers().filter(function(u) { return u && String(u.familyId) === String(fid); });
     if (!users.length) {
-        return '<div style="text-align:center;padding:14px;color:#9CA3AF;font-size:13px;">暂无绑定手机号<br><span style="font-size:12px;">点「🔗 邀请家人」生成邀请码，家人注册时输入即可加入</span></div>';
+        return '<div style="text-align:center;padding:14px;color:#9CA3AF;font-size:13px;">暂无绑定手机号<br><span style="font-size:12px;">点「邀请码」生成邀请码，家人注册时输入即可加入</span></div>';
     }
     var curPhone = String(((getLoginUser() || {}).phone) || '');
     return users.map(function(u) {
@@ -6687,7 +6687,7 @@ function openFamilyAccountsModal() {
     var box = document.getElementById('familyAccountsList');
     if (!box) return;
     if (!users.length) {
-        box.innerHTML = '<div style="text-align:center;padding:18px;color:#9CA3AF;font-size:13px;">暂无绑定手机号<br><span style="font-size:12px;">点「🔗 邀请家人」生成邀请码，家人注册时输入即可加入</span></div>';
+        box.innerHTML = '<div style="text-align:center;padding:18px;color:#9CA3AF;font-size:13px;">暂无绑定手机号<br><span style="font-size:12px;">点「邀请码」生成邀请码，家人注册时输入即可加入</span></div>';
         return;
     }
     var curPhone = String(((getLoginUser() || {}).phone) || '');
@@ -40395,14 +40395,6 @@ function renderFamily() {
         var dgAddBtn = document.getElementById('addDiningGroupBtn');
         if (dgAddBtn) dgAddBtn.addEventListener('click', function() { _openAddSubGroupModal(); });
     })();
-    // ============ V288: 邀请家人 / 家庭成员账号（登录后可见） ============
-    // ============ V290: 新增「账号资料 / 家庭信息」，普通用户也可改昵称与家庭名称 ============
-    familyList.insertAdjacentHTML('beforeend', `
-        <div style="display:flex;gap:8px;margin-bottom:12px;">
-            <button type="button" onclick="openInviteFamilyModal()" style="flex:1 1 0;min-width:0;padding:10px 8px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:13px;font-weight:700;color:#C2410C;cursor:pointer;white-space:nowrap;">🔗 邀请家人</button>
-            <button type="button" onclick="openFamilyInfoModal()" style="flex:1 1 0;min-width:0;padding:10px 8px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:13px;font-weight:700;color:#C2410C;cursor:pointer;white-space:nowrap;">🏠 修改家庭名称</button>
-        </div>
-    `);
     // V162: 膳食日记/我的外食/我的复刻/我的创作 四大模块 2×2 一级入口卡
     function _renderDiaryTopCard() {
         var weekCnt = 0;
@@ -40518,11 +40510,14 @@ function renderFamily() {
         _xjWrap.innerHTML = _smmBanner + `
             <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px 8px;gap:8px;">
                 <span style="font-weight:600;color:#374151;font-size:13px;flex-shrink:0;">👪 小家 · ${xiaojiaMembers.length} 人</span>
-                ${xiaojiaMembers.length > 1 ? `<select id="xjMemberSelect" aria-label="切换当前操作人" style="max-width:110px;height:26px;padding:0 6px;border:1px solid #FDBA74;border-radius:13px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;outline:none;cursor:pointer;">
-                    ${xiaojiaMembers.map(function(m) {
-                        return `<option value="${m.id}" ${m.name === selectedFamilyMemberName ? 'selected' : ''}>${escapeHtml(m.name)}</option>`;
-                    }).join('')}
-                </select>` : `<span style="font-size:12px;color:#9CA3AF;">当前：${escapeHtml(_selMember ? _selMember.name : '')}</span>`}
+                <div style="display:flex;align-items:center;gap:6px;min-width:0;">
+                    <button type="button" onclick="openInviteFamilyModal()" style="flex:0 0 auto;height:26px;padding:0 10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:13px;font-size:12px;font-weight:600;color:#C2410C;cursor:pointer;white-space:nowrap;">邀请码</button>
+                    ${xiaojiaMembers.length > 1 ? `<select id="xjMemberSelect" aria-label="切换当前操作人" style="max-width:110px;height:26px;padding:0 6px;border:1px solid #FDBA74;border-radius:13px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;outline:none;cursor:pointer;">
+                        ${xiaojiaMembers.map(function(m) {
+                            return `<option value="${m.id}" ${m.name === selectedFamilyMemberName ? 'selected' : ''}>${escapeHtml(m.name)}</option>`;
+                        }).join('')}
+                    </select>` : `<span style="font-size:12px;color:#9CA3AF;">当前：${escapeHtml(_selMember ? _selMember.name : '')}</span>`}
+                </div>
             </div>
             ${_selMember ? (function(m) {
                 var _cst = m.constitution ? '<span class="constitution-tag" style="margin-left:0;margin-right:6px;">' + escapeHtml(m.constitution) + '</span>' : '';
@@ -40557,7 +40552,9 @@ function renderFamily() {
             });
         }
     } else {
-        familyList.insertAdjacentHTML('beforeend', (familyData.length === 1 ? _singleMealGuideHtml() : '') + `<div style="text-align:center;padding:20px;color:#9CA3AF;font-size:14px;">暂无小家成员，请添加</div>`);
+        familyList.insertAdjacentHTML('beforeend', (familyData.length === 1 ? _singleMealGuideHtml() : '')
+            + `<div style="display:flex;justify-content:flex-end;padding:4px 2px 8px;"><button type="button" onclick="openInviteFamilyModal()" style="height:26px;padding:0 10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:13px;font-size:12px;font-weight:600;color:#C2410C;cursor:pointer;white-space:nowrap;">邀请码</button></div>`
+            + `<div style="text-align:center;padding:20px;color:#9CA3AF;font-size:14px;">暂无小家成员，请添加</div>`);
     }
 
     // V138: 去掉 addEventListener 绑定（onclick 内联已 100% 可靠，双重绑定导致两次调用互相抵消：第一次创建表单→第二次删除表单）
