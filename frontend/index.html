@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V429-20261109';
+        var APP_VER = 'V431-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -40259,7 +40259,7 @@ function saveSingleMealMode(mode) {
 function chooseSingleMealSubtype(subtype) {
     if (subtype !== 'worker' && subtype !== 'elder') return;
     saveSingleMealMode({ enabled: true, subtype: subtype, chosenAt: Date.now() });
-    showToast('🍱 一人食模式已开启 · ' + _singleMealSubtypeLabel(subtype));
+    showToast('🍱 一人餐模式已开启 · ' + _singleMealSubtypeLabel(subtype));
     if (typeof renderFamily === 'function') renderFamily();
 }
 function dismissSingleMealGuide() {
@@ -40277,7 +40277,7 @@ function _singleMealGuideHtml() {
     if (!mode) {
         return '<div style="background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FDBA74;border-radius:14px;padding:12px;margin-bottom:10px;">'
             + '<div style="font-size:14px;font-weight:800;color:#C2410C;">🍱 检测到您家只有 1 位成员</div>'
-            + '<div style="font-size:12px;color:#9A3412;line-height:1.7;margin-top:4px;">开启「一人食模式」后，采购清单自动按单人份计算，健康管家也会每天为您推荐独享料理。</div>'
+            + '<div style="font-size:12px;color:#9A3412;line-height:1.7;margin-top:4px;">开启「一人餐模式」后，采购清单自动按单人份计算，健康管家也会每天为您推荐独享料理。</div>'
             + '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">'
             +   '<button type="button" onclick="chooseSingleMealSubtype(\'worker\')" style="flex:1 1 0;min-width:0;padding:8px 6px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">💼 职场青年</button>'
             +   '<button type="button" onclick="chooseSingleMealSubtype(\'elder\')" style="flex:1 1 0;min-width:0;padding:8px 6px;border:none;border-radius:10px;background:#EA580C;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">👵 老年长者</button>'
@@ -40287,10 +40287,11 @@ function _singleMealGuideHtml() {
     }
     if (!mode.enabled) return '';
     return '<div style="background:#fff;border:1px solid #FED7AA;border-radius:12px;padding:9px 12px;margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
-        + '<span style="font-size:13px;font-weight:800;color:#C2410C;">🍱 一人食模式 · ' + _singleMealSubtypeLabel(mode.subtype) + '</span>'
+        + '<span style="font-size:13px;font-weight:800;color:#C2410C;">🍱 一人餐模式 · ' + _singleMealSubtypeLabel(mode.subtype) + '</span>'
         + '<span style="font-size:11px;color:#9CA3AF;">采购按单人份（单日）计算</span>'
-        + '<button type="button" onclick="chooseSingleMealSubtype(\'worker\')" style="margin-left:auto;padding:3px 8px;border:1px solid #FDBA74;border-radius:8px;background:#FFF7ED;color:#C2410C;font-size:11px;cursor:pointer;">切职场</button>'
-        + '<button type="button" onclick="chooseSingleMealSubtype(\'elder\')" style="padding:3px 8px;border:1px solid #FDBA74;border-radius:8px;background:#FFF7ED;color:#C2410C;font-size:11px;cursor:pointer;">切长者</button>'
+        + '<span style="margin-left:auto;font-size:11px;color:#9CA3AF;white-space:nowrap;">切换模式：</span>'
+        + '<button type="button" onclick="chooseSingleMealSubtype(\'worker\')" style="padding:3px 8px;border:1px solid #FDBA74;border-radius:8px;background:#FFF7ED;color:#C2410C;font-size:11px;cursor:pointer;">职场人</button>'
+        + '<button type="button" onclick="chooseSingleMealSubtype(\'elder\')" style="padding:3px 8px;border:1px solid #FDBA74;border-radius:8px;background:#FFF7ED;color:#C2410C;font-size:11px;cursor:pointer;">长者</button>'
         + '<button type="button" onclick="dismissSingleMealGuide()" style="padding:3px 8px;border:1px solid #E5E7EB;border-radius:8px;background:#F9FAFB;color:#6B7280;font-size:11px;cursor:pointer;">关闭</button>'
         + '</div>';
 }
@@ -40310,7 +40311,7 @@ function _singleMealCardHtml() {
         +     '<div style="font-size:15px;font-weight:800;color:#C2410C;">🍱 今天的独享料理</div>'
         +     '<span style="font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">' + label + '</span>'
         +   '</div>'
-        +   '<div style="font-size:11px;color:#9A3412;margin-top:4px;">一人食专属搭配，三餐各一道，食材用量按单人份计算。</div>'
+        +   '<div style="font-size:11px;color:#9A3412;margin-top:4px;">一人餐专属搭配，三餐各一道，食材用量按单人份计算。</div>'
         +   '<div style="margin-top:8px;">'
         +     row('🌅', '早餐', menu.breakfast)
         +     row('☀️', '午餐', menu.lunch)
