@@ -804,6 +804,7 @@ class FoodHallAuditRequest(BaseModel):
     summary: str = ""
     content: str = ""
     tips: List[str] = Field(default_factory=list)
+    category: str = ""  # V425: 分类用于「节气食养」过期节气校验
 
 
 # 规格 Prompt：三篇主题分散 + 口语化 + 严格禁词（医疗/功效承诺类）
@@ -1332,6 +1333,13 @@ async def _foodhall_generate_core(
                     dishes.append({"name": dname, "image": dimg,
                                    "imagePrompt": dprompt, "steps": dsteps})
                 draft["dishes"] = dishes
+            # V425: 落库前硬校验（过期节气 / 具体金额），不合格的不进草稿池、不写 foodHallArticles
+            _val = validate_content(draft.get("content", ""), draft.get("category", ""),
+                                    title=draft.get("title", ""), date_str=date)
+            if not _val.get("passed"):
+                violations.append({"index": i, "type": "validate",
+                                   "reason": _val.get("reason", ""), "words": _val.get("words") or []})
+                continue
             drafts.append(draft)
         if drafts and not violations:
             break  # 干净即返回；命中禁词/跑题则再生成一轮
@@ -1352,18 +1360,28 @@ async def food_hall_audit(req: FoodHallAuditRequest) -> Dict[str, Any]:
     """V141: 食养堂发布前合规审核——本地关键词优先（0 token），弱信号才调 AI 二次确认。
     V143: 主体抽到 _foodhall_audit_core，自动发布流水线复用同一把尺子。
     """
-    return await _foodhall_audit_core(req.title, req.summary, req.content, req.tips)
+    return await _foodhall_audit_core(req.title, req.summary, req.content, req.tips, req.category)
 
 
 async def _foodhall_audit_core(
-    title: str, summary: str, content: str, tips: List[str]
+    title: str, summary: str, content: str, tips: List[str],
+    category: str = "", date_str: str = "",
 ) -> Dict[str, Any]:
-    """审核核心：1) 黑名单/疾病名/功效短语本地匹配（error 直接拒，0 token）；
-    2) 长度检查（warning，不阻断）；3) 弱信号词 → AI 语义二次确认。
+    """审核核心：1) V425 内容硬校验（过期节气/离谱价格，error 直接拒，0 token）；
+    2) 黑名单/疾病名/功效短语本地匹配（error 直接拒，0 token）；
+    3) 长度检查（warning，不阻断）；4) 弱信号词 → AI 语义二次确认。
     """
     tips_text = " ".join(str(t) for t in (tips or []))
     blob = " ".join([title or "", summary or "", content or "", tips_text])
     issues: List[Dict[str, str]] = []
+
+    # 0. V425: 生成内容的防错硬校验——过期节气 / 具体金额一律拦截
+    _val = validate_content(content or "", category, title=title or "", date_str=date_str)
+    if not _val.get("passed"):
+        issues.append({"level": "error", "message": _val.get("reason") or "内容校验未通过"})
+        return {"ok": True, "passed": False, "issues": issues, "suggestions": [],
+                "reason": _val.get("reason") or "内容校验未通过",
+                "validationFailed": True, "validation": _val}
 
     # 1. 本地硬校验（error，0 token）
     for w in _FOODHALL_AUDIT_BANNED:
@@ -1486,6 +1504,84 @@ def _fh_stale_term(article: Dict[str, Any], date_str: str) -> bool:
     prev1 = _FH_SOLAR_TERMS[(i - 1) % 24]
     prev2 = _FH_SOLAR_TERMS[(i - 2) % 24]
     return prev1 in blob or prev2 in blob
+
+
+# ========== V425: AI 内容落库前的硬校验（过期节气 / 离谱价格） ==========
+# 本地食材基准价（元/斤，与前端 ingredientPriceBase 一致）——只用于判断报价是否离谱
+_FH_INGREDIENT_PRICE_BASE = {
+    "猪肉": 15, "五花肉": 16, "排骨": 22, "牛肉": 45, "羊肉": 42, "鸡肉": 13, "鸡腿": 12,
+    "鸡蛋": 6, "鸭蛋": 7, "鱼": 18, "鲈鱼": 22, "虾": 35, "豆腐": 3, "豆干": 8,
+    "番茄": 5, "土豆": 3, "红薯": 2.5, "玉米": 3, "山药": 6, "南瓜": 3,
+    "白菜": 2.5, "青菜": 4, "菠菜": 5, "生菜": 4, "黄瓜": 4, "茄子": 4.5,
+    "萝卜": 2.5, "胡萝卜": 3, "洋葱": 3, "青椒": 5, "香菇": 10, "木耳": 30,
+    "大米": 3.5, "面粉": 3, "面条": 4, "食用油": 8, "牛奶": 4,
+}
+# 只把「明显在说钱」的写法当价格：¥20 / 约20元 / 成本30块 / 20元（斤）等；避免「两块豆腐」误判
+_FH_PRICE_RE = re.compile(
+    r"(?:[¥￥]\s*(\d+(?:\.\d+)?))"
+    r"|(?:(?:约|大约|大概|成本|价格|售价|单价|预算|人均|只要|只需|仅需|花了|省了|省下)\s*(\d+(?:\.\d+)?)\s*(?:元|块钱|块))"
+    r"|(?:(\d+(?:\.\d+)?)\s*元(?:/?斤|左右)?)"
+)
+
+
+def _fh_price_hits(text: str) -> List[Dict[str, Any]]:
+    """抽取文中「具体金额」，并按前文 16 字尝试匹配本地基准价。"""
+    s = str(text or "")
+    hits: List[Dict[str, Any]] = []
+    for m in _FH_PRICE_RE.finditer(s):
+        raw = next((g for g in m.groups() if g), "")
+        if not raw:
+            continue
+        try:
+            amount = float(raw)
+        except ValueError:
+            continue
+        ctx = s[max(0, m.start() - 16):m.start()]
+        ingredient = next((n for n in _FH_INGREDIENT_PRICE_BASE if n in ctx), "")
+        hits.append({
+            "amount": amount,
+            "ingredient": ingredient,
+            "base": _FH_INGREDIENT_PRICE_BASE.get(ingredient),
+            "text": m.group(0),
+        })
+    return hits
+
+
+def validate_content(
+    text: str, category: str = "", title: str = "", date_str: str = "",
+) -> Dict[str, Any]:
+    """V425: AI 生成文章 / 食谱落库前的统一防错校验。
+
+    规则 1：category='节气食养' 时，标题或正文前 100 字出现「非当前节气」的旧节气 → 违规；
+    规则 2：文中出现具体金额，且与本地基准价偏差极大（>3 倍或 <1/3）→ 违规；
+            无法对应食材的金额同样违规（AI 不得输出价格，价格由前端算）。
+    返回 {passed: True} 或 {passed: False, reason: '...', type, words}。
+    """
+    body = str(text or "")
+    day = (date_str or "").strip() or _dt_cls.now().strftime("%Y-%m-%d")
+    cur = _fh_current_term(day)
+
+    # 规则 1：过期节气（只约束「节气食养」分类；允许预告下一个节气）
+    if category == "节气食养" and cur in _FH_SOLAR_TERMS:
+        head = (str(title or "") + body[:100]).strip()
+        i = _FH_SOLAR_TERMS.index(cur)
+        nxt = _FH_SOLAR_TERMS[(i + 1) % 24]
+        stale_terms = [t for t in _FH_SOLAR_TERMS if t != cur and t != nxt and t in head]
+        if stale_terms:
+            return {"passed": False, "type": "stale_term", "words": stale_terms,
+                    "reason": "内容包含了过期的节气信息，请重新生成"}
+
+    # 规则 2：具体金额（有基准价则判偏差，无基准价直接拦截）
+    for h in _fh_price_hits(body):
+        if h["base"]:
+            if h["amount"] > h["base"] * 3 or h["amount"] < h["base"] / 3:
+                return {"passed": False, "type": "price", "words": [h["ingredient"]],
+                        "reason": f"价格离谱：{h['ingredient']} 标价 {h['amount']:g} 元，"
+                                  f"本地基准 {h['base']:g} 元/斤，请重新生成"}
+        else:
+            return {"passed": False, "type": "price", "words": [h["text"]],
+                    "reason": "内容出现了具体金额，请改为只写食材与用量（价格由前端计算），请重新生成"}
+    return {"passed": True}
 
 
 def _internal_token() -> str:
@@ -1846,7 +1942,7 @@ async def _fh_publish_due_track(pub_date: str, content_type: str) -> Dict[str, A
                     "contentType": content_type, "error": f"{label}兜底生成异常: {exc}"}
         candidates = [c for c in drafts if not _fh_stale_term(c, pub_date)]
         if not candidates:
-            note = f"{label}到点发布：新生成稿件仍停留在过季节气，暂不上架"
+            note = f"{label}到点发布：新生成稿件无合格内容（过期节气/价格/合规），暂不上架"
             _fh_record_run(pub_date, "stale", note, drafts)
             return {"ok": True, "published": False, "date": pub_date,
                     "contentType": content_type, "reason": note}
@@ -1854,11 +1950,19 @@ async def _fh_publish_due_track(pub_date: str, content_type: str) -> Dict[str, A
 
     audited: List[Dict[str, Any]] = []
     for c in candidates:
+        # V425: 老草稿可能带着旧审核结果，落库前仍要过一遍内容硬校验（本地 0 token）
+        _val = validate_content(c.get("content", ""), c.get("category", ""),
+                                title=c.get("title", ""), date_str=pub_date)
         audit = c.get("audit") if isinstance(c.get("audit"), dict) else None
-        if not audit:
+        if not _val.get("passed"):
+            audit = {"ok": True, "passed": False,
+                     "issues": [{"level": "error", "message": _val.get("reason", "")}],
+                     "reason": _val.get("reason", ""), "validationFailed": True, "validation": _val}
+        elif not audit:
             audit = await _foodhall_audit_core(
                 c.get("title", ""), c.get("summary", ""),
                 c.get("content", ""), c.get("tips") or [],
+                c.get("category", ""), pub_date,
             )
         audited.append({**c, "audit": audit})
     passed = [a for a in audited if a.get("audit", {}).get("passed")]
@@ -1980,7 +2084,8 @@ async def food_hall_auto_publish(
         audited: List[Dict[str, Any]] = []
         for d in drafts:
             audit = await _foodhall_audit_core(
-                d.get("title", ""), d.get("summary", ""), d.get("content", ""), d.get("tips", [])
+                d.get("title", ""), d.get("summary", ""), d.get("content", ""), d.get("tips", []),
+                d.get("category", ""), pub_date,
             )
             audited.append({**d, "audit": audit})
         all_audited.extend(audited)
@@ -2269,10 +2374,16 @@ async def food_hall_select(req: FoodHallSelectRequest) -> Dict[str, Any]:
     summary = str(chosen.get("summary") or "").strip()
     content = str(chosen.get("content") or "").strip()
     # 选中前再走一次合规审核，避免绕过审核直接上首页
-    audit = await _foodhall_audit_core(title, summary, content, chosen.get("tips") or [])
+    audit = await _foodhall_audit_core(
+        title, summary, content, chosen.get("tips") or [],
+        str(chosen.get("category") or ""), pub_date,
+    )
     if not audit.get("passed"):
         reason = "；".join(i.get("message", "") for i in audit.get("issues", []) if i.get("level") == "error")
-        return {"ok": False, "error": reason or "该篇未通过合规审核，不能设为今日精选"}
+        return {"ok": False, "error": reason or "该篇未通过合规审核，不能设为今日精选",
+                "reason": reason or "该篇未通过合规审核，不能设为今日精选",
+                "validationFailed": bool(audit.get("validationFailed")),
+                "validation": audit.get("validation") or {}}
 
     is_recipe = ct == "recipe_article"
     image_prompt = str(chosen.get("imagePrompt") or "").strip()

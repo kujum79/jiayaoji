@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V424-20261109';
+        var APP_VER = 'V425-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -36476,7 +36476,9 @@ async function _fhMgrPickCandidate(date, ct, idx, btn) {
         });
         var out = await resp.json();
         if (!resp.ok || !out || !out.ok) {
-            showToast && showToast((out && (out.error || out.detail)) || '设为精选失败');
+            // V425: 内容校验未通过 → 弹窗拦截「设为精选」，提示重写
+            if (out && out.validationFailed) _fhMgrRejectModal(out.reason || out.error, '🚫 发布拦截', '该篇未发布：内容校验未通过，请重写或重新生成后再发布。');
+            else showToast && showToast((out && (out.error || out.detail)) || '设为精选失败');
             if (btn) { btn.disabled = false; btn.innerHTML = old; }
             return;
         }
@@ -36630,7 +36632,7 @@ async function _fhMgrPublish(id, btn) {
     try {
         var resp = await fetch('/api/food-hall/audit', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ articleId: id, title: a.title || '', summary: a.summary || '', content: a.content || '', tips: a.tips || [] })
+            body: JSON.stringify({ articleId: id, title: a.title || '', summary: a.summary || '', content: a.content || '', tips: a.tips || [], category: a.category || '' })
         });
         var out = await resp.json();
         var issues = (out && Array.isArray(out.issues)) ? out.issues : [];
@@ -36648,7 +36650,9 @@ async function _fhMgrPublish(id, btn) {
             var reason = errMsgs.length ? errMsgs.join('；') : ((out && out.reason) || '审核未通过');
             _fhTransition(id, 'rejected');
             _fhUpdate(id, { auditStatus: 'rejected', auditNote: reason });
-            _fhMgrRejectModal(reason);
+            // V425: 过期节气/离谱价格等内容校验未通过 → 弹窗拦截并提示重写
+            if (out && out.validationFailed) _fhMgrRejectModal(reason, '🚫 发布拦截', '该篇未发布：内容校验未通过，请重写或重新生成后再发布。');
+            else _fhMgrRejectModal(reason);
         }
     } catch (e) {
         _fhTransition(id, 'draft'); // 网络/服务异常：退回草稿
@@ -36684,16 +36688,16 @@ function _fhMgrDelete(id) {
         showToast && showToast('已删除');
     });
 }
-function _fhMgrRejectModal(reason) {
+function _fhMgrRejectModal(reason, title, tip) {
     var old = document.getElementById('fhRejOv');
     if (old) old.remove();
     var ov = document.createElement('div');
     ov.id = 'fhRejOv';
     ov.style.cssText = 'position:fixed;inset:0;z-index:10006;background:rgba(31,41,55,0.55);display:flex;align-items:center;justify-content:center;padding:24px;';
     ov.innerHTML = '<div style="background:white;border-radius:16px;max-width:340px;width:100%;padding:20px;">'
-        + '<div style="font-size:16px;font-weight:700;color:#DC2626;">❌ 审核未通过</div>'
+        + '<div style="font-size:16px;font-weight:700;color:#DC2626;">' + (title || '❌ 审核未通过') + '</div>'
         + '<div style="margin-top:10px;font-size:13px;color:#4B5563;line-height:1.7;">' + reason + '</div>'
-        + '<div style="font-size:12px;color:#9CA3AF;margin-top:6px;">该篇已退回，可在「已驳回」中重新编辑后再次发布。</div>'
+        + '<div style="font-size:12px;color:#9CA3AF;margin-top:6px;">' + (tip || '该篇已退回，可在「已驳回」中重新编辑后再次发布。') + '</div>'
         + '<button type="button" onclick="this.closest(\'#fhRejOv\').remove()" style="margin-top:16px;width:100%;border:none;background:#C2410C;color:white;font-size:14px;font-weight:600;border-radius:10px;padding:10px;cursor:pointer;">知道了</button></div>';
     document.body.appendChild(ov);
 }
