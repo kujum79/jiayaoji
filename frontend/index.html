@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V441-20261109';
+        var APP_VER = 'V442-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4439,6 +4439,8 @@ async function _submitFeedback() {
                 <span id="homeDiaryDiningSlot" style="display:inline-flex;align-items:center;"><span id="homeDiaryDiningReadonly" style="font-size:12px;color:#C2410C;font-weight:600;white-space:nowrap;"></span></span>
                 <!-- V61: ＋ 紧跟 2人▼（间距由 hd-head gap:8px 承担）；V439: 去掉首页重复的「确认」入口，确认统一在食记页 -->
                 <button class="hd-plus-btn" onclick="openMealPlanPage()" title="规划食谱">＋</button>
+                <!-- V442: 记录入口移到 ＋ 右侧，首页正文只展示计划与成本 -->
+                <button class="hd-pill-btn" onclick="_hdRecordCurrent()" title="记录本餐实际吃了什么">记录</button>
             </div>
             <div class="hd-body" id="hdBody"></div>
         </div>
@@ -30850,7 +30852,7 @@ async function runDiaryMealAudit(dateKey, mealKey, btnEl) {
         } catch (e) {}
         try { if (typeof renderDiary === 'function') renderDiary(); } catch (e) {}
         try { if (typeof renderHomeDiaryCard === 'function') renderHomeDiaryCard(); } catch (e) {}
-        if (typeof showToast === 'function') showToast('审核未返回评分，请稍后点击「待审核」重试');
+        if (typeof showToast === 'function') showToast('审核未返回评分，请稍后点击「去评分」重试');
     }
 }
 
@@ -33859,7 +33861,7 @@ function _hdMealStatusBadgeHtml(dk, mealKey) {
         var ts = (rec && typeof rec.totalScore === 'number') ? rec.totalScore : null;
         if (hasPlan && hasActual) return '<span class="diary-status-tag">✅ 已记录</span>';
         if (hasPlan && ts !== null) return '<span class="diary-status-tag diary-tag-score" style="cursor:pointer;" onclick="currentDiaryDate = new Date(); openDiaryAuditReport(\'' + mealKey + '\')" title="查看这餐的 AI 审核报告">评分' + ts + '</span>';
-        if (hasPlan) return '<span class="diary-status-tag diary-tag-pending" style="cursor:pointer;" onclick="runDiaryMealAudit(\'' + dk + '\',\'' + mealKey + '\',this)" title="点击立即 AI 审核这餐的计划食谱与外食计划">待审核</span>';
+        if (hasPlan) return '<span class="diary-status-tag diary-tag-pending" style="cursor:pointer;" onclick="runDiaryMealAudit(\'' + dk + '\',\'' + mealKey + '\',this)" title="点击立即 AI 审核这餐的计划食谱与外食计划">去评分</span>';
         if (!hasPlan && hasActual) return '<span class="diary-status-tag">✅ 已记录</span>';
         return '<span class="diary-status-tag diary-tag-muted">未安排</span>';
     } catch (e) { return ''; }
@@ -33924,15 +33926,18 @@ function renderHomeDiaryCard() {
                 + '</span>';
         }).join('') : '<span style="font-size:13px;color:#9CA3AF;">（未计划，点右上角 ＋ 规划）</span>') + '</div>'
         + '</div>'
-        + '<div class="hd-act-row" style="justify-content:flex-end;">'
-        + '<button class="hd-pill-btn" onclick="openTodayMealRecordModal(\'' + mealKey + '\')">记录</button>' // V179: 统一记录弹窗（全家/分餐），直接记录本餐
-        + '</div>'
         + costHtml;
     // V159: 餐卡重建后刷新成本行右侧「本月已省」槽
     try { renderHomeSavingCard(); } catch (e) {}
 }
 
 // 食记卡片「📋 计划」：进入食记页管理计划（餐卡勾选 + 确认计划）
+function _hdRecordCurrent() {
+    // V442: 记录按钮在静态头部，按下时按当前餐次取 key
+    var idx = (typeof _hdCurrentIdx === 'function') ? _hdCurrentIdx() : 2;
+    var mealKey = (_hdMeals && _hdMeals[idx]) || 'dinner';
+    openTodayMealRecordModal(mealKey);
+}
 function _hdGotoDiary() {
     document.getElementById('pageHome').classList.add('slide-up');
     document.querySelector('.main-app').style.display = 'flex';
@@ -61403,7 +61408,7 @@ function renderDiary() {
             var _tsV104 = (_arec && typeof _arec.totalScore === 'number') ? _arec.totalScore : null;
             if (hasPlan && hasActual) statusBadge = '<span class="diary-status-tag">✅ 已记录</span>';
             else if (hasPlan && _tsV104 !== null) statusBadge = '<span class="diary-status-tag diary-tag-score" style="cursor:pointer;" onclick="openDiaryAuditReport(\'' + escapeAttr(meal.key) + '\')" title="查看这餐的 AI 审核报告">评分' + _tsV104 + '</span>';
-            else if (hasPlan) statusBadge = '<span class="diary-status-tag diary-tag-pending" style="cursor:pointer;" onclick="runDiaryMealAudit(\'' + escapeAttr(dateKey) + '\',\'' + escapeAttr(meal.key) + '\',this)" title="点击立即 AI 审核这餐的计划食谱与外食计划">待审核</span>';
+            else if (hasPlan) statusBadge = '<span class="diary-status-tag diary-tag-pending" style="cursor:pointer;" onclick="runDiaryMealAudit(\'' + escapeAttr(dateKey) + '\',\'' + escapeAttr(meal.key) + '\',this)" title="点击立即 AI 审核这餐的计划食谱与外食计划">去评分</span>';
             else if (!hasPlan && hasActual) statusBadge = '<span class="diary-status-tag">✅ 已记录</span>';
             else statusBadge = '<span class="diary-status-tag diary-tag-muted">未安排</span>';
         }
