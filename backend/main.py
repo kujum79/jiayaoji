@@ -7216,6 +7216,286 @@ async def _churn_startup() -> None:
     asyncio.create_task(_churn_scheduler())
 
 
+# ========== V444: 专属微课服务端每日生成（05:20），前端只读取 ==========
+# 背景：原来微课由前端在用户打开 App 时本地调 AI 生成，当天没打开就没有、每台设备还要各调一次。
+# 现改为服务端每天定时为「全国通用版 + 每个有家庭档案的家庭」各生成一篇，前端只拉取展示。
+_DL_GEN_AT = "05:20"
+_DL_TABLE_READY = False
+_DL_SCHED_DONE: set = set()
+_DL_SCHED_TRY: Dict[str, int] = {}
+_DL_SCHED_NEXT: Dict[str, float] = {}
+_DL_LOCK = asyncio.Lock()
+
+
+def _dl_db():
+    global _DL_TABLE_READY
+    _FH_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    conn = _sqlite3.connect(str(_FH_DB_PATH), timeout=10)
+    conn.row_factory = _sqlite3.Row
+    if not _DL_TABLE_READY:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS daily_lessons (
+                family_id    TEXT NOT NULL DEFAULT '*',
+                date         TEXT NOT NULL,
+                title        TEXT NOT NULL DEFAULT '',
+                content      TEXT NOT NULL DEFAULT '',
+                weather      TEXT DEFAULT '',
+                solar_term   TEXT DEFAULT '',
+                family_brief TEXT DEFAULT '',
+                created_at   TEXT DEFAULT '',
+                PRIMARY KEY (family_id, date)
+            )
+            """
+        )
+        conn.commit()
+        _DL_TABLE_READY = True
+    return conn
+
+
+def _dl_get(fid: str, day: str) -> Optional[Dict[str, Any]]:
+    try:
+        conn = _dl_db()
+        try:
+            row = conn.execute(
+                "SELECT * FROM daily_lessons WHERE family_id=? AND date=?", (fid, day)
+            ).fetchone()
+        finally:
+            conn.close()
+    except Exception as exc:
+        print(f"[daily-lesson] 读取失败: {exc}", flush=True)
+        return None
+    if not row:
+        return None
+    return {
+        "id": f"dl_{day}",
+        "date": row["date"],
+        "title": row["title"],
+        "content": row["content"],
+        "weather": row["weather"] or "",
+        "solarTerm": row["solar_term"] or "",
+        "familyBrief": row["family_brief"] or "",
+        "createdAt": int(time.time() * 1000),
+    }
+
+
+def _dl_save(fid: str, day: str, title: str, content: str, term: str, brief: str) -> None:
+    conn = _dl_db()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO daily_lessons"
+            "(family_id,date,title,content,weather,solar_term,family_brief,created_at)"
+            " VALUES(?,?,?,?,?,?,?,?)",
+            (fid, day, title, content, "", term, brief, _dt_cls.now().isoformat(timespec="seconds")),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _dl_family_brief(fid: str) -> str:
+    """从云端家庭快照里提取画像摘要（爸爸（56岁、气虚质）…），与前端 _familyBriefForLesson 同口径。"""
+    path = _family_backup_path(fid)
+    if not path.exists():
+        return ""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        data = payload.get("data") if isinstance(payload, dict) else None
+        raw = (data or {}).get("familyData") or ""
+        members = json.loads(raw) if isinstance(raw, str) else (raw or [])
+    except (OSError, json.JSONDecodeError, TypeError):
+        return ""
+    if not isinstance(members, list) or not members:
+        return ""
+    parts: List[str] = []
+    for m in members[:6]:
+        if not isinstance(m, dict):
+            continue
+        bits: List[str] = []
+        try:
+            age = int(m.get("age") or 0)
+        except (TypeError, ValueError):
+            age = 0
+        if age > 0:
+            bits.append(f"{age}岁")
+        if m.get("constitution"):
+            bits.append(str(m["constitution"]))
+        tags = m.get("tags")
+        if isinstance(tags, list):
+            bits.extend([str(t) for t in tags if t][:2])
+        name = str(m.get("name") or "家人")
+        parts.append(name + (f"（{'、'.join(bits)}）" if bits else ""))
+    brief = "，".join(parts)
+    return brief[:90] + "…" if len(brief) > 90 else brief
+
+
+def _dl_clean(text: str) -> str:
+    """医疗词黑名单过滤 + 城市名兜底删除（与面向全国的内容口径一致）。"""
+    s = _strip_medical_words(str(text or ""))
+    for w in _FH_CITY_HINTS:
+        if w in s:
+            s = s.replace(w, "")
+    s = re.sub(r"[ \t]{2,}", " ", s)
+    return s.strip()
+
+
+def _dl_parse_json(text: str) -> Optional[Dict[str, str]]:
+    s = str(text or "").replace("```json", "").replace("```", "").strip()
+    a, b = s.find("{"), s.rfind("}")
+    if a >= 0 and b > a:
+        s = s[a:b + 1]
+    try:
+        obj = json.loads(s)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    title = str(obj.get("title") or "").strip()
+    content = str(obj.get("content") or obj.get("text") or "").strip()
+    return {"title": title, "content": content} if title and content else None
+
+
+async def _dl_generate(fid: str, day: str, brief: str) -> Dict[str, Any]:
+    """调用模型生成一篇微课并入库；失败抛异常由调用方兜底。"""
+    term = _fh_current_term(day) or "当前时节"
+    who = brief or "一个普通的三口之家（含一名学龄儿童）"
+    sys = (
+        "你是一位家庭营养师，擅长写简短、可执行的家庭饮食微课。只讲营养搭配与日常饮食安排，"
+        "严禁使用任何医疗词汇（治疗、治愈、改善、降低、预防、缓解、调理、疗效等一律不用），"
+        "也不使用中医功效词（如健脾、养胃、益气、补血、祛湿、活血、降火）。只返回 JSON，不要多余文字。"
+    )
+    usr = (
+        f"今天是{day}，节气是{term}。该家庭有：{who}。\n"
+        f"请写一篇 300 字左右的今日微课，标题引人入胜（不超过 16 字）。内容要提醒他们在今天的饮食中注意什么，"
+        f"给出具体可执行的食材与搭配建议。不要医疗词汇，只讲营养搭配。\n"
+        f"这篇微课会展示给全国各地用户，标题与正文不得出现任何城市/地区名称，也不要用「今天天气」这类需要实时天气的表述。\n"
+        f'严格返回 JSON：{{"title":"标题","content":"正文"}}'
+    )
+    text = await call_qwen(
+        [{"role": "system", "content": sys}, {"role": "user", "content": usr}],
+        json_mode=True, max_tokens=800, task_type="daily_lesson", timeout=45.0,
+    )
+    parsed = _dl_parse_json(text)
+    if not parsed:
+        raise ValueError("AI 返回格式异常")
+    parsed["title"] = _dl_clean(parsed["title"])[:40]
+    parsed["content"] = _dl_clean(parsed["content"])
+    if len(parsed["content"]) < 80:
+        raise ValueError(f"正文仅 {len(parsed['content'])} 字，疑似生成被截断")
+    _dl_save(fid, day, parsed["title"], parsed["content"], term, brief)
+    return {"title": parsed["title"], "content": parsed["content"]}
+
+
+def _dl_family_ids() -> List[str]:
+    try:
+        return sorted(p.stem for p in _FAMILY_BACKUP_DIR.glob("*.json") if p.is_file())
+    except OSError:
+        return []
+
+
+async def _dl_generate_all(day: str) -> Dict[str, Any]:
+    """先生成全国通用版（兜底），再为每个有家庭档案的家庭生成专属版。"""
+    jobs: List[Tuple[str, str]] = [("*", "")]
+    for fid in _dl_family_ids():
+        brief = _dl_family_brief(fid)
+        if brief:
+            jobs.append((fid, brief))
+    errors: List[str] = []
+    made = 0
+    for fid, brief in jobs:
+        if _dl_get(fid, day):
+            continue
+        try:
+            await _dl_generate(fid, day, brief)
+            made += 1
+        except Exception as exc:
+            errors.append(f"{fid}: {exc}")
+            print(f"[daily-lesson] 生成失败 {fid}: {exc}", flush=True)
+    return {"ok": made > 0 or bool(_dl_get("*", day)), "made": made, "errors": errors}
+
+
+async def _dl_scheduler() -> None:
+    """每天 05:20 生成当天微课；服务晚启动会补跑，单日最多重试 3 次（间隔 5 分钟）。"""
+    await asyncio.sleep(20)
+    while True:
+        try:
+            now = _dt_cls.now()
+            today = now.strftime("%Y-%m-%d")
+            hhmm = now.strftime("%H:%M")
+            now_ts = time.time()
+            if (
+                hhmm >= _DL_GEN_AT
+                and today not in _DL_SCHED_DONE
+                and _DL_SCHED_TRY.get(today, 0) < 3
+                and now_ts >= _DL_SCHED_NEXT.get(today, 0)
+            ):
+                _DL_SCHED_TRY[today] = _DL_SCHED_TRY.get(today, 0) + 1
+                try:
+                    res = await _dl_generate_all(today)
+                except Exception as exc:
+                    res = {"ok": False, "errors": [str(exc)]}
+                print(f"[daily-lesson] 定时生成 {today}: {res}", flush=True)
+                if res.get("ok"):
+                    _DL_SCHED_DONE.add(today)
+                else:
+                    _DL_SCHED_NEXT[today] = now_ts + 300
+            for k in [k for k in _DL_SCHED_DONE if k != today]:
+                _DL_SCHED_DONE.discard(k)
+            for k in [k for k in _DL_SCHED_TRY if k != today]:
+                _DL_SCHED_TRY.pop(k, None)
+                _DL_SCHED_NEXT.pop(k, None)
+        except Exception as exc:
+            print(f"[daily-lesson] 调度异常: {exc}", flush=True)
+        await asyncio.sleep(60)
+
+
+_DL_TASK_STARTED = False
+
+
+@app.on_event("startup")
+async def _dl_startup() -> None:
+    global _DL_TASK_STARTED
+    if _DL_TASK_STARTED:
+        return
+    _DL_TASK_STARTED = True
+    try:
+        _dl_db().close()
+    except Exception as exc:
+        print(f"[daily-lesson] 建表失败: {exc}", flush=True)
+    asyncio.create_task(_dl_scheduler())
+
+
+class DailyLessonReq(BaseModel):
+    familyId: str = Field(default="", max_length=32)
+    date: str = Field(default="", max_length=10)
+
+
+@app.post("/api/daily-lesson")
+async def daily_lesson(req: DailyLessonReq) -> Dict[str, Any]:
+    """前端只读接口：返回该家庭今天的微课；没有专属版则回落到全国通用版。"""
+    day = (req.date or "").strip() or _dt_cls.now().strftime("%Y-%m-%d")
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", day):
+        return {"ok": False, "error": "日期格式不正确"}
+    fid = re.sub(r"[^A-Z0-9_-]", "", (req.familyId or "").strip().upper())[:32]
+    lesson = _dl_get(fid, day) if fid else None
+    source = "family" if lesson else ""
+    if not lesson:
+        lesson = _dl_get("*", day)
+        source = "global" if lesson else ""
+    if not lesson:
+        # 调度漏跑/服务刚启动：按需补生成一版通用内容，避免用户看到空白
+        async with _DL_LOCK:
+            lesson = _dl_get("*", day)
+            if not lesson:
+                try:
+                    await _dl_generate("*", day, "")
+                except Exception as exc:
+                    return {"ok": False, "error": f"今日微课生成失败：{exc}"}
+                lesson = _dl_get("*", day)
+            source = "global"
+    if not lesson:
+        return {"ok": False, "error": "今日微课暂无"}
+    return {"ok": True, "source": source, "lesson": lesson}
+
+
 # V157: 文件末尾补跑别名注册——覆盖定义在本块之后的 /api/daily-tip、/api/weather、
 # /api/migration 等 POST 路由（catch-all 仅 GET，POST 别名无被吞风险；已注册路径自动去重）
 _register_api_prefix_aliases()

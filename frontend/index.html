@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V443-20261109';
+        var APP_VER = 'V444-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -10693,95 +10693,49 @@ function _todayLesson() {
     return null;
 }
 
-// 家庭画像摘要：爸爸（56岁、气虚质、高血压）…
-function _familyBriefForLesson() {
-    var members = [];
-    try { members = getFamilyMembers() || []; } catch (e) {}
-    if (!members.length) return '家庭成员信息未填写';
-    var parts = [];
-    members.slice(0, 6).forEach(function (m) {
-        if (!m) return;
-        var bits = [];
-        var age = Number(m.age);
-        if (age > 0) bits.push(age + '岁');
-        if (m.constitution) bits.push(m.constitution);
-        if (Array.isArray(m.tags)) bits = bits.concat(m.tags.filter(Boolean).slice(0, 2));
-        parts.push(String(m.name || '家人') + (bits.length ? '（' + bits.join('、') + '）' : ''));
-    });
-    var brief = parts.join('，');
-    return brief.length > 90 ? brief.slice(0, 90) + '…' : brief;
-}
+// 家庭画像摘要与天气注入已随 V444 迁移到服务端，本地不再生成微课
 
-async function _lessonWeatherText() {
-    try {
-        var r = await _ensureWeatherData();
-        var wx = r && r.data;
-        if (!wx) return '天气未知';
-        var key = dateToKey(new Date());
-        var d = (wx.daily || []).filter(function (x) { return x && x.date === key; })[0];
-        // V325: 只给通用天气，不带城市名，避免 AI 把城市写进正文（D3-05）
-        if (d) return _lessonStripCity((d.textDay || '') + ' ' + d.tempMin + '~' + d.tempMax + '°C');
-        return _lessonStripCity(wx.summary || '天气未知');
-    } catch (e) { return '天气未知'; }
-}
-
-// 解析 AI 返回 JSON（兼容 ```json 代码块与前后多余文字）
-function _parseLessonJson(text) {
-    var s = String(text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
-    var a = s.indexOf('{'), b = s.lastIndexOf('}');
-    if (a >= 0 && b > a) s = s.slice(a, b + 1);
-    try {
-        var o = JSON.parse(s);
-        return { title: String(o.title || '').trim(), content: String(o.content || o.text || '').trim() };
-    } catch (e) { return null; }
-}
-
+// V444: 专属微课改为服务端每天 05:20 定时生成，前端只读取（不再本地调 AI）
 async function _generateDailyLesson(force) {
+    return await _syncDailyLessonFromServer(!!force);
+}
+
+async function _syncDailyLessonFromServer(force) {
     if (_dailyLessonBusy) return null;
     if (_subTier() !== 'premium') return null;
     var today = dateToKey(new Date());
     var exist = _todayLesson();
-    if (exist && !force) return exist;   // 每天只生成一次
+    if (exist && !force) return exist;
     _dailyLessonBusy = true;
     _renderDailyLessonCard();
     try {
-        var weatherText = await _lessonWeatherText();
-        var termName = '当前时节';
-        try { var term = getSolarTermForDate(new Date()); if (term && term.name) termName = term.name; } catch (e) {}
-        var brief = _familyBriefForLesson();
-        var sys = '你是一位家庭营养师，擅长写简短、可执行的家庭饮食微课。只讲营养搭配与日常饮食安排，严禁使用任何医疗词汇（治疗、治愈、改善、降低、预防、缓解、调理、疗效等一律不用），也不使用中医功效词（如健脾、养胃、益气、补血、祛湿、活血、降火）。只返回 JSON，不要多余文字。';
-        var usr = '今天是' + today + '，节气是' + termName + '，天气' + weatherText + '。该家庭有：' + brief + '。\n' +
-            '请写一篇 300 字左右的今日微课，标题引人入胜（不超过 16 字）。内容要提醒他们在今天的饮食中注意什么，给出具体可执行的食材与搭配建议。不要医疗词汇，只讲营养搭配。\n' +
-            '这篇微课会展示给全国各地用户，标题与正文不得出现任何城市/地区名称（如「武汉」「杭州」「北方某地」），天气一律用「此时节」「最近降温」这类通用表述。\n' +
-            '严格返回 JSON：{"title":"标题","content":"正文"}';
-        var resp = await aiChatMultiProvider(sys, usr, { maxTokens: 800, temperature: 0.7, taskType: 'knowledge' });
-        var text = (resp && resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || '';
-        var parsed = _parseLessonJson(text);
-        if (!parsed || !parsed.title || !parsed.content) throw new Error('AI 返回格式异常');
-        if (typeof _eduMedicalSanitize === 'function') {
-            parsed.title = _eduMedicalSanitize(parsed.title);
-            parsed.content = _eduMedicalSanitize(parsed.content);
-        }
-        // V325: 输出兜底去城市名（AI 仍可能写到城市，如「霜降至，武汉气温渐凉」）
-        parsed.title = _lessonStripCity(parsed.title);
-        parsed.content = _lessonStripCity(parsed.content);
+        var fid = '';
+        try { fid = (typeof getFamilyId === 'function' ? getFamilyId() : '') || ''; } catch (e) {}
+        var resp = await fetch(API_BASE + '/api/daily-lesson', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ familyId: fid, date: today })
+        });
+        var j = await resp.json().catch(function () { return null; });
+        if (!j || !j.ok || !j.lesson) throw new Error((j && j.error) || '服务端暂未生成今日微课');
+        var L = j.lesson;
         var rec = {
-            id: 'dl_' + today,
-            date: today,
-            title: parsed.title,
-            content: parsed.content,
-            weather: weatherText,
-            solarTerm: termName,
-            familyBrief: brief,
-            createdAt: Date.now()
+            id: L.id || ('dl_' + L.date),
+            date: L.date || today,
+            title: L.title || '',
+            content: L.content || '',
+            weather: L.weather || '',
+            solarTerm: L.solarTerm || '',
+            familyBrief: L.familyBrief || '',
+            createdAt: L.createdAt || Date.now()
         };
-        var list = _getDailyLessons().filter(function (x) { return x && x.date !== today; });
+        if (!rec.title || !rec.content) throw new Error('服务端内容不完整');
+        var list = _getDailyLessons().filter(function (x) { return x && x.date !== rec.date; });
         list.unshift(rec);
         _saveDailyLessons(list);
-        showToast('今日微课已生成');
         return rec;
     } catch (e) {
-        showToast('今日微课生成失败：' + (e.message || e));
+        if (force) showToast('获取今日微课失败：' + (e.message || e));
         return null;
     } finally {
         _dailyLessonBusy = false;
@@ -10816,12 +10770,12 @@ function _renderDailyLessonCard() {
         return;
     }
     if (_dailyLessonBusy) {
-        box.innerHTML = '<div style="background:#fff;border:1px dashed #FDBA74;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#9A3412;">AI 正在为今天生成专属微课…</div>';
+        box.innerHTML = '<div style="background:#fff;border:1px dashed #FDBA74;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#9A3412;">正在获取今日微课…</div>';
         return;
     }
     box.innerHTML = '<div style="background:#fff;border:1px dashed #FDBA74;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;">' +
-        '<div style="font-size:13px;color:#9A3412;line-height:1.7;margin-bottom:10px;">今日微课还没生成<br>将结合今天的天气、节气与家人情况写一篇</div>' +
-        '<button type="button" onclick="_generateDailyLesson(true)" style="padding:9px 18px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">生成今日微课</button>' +
+        '<div style="font-size:13px;color:#9A3412;line-height:1.7;margin-bottom:10px;">今日微课由服务端每天 05:20 自动生成<br>将结合今天的节气与家人情况撰写</div>' +
+        '<button type="button" onclick="_generateDailyLesson(true)" style="padding:9px 18px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">刷新获取</button>' +
         '</div>';
 }
 
