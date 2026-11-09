@@ -2480,7 +2480,7 @@ async def food_hall_select(req: FoodHallSelectRequest) -> Dict[str, Any]:
                   (publish_date, content_type, category, title, summary, content, tips, related,
                    ingredients, steps, dishes, cover_image, image_prompt, drafts, chosen_id,
                    auto_published, review_status, run_note, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'confirmed',?,?,?)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'confirmed',?,?,?)
                 ON CONFLICT(publish_date, content_type) DO UPDATE SET
                   category=excluded.category, title=excluded.title, summary=excluded.summary,
                   content=excluded.content, tips=excluded.tips, ingredients=excluded.ingredients,

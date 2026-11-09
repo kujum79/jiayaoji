@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V436-20261109';
+        var APP_VER = 'V437-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -35086,6 +35086,8 @@ function _dtFavRemove(id) {
     return list;
 }
 function _closeDtFull() {
+    try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {}
+    _dtSpeaking = false;
     var ov = document.getElementById('dtFullOv');
     if (!ov) return;
     var sh = document.getElementById('dtFullSheet');
@@ -35609,6 +35611,35 @@ function _paintDeepPlanCard(data) {
 // V393: 语音播报（音频）已下线，本次迭代仅保留图文与课程
 var _dtCurTip = null; // 当前弹层展示的 tip（卡片/往期/收藏三个入口共用）
 // V436: 食养堂文章/食谱对所有用户开放，详情页不再展示「我的订阅」推广卡
+// V437: 恢复详情页右上角语音播报（V393 下线后用户反馈缺失）
+var _dtSpeaking = false;
+function _dtSetSpeakBtn(label) {
+    var b = document.getElementById('dtFullSpeakBtn');
+    if (b) { b.textContent = label; b.title = (label === '⏹' ? '停止播报' : '语音播报'); }
+}
+function _dtSpeakTip() {
+    if (!window.speechSynthesis) { showToast('当前浏览器不支持语音播报'); return; }
+    if (_dtSpeaking) {
+        try { speechSynthesis.cancel(); } catch (e) {}
+        _dtSpeaking = false; _dtSetSpeakBtn('🔊');
+        return;
+    }
+    var tip = _dtCurTip;
+    if (!tip) { showToast('暂无内容可朗读'); return; }
+    var parts = [];
+    if (tip.title) parts.push(tip.title);
+    if (tip.content || tip.summary) parts.push(tip.content || tip.summary);
+    if (tip.tips && tip.tips.length) parts.push('小贴士。' + tip.tips.join('。'));
+    var text = parts.join('。');
+    if (!text.trim()) { showToast('暂无内容可朗读'); return; }
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN'; u.rate = 0.9; u.pitch = 1; u.volume = 1;
+    u.onend = function () { _dtSpeaking = false; _dtSetSpeakBtn('🔊'); };
+    u.onerror = function () { _dtSpeaking = false; _dtSetSpeakBtn('🔊'); };
+    try { speechSynthesis.cancel(); } catch (e) {}
+    speechSynthesis.speak(u);
+    _dtSpeaking = true; _dtSetSpeakBtn('⏹');
+}
 // V358(P1-8): 食养内容按家庭画像附禁忌注——柿子等高鞣酸/高糖食材，避免把通用内容读成"我家也能吃"
 function _dietProfileRisks() {
     var tags = [];
@@ -35689,6 +35720,7 @@ function _openDailyTipFull(tip) {
         + '<div style="display:flex;align-items:center;gap:8px;">'
         + '<button type="button" onclick="_closeDtFull()" style="border:none;background:none;font-size:18px;color:#6B7280;cursor:pointer;padding:2px 6px;line-height:1;">←</button>'
         + '<span style="font-size:15px;font-weight:700;color:#1F2937;">食养堂</span>'
+        + '<button type="button" id="dtFullSpeakBtn" onclick="_dtSpeakTip()" title="语音播报" style="margin-left:auto;border:none;background:none;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1;color:#6B7280;">🔊</button>'
         + '</div>';
     var body = document.createElement('div');
     body.style.cssText = 'flex:1;overflow-y:auto;padding:16px 20px 12px;';
