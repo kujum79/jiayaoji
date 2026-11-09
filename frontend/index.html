@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V440-20261109';
+        var APP_VER = 'V441-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -33915,30 +33915,7 @@ function renderHomeDiaryCard() {
     }
     // ====== V46: 计划确认/记录实际 交互结构 ======
     var dishesArr = (md && md.plan && md.plan.dishes) ? md.plan.dishes.map(function (d) { return typeof d === 'string' ? d : (d.name || d.dish || ''); }).filter(Boolean) : [];
-    var actualRecorded = '';
-    if (md && md.actual) {
-        if (md.actual.diningType === '外出就餐') {
-            // V138: 首页与食记页一致——显示餐厅名+地址+总价+人均+菜品横排
-            var _a = md.actual;
-            var _r = _a.restaurantName ? _a.restaurantName : '外出就餐';
-            var _addr = _a.restaurantAddress ? ' · 📍 ' + _a.restaurantAddress : '';
-            var _total = _a.totalCost ? ' · 总价¥' + _a.totalCost : '';
-            var _ac = _a.avgCost || _a.price;
-            var _avg = _ac ? ' · 人均¥' + _ac : '';
-            var _dishes = (_a.dishes || []).map(function(d) {
-                var _p = parseFloat(d.price) || 0;
-                var _q = parseInt(d.quantity) || 1;
-                return d.name + (_p > 0 ? '¥' + _p : '') + (_q > 1 ? 'x' + _q : '');
-            }).join(' · ');
-            actualRecorded = _r + _addr + _total + _avg + (_dishes ? ' · ' + _dishes : '');
-        } else if (md.actual.dishes && md.actual.dishes.length) {
-            actualRecorded = md.actual.dishes.map(function (d) { return typeof d === 'string' ? d : (d.name || d.dish || ''); }).filter(Boolean).join(' · ');
-        }
-    }
-    var actInner = actualRecorded;
-    // V55: 「实际：」前缀 #4B5563；未记录「（未记录）」#9CA3AF
-    var actHtml = '<span class="hd-act-label">实际：</span>'
-        + (actInner ? escapeHtml(actInner) : '<span class="hd-act-none">（未记录）</span>');
+    // V441: 首页不再显示「实际：」——实际与计划的差异统一在「三餐计划、记录」页展示
     // V439: 首页只读展示计划，确认/复核统一在食记页
     body.innerHTML = '<div class="hd-plan-row">'
         + '<div class="hd-dishes">' + (dishesArr.length ? dishesArr.map(function (name) {
@@ -33947,8 +33924,7 @@ function renderHomeDiaryCard() {
                 + '</span>';
         }).join('') : '<span style="font-size:13px;color:#9CA3AF;">（未计划，点右上角 ＋ 规划）</span>') + '</div>'
         + '</div>'
-        + '<div class="hd-act-row">'
-        + '<span class="hd-act-text" id="hdActText">' + actHtml + '</span>'
+        + '<div class="hd-act-row" style="justify-content:flex-end;">'
         + '<button class="hd-pill-btn" onclick="openTodayMealRecordModal(\'' + mealKey + '\')">记录</button>' // V179: 统一记录弹窗（全家/分餐），直接记录本餐
         + '</div>'
         + costHtml;
@@ -61356,6 +61332,22 @@ function renderDiary() {
             actualText = '（未记录）';
             actualClass = 'diary-section-empty';
         }
+        // V441: 记录后与计划不一致的菜明确标出（计划外 / 未按计划），首页不再重复展示实际
+        var actualDiffHtml = '';
+        if (hasActual && hasPlan && !isDiningOut) {
+            var _planSet = new Set(data.plan.dishes);
+            var _actNames = data.actual.dishes.map(function (d) { return d.name || ''; }).filter(Boolean);
+            var _actSet = new Set(_actNames);
+            var _extraDishes = _actNames.filter(function (n) { return !_planSet.has(n); });
+            var _missDishes = data.plan.dishes.filter(function (n) { return !_actSet.has(n); });
+            if (_extraDishes.length || _missDishes.length) {
+                actualDiffHtml = '<div style="font-size:11px;line-height:1.7;margin-top:3px;">'
+                    + (_extraDishes.length ? '<span style="color:#C2410C;">计划外：' + _extraDishes.map(escapeHtml).join('、') + '</span>' : '')
+                    + (_extraDishes.length && _missDishes.length ? '<span style="color:#D1D5DB;"> ｜ </span>' : '')
+                    + (_missDishes.length ? '<span style="color:#6B7280;">未按计划：' + _missDishes.map(escapeHtml).join('、') + '</span>' : '')
+                    + '</div>';
+            }
+        }
         
         // AI建议区
         let aiSuggestion = '';
@@ -61493,6 +61485,7 @@ function renderDiary() {
                         return '';
                     })()}
                     <div><span class="diary-section-label">实际：</span>${actualText}${actualEmoji}${_siDoneTag}</div>
+                    ${actualDiffHtml}
                     ${hasActual && !data.actual.groupRecord && data.actual.location ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">📍 ${escapeHtml(data.actual.location)}${data.actual.location !== '家' ? ' 就餐' : ''}</div>` : ''}
                     ${hasActual && data.actual.groupRecord && data.actual.locationSummary ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">👥 ${escapeHtml(data.actual.locationSummary)}</div>` : ''}
                     ${hasActual && data.actual.photos && data.actual.photos.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${data.actual.photos.slice(0,4).map(p => `<img src="${p}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">`).join('')}</div>` : ''}
