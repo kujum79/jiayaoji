@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V431-20261109';
+        var APP_VER = 'V432-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -40122,6 +40122,8 @@ function _memberPreferenceSummary(member) {
 
 // ==================== V386: 一人食专属模式 ====================
 var SINGLE_MEAL_MODE_KEY = 'singleMealMode';
+// V432: 一人餐状态条改为点击「一人餐」按钮后才展开（默认收起），不再自动占用小家顶部
+var _singleMealBannerOpen = false;
 var SINGLE_MEAL_MENUS = {
     worker: [
         { breakfast: '牛油果鸡蛋全麦三明治', lunch: '番茄鸡胸意面', dinner: '香煎三文鱼配西兰花' },
@@ -40264,6 +40266,11 @@ function chooseSingleMealSubtype(subtype) {
 }
 function dismissSingleMealGuide() {
     saveSingleMealMode({ enabled: false, subtype: '', dismissedAt: Date.now() });
+    _singleMealBannerOpen = false;
+    if (typeof renderFamily === 'function') renderFamily();
+}
+function toggleSingleMealBanner() {
+    _singleMealBannerOpen = !_singleMealBannerOpen;
     if (typeof renderFamily === 'function') renderFamily();
 }
 function _singleMealTodayMenu() {
@@ -40387,7 +40394,8 @@ function renderFamily() {
             <div style="${topCardStyle}display:flex;align-items:center;gap:8px;padding:10px 16px;">
                 <span style="font-size:14px;color:#374151;font-weight:500;white-space:nowrap;flex:0 0 auto;">当前就餐组</span>
                 <select id="diningGroupInlineSelect" style="padding:4px 8px;border:1px solid #FED7AA;border-radius:6px;background:#FFFBEB;font-size:13px;color:#C2410C;cursor:pointer;outline:none;max-width:120px;">${dgOptions}</select>
-                <button id="addDiningGroupBtn" style="margin-left:auto;height:24px;padding:0 12px;border:1px solid #F97316;border-radius:10px;background:white;color:#F97316;font-size:12px;cursor:pointer;white-space:nowrap;flex:0 0 auto;">新建就餐组</button>
+                ${familyData.length === 1 ? `<button id="singleMealBtn" style="margin-left:auto;height:24px;padding:0 12px;border:1px solid #F97316;border-radius:10px;background:${_singleMealBannerOpen ? '#FFEDD5' : 'white'};color:#F97316;font-size:12px;cursor:pointer;white-space:nowrap;flex:0 0 auto;">一人餐</button>` : ''}
+                <button id="addDiningGroupBtn" style="margin-left:${familyData.length === 1 ? '6px' : 'auto'};height:24px;padding:0 12px;border:1px solid #F97316;border-radius:10px;background:white;color:#F97316;font-size:12px;cursor:pointer;white-space:nowrap;flex:0 0 auto;">新建就餐组</button>
             </div>
         `);
         // 下拉切换（setCurrentDiningGroup 内部 renderFamily 重建）；「新建就餐组」→ 子组弹窗（确认后自动切换+刷新）
@@ -40395,6 +40403,8 @@ function renderFamily() {
         if (dgSel) dgSel.addEventListener('change', function(e) { setCurrentDiningGroup(e.target.value); });
         var dgAddBtn = document.getElementById('addDiningGroupBtn');
         if (dgAddBtn) dgAddBtn.addEventListener('click', function() { _openAddSubGroupModal(); });
+        var smBtn = document.getElementById('singleMealBtn');
+        if (smBtn) smBtn.addEventListener('click', function() { toggleSingleMealBanner(); });
     })();
     // V162: 膳食日记/我的外食/我的复刻/我的创作 四大模块 2×2 一级入口卡
     function _renderDiaryTopCard() {
@@ -40506,8 +40516,8 @@ function renderFamily() {
         var _xjWrap = document.createElement('div');
         _xjWrap.id = 'familyMembersAnchor';
         _xjWrap.style.cssText = 'margin-bottom:10px;';
-        // V386: 家庭仅 1 人时自动展示「一人食模式」引导 / 已开启状态条
-        var _smmBanner = (familyData.length === 1) ? _singleMealGuideHtml() : '';
+        // V432: 不再自动展示，改为点击「一人餐」按钮后展开
+        var _smmBanner = (familyData.length === 1 && _singleMealBannerOpen) ? _singleMealGuideHtml() : '';
         _xjWrap.innerHTML = _smmBanner + `
             <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px 8px;gap:8px;">
                 <span style="font-weight:600;color:#374151;font-size:13px;flex-shrink:0;">👪 小家 · ${xiaojiaMembers.length} 人</span>
@@ -40551,7 +40561,7 @@ function renderFamily() {
             });
         }
     } else {
-        familyList.insertAdjacentHTML('beforeend', (familyData.length === 1 ? _singleMealGuideHtml() : '')
+        familyList.insertAdjacentHTML('beforeend', ((familyData.length === 1 && _singleMealBannerOpen) ? _singleMealGuideHtml() : '')
             + `<div style="display:flex;justify-content:flex-end;padding:4px 2px 8px;"><button type="button" onclick="openInviteFamilyModal()" style="height:26px;padding:0 10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:13px;font-size:12px;font-weight:600;color:#C2410C;cursor:pointer;white-space:nowrap;">邀请码</button></div>`
             + `<div style="text-align:center;padding:20px;color:#9CA3AF;font-size:14px;">暂无小家成员，请添加</div>`);
     }
