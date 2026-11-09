@@ -5376,11 +5376,15 @@ _FAMILY_BACKUP_KEYS = {
     "customCourses", "subscriptionStatus", "customCourseOrders",
 }
 _FAMILY_BACKUP_ID_RE = re.compile(r"^[A-HJ-NP-Z2-9]{8}$")  # 与前端 generateFamilyCode 字符集一致
+# V430: 兼容旧版本地账号的家庭 ID（形如 family_mw4ad9xs520，17 位）。
+# 旧账号从未能在云端备份（8 位强校验直接 422），放宽为"文件名安全"即可：
+# 仅允许大写字母/数字/下划线/短横，长度 6~32，杜绝路径穿越。
+_FAMILY_BACKUP_ID_SAFE_RE = re.compile(r"^[A-Z0-9_-]{6,32}$")
 _FAMILY_BACKUP_MAX_BYTES = 3 * 1024 * 1024
 
 
 class FamilyBackupRequest(BaseModel):
-    familyId: str = Field(..., min_length=8, max_length=8)
+    familyId: str = Field(..., min_length=6, max_length=32)  # V430: 兼容旧版 ID，格式由下方 SAFE_RE 校验
     data: Dict[str, str] = Field(default_factory=dict)
     # V367: 用户主动删除成员等"合法缩减"需显式带上 force，否则服务端拒绝覆盖
     force: bool = False
@@ -5441,7 +5445,7 @@ def _backup_shrink_guard(old_data: Dict[str, str], new_data: Dict[str, str], for
 @app.post("/api/family-backup")
 async def save_family_backup(req: FamilyBackupRequest) -> Dict[str, Any]:
     fid = (req.familyId or "").strip().upper()
-    if not _FAMILY_BACKUP_ID_RE.match(fid):
+    if not _FAMILY_BACKUP_ID_SAFE_RE.match(fid):
         return {"ok": False, "error": "家庭码格式不正确"}
     clean: Dict[str, str] = {}
     total = 0
@@ -5479,14 +5483,14 @@ async def save_family_backup(req: FamilyBackupRequest) -> Dict[str, Any]:
 
 
 class FamilyBackupGetRequest(BaseModel):
-    familyId: str = Field(..., min_length=8, max_length=8)
+    familyId: str = Field(..., min_length=6, max_length=32)  # V430: 兼容旧版 ID
 
 
 # 读取用 POST 而非 GET——先注册的 GET catch-all（/{path:path} 静态回退）会吞掉后注册的 GET 路由
 @app.post("/api/family-backup/get")
 async def get_family_backup(req: FamilyBackupGetRequest) -> Dict[str, Any]:
     fid = (req.familyId or "").strip().upper()
-    if not _FAMILY_BACKUP_ID_RE.match(fid):
+    if not _FAMILY_BACKUP_ID_SAFE_RE.match(fid):
         return {"ok": False, "error": "家庭码格式不正确"}
     path = _family_backup_path(fid)
     if not path.exists():
