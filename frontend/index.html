@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V447-20261109';
+        var APP_VER = 'V448-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -101,8 +101,6 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- V417: 夸夸海报生成（html2canvas）；主 CDN 失败时自动切 unpkg 备用源 -->
-    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" onerror="var _h2c=document.createElement('script');_h2c.src='https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js';document.head.appendChild(_h2c);"></script>
     <!-- Supabase SDK（本地化部署，避免 jsdelivr 在国内被墙/连接关闭） -->
     <script src="images/supabase.js"></script>
     <style>
@@ -48354,6 +48352,63 @@ function _mrSavePraise(record, praise) {
         if (hit) saveFoodDiaries(list);
     } catch (e) { console.warn('[V415] 写入 foodDiaries.aiPraise 失败:', e); }
 }
+// V448: 夸夸弹层里补拍/选照片（可选）——写回本条记录，海报会用这张图
+function _mrPickPhoto() {
+    var rec = window._mrPraiseRecord;
+    if (!rec) { showToast('未找到本餐记录'); return; }
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.setAttribute('capture', 'environment');
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    input.onchange = function () {
+        var file = input.files && input.files[0];
+        document.body.removeChild(input);
+        if (!file) return;
+        if (!/^image\//.test(file.type || '')) { showToast('请选择图片文件'); return; }
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+            var img = new Image();
+            img.onload = function () {
+                var data = '';
+                try {
+                    var maxW = 1080;
+                    var scale = Math.min(1, maxW / (img.width || maxW));
+                    var canvas = document.createElement('canvas');
+                    canvas.width = Math.round((img.width || maxW) * scale);
+                    canvas.height = Math.round((img.height || maxW) * scale);
+                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                    data = canvas.toDataURL('image/jpeg', 0.82);
+                } catch (e) { data = String(ev.target.result || ''); }
+                if (!data) { showToast('照片读取失败'); return; }
+                rec.imageBase64 = data;
+                try {
+                    var records = JSON.parse(lsGet('mealRecords')) || [];
+                    records.forEach(function (r) { if (r && String(r.id) === String(rec.id)) r.imageBase64 = data; });
+                    lsSet('mealRecords', JSON.stringify(records));
+                } catch (e) {}
+                try {
+                    var list = getFoodDiaries();
+                    var hit = false;
+                    (list || []).forEach(function (d) {
+                        if (d && d.type === 'meal' && d.relatedDate === rec.date && d.relatedMealType === rec.mealType) {
+                            d.imageBase64 = data;
+                            hit = true;
+                        }
+                    });
+                    if (hit) saveFoodDiaries(list);
+                } catch (e) {}
+                _mrShowPraise(rec, rec.aiPraise || '');
+                showToast('照片已添加，可以生成海报了');
+            };
+            img.onerror = function () { showToast('照片读取失败'); };
+            img.src = String(ev.target.result || '');
+        };
+        reader.readAsDataURL(file);
+    };
+    input.click();
+}
 function _mrShowPraise(record, praise) {
     var old = document.getElementById('mrPraiseOv');
     if (old) old.remove();
@@ -48362,8 +48417,10 @@ function _mrShowPraise(record, praise) {
     window._mrPraiseRecord = record;
     var dishText = (record.dishes || []).map(function (d) { return (d && d.name) || ''; }).filter(Boolean).slice(0, 3).join('、');
     var img = record.imageBase64
-        ? '<img src="' + record.imageBase64 + '" alt="本餐照片" style="display:block;width:100%;max-height:210px;object-fit:cover;border-radius:14px;margin-bottom:12px;">'
+        ? '<img src="' + record.imageBase64 + '" alt="本餐照片" style="display:block;width:100%;max-height:210px;object-fit:cover;border-radius:14px;margin-bottom:8px;">'
         : '';
+    var photoBtn = '<button type="button" onclick="_mrPickPhoto()" style="margin-bottom:12px;width:100%;padding:9px 0;border:1px dashed #FDBA74;border-radius:10px;background:#FFFBF5;color:#C2410C;font-size:12px;font-weight:600;cursor:pointer;">'
+        + (record.imageBase64 ? '📷 更换本餐照片' : '📷 加张照片（可选，让海报更好看）') + '</button>';
     var ov = document.createElement('div');
     ov.id = 'mrPraiseOv';
     ov.style.cssText = 'position:fixed;inset:0;z-index:100003;background:rgba(31,41,55,0.6);display:flex;align-items:center;justify-content:center;padding:20px;';
@@ -48373,6 +48430,7 @@ function _mrShowPraise(record, praise) {
         + '<span style="font-size:11px;color:#9CA3AF;">AI 为你写</span>'
         + '</div>'
         + img
+        + photoBtn
         + (dishText ? '<div style="font-size:12px;color:#B08968;margin-bottom:8px;">🍽️ ' + escapeHtml(dishText) + '</div>' : '')
         + '<div style="font-size:14px;color:#374151;line-height:1.9;white-space:pre-wrap;">' + escapeHtml(praise) + '</div>'
         + '<button type="button" onclick="_mrSendToWorks(window._mrPraiseRecord)" style="margin-top:14px;width:100%;padding:11px 0;border:1px solid #C7D2FE;border-radius:12px;background:#EEF2FF;color:#4338CA;font-size:14px;font-weight:700;cursor:pointer;">🚀 发到我的创作</button>'
@@ -48463,9 +48521,53 @@ function _mrSavedAmount(record) {
     var n = (record.dishes || []).length || 2;
     return n * 8 + 22;
 }
-function _mrBuildPoster(record) {
-    var box = document.getElementById('poster-container');
-    if (!box) return null;
+// V448: 海报改用原生 Canvas 绘制。原先依赖 html2canvas：它对 Tailwind 注入的 oklch 颜色支持不佳，
+// 在微信里也容易卡住不返回，表现为「一直转圈、图片不出来」。
+function _mrLoadImg(src, ms) {
+    return new Promise(function (res) {
+        if (!src) { res(null); return; }
+        var im = new Image();
+        im.crossOrigin = 'anonymous';
+        var done = false;
+        var fin = function (ok) { if (done) return; done = true; res(ok ? im : null); };
+        im.onload = function () { fin(true); };
+        im.onerror = function () { fin(false); };
+        setTimeout(function () { fin(!!im.complete && im.naturalWidth > 0); }, ms || 2500);
+        im.src = src;
+    });
+}
+function _mrRR(ctx, x, y, w, h, r) {
+    var rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+}
+function _mrWrap(ctx, text, maxW, maxLines) {
+    var s = String(text || '');
+    var lines = [], cur = '';
+    for (var i = 0; i < s.length; i++) {
+        var t = cur + s[i];
+        if (ctx.measureText(t).width > maxW && cur) {
+            lines.push(cur);
+            if (lines.length === maxLines) {
+                var last = lines[maxLines - 1];
+                while (last.length > 1 && ctx.measureText(last + '…').width > maxW) last = last.slice(0, -1);
+                lines[maxLines - 1] = last + '…';
+                return lines;
+            }
+            cur = s[i];
+        } else cur = t;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+}
+function _mrRenderPoster(record) {
+    var W = 375, H = 600, S = 2;
+    var FONT = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif';
     var praise = record.aiPraise || '这一餐的用心，家人都尝到了 ❤';
     var dateText = (function () {
         var p = String(record.date || '').split('-');
@@ -48475,38 +48577,83 @@ function _mrBuildPoster(record) {
     var stars = new Array(rating + 1).join('★') + new Array(6 - rating).join('☆');
     var dishText = (record.dishes || []).map(function (d) { return (d && d.name) || ''; }).filter(Boolean).slice(0, 3).join(' · ');
     var saved = _mrSavedAmount(record);
-    var photo = record.imageBase64
-        ? '<img src="' + record.imageBase64 + '" crossorigin="anonymous" alt="本餐照片" style="display:block;width:335px;height:238px;object-fit:cover;border-radius:16px;" />'
-        : '<div style="width:335px;height:238px;border-radius:16px;background:linear-gradient(135deg,#FDBA74,#F97316);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;font-weight:800;letter-spacing:2px;">🍲 ' + escapeHtml(dishText || '今日家宴') + '</div>';
     var qr = _mrFakeQrDataUrl(160);
-    box.innerHTML = '<div style="position:relative;height:600px;box-sizing:border-box;padding:22px 20px 16px;">'
-        + '<div style="display:flex;align-items:center;gap:8px;">'
-        + '<img src="images/logo.png" crossorigin="anonymous" alt="logo" style="width:34px;height:34px;border-radius:10px;object-fit:contain;background:#fff;" />'
-        + '<div style="flex:1;min-width:0;">'
-        + '<div style="font-size:16px;font-weight:800;color:#C2410C;letter-spacing:1px;">家肴记</div>'
-        + '<div style="font-size:10px;color:#B08968;margin-top:1px;">AI 家庭膳食助理</div>'
-        + '</div>'
-        + '<div style="font-size:11px;color:#9A6B4B;">' + escapeHtml(dateText) + '</div>'
-        + '</div>'
-        + '<div style="margin-top:14px;">' + photo + '</div>'
-        + '<div style="margin-top:12px;background:rgba(255,255,255,.88);border-radius:14px;padding:12px 14px;height:100px;box-sizing:border-box;display:flex;align-items:center;">'
-        + '<div style="font-size:14px;line-height:1.72;color:#4B3A2A;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(praise) + '</div>'
-        + '</div>'
-        + '<div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;">'
-        + '<div style="font-size:15px;color:#F59E0B;letter-spacing:2px;">' + stars + '</div>'
-        + '<div style="font-size:11px;color:#115E59;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:999px;padding:3px 9px;">今日在家做省了 ¥' + saved + '</div>'
-        + '</div>'
-        + (dishText ? '<div style="margin-top:8px;font-size:11px;color:#9A6B4B;">🍽️ ' + escapeHtml(dishText) + '</div>' : '')
-        + '<div style="position:absolute;left:20px;right:20px;bottom:16px;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.76);border-radius:14px;padding:10px 12px;">'
-        + (qr ? '<img src="' + qr + '" alt="二维码" style="width:64px;height:64px;border-radius:8px;background:#fff;display:block;" />' : '')
-        + '<div style="flex:1;min-width:0;">'
-        + '<div style="font-size:12px;font-weight:700;color:#7C2D12;">扫码一起好好吃饭</div>'
-        + '<div style="font-size:10px;color:#A88C74;margin-top:3px;line-height:1.5;">家肴记 · 每日食谱 / 家庭膳食计划</div>'
-        + '</div>'
-        + '<div style="font-size:10px;color:#C4A88F;">长按识别</div>'
-        + '</div>'
-        + '</div>';
-    return box;
+    return Promise.all([
+        _mrLoadImg('images/logo.png', 2000),
+        record.imageBase64 ? _mrLoadImg(record.imageBase64, 3000) : Promise.resolve(null),
+        qr ? _mrLoadImg(qr, 1500) : Promise.resolve(null)
+    ]).then(function (imgs) {
+        var logo = imgs[0], photo = imgs[1], qrimg = imgs[2];
+        var cv = document.createElement('canvas');
+        cv.width = W * S; cv.height = H * S;
+        var ctx = cv.getContext('2d');
+        ctx.scale(S, S);
+        // 背景
+        var g = ctx.createLinearGradient(0, 0, W * 0.4, H);
+        g.addColorStop(0, '#FFF7ED'); g.addColorStop(0.55, '#FFEDD5'); g.addColorStop(1, '#FED7AA');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        // 头部
+        if (logo) {
+            ctx.fillStyle = '#fff'; _mrRR(ctx, 20, 22, 34, 34, 10); ctx.fill();
+            try { ctx.drawImage(logo, 22, 24, 30, 30); } catch (e) {}
+        }
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+        ctx.fillStyle = '#C2410C'; ctx.font = '800 16px ' + FONT;
+        ctx.fillText('家肴记', logo ? 62 : 20, 41);
+        ctx.fillStyle = '#B08968'; ctx.font = '10px ' + FONT;
+        ctx.fillText('AI 家庭膳食助理', logo ? 62 : 20, 55);
+        ctx.textAlign = 'right'; ctx.fillStyle = '#9A6B4B'; ctx.font = '11px ' + FONT;
+        ctx.fillText(dateText, W - 20, 41);
+        // 照片区
+        var px = 20, py = 70, pw = 335, ph = 238;
+        ctx.save(); _mrRR(ctx, px, py, pw, ph, 16); ctx.clip();
+        if (photo && photo.naturalWidth) {
+            var sc = Math.max(pw / photo.naturalWidth, ph / photo.naturalHeight);
+            var dw = photo.naturalWidth * sc, dh = photo.naturalHeight * sc;
+            ctx.drawImage(photo, px + (pw - dw) / 2, py + (ph - dh) / 2, dw, dh);
+        } else {
+            var pg = ctx.createLinearGradient(px, py, px + pw, py + ph);
+            pg.addColorStop(0, '#FDBA74'); pg.addColorStop(1, '#F97316');
+            ctx.fillStyle = pg; ctx.fillRect(px, py, pw, ph);
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = '800 20px ' + FONT;
+            var dl = _mrWrap(ctx, dishText || '今日家宴', pw - 40, 2);
+            dl.forEach(function (ln, i) { ctx.fillText(ln, px + pw / 2, py + ph / 2 + (i - (dl.length - 1) / 2) * 30); });
+        }
+        ctx.restore();
+        // 夸赞语
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+        ctx.fillStyle = 'rgba(255,255,255,0.88)'; _mrRR(ctx, 20, 320, 335, 100, 14); ctx.fill();
+        ctx.fillStyle = '#4B3A2A'; ctx.font = '14px ' + FONT;
+        _mrWrap(ctx, praise, 300, 3).forEach(function (ln, i) { ctx.fillText(ln, 34, 347 + i * 24); });
+        // 星级 + 省钱
+        ctx.fillStyle = '#F59E0B'; ctx.font = '15px ' + FONT;
+        ctx.fillText(stars, 20, 448);
+        var pill = '今日在家做省了 ¥' + saved;
+        ctx.font = '11px ' + FONT;
+        var tw = ctx.measureText(pill).width;
+        ctx.fillStyle = '#ECFDF5'; _mrRR(ctx, W - 30 - tw, 432, tw + 20, 22, 11); ctx.fill();
+        ctx.fillStyle = '#115E59'; ctx.fillText(pill, W - 20 - tw, 447);
+        // 菜名
+        if (dishText) {
+            ctx.fillStyle = '#9A6B4B'; ctx.font = '11px ' + FONT;
+            ctx.fillText(dishText, 20, 476);
+        }
+        // 底部二维码卡
+        ctx.fillStyle = 'rgba(255,255,255,0.76)'; _mrRR(ctx, 20, 500, 335, 84, 14); ctx.fill();
+        if (qrimg) {
+            ctx.fillStyle = '#fff'; _mrRR(ctx, 32, 510, 64, 64, 8); ctx.fill();
+            try { ctx.drawImage(qrimg, 32, 510, 64, 64); } catch (e) {}
+        }
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#7C2D12'; ctx.font = 'bold 12px ' + FONT;
+        ctx.fillText('扫码一起好好吃饭', 108, 534);
+        ctx.fillStyle = '#A88C74'; ctx.font = '10px ' + FONT;
+        ctx.fillText('家肴记 · 每日食谱 / 家庭膳食计划', 108, 552);
+        ctx.textAlign = 'right'; ctx.fillStyle = '#C4A88F'; ctx.font = '10px ' + FONT;
+        ctx.fillText('长按识别', W - 32, 544);
+        return cv.toDataURL('image/png');
+    });
 }
 function _mrMarkPosterGenerated(record) {
     record.posterGenerated = true;
@@ -48538,41 +48685,33 @@ function _mrShowPoster(dataUrl) {
     ov.innerHTML = '<div style="width:100%;max-width:330px;text-align:center;">'
         + '<img src="' + dataUrl + '" alt="夸夸海报" style="display:block;width:100%;border-radius:16px;box-shadow:0 18px 48px rgba(0,0,0,.35);" />'
         + '<div style="margin-top:12px;font-size:13px;color:#FDE68A;font-weight:600;">长按图片保存或分享给家人</div>'
-        + '<button type="button" onclick="document.getElementById(\'mrPosterOv\').remove()" style="margin-top:10px;width:100%;padding:10px 0;border:none;border-radius:12px;background:rgba(255,255,255,.92);color:#C2410C;font-size:14px;font-weight:700;cursor:pointer;">关闭</button>'
+        + '<div style="display:flex;gap:8px;margin-top:10px;">'
+        + '<button type="button" onclick="_mrPosterToWorks()" style="flex:1;padding:10px 0;border:1px solid rgba(255,255,255,.6);border-radius:12px;background:rgba(255,255,255,.18);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">存入我的创作</button>'
+        + '<button type="button" onclick="document.getElementById(\'mrPosterOv\').remove()" style="flex:1;padding:10px 0;border:none;border-radius:12px;background:rgba(255,255,255,.92);color:#C2410C;font-size:14px;font-weight:700;cursor:pointer;">关闭</button>'
+        + '</div>'
         + '</div>';
     ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
     document.body.appendChild(ov);
 }
+// V448: 海报页可直接存入「我的创作」（与「🚀 发到我的创作」同一条数据，按 sourceRecordId 去重）
+function _mrPosterToWorks() {
+    if (!window._mrPosterRecord) { showToast('未找到本餐记录'); return; }
+    _mrSendToWorks(window._mrPosterRecord);
+}
 function _mrGeneratePoster(record) {
     if (!record) { showToast('未找到本餐记录'); return; }
-    var box = _mrBuildPoster(record);
-    if (!box) { showToast('海报容器缺失'); return; }
-    var shoot = function () {
-        _mrPosterLoading(true, '正在生成海报...');
-        var imgs = Array.prototype.slice.call(box.querySelectorAll('img'));
-        var waits = imgs.map(function (im) {
-            return im.complete ? Promise.resolve() : new Promise(function (res) { im.onload = res; im.onerror = res; });
-        });
-        Promise.all(waits).then(function () {
-            return html2canvas(box, { useCORS: true, scale: 2, backgroundColor: '#FFF7ED', logging: false, width: 375, height: 600 });
-        }).then(function (canvas) {
-            var dataUrl = canvas.toDataURL('image/png');
-            _mrPosterLoading(false);
-            _mrMarkPosterGenerated(record);
-            _mrShowPoster(dataUrl);
-        }).catch(function (e) {
-            _mrPosterLoading(false);
-            console.warn('[V417] 海报生成失败:', e);
-            showToast('海报生成失败，请重试');
-        });
-    };
-    if (window.html2canvas) { shoot(); return; }
-    _mrPosterLoading(true, '正在加载海报组件...');
-    var t0 = Date.now();
-    var timer = setInterval(function () {
-        if (window.html2canvas) { clearInterval(timer); _mrPosterLoading(false); shoot(); }
-        else if (Date.now() - t0 > 8000) { clearInterval(timer); _mrPosterLoading(false); showToast('海报组件加载失败，请检查网络'); }
-    }, 200);
+    window._mrPosterRecord = record;
+    _mrPosterLoading(true, '正在生成海报...');
+    _mrRenderPoster(record).then(function (dataUrl) {
+        _mrPosterLoading(false);
+        if (!dataUrl || dataUrl.length < 200) throw new Error('海报内容为空');
+        _mrMarkPosterGenerated(record);
+        _mrShowPoster(dataUrl);
+    }).catch(function (e) {
+        _mrPosterLoading(false);
+        console.warn('[V448] 海报生成失败:', e);
+        showToast('海报生成失败，请重试');
+    });
 }
 
 // ==================== 食录模态框事件绑定 ====================
@@ -81293,8 +81432,6 @@ setTimeout(function () { try { _maybeGenerateDailyLesson(); } catch (e) {} }, 80
 
 
 
-<!-- V417: 夸夸海报离屏容器（375×600，html2canvas 截图用，不参与页面布局） -->
-<div id="poster-container" style="position:absolute;left:-9999px;top:0;width:375px;height:600px;overflow:hidden;background:linear-gradient(160deg,#FFF7ED 0%,#FFEDD5 55%,#FED7AA 100%);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"></div>
 
 </body>
 </html>
