@@ -1398,6 +1398,15 @@ async def _foodhall_audit_core(
     if city_hits:
         issues.append({"level": "error",
                        "message": f"含具体城市名'{city_hits[0]}'，面向全国的内容不应绑定城市，请改为全国通用表述"})
+    # V438: 生成截断硬拦截——正文过短或结尾无句末标点，视为 AI 输出被截断，禁止进入发布链路
+    # （2026-11-09 曾出现正文断在「老一辈说的」且 tips 为空，自动发布后详情页近乎空白）
+    _c = (content or "").strip()
+    if len(_c) < 120:
+        issues.append({"level": "error", "code": "content_truncated",
+                       "message": f"正文仅 {len(_c)} 字，疑似生成被截断，请重新生成"})
+    elif _c[-1] not in "。！？…!?.…”』」":
+        issues.append({"level": "error", "code": "content_truncated",
+                       "message": "正文结尾不完整，疑似生成被截断，请重新生成"})
     if any(i["level"] == "error" for i in issues):
         return {"ok": True, "passed": False, "issues": issues, "suggestions": []}
 
