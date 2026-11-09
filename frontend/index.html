@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V422-20261109';
+        var APP_VER = 'V424-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -34372,6 +34372,41 @@ function _fhHallOpenRecipe(id) {
     if (r) _fhOpenRecipeDetail(r);
 }
 var _fhCurRecipe = null;   // V405: 当前打开的寻味天下文章（供单品加入食记取 dishes）
+// V424: 本地食材基准价（元/斤；鸡蛋等按个数折算）——价格一律前端算，AI 只给食材与用量
+var ingredientPriceBase = {
+    '猪肉': 15, '五花肉': 16, '排骨': 22, '牛肉': 45, '羊肉': 42, '鸡肉': 13, '鸡腿': 12,
+    '鸡蛋': 6, '鸭蛋': 7, '鱼': 18, '鲈鱼': 22, '虾': 35, '豆腐': 3, '豆干': 8,
+    '番茄': 5, '土豆': 3, '红薯': 2.5, '玉米': 3, '山药': 6, '南瓜': 3,
+    '白菜': 2.5, '青菜': 4, '菠菜': 5, '生菜': 4, '黄瓜': 4, '茄子': 4.5,
+    '萝卜': 2.5, '胡萝卜': 3, '洋葱': 3, '青椒': 5, '香菇': 10, '木耳': 30,
+    '大米': 3.5, '面粉': 3, '面条': 4, '食用油': 8, '牛奶': 4
+};
+// 解析「猪肉 200g」「番茄 2 个」并按本地基准价折算总价（元，保留 1 位小数）
+function calcIngredientsCost(list) {
+    var total = 0;
+    (list || []).forEach(function (raw) {
+        var s = String(raw || '').trim();
+        if (!s) return;
+        var m = s.match(/^(.+?)[\s：:]*([\d.]+)\s*(克|g|G|斤|两|个|只|枚|毫升|ml|ML)?/);
+        if (!m) return;
+        var name = m[1].replace(/[（(].*$/, '').trim();
+        var num = parseFloat(m[2]);
+        var unit = m[3] || '克';
+        if (!isFinite(num) || num <= 0) return;
+        var key = '';
+        Object.keys(ingredientPriceBase).forEach(function (k) {
+            if (!key && name.indexOf(k) >= 0) key = k;
+        });
+        if (!key) return;
+        var per = ingredientPriceBase[key];
+        if (unit === '个' || unit === '只' || unit === '枚') total += num * per / 5;   // 5 个≈1 斤
+        else if (unit === '斤') total += num * per;
+        else if (unit === '两') total += num * per / 10;
+        else if (unit === '毫升' || unit === 'ml' || unit === 'ML') total += num / 500 * per;
+        else total += num / 500 * per;                                                // 克/g
+    });
+    return Math.round(total * 10) / 10;
+}
 function _fhOpenRecipeDetail(r) {
     if (!r) return;
     _fhCurRecipe = r;
@@ -34381,6 +34416,7 @@ function _fhOpenRecipeDetail(r) {
     var ing = (r.ingredients || []).map(function (x) {
         return '<span style="display:inline-block;font-size:12px;color:#7C2D12;background:#FFF7ED;border:1px solid #FDE68A;border-radius:999px;padding:4px 9px;margin:0 6px 6px 0;">' + escapeHtml(x) + '</span>';
     }).join('');
+    var _fhIngCost = calcIngredientsCost(r.ingredients || []);   // V424: 价格前端本地计算
     var steps = (r.steps || []).map(function (s, i) {
         return '<div style="display:flex;gap:10px;margin-bottom:12px;">'
             + '<span style="flex:0 0 auto;width:22px;height:22px;border-radius:50%;background:#F97316;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">' + (i + 1) + '</span>'
@@ -34456,6 +34492,7 @@ function _fhOpenRecipeDetail(r) {
         + (!dishes.length && ing ? '<div style="padding:14px 18px 0;">'
         + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin-bottom:8px;">🧺 食材</div>'
         + '<div>' + ing + '</div>'
+        + (_fhIngCost > 0 ? '<div style="margin-top:8px;font-size:12px;font-weight:700;color:#B45309;">💰 食材成本约 ¥' + _fhIngCost + '（按本地基准价估算）</div>' : '')
         + '</div>' : '')
         + (r.tips ? '<div style="margin:14px 18px 18px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:10px 12px;font-size:12px;color:#92400E;line-height:1.7;">💡 ' + escapeHtml(r.tips) + '</div>' : '')
         + '</div>'

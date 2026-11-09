@@ -679,6 +679,18 @@ async def plan(req: PlanRequest) -> Dict[str, str]:
     system_content = get_mode_directive(req.mode)
     # V373: 晚餐场景追加「晚餐减负」规则（只影响晚餐菜品，早午餐保持原样）
     system_content += get_meal_scene_directive(req.meal_scene)
+    # V424: 三餐计划注入服务端现算的日期/节气硬规则，杜绝「立冬还排霜降菜」
+    # 仅作用于 plan 类任务（三餐计划/食材用量），不污染聊天回复与审核评分
+    if task_type == "plan":
+        _plan_today = _dt_cls.now().strftime("%Y-%m-%d")
+        _plan_term = _fh_current_term(_plan_today)
+        system_content += (
+            f"\n【今日真实日期】{_plan_today}\n【当前真实节气】{_plan_term}\n"
+            f"注意：当前不是其他节气，请严格围绕【{_plan_term}】来安排三餐。"
+            "禁止提及已经过去的节气（如霜降、寒露）作为当前季节。\n"
+            "【价格硬规则】菜品只输出食材名称与用量（如「猪肉 200g」），"
+            "禁止输出任何价格、金额、成本数字或字段，价格由前端按本地基准价计算。\n\n"
+        )
     # V143: 仅对食谱规划类任务注入食养堂上下文（近7天已选主题防重复 + 近3天未选候选池），
     # 绝不作用于聊天回复，避免重蹈 V139 无差别污染输出格式的覆辙
     if "plan" in task_type:
@@ -797,21 +809,22 @@ class FoodHallAuditRequest(BaseModel):
 # 规格 Prompt：三篇主题分散 + 口语化 + 严格禁词（医疗/功效承诺类）
 _FOODHALL_SYSTEM = (
     '请为家肴记"食养堂"栏目生成 3 篇候选内容。\n'
-    "【日期】{date}\n"
-    "【节气】{solar_term}\n"
+    "【今日真实日期】{date}\n"
+    "【当前真实节气】{solar_term}\n"
+    "注意：当前不是其他节气，请严格围绕【{solar_term}】来撰写。禁止提及已经过去的节气（如霜降、寒露）作为当前季节。\n"
     "\n"
     "生成要求：\n"
-    '1. 3 篇必须全部围绕【节气】{solar_term}（节气为空时围绕当前当季）展开，只换角度、不换主题：\n'
+    "1. 3 篇必须全部围绕【{solar_term}】展开，只换角度、不换主题：\n"
     '   - 1 篇讲该节气的饮食习俗与气候特点（category 用"节气食养"）；\n'
     '   - 1 篇讲该节气当令的 1-2 种食材与挑选/处理（category 用"当季食材"）；\n'
     '   - 1 篇讲家常做法或节气饮食文化（category 用"烹饪技巧"或"饮食文化"），同样必须落在该节气；\n'
-    '   禁止换成与本节气无关的泛季节话题（例如霜降批次不得写成"贴秋膘""立冬进补"），'
-    '标题与摘要不得出现其他节气名称；\n'
-    "2. 每篇摘要必须出现节气名（如「霜降」），让三篇一眼看出是同一批节气内容；\n"
+    "   禁止换成与本节气无关的泛季节话题，标题、摘要与正文不得出现其他节气名称；\n"
+    "2. 每篇摘要必须出现当前节气名，让三篇一眼看出是同一批节气内容；\n"
     "3. 每篇：标题 15 字内、摘要 60 字内、正文 200-300 字、小贴士 2 条（每条 25 字内）\n"
     "4. 语言口语化，像和朋友聊天\n"
     '5. 主题必须全国通用，不得指定或暗示某座城市/地区，不得绑定某地天气（如"杭州降温""北京下雪"等都被禁止）；'
-    '可结合该节气全国性的饮食话题（如霜降的"秋燥""吃柿子"）\n'
+    "可结合该节气全国性的饮食话题\n"
+    "6. 正文与贴士里禁止出现任何价格、金额、成本数字（如「约 15 元」「成本 30 块」），只写食材与做法；\n"
     "\n"
     "严格禁止出现这些词：治疗、治愈、改善、降低、预防、功效、食疗、润肺、止咳、降三高、祛湿、排毒。"
     "禁止提及疾病名称，禁止承诺任何功效。\n"
@@ -823,8 +836,9 @@ _FOODHALL_SYSTEM = (
 # V405: 食谱类 Prompt——「🌍 寻味天下」轨道，散文写地方美食，并结构化输出 2-4 道菜品（dishes）
 _FOODHALL_RECIPE_SYSTEM = (
     '请为家肴记"食养堂"栏目生成 3 篇「🌍 寻味天下」候选内容。\n'
-    "【日期】{date}\n"
-    "【节气】{solar_term}\n"
+    "【今日真实日期】{date}\n"
+    "【当前真实节气】{solar_term}\n"
+    "注意：当前不是其他节气，请严格围绕【{solar_term}】来撰写。禁止提及已经过去的节气（如霜降、寒露）作为当前季节。\n"
     "\n"
     "请推荐一个地方的美食（或新奇特美食）。正文以散文形式展开。\n"
     "同时，请提取文章中提到的 2-4 道核心美食，结构化为 dishes 数组，包含菜名、AI绘图提示词（用于生成单品图）"
@@ -840,6 +854,8 @@ _FOODHALL_RECIPE_SYSTEM = (
     "   - imagePrompt：该单品的英文 SDXL 绘图提示词（如 \"zhong dumplings in red oil, macro lens, steam, "
     "warm tone, food photography\"），必须包含主体食物 + 镜头/光线 + 氛围，禁止出现文字、logo、人物正脸；\n"
     "   - steps：精简家庭做法 2-4 步，每步 30 字内；\n"
+    "   - ingredients：2-6 条食材用量，只写「食材名 + 剂量」（如「猪肉 200g」「番茄 2 个」）；\n"
+    "   严禁输出任何价格、金额、成本、单价字段或数字，价格一律由前端按本地基准价计算；\n"
     "6. tips：2 条小贴士，每条 25 字内；\n"
     "7. imagePrompt：整篇文章封面图的英文 SDXL 绘图提示词，要求诱人、有食欲；\n"
     "\n"
@@ -848,7 +864,7 @@ _FOODHALL_RECIPE_SYSTEM = (
     "\n"
     '返回严格 JSON：{{"articles":[{{"category":"寻味天下","title":"...","summary":"...","content":"...",'
     '"tips":["...","..."],"imagePrompt":"...",'
-    '"dishes":[{{"name":"...","imagePrompt":"...","steps":["...","..."]}}]}}]}}，'
+    '"dishes":[{{"name":"...","imagePrompt":"...","steps":["...","..."],"ingredients":["猪肉 200g","番茄 2 个"]}}]}}]}}，'
     "articles 必须恰好 3 个元素，每篇 dishes 必须 2-4 个元素。"
 )
 
@@ -1226,18 +1242,22 @@ async def _foodhall_generate_core(
     V402: content_type 区分饮食文章 / 新奇特食谱两套 Prompt 与返回字段。
     """
     is_recipe = content_type == "recipe_article"
+    # V424: 节气一律用服务端按当天算出的「当前节气」，不接受空值/前端过期值
+    solar_term = (solar_term or "").strip() or _fh_current_term(date)
     if is_recipe:
         system_prompt = _FOODHALL_RECIPE_SYSTEM.format(
-            date=date, solar_term=solar_term or "无",
+            date=date, solar_term=solar_term,
         )
-        user_prompt = (f"日期：{date}；节气：{solar_term or '无'}。请生成 3 篇不同地方的「寻味天下」美食散文候选，"
-                       "每篇必须给出 2-4 道菜的 dishes（菜名 + 单品英文绘图提示词 + 精简做法）与封面 imagePrompt。")
+        user_prompt = (f"日期：{date}；当前节气：{solar_term}。请生成 3 篇不同地方的「寻味天下」美食散文候选，"
+                       "每篇必须给出 2-4 道菜的 dishes（菜名 + 单品英文绘图提示词 + 精简做法 + 食材用量），"
+                       "只写食材名与用量，禁止输出任何价格/金额/成本数字。")
     else:
         system_prompt = _FOODHALL_SYSTEM.format(
-            date=date, solar_term=solar_term or "无",
+            date=date, solar_term=solar_term,
         )
-        user_prompt = (f"日期：{date}；节气：{solar_term or '无'}。请生成 3 篇食养堂候选内容，主题必须全国通用。"
-                       "标题、摘要、正文一律不得出现任何城市/地区名称（如“杭州降温”），请用季节与节气表述。")
+        user_prompt = (f"日期：{date}；当前节气：{solar_term}。请生成 3 篇食养堂候选内容，主题必须围绕当前节气、全国通用。"
+                       "标题、摘要、正文一律不得出现任何城市/地区名称（如“杭州降温”），不得出现其他节气名，"
+                       "也不得出现任何价格/金额/成本数字。")
 
     drafts: List[Dict[str, Any]] = []
     violations: List[Dict[str, Any]] = []
@@ -1931,7 +1951,8 @@ async def food_hall_auto_publish(
         raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
 
     now_iso = _dt_cls.now().strftime("%Y-%m-%d %H:%M:%S")
-    term = (req.solarTerm or "").strip() or _fh_solar_term(pub_date)
+    # V424: 节气以服务端按当天计算的「当前节气」为准，前端/请求传值不可信
+    term = _fh_current_term(pub_date) or (req.solarTerm or "").strip() or _fh_solar_term(pub_date)
 
     # V402: 两轨（饮食/食谱）各自独立——都已被超管确认才整体跳过
     existed = {ct: _fh_get_track_row(pub_date, ct) for ct in _FH_CONTENT_TYPES}
@@ -4014,9 +4035,12 @@ async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
         exclusive_seg = exclusive_seg + need_seg if exclusive_seg else need_seg
     system_prompt = _DAILY_TIP_SYSTEM + ("\\n\\n" + exclusive_seg if exclusive_seg else "")
 
+    # V424: 节气不接受前端传值（页面久挂会带过期节气），一律服务端现算并注入硬规则
+    _term_now = _fh_current_term(date_str)
     user_lines = [
-        f"【日期】{date_str}",
-        f"【节气】{req.solarTerm.strip() or '不在节气当天'}",
+        f"【今日真实日期】{date_str}",
+        f"【当前真实节气】{_term_now}",
+        f"注意：当前不是其他节气，请严格围绕【{_term_now}】来撰写。禁止提及已经过去的节气（如霜降、寒露）作为当前季节。",
         f"【天气】{weather_line}",
     ]
     if sub_plan:
