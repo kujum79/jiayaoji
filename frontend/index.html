@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V442-20261109';
+        var APP_VER = 'V443-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -34469,6 +34469,8 @@ function _fhOpenRecipeDetail(r) {
     ov.innerHTML = '<div style="flex:0 0 auto;background:#fff;border-bottom:1px solid #FED7AA;display:flex;align-items:center;gap:8px;padding:10px 14px;">'
         + '<button type="button" onclick="_fhCloseRecipe()" style="border:none;background:none;font-size:17px;color:#6B7280;cursor:pointer;padding:2px 4px;line-height:1;">←</button>'
         + '<div style="flex:1;min-width:0;font-size:15px;font-weight:700;color:#1F2937;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">🌍 寻味天下</div>'
+        // V443: 恢复右上角语音播报（V393 下线后遗漏，寻味天下详情页一直没有喇叭）
+        + '<button type="button" id="fhRecipeSpeakBtn" onclick="_fhSpeakRecipe()" title="语音播报" style="flex:0 0 auto;border:none;background:none;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1;color:#F97316;">🔊</button>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;">'
         + (r.coverImage
@@ -34502,9 +34504,43 @@ function _fhOpenRecipeDetail(r) {
     document.body.style.overflow = 'hidden';
 }
 function _fhCloseRecipe() {
+    if (_fhRecipeSpeaking) { try { speechSynthesis.cancel(); } catch (e) {} }
+    _fhRecipeSpeaking = false;
     var ov = document.getElementById('fhRecipeOv');
     if (ov) ov.remove();
     if (!document.getElementById('fhHallOv') && !document.getElementById('classroomCourseOverlay')) document.body.style.overflow = '';
+}
+// V443: 寻味天下详情页语音播报（标题+简介+正文+小贴士，再点停止）
+var _fhRecipeSpeaking = false;
+function _fhSetSpeakBtn(label) {
+    var b = document.getElementById('fhRecipeSpeakBtn');
+    if (b) { b.textContent = label; b.title = (label === '⏹' ? '停止播报' : '语音播报'); }
+}
+function _fhSpeakRecipe() {
+    if (!window.speechSynthesis) { showToast('当前浏览器不支持语音播报'); return; }
+    if (_fhRecipeSpeaking) {
+        try { speechSynthesis.cancel(); } catch (e) {}
+        _fhRecipeSpeaking = false; _fhSetSpeakBtn('🔊');
+        return;
+    }
+    var r = _fhCurRecipe;
+    if (!r) { showToast('暂无内容可朗读'); return; }
+    var parts = [];
+    if (r.title) parts.push(r.title);
+    if (r.summary) parts.push(String(r.summary).replace(/<[^>]+>/g, ' '));
+    var plain = String(r.content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (plain) parts.push(plain);
+    if (Array.isArray(r.tips) && r.tips.length) parts.push('小贴士。' + r.tips.join('。'));
+    else if (typeof r.tips === 'string' && r.tips.trim()) parts.push('小贴士。' + r.tips.trim());
+    var text = parts.filter(Boolean).join('。');
+    if (!text.trim()) { showToast('暂无内容可朗读'); return; }
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN'; u.rate = 0.9; u.pitch = 1; u.volume = 1;
+    u.onend = function () { _fhRecipeSpeaking = false; _fhSetSpeakBtn('🔊'); };
+    u.onerror = function () { _fhRecipeSpeaking = false; _fhSetSpeakBtn('🔊'); };
+    try { speechSynthesis.cancel(); } catch (e) {}
+    speechSynthesis.speak(u);
+    _fhRecipeSpeaking = true; _fhSetSpeakBtn('⏹');
 }
 // ===== V426: 用户纠错反馈（内容有误？反馈给主编） =====
 function _fhOpenCorrection(kind) {
