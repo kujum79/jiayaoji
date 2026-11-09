@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V425-20261109';
+        var APP_VER = 'V426-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -12021,12 +12021,14 @@ async function _refreshMonitorBadge() {
     var badge = document.getElementById('monitorBadge');
     if (!badge) return;
     // V311: 徽标只提示「需要动手」的条数，偶发报错不再打扰超管
-    var n = _monitorNeedsActionCount(data);
+    // V426: 用户纠错反馈也计入红点
+    var fbN = Number((data && data.feedbackCount) || 0);
+    var n = _monitorNeedsActionCount(data) + fbN;
     var nToday = _monitorNeedsActionTodayCount(data);
     badge.textContent = n > 99 ? '99+' : String(n);
     badge.style.display = n > 0 ? 'block' : 'none';
     // D5-06: 徽标是「未处理累计」（含往期），用 tooltip 说明口径，避免与「今日新增」并列时被误读成今日条数
-    badge.title = '需要动手：未处理累计 ' + n + ' 条（含往期），其中今日 ' + nToday + ' 条';
+    badge.title = '需要动手：未处理累计 ' + n + ' 条（含往期），其中今日 ' + nToday + ' 条' + (fbN ? '；另有 ' + fbN + ' 条用户纠错反馈' : '');
 }
 
 function _monitorTypeMeta(t) {
@@ -12129,6 +12131,24 @@ function _monitorBodyHtml(d) {
         '<button type="button" onclick="_openAnnounceSheet()" style="flex:1;border:none;border-radius:12px;background:#DC2626;color:#fff;font-size:12px;font-weight:700;padding:10px 6px;cursor:pointer;box-shadow:0 2px 8px rgba(220,38,38,0.25);">📢 全局安抚公告</button>' +
         '<button type="button" onclick="openAiUsagePanel()" style="flex:1;border:1px solid #FED7AA;border-radius:12px;background:#FFF7ED;color:#9A3412;font-size:12px;font-weight:700;padding:10px 6px;cursor:pointer;">🤖 AI 用量</button>' +
         '</div>' +
+        // V426: 用户纠错反馈（内容有误？→ feedbackList → 红点）
+        ((d && Number(d.feedbackCount) > 0) ? '<div style="margin-bottom:14px;">' +
+            '<div style="display:flex;align-items:center;margin-bottom:8px;">' +
+            '<div style="font-size:13px;font-weight:700;color:#1F2937;">📮 用户纠错反馈</div>' +
+            '<span style="margin-left:8px;font-size:11px;color:#fff;background:#DC2626;border-radius:8px;padding:1px 7px;font-weight:700;">' + Number(d.feedbackCount) + ' 条未读</span>' +
+            '</div>' +
+            (Array.isArray(d.feedbackList) ? d.feedbackList : []).map(function (f) {
+                return '<div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px;border-left:3px solid #DC2626;">' +
+                    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">' +
+                    '<span style="font-size:11px;font-weight:700;color:#fff;background:#DC2626;border-radius:6px;padding:1px 7px;">⚠️ 内容纠错</span>' +
+                    '<span style="font-size:11px;color:#9CA3AF;margin-left:auto;">' + escapeHtml(f.ts || '') + '</span>' +
+                    '</div>' +
+                    '<div style="font-size:12px;color:#1F2937;line-height:1.7;word-break:break-all;">' + escapeHtml(f.content || '') + '</div>' +
+                    '<div style="display:flex;align-items:center;gap:8px;margin-top:6px;">' +
+                    '<span style="font-size:11px;color:#6B7280;flex:1;min-width:0;">📄 ' + escapeHtml(f.articleTitle || '未标注文章') + (f.articleDate ? ' · ' + escapeHtml(f.articleDate) : '') + '</span>' +
+                    '<button type="button" onclick="_monitorAckFeedback(\'' + escapeHtml(f.id || '') + '\',this)" style="border:1px solid #BBF7D0;background:#F0FDF4;color:#16A34A;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;">✅ 标记已读</button>' +
+                    '</div></div>';
+            }).join('') + '</div>' : '') +
         '<div style="display:flex;align-items:center;margin-bottom:8px;">' +
         '<div style="font-size:13px;font-weight:700;color:#1F2937;">🚨 需要动手</div>' +
         '<span style="margin-left:8px;font-size:11px;color:#9CA3AF;">未处理累计 ' + needPending + ' 条 · 今日 ' + needPendingToday + ' 条 · 今日已修复 ' + ((d && d.resolvedTodayCount) || 0) + ' 条</span>' +
@@ -12185,6 +12205,32 @@ async function _reloadSystemMonitor() {
     if (b2) b2.outerHTML = '<div id="systemMonitorBody">' + _monitorBodyHtml(d) + '</div>';
     if (!d) showToast('监控数据加载失败');
     _refreshMonitorBadge();
+}
+
+// V426: 超管标记用户纠错反馈已读（红点计数随之减少）
+async function _monitorAckFeedback(id, btn) {
+    if (!id) return;
+    if (btn) { btn.disabled = true; btn.textContent = '处理中…'; }
+    try {
+        var res = await fetch('/api/admin/feedback-ack', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: [id] })
+        });
+        var out = await res.json();
+        if (!res.ok || !out || !out.ok) {
+            showToast && showToast((out && out.error) || '标记失败');
+            if (btn) { btn.disabled = false; btn.textContent = '✅ 标记已读'; }
+            return;
+        }
+        var d = await _fetchMonitorData();
+        var body = document.getElementById('systemMonitorBody');
+        if (body) body.outerHTML = '<div id="systemMonitorBody">' + _monitorBodyHtml(d) + '</div>';
+        _refreshMonitorBadge();
+        showToast && showToast('已标记为已读');
+    } catch (e) {
+        showToast && showToast('标记失败，请稍后重试');
+        if (btn) { btn.disabled = false; btn.textContent = '✅ 标记已读'; }
+    }
 }
 
 async function _monitorResolve(errorId, note) {
@@ -34495,6 +34541,7 @@ function _fhOpenRecipeDetail(r) {
         + (_fhIngCost > 0 ? '<div style="margin-top:8px;font-size:12px;font-weight:700;color:#B45309;">💰 食材成本约 ¥' + _fhIngCost + '（按本地基准价估算）</div>' : '')
         + '</div>' : '')
         + (r.tips ? '<div style="margin:14px 18px 18px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:10px 12px;font-size:12px;color:#92400E;line-height:1.7;">💡 ' + escapeHtml(r.tips) + '</div>' : '')
+        + '<div style="text-align:center;padding:2px 0 18px;"><button type="button" onclick="_fhOpenCorrection(\'recipe\')" style="border:none;background:none;color:#9CA3AF;font-size:11px;cursor:pointer;text-decoration:underline;padding:2px 6px;">⚠️ 内容有误？反馈给主编</button></div>'
         + '</div>'
         + (dishes.length ? '' : '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #FED7AA;padding:10px 14px calc(12px + env(safe-area-inset-bottom));">'
         + '<button type="button" onclick="_fhAddRecipeToPlan(\'' + escapeAttr(r.id) + '\')" style="width:100%;height:46px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(249,115,22,.28);">🍳 加入我的食记计划</button>'
@@ -34506,6 +34553,61 @@ function _fhCloseRecipe() {
     var ov = document.getElementById('fhRecipeOv');
     if (ov) ov.remove();
     if (!document.getElementById('fhHallOv') && !document.getElementById('classroomCourseOverlay')) document.body.style.overflow = '';
+}
+// ===== V426: 用户纠错反馈（内容有误？反馈给主编） =====
+function _fhOpenCorrection(kind) {
+    var old = document.getElementById('fhCorrectionOv');
+    if (old) old.remove();
+    var item = (kind === 'recipe') ? (_fhCurRecipe || {}) : (_dtCurTip || {});
+    var title = item.title || item.dishName || '';
+    var ov = document.createElement('div');
+    ov.id = 'fhCorrectionOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100020;background:rgba(31,41,55,0.55);display:flex;align-items:flex-end;justify-content:center;';
+    ov.innerHTML = '<div style="background:#fff;width:100%;max-width:430px;border-radius:18px 18px 0 0;padding:18px 18px calc(16px + env(safe-area-inset-bottom));">'
+        + '<div style="font-size:16px;font-weight:700;color:#1F2937;">⚠️ 反馈给主编</div>'
+        + (title ? '<div style="margin-top:6px;font-size:12px;color:#6B7280;line-height:1.6;">内容：' + escapeHtml(title) + '</div>' : '')
+        + '<textarea id="fhCorrectionInput" maxlength="500" placeholder="例如：今天都立冬了，怎么还推霜降吃柿子？" style="margin-top:12px;width:100%;height:96px;border:1px solid #E5E7EB;border-radius:12px;padding:10px 12px;font-size:14px;line-height:1.6;resize:none;outline:none;box-sizing:border-box;"></textarea>'
+        + '<div style="display:flex;gap:10px;margin-top:14px;">'
+        + '<button type="button" onclick="document.getElementById(\'fhCorrectionOv\').remove()" style="flex:1;height:42px;border-radius:12px;border:none;background:#F3F4F6;color:#4B5563;font-size:14px;cursor:pointer;">取消</button>'
+        + '<button type="button" onclick="_fhSubmitCorrection(this,\'' + kind + '\')" style="flex:2;height:42px;border-radius:12px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:700;cursor:pointer;">提交给主编</button>'
+        + '</div></div>';
+    document.body.appendChild(ov);
+}
+async function _fhSubmitCorrection(btn, kind) {
+    var input = document.getElementById('fhCorrectionInput');
+    var text = input ? String(input.value || '').trim() : '';
+    if (!text) { showToast && showToast('请先填写纠错内容'); return; }
+    var item = (kind === 'recipe') ? (_fhCurRecipe || {}) : (_dtCurTip || {});
+    if (btn) { btn.disabled = true; btn.textContent = '提交中…'; }
+    try {
+        var resp = await fetch('/api/feedback', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                content: text,
+                kind: 'content_correction',
+                familyId: (typeof familyKey === 'function' ? familyKey() : ''),
+                page: 'food_hall_' + kind,
+                appVer: String(localStorage.getItem('_appVer') || ''),
+                ua: navigator.userAgent || '',
+                articleId: item.id || '',
+                articleTitle: item.title || item.dishName || '',
+                articleDate: item.date || '',
+                articleType: kind
+            })
+        });
+        var out = await resp.json();
+        if (!resp.ok || !out || !out.ok) {
+            showToast && showToast((out && out.error) || '提交失败，请稍后重试');
+            if (btn) { btn.disabled = false; btn.textContent = '提交给主编'; }
+            return;
+        }
+        var ov = document.getElementById('fhCorrectionOv');
+        if (ov) ov.remove();
+        showToast && showToast('🙏 已收到，主编会尽快核查');
+    } catch (e) {
+        showToast && showToast('提交失败，请检查网络');
+        if (btn) { btn.disabled = false; btn.textContent = '提交给主编'; }
+    }
 }
 // V405: 单品加入食记——只写该道菜（菜名+做法），不改动文章里的其他菜品
 function _fhAddDishToPlan(idx) {
@@ -35620,6 +35722,7 @@ function _openDailyTipFull(tip) {
               + '<div style="text-align:center;font-size:11px;color:#9CA3AF;margin:6px 0 8px;">加入今天午餐 · 缺的食材自动进采购清单</div>'
             : '')
         + '<div style="text-align:center;font-size:11px;color:#9CA3AF;margin-bottom:8px;">以上内容仅供参考，不构成医疗建议。</div>'
+        + '<div style="text-align:center;margin-bottom:8px;"><button type="button" onclick="_fhOpenCorrection(\'article\')" style="border:none;background:none;color:#9CA3AF;font-size:11px;cursor:pointer;text-decoration:underline;padding:2px 6px;">⚠️ 内容有误？反馈给主编</button></div>'
         + '<div style="display:flex;gap:10px;">'
         + '<button type="button" onclick="_closeDtFull()" style="flex:1;height:38px;border-radius:12px;border:none;background:#F3F4F6;color:#4B5563;font-size:14px;cursor:pointer;">关闭</button>'
         + '<button type="button" onclick="_closeDtFull(); _openSubscribeGuide()" style="flex:1;height:38px;border-radius:12px;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:14px;cursor:pointer;">🔔 订阅食养堂</button>'
@@ -36292,7 +36395,8 @@ var _FH_MGR_TABS = [
     { k: 'recipe_review', n: '🍔 食谱文章审核' },
     { k: 'draft', n: '今日草稿' },
     { k: 'draftbox', n: '📥 草稿箱' },
-    { k: 'ai_pending', n: 'AI 待审' }
+    { k: 'ai_pending', n: 'AI 待审' },
+    { k: 'stale', n: '🧹 过期巡检' }
 ];
 var _fhMgrAiPending = []; var _fhMgrAiPendingAt = 0;
 // V402: 双轨候选池（服务端 /api/food-hall/candidates）
@@ -36334,6 +36438,7 @@ function _openFoodHallMgr() {
         + '<div id="fhMgrTabs" style="flex-shrink:0;display:flex;background:white;padding:0 8px 0;border-bottom:1px solid #F3E9DC;"></div>'
         + '<div id="fhMgrList" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;"></div>'
         + '<div style="flex-shrink:0;background:white;border-top:1px solid #F3E9DC;padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;flex-wrap:wrap;">'
+        + '<button type="button" onclick="_fhMgrScanStale(this)" style="flex:1 1 100%;border:none;background:#FEF2F2;color:#B91C1C;font-size:13px;font-weight:700;border-radius:10px;padding:9px 6px;cursor:pointer;">🧹 一键扫描过期内容</button>'
         + '<button type="button" onclick="_fhMgrRegen(this)" style="flex:1 1 45%;border:none;background:#FFF3E2;color:#9A3412;font-size:13px;font-weight:600;border-radius:10px;padding:9px 6px;cursor:pointer;">🔄 重新生成 3+3 篇</button>'
         + '<button type="button" onclick="_fhMgrEdit(null)" style="flex:1 1 45%;border:none;background:#FFF3E2;color:#9A3412;font-size:13px;font-weight:600;border-radius:10px;padding:9px 6px;cursor:pointer;">✏️ 新编一篇</button>'
         + '<button type="button" onclick="_fhMgrUpload()" style="flex:1 1 45%;border:none;background:#FFF3E2;color:#9A3412;font-size:13px;font-weight:600;border-radius:10px;padding:9px 6px;cursor:pointer;">📤 上传文件</button>'
@@ -36511,6 +36616,7 @@ function _fhMgrRender() {
         var n = t.k === 'draft' ? arts.filter(function (x) { return x && inWorkbench(x); }).length
             : t.k === 'draftbox' ? arts.filter(function (x) { return x && ['draft', 'archived', 'pending_review'].indexOf(x.status) >= 0; }).length
             : t.k === 'ai_pending' ? aiPendingN
+            : t.k === 'stale' ? ((_fhMgrStale && _fhMgrStale.items) ? _fhMgrStale.items.length : 0)
             : t.k === 'diet_review' ? candN('diet_article')
             : t.k === 'recipe_review' ? candN('recipe_article')
             : arts.filter(function (x) { return x && x.status === t.k; }).length;
@@ -36543,6 +36649,11 @@ function _fhMgrRender() {
                         + '</div></div>';
                 }).join('') + '<div style="height:14px;"></div>';
         }
+        return;
+    }
+    // V426: 过期内容巡检 tab
+    if (_fhMgrTab === 'stale') {
+        _fhMgrRenderStaleTab(listEl);
         return;
     }
     var list = arts.filter(function (x) {
@@ -36617,6 +36728,87 @@ function _fhMgrRender() {
 }
 function _fhMgrBtn(txt, fn, color) {
     return '<button type="button" onclick="' + fn + '" style="flex:1;border:1px solid #F3E9DC;background:#FAF7F2;color:' + color + ';font-size:12px;font-weight:600;border-radius:8px;padding:6px 4px;cursor:pointer;">' + txt + '</button>';
+}
+// ===== V426: 过期内容一键巡检 =====
+var _fhMgrStale = null;  // { today, currentTerm, scanned, count, items:[...] }
+
+async function _fhMgrScanStale(btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '扫描中…'; }
+    try {
+        var resp = await fetch('/api/food-hall/scan-stale', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        var out = await resp.json();
+        if (!resp.ok || !out || !out.ok) {
+            showToast && showToast((out && out.error) || '扫描失败，请稍后重试');
+            return;
+        }
+        _fhMgrStale = out;
+        _fhMgrTab = 'stale';
+        _fhMgrRender();
+        showToast && showToast('扫描完成：' + out.scanned + ' 篇已发布，发现 ' + out.count + ' 篇含过期节气');
+    } catch (e) {
+        showToast && showToast('扫描失败，请检查网络');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🧹 一键扫描过期内容'; }
+    }
+}
+
+function _fhMgrRenderStaleTab(listEl) {
+    var s = _fhMgrStale;
+    if (!s) {
+        listEl.innerHTML = '<div style="padding:56px 24px;text-align:center;color:#9CA3AF;font-size:13px;line-height:1.9;">'
+            + '还没有扫描结果<br><span style="font-size:11px;color:#D1D5DB;">点击下方「🧹 一键扫描过期内容」，<br>自动检查历史发布的文章是否还在写旧节气</span></div>';
+        return;
+    }
+    var cur = escapeHtml(s.currentTerm || '');
+    if (!s.items || !s.items.length) {
+        listEl.innerHTML = '<div style="padding:56px 24px;text-align:center;color:#16A34A;font-size:13px;line-height:1.9;">'
+            + '✅ 未发现过期内容<br><span style="font-size:11px;color:#9CA3AF;">已扫描 ' + s.scanned + ' 篇 · 当前节气：' + cur + '</span></div>';
+        return;
+    }
+    listEl.innerHTML = '<div style="margin:10px 14px 0;padding:9px 11px;background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;font-size:12px;color:#B91C1C;line-height:1.6;">'
+        + '共扫描 ' + s.scanned + ' 篇，发现 <b>' + s.items.length + '</b> 篇含过期节气（当前节气：' + cur + '）</div>'
+        + s.items.map(function (it, i) {
+            return '<div style="background:#fff;border:1px solid #FECACA;border-radius:12px;padding:12px 14px;margin:10px 14px 0;">'
+                + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+                + '<span style="font-size:11px;font-weight:700;color:#fff;background:#DC2626;border-radius:6px;padding:1px 7px;">⚠️ 节气过期</span>'
+                + '<span style="font-size:11px;color:#9CA3AF;">' + escapeHtml(it.date || '') + ' · ' + (it.contentType === 'recipe_article' ? '寻味天下' : '饮食文章') + '</span></div>'
+                + '<div style="font-size:14px;font-weight:600;color:#1F2937;line-height:1.5;margin-top:6px;">' + escapeHtml(it.title || '(无标题)') + '</div>'
+                + '<div style="font-size:11px;color:#B91C1C;margin-top:4px;">命中旧节气：' + escapeHtml((it.hits || []).join('、')) + '</div>'
+                + '<div style="display:flex;gap:8px;margin-top:10px;">'
+                + _fhMgrBtn('预览', '_fhMgrPreviewStale(' + i + ')', '#6B7280')
+                + _fhMgrBtn('一键下架', '_fhMgrStaleUnpublish(' + i + ',this)', '#DC2626')
+                + '</div></div>';
+        }).join('') + '<div style="height:14px;"></div>';
+}
+
+function _fhMgrPreviewStale(i) {
+    var it = _fhMgrStale && _fhMgrStale.items && _fhMgrStale.items[i];
+    if (it) _openDailyTipFull(it);
+}
+
+async function _fhMgrStaleUnpublish(i, btn) {
+    var it = _fhMgrStale && _fhMgrStale.items && _fhMgrStale.items[i];
+    if (!it) return;
+    if (btn) { btn.disabled = true; btn.textContent = '下架中…'; }
+    try {
+        var resp = await fetch('/api/food-hall/review', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: it.date || '', action: 'withdraw', contentType: it.contentType || '' })
+        });
+        var out = await resp.json();
+        if (!resp.ok || !out || !out.ok) {
+            showToast && showToast((out && (out.error || out.detail)) || '下架失败');
+            if (btn) { btn.disabled = false; btn.textContent = '一键下架'; }
+            return;
+        }
+        _fhMgrStale.items.splice(i, 1);
+        _fhMgrStale.count = _fhMgrStale.items.length;
+        showToast && showToast('✅ 已下架，首页不再展示这篇');
+        _fhMgrRender();
+    } catch (e) {
+        showToast && showToast('下架失败，请检查网络');
+        if (btn) { btn.disabled = false; btn.textContent = '一键下架'; }
+    }
 }
 function _fhMgrPreview(id) {
     var a = _fhGet(id);

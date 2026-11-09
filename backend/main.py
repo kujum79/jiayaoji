@@ -1584,6 +1584,23 @@ def validate_content(
     return {"passed": True}
 
 
+def _fh_expired_terms(blob: str, date_str: str, depth: int = 4) -> List[str]:
+    """V426: 巡检用——返回文中出现的「相对当前节气已过期」的节气词。
+
+    若正文已提到当前节气，说明主题当季，不算过期；否则检查前 4 个节气词。
+    """
+    cur = _fh_current_term(date_str)
+    if cur not in _FH_SOLAR_TERMS or cur in blob:
+        return []
+    i = _FH_SOLAR_TERMS.index(cur)
+    hits: List[str] = []
+    for k in range(1, depth + 1):
+        t = _FH_SOLAR_TERMS[(i - k) % 24]
+        if t in blob:
+            hits.append(t)
+    return hits
+
+
 def _internal_token() -> str:
     """内部定时任务令牌：环境变量优先，否则首次自动生成落到 data/.internal_token（仅本机定时任务读取）。"""
     env = os.environ.get("JIAYAOJI_INTERNAL_TOKEN", "").strip()
@@ -2213,6 +2230,39 @@ async def food_hall_published_list(days: int = 120) -> Dict[str, Any]:
         print(f"[foodhall] 归档列表读取失败: {exc}")
         return {"ok": False, "error": "归档读取失败"}
     return {"ok": True, "articles": [_fh_row_to_article(r) for r in rows]}
+
+
+@app.post("/api/food-hall/scan-stale", include_in_schema=False)
+async def food_hall_scan_stale() -> Dict[str, Any]:
+    """V426: 超管「一键扫描过期内容」——遍历全部已发布文章，标出仍停留在旧节气的篇目。"""
+    today = _date_cls.today().strftime("%Y-%m-%d")
+    try:
+        with _fh_db() as conn:
+            rows = conn.execute(
+                "SELECT * FROM food_hall_pub_days WHERE title<>'' "
+                "AND COALESCE(review_status,'')='confirmed' ORDER BY publish_date DESC",
+            ).fetchall()
+    except Exception as exc:
+        print(f"[foodhall] 过期巡检读取失败: {exc}")
+        return {"ok": False, "error": f"巡检读取失败：{exc}"}
+    items: List[Dict[str, Any]] = []
+    for r in rows:
+        art = _fh_row_to_article(r)
+        blob = "".join([
+            str(art.get("title") or ""), str(art.get("summary") or ""),
+            str(art.get("content") or ""),
+        ])
+        hits = _fh_expired_terms(blob, str(art.get("date") or today))
+        if hits:
+            items.append({**art, "hits": hits})
+    return {
+        "ok": True,
+        "today": today,
+        "currentTerm": _fh_current_term(today),
+        "scanned": len(rows),
+        "count": len(items),
+        "items": items,
+    }
 
 
 class FoodHallReviewRequest(BaseModel):
@@ -5434,6 +5484,12 @@ class FeedbackRequest(BaseModel):
     page: str = Field(default="", max_length=300)
     appVer: str = Field(default="", max_length=40)
     ua: str = Field(default="", max_length=300)
+    # V426: 内容纠错——kind=content_correction 时进入超管「内容纠错」红点列表
+    kind: str = Field(default="", max_length=40)
+    articleId: str = Field(default="", max_length=80)
+    articleTitle: str = Field(default="", max_length=200)
+    articleDate: str = Field(default="", max_length=20)
+    articleType: str = Field(default="", max_length=20)
 
 
 @app.post("/api/feedback")
@@ -5442,6 +5498,7 @@ async def save_feedback(req: FeedbackRequest) -> Dict[str, Any]:
     if not content:
         return {"ok": False, "error": "反馈内容为空"}
     record = {
+        "id": uuid.uuid4().hex[:12],
         "ts": _dt_cls.now().strftime("%Y-%m-%d %H:%M:%S"),
         "familyId": req.familyId.strip().upper(),
         "contact": req.contact.strip(),
@@ -5449,6 +5506,11 @@ async def save_feedback(req: FeedbackRequest) -> Dict[str, Any]:
         "appVer": req.appVer.strip(),
         "ua": req.ua.strip(),
         "content": content,
+        "kind": req.kind.strip(),
+        "articleId": req.articleId.strip(),
+        "articleTitle": req.articleTitle.strip(),
+        "articleDate": req.articleDate.strip(),
+        "articleType": req.articleType.strip(),
     }
     try:
         _FEEDBACK_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -5457,6 +5519,69 @@ async def save_feedback(req: FeedbackRequest) -> Dict[str, Any]:
     except OSError as exc:
         return {"ok": False, "error": f"写入失败：{exc}"}
     return {"ok": True}
+
+
+# ========== V426: 内容纠错反馈（超管系统监控红点） ==========
+_FEEDBACK_ACK_PATH = _FEEDBACK_PATH.parent / "feedback_ack.json"
+
+
+def _feedback_read_all() -> List[Dict[str, Any]]:
+    """读取全部反馈记录（feedback.jsonl，逐行 JSON）。"""
+    items: List[Dict[str, Any]] = []
+    try:
+        with open(_FEEDBACK_PATH, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(obj, dict):
+                    items.append(obj)
+    except OSError:
+        pass
+    return items
+
+
+def _feedback_ack_load() -> Dict[str, int]:
+    try:
+        data = json.loads(_FEEDBACK_ACK_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    out: Dict[str, int] = {}
+    for k, v in data.items():
+        try:
+            out[str(k)] = int(v)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _feedback_unacked(limit: int = 20) -> Tuple[List[Dict[str, Any]], int]:
+    """返回未读「内容纠错」反馈（最新在前）与未读总数。"""
+    acked = _feedback_ack_load()
+    rows: List[Dict[str, Any]] = []
+    for i, rec in enumerate(_feedback_read_all()):
+        if str(rec.get("kind") or "") != "content_correction":
+            continue
+        fid = str(rec.get("id") or f"fb_{i}_{rec.get('ts', '')}")
+        if fid in acked:
+            continue
+        rows.append({
+            "id": fid,
+            "ts": rec.get("ts", ""),
+            "familyId": rec.get("familyId", ""),
+            "content": rec.get("content", ""),
+            "articleId": rec.get("articleId", ""),
+            "articleTitle": rec.get("articleTitle", ""),
+            "articleDate": rec.get("articleDate", ""),
+            "articleType": rec.get("articleType", ""),
+        })
+    return rows[-limit:][::-1], len(rows)
 
 
 # ========== V224: 复盘「治未病风险预警」AI 归因（POST /api/review-risk） ==========
@@ -6575,6 +6700,7 @@ async def admin_monitor() -> Dict[str, Any]:
             "resolved": is_resolved,
             "resolvedAt": int(resolved.get(eid) or 0) if is_resolved else 0,
         })
+    _fb_items, _fb_count = _feedback_unacked(20)
     return {
         "ok": True,
         "todayErrorCount": today_count,
@@ -6584,7 +6710,38 @@ async def admin_monitor() -> Dict[str, Any]:
         "resolvedTotalCount": len(resolved),
         "unresolvedCount": unresolved_count,
         "unresolved": unresolved,
+        "feedbackCount": _fb_count,
+        "feedbackList": _fb_items,
     }
+
+
+class FeedbackAckRequest(BaseModel):
+    ids: List[str] = Field(default_factory=list)
+
+
+@app.post("/api/admin/feedback-list")
+async def admin_feedback_list() -> Dict[str, Any]:
+    """V426: 超管读取未处理的「内容纠错」反馈。"""
+    items, total = _feedback_unacked(50)
+    return {"ok": True, "count": total, "items": items}
+
+
+@app.post("/api/admin/feedback-ack")
+async def admin_feedback_ack(req: FeedbackAckRequest) -> Dict[str, Any]:
+    """V426: 超管标记纠错反馈已读（红点计数随之减少）。"""
+    ids = [str(x).strip() for x in (req.ids or []) if str(x).strip()]
+    if not ids:
+        return {"ok": False, "error": "缺少 ids"}
+    acked = _feedback_ack_load()
+    now_ms = int(time.time() * 1000)
+    for i in ids:
+        acked[i] = now_ms
+    try:
+        _FEEDBACK_ACK_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _FEEDBACK_ACK_PATH.write_text(json.dumps(acked, ensure_ascii=False), encoding="utf-8")
+    except OSError as exc:
+        return {"ok": False, "error": f"写入失败：{exc}"}
+    return {"ok": True, "acked": len(ids)}
 
 
 @app.post("/api/admin/error-resolve")
