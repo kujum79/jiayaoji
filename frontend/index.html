@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V426-20261109';
+        var APP_VER = 'V427-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -35920,6 +35920,7 @@ function _dtArcUnfav(id) { _dtUnfav(id); }
 // auditStatus 随流转联动：提审=pending、发布=passed、驳回=rejected。
 var _FH_CATS = ['节气食养', '天气食养', '当季食材', '厨房技巧', '选材避坑', '家庭宴客', '饮食文化', '食育', '食方'];
 var _FH_FLOW = {
+    'pending': ['published', 'draft', 'rejected', 'pending_review'],  // V427: AI 待审（今日凌晨生成）
     'draft': ['pending_review', 'archived'],
     'pending_review': ['published', 'rejected', 'draft'],
     'published': ['draft', 'archived'],
@@ -35949,7 +35950,7 @@ function _fhMake(fields) {
         id: 'fh_' + now + '_' + Math.floor(Math.random() * 1000),
         date: '', status: 'draft', source: 'ai', category: '节气食养',
         title: '', summary: '', content: '', tips: [], relatedIngredients: [], relatedDish: '',
-        auditStatus: 'pending', auditNote: '', publishedAt: 0,
+        auditStatus: 'pending', auditNote: '', publishedAt: 0, isPublished: false, isTodayPick: false,
         createdAt: now, updatedAt: now, authorId: 'ai', viewCount: 0, favoriteCount: 0
     };
     var f = fields || {};
@@ -36121,7 +36122,8 @@ function _fhTransition(id, next) {
     if (!art || (_FH_FLOW[art.status] || []).indexOf(next) < 0) return null;
     var patch = { status: next };
     if (next === 'pending_review') { patch.auditStatus = 'pending'; }
-    if (next === 'published') { patch.auditStatus = 'passed'; patch.publishedAt = Date.now(); }
+    if (next === 'published') { patch.auditStatus = 'passed'; patch.publishedAt = Date.now(); patch.isPublished = true; }
+    else { patch.isPublished = false; }  // V427: 离开已发布态即从线上撤下
     if (next === 'rejected') { patch.auditStatus = 'rejected'; }
     return _fhUpdate(id, patch);
 }
@@ -36164,6 +36166,7 @@ function _fhSetTodayPick(id) {
             hit = true;
             x.isTodayPick = true;
             x.status = 'published';
+            x.isPublished = true;   // V427: 已发布列表按 isPublished 聚合
             x.auditStatus = 'passed';
             if (!x.publishedAt) x.publishedAt = now;
             if (!x.date) x.date = _dtTodayKey();
@@ -36358,7 +36361,8 @@ async function _fhEnsureDailyDrafts(force) {
             if (!d || !d.title) return;
             var art = _fhAdd({
                 id: d.id, date: out.date || today, source: 'ai', authorId: 'ai',
-                status: 'draft', isTodayPick: false,   // V300: 新生成的草稿默认进草稿箱，等超管挑 1 篇设为今日精选
+                status: 'pending', isTodayPick: false,   // V427: 新生成文章先进入「AI待审」，等超管发布或淘汰
+                isPublished: false,
                 contentType: d.contentType || 'diet_article',
                 category: d.category || (d.contentType === 'recipe_article' ? '寻味天下' : '节气食养'),
                 title: d.title, summary: d.summary || '',
@@ -36389,13 +36393,11 @@ async function _fhManualGen(btn) {
 }
 
 // ====== V140: 食养堂管理（仅超管；入口：我家→家庭管理员→文库管理下方） ======
-var _fhMgrTab = 'diet_review';
+var _fhMgrTab = 'ai_pending';
 var _FH_MGR_TABS = [
-    { k: 'diet_review', n: '📝 饮食文章审核' },
-    { k: 'recipe_review', n: '🍔 食谱文章审核' },
-    { k: 'draft', n: '今日草稿' },
-    { k: 'draftbox', n: '📥 草稿箱' },
-    { k: 'ai_pending', n: 'AI 待审' },
+    { k: 'ai_pending', n: '🤖 AI待审' },
+    { k: 'published', n: '✅ 已发布' },
+    { k: 'draftbox', n: '📂 备选草稿箱' },
     { k: 'stale', n: '🧹 过期巡检' }
 ];
 var _fhMgrAiPending = []; var _fhMgrAiPendingAt = 0;
@@ -36426,7 +36428,7 @@ function _openFoodHallMgr() {
     var ok = false;
     try { ok = !!(isSuperAdmin() || getCurrentUserContext().isSuperAdmin); } catch (e) {} // 双通道与入口显示一致
     if (!ok) { showToast && showToast('仅超级管理员可访问'); return; }
-    _fhMgrTab = 'diet_review';
+    _fhMgrTab = 'ai_pending';
     var ov = document.createElement('div');
     ov.id = 'fhMgrOv';
     ov.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(31,41,55,0.35);display:flex;justify-content:center;';
@@ -36437,19 +36439,13 @@ function _openFoodHallMgr() {
         + '<span style="font-size:15px;font-weight:700;color:#1F2937;">食养堂管理</span></div>'
         + '<div id="fhMgrTabs" style="flex-shrink:0;display:flex;background:white;padding:0 8px 0;border-bottom:1px solid #F3E9DC;"></div>'
         + '<div id="fhMgrList" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;"></div>'
-        + '<div style="flex-shrink:0;background:white;border-top:1px solid #F3E9DC;padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;flex-wrap:wrap;">'
-        + '<button type="button" onclick="_fhMgrScanStale(this)" style="flex:1 1 100%;border:none;background:#FEF2F2;color:#B91C1C;font-size:13px;font-weight:700;border-radius:10px;padding:9px 6px;cursor:pointer;">🧹 一键扫描过期内容</button>'
-        + '<button type="button" onclick="_fhMgrRegen(this)" style="flex:1 1 45%;border:none;background:#FFF3E2;color:#9A3412;font-size:13px;font-weight:600;border-radius:10px;padding:9px 6px;cursor:pointer;">🔄 重新生成 3+3 篇</button>'
-        + '<button type="button" onclick="_fhMgrEdit(null)" style="flex:1 1 45%;border:none;background:#FFF3E2;color:#9A3412;font-size:13px;font-weight:600;border-radius:10px;padding:9px 6px;cursor:pointer;">✏️ 新编一篇</button>'
-        + '<button type="button" onclick="_fhMgrUpload()" style="flex:1 1 45%;border:none;background:#FFF3E2;color:#9A3412;font-size:13px;font-weight:600;border-radius:10px;padding:9px 6px;cursor:pointer;">📤 上传文件</button>'
+        + '<div style="flex-shrink:0;background:white;border-top:1px solid #F3E9DC;padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;">'
+        + '<button type="button" onclick="_fhMgrRegen(this)" style="flex:1;border:none;background:#FFF3E2;color:#9A3412;font-size:13px;font-weight:600;border-radius:10px;padding:10px 6px;cursor:pointer;">🔄 重新生成 3+3 篇</button>'
+        + '<button type="button" onclick="_fhMgrUpload()" style="flex:1;border:none;background:#FFF3E2;color:#9A3412;font-size:13px;font-weight:600;border-radius:10px;padding:10px 6px;cursor:pointer;">📤 上传文件</button>'
         + '<input type="file" id="fhMgrFile" accept=".md,.txt" style="display:none" onchange="_fhMgrFileChosen(this)">'
         + '</div></div>';
     document.body.appendChild(ov);
     _fhMgrRender();
-    // V145: 进入管理页时拉取服务端 AI 待审列表
-    // V402: 同时拉取双轨候选池（饮食/食谱各 3 篇）
-    _fhMgrLoadAiPending(true).then(function () { _fhMgrRender(); });
-    _fhMgrLoadCandidates(true).then(function () { _fhMgrRender(); });
 }
 function _closeFoodHallMgr() {
     var ov = document.getElementById('fhMgrOv');
@@ -36597,189 +36593,102 @@ async function _fhMgrPickCandidate(date, ct, idx, btn) {
         if (btn) { btn.disabled = false; btn.innerHTML = old; }
     }
 }
+// ===== V427: 食养堂管理重写——四个 Tab、按钮极简、状态互不重叠 =====
 function _fhMgrRender() {
     var tabsEl = document.getElementById('fhMgrTabs');
     var listEl = document.getElementById('fhMgrList');
     if (!tabsEl || !listEl) return;
-    var today = _dtTodayKey();
     var arts = _fhRead();
-    // 素材库 = 已归档 + 落选草稿（非今天的 draft，当天没被选中发布就自动出现在这里）
-    var inLibrary = function (x) { return x.status === 'archived' || (x.status === 'draft' && x.date !== today); };
-    // 今日草稿 = 今天的工作台：今天 draft + 被拒稿（待重编）+ 已发布稿（可入库）
-    var inWorkbench = function (x) { return (x.status === 'draft' && x.date === today) || x.status === 'rejected' || x.status === 'published'; };
-    // V145: AI 待审数量取服务端
-    var aiPendingN = _fhMgrAiPending.length;
-    var candN = function (ct) {
-        try { return ((_fhMgrCands.tracks[ct] || {}).articles || []).length; } catch (e) { return 0; }
+    var isPending = function (x) { return !!x && x.status === 'pending'; };
+    var isPublishedArt = function (x) { return !!x && (x.isPublished === true || x.status === 'published'); };
+    var isDraftBox = function (x) { return !!x && ['draft', 'archived', 'rejected', 'pending_review'].indexOf(x.status) >= 0; };
+    var countOf = function (k) {
+        if (k === 'ai_pending') return arts.filter(isPending).length;
+        if (k === 'published') return arts.filter(isPublishedArt).length;
+        if (k === 'draftbox') return arts.filter(isDraftBox).length;
+        if (k === 'stale') return (_fhMgrStale && _fhMgrStale.items) ? _fhMgrStale.items.length : 0;
+        return 0;
     };
     tabsEl.innerHTML = _FH_MGR_TABS.map(function (t) {
-        var n = t.k === 'draft' ? arts.filter(function (x) { return x && inWorkbench(x); }).length
-            : t.k === 'draftbox' ? arts.filter(function (x) { return x && ['draft', 'archived', 'pending_review'].indexOf(x.status) >= 0; }).length
-            : t.k === 'ai_pending' ? aiPendingN
-            : t.k === 'stale' ? ((_fhMgrStale && _fhMgrStale.items) ? _fhMgrStale.items.length : 0)
-            : t.k === 'diet_review' ? candN('diet_article')
-            : t.k === 'recipe_review' ? candN('recipe_article')
-            : arts.filter(function (x) { return x && x.status === t.k; }).length;
+        var n = countOf(t.k);
         var on = _fhMgrTab === t.k;
         return '<button type="button" onclick="_fhMgrSetTab(\'' + t.k + '\')" style="flex:1;min-width:0;border:none;background:none;padding:10px 2px 8px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:' + (on ? '700' : '500') + ';color:' + (on ? '#C2410C' : '#6B7280') + ';cursor:pointer;border-bottom:2px solid ' + (on ? '#F97316' : 'transparent') + ';">' + t.n + (n ? ' ' + n : '') + '</button>';
     }).join('');
-    // V402: 双轨审核 tab——每轨 3 篇 AI 候选，各选 1 篇设为「今日精选」
-    if (_fhMgrTab === 'diet_review' || _fhMgrTab === 'recipe_review') {
-        _fhMgrRenderReviewTab(listEl, _fhMgrTab === 'recipe_review' ? 'recipe_article' : 'diet_article');
-        return;
-    }
-    // V145: AI 待审 tab 渲染——pending-list 内容（服务端自动备稿）
-    if (_fhMgrTab === 'ai_pending') {
-        if (aiPendingN === 0) {
-            listEl.innerHTML = '<div style="padding:60px 20px;text-align:center;color:#9CA3AF;font-size:13px;">暂无 AI 自动备稿待审<br><span style="font-size:11px;color:#D1D5DB;">每天 22:30 自动生成，次日 6:00 保底发布</span></div>';
-        } else {
-            var todayKey = _dtTodayKey();
-            listEl.innerHTML = '<div style="margin:10px 14px;padding:10px 12px;background:#FEF3C7;border-radius:8px;font-size:12px;color:#B45309;line-height:1.6;">📋 共 ' + aiPendingN + ' 篇 AI 自动备稿待审<br>今日 6:00 前未确认将自动发布；超管可手动确认或撤回换篇。</div>'
-                + _fhMgrAiPending.map(function (a, i) {
-                    var isToday = a.date === todayKey;
-                    var badge = '<span style="font-size:11px;color:' + (isToday ? '#16A34A' : '#9CA3AF') + ';">' + (isToday ? '今日' : a.date || '') + '</span>';
-                    return '<div style="background:white;border:1px solid #F3E9DC;border-radius:12px;padding:12px 14px;margin:10px 14px 0;">'
-                        + '<div style="display:flex;align-items:baseline;gap:6px;"><span style="font-size:13px;font-weight:700;color:#9CA3AF;">' + (i + 1) + '.</span>'
-                        + '<span style="flex:1;font-size:14px;font-weight:600;color:#1F2937;line-height:1.5;">' + (a.title || '(无标题)') + '</span>' + badge + '</div>'
-                        + '<div style="margin-top:4px;font-size:11px;color:#9CA3AF;">' + (a.category || '') + ' · AI 预选 · <span style="color:#B45309;">待审</span></div>'
-                        + (a.summary ? '<div style="margin-top:6px;font-size:12px;color:#6B7280;line-height:1.5;">' + a.summary + '</div>' : '')
-                        + '<div style="margin-top:10px;display:flex;gap:8px;">'
-                        + '<button type="button" onclick="_fhMgrAiReview(\'' + (a.date || '') + '\',\'confirm\',this)" style="flex:1;border:1px solid #F3E9DC;background:#DCFCE7;color:#15803D;font-size:12px;font-weight:600;border-radius:8px;padding:6px 4px;cursor:pointer;">✅ 确认发布</button>'
-                        + '<button type="button" onclick="_fhMgrAiReview(\'' + (a.date || '') + '\',\'withdraw\',this)" style="flex:1;border:1px solid #F3E9DC;background:#FEF2F2;color:#B91C1C;font-size:12px;font-weight:600;border-radius:8px;padding:6px 4px;cursor:pointer;">↩️ 撤回换篇</button>'
-                        + '</div></div>';
-                }).join('') + '<div style="height:14px;"></div>';
-        }
-        return;
-    }
-    // V426: 过期内容巡检 tab
-    if (_fhMgrTab === 'stale') {
-        _fhMgrRenderStaleTab(listEl);
-        return;
-    }
+
+    if (_fhMgrTab === 'stale') { _fhMgrRenderStaleTab(listEl); return; }
+
     var list = arts.filter(function (x) {
         if (!x) return false;
-        if (_fhMgrTab === 'draft') return inWorkbench(x);
-        // V302: 草稿箱 = 草稿 + 素材库（已归档）+ 极少数残留的审核中
-        if (_fhMgrTab === 'draftbox') return ['draft', 'archived', 'pending_review'].indexOf(x.status) >= 0;
-        return x.status === _fhMgrTab;
+        if (_fhMgrTab === 'ai_pending') return isPending(x);
+        if (_fhMgrTab === 'published') return isPublishedArt(x);
+        return isDraftBox(x);
     });
-    if (_fhMgrTab === 'draftbox') list.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
-    var btns = {
-        draft: function (a) {
-            return _fhMgrBtn('预览', '_fhMgrPreview(\'' + a.id + '\')', '#6B7280')
-                + _fhMgrBtn('发布', '_fhMgrPublish(\'' + a.id + '\',this)', '#16A34A')
-                + _fhMgrBtn('编辑', '_fhMgrEdit(\'' + a.id + '\')', '#C2410C')
-                + _fhMgrBtn('删', '_fhMgrDelete(\'' + a.id + '\')', '#DC2626');
-        },
-        draftbox: function (a) {
-            // V302: 草稿箱按文章实际状态给按钮——已归档可「采用发布」，草稿走「发布」，审核中可重试
-            if (a.status === 'archived') return btns.archived(a);
-            if (a.status === 'pending_review') return btns.pending_review(a);
-            return btns.draft(a);
-        },
-        pending_review: function (a) {
-            return _fhMgrBtn('预览', '_fhMgrPreview(\'' + a.id + '\')', '#6B7280')
-                + _fhMgrBtn('重试发布', '_fhMgrPublish(\'' + a.id + '\',this)', '#16A34A')
-                + _fhMgrBtn('退回草稿', '_fhMgrBack(\'' + a.id + '\')', '#6B7280');
-        },
-        published: function (a) {
-            return _fhMgrBtn('预览', '_fhMgrPreview(\'' + a.id + '\')', '#6B7280')
-                + _fhMgrBtn('下架到草稿箱', '_fhMgrArchive(\'' + a.id + '\')', '#6B7280');
-        },
-        rejected: function (a) {
-            return _fhMgrBtn('预览', '_fhMgrPreview(\'' + a.id + '\')', '#6B7280')
-                + _fhMgrBtn('重新编辑', '_fhMgrEdit(\'' + a.id + '\')', '#C2410C')
-                + _fhMgrBtn('下架到草稿箱', '_fhMgrArchive(\'' + a.id + '\')', '#6B7280')
-                + _fhMgrBtn('删', '_fhMgrDelete(\'' + a.id + '\')', '#DC2626');
-        },
-        archived: function (a) {
-            return _fhMgrBtn('预览', '_fhMgrPreview(\'' + a.id + '\')', '#6B7280')
-                + _fhMgrBtn('采用发布', '_fhMgrAdopt(\'' + a.id + '\',this)', '#16A34A')
-                + _fhMgrBtn('编辑', '_fhMgrEdit(\'' + a.id + '\')', '#C2410C')
-                + _fhMgrBtn('删', '_fhMgrDelete(\'' + a.id + '\')', '#DC2626');
-        }
-    };
+    if (_fhMgrTab === 'published') list.sort(function (a, b) { return ((b.publishedAt || 0) - (a.publishedAt || 0)) || (b.date || '').localeCompare(a.date || ''); });
+    else if (_fhMgrTab === 'draftbox') list.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+
+    var head = '';
+    if (_fhMgrTab === 'ai_pending' && list.length) {
+        head = '<div style="margin:10px 14px 0;padding:10px 12px;background:#FEF3C7;border-radius:10px;font-size:12px;color:#B45309;line-height:1.6;">'
+            + '📋 共 ' + list.length + ' 篇 AI 待审。发布后立即进入「已发布」并标记 ⭐ 今日精选；已有精选会自动替换。</div>';
+    }
+    var tail = '';
+    if (_fhMgrTab === 'ai_pending' && list.length) {
+        tail = '<div style="margin:12px 14px 0;"><button type="button" onclick="_fhMgrRejectAllPending(this)" style="width:100%;border:1px solid #FCA5A5;background:#FEF2F2;color:#B91C1C;font-size:13px;font-weight:700;border-radius:12px;padding:12px;cursor:pointer;">🗑️ 一键全部淘汰进草稿箱</button></div>';
+    }
     if (!list.length) {
-        listEl.innerHTML = '<div style="padding:60px 20px;text-align:center;color:#9CA3AF;font-size:13px;">暂无内容</div>';
+        listEl.innerHTML = head + _fhMgrEmptyHtml(_fhMgrTab) + tail;
         return;
     }
-    listEl.innerHTML = list.map(function (a, i) {
-        var badge = _fhMgrTab === 'draft'
-            ? (a.status === 'published' ? '<span style="font-size:11px;color:#16A34A;">✅ 已发布</span>'
-                : a.status === 'rejected' ? '<span style="font-size:11px;color:#DC2626;">❌ 已驳回</span>' : '')
-            : _fhMgrTab === 'draftbox' ? (a.status === 'archived'
-                ? '<span style="font-size:11px;color:#9CA3AF;">' + (a.publishedAt > 0 ? '📚 已归档（曾发布）' : '📚 落选草稿') + '</span>'
-                : a.status === 'pending_review' ? '<span style="font-size:11px;color:#D97706;">⏳ 审核中</span>'
-                    : '<span style="font-size:11px;color:#C2410C;">📝 草稿</span>')
-            : '';
-        var noteHtml = (a.auditNote && a.status === 'rejected')
-            ? '<div style="margin-top:4px;font-size:11px;color:#DC2626;line-height:1.5;">驳回原因：' + a.auditNote + '</div>' : '';
-        var dateHtml = _fhMgrTab !== 'draft' ? '<span style="margin-left:6px;">' + (a.date || '') + '</span>' : '';
-        var pickBadge = a.isTodayPick === true ? '<span style="font-size:11px;color:#C2410C;margin-left:6px;">⭐ 今日精选</span>' : '';
-        return '<div style="background:white;border:1px solid #F3E9DC;border-radius:12px;padding:12px 14px;margin:10px 14px 0;">'
-            + '<div style="display:flex;align-items:baseline;gap:6px;"><span style="font-size:13px;font-weight:700;color:#9CA3AF;">' + (i + 1) + '.</span>'
-            + '<span style="flex:1;font-size:14px;font-weight:600;color:#1F2937;line-height:1.5;">' + (a.title || '(无标题)') + '</span>' + pickBadge + badge + '</div>'
-            + '<div style="margin-top:4px;font-size:11px;color:#9CA3AF;">' + (a.category || '') + dateHtml + '</div>'
-            + noteHtml
-            + '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">' + btns[_fhMgrTab === 'draft' ? a.status : _fhMgrTab](a)
-            + _fhMgrBtn(a.isTodayPick === true ? '⭐ 已是今日精选' : '设为今日精选', '_fhSetTodayPick(\'' + a.id + '\')', '#C2410C')
-            + '</div></div>';
-    }).join('') + '<div style="height:14px;"></div>';
+    listEl.innerHTML = head + list.map(function (a, i) {
+        return _fhMgrCard(a, i, _fhMgrCardBtns(a));
+    }).join('') + tail + '<div style="height:16px;"></div>';
+}
+function _fhMgrEmptyHtml(tab) {
+    if (tab === 'ai_pending') return '<div style="padding:60px 20px;text-align:center;color:#9CA3AF;font-size:13px;line-height:1.9;">暂无 AI 待审文章<br><span style="font-size:11px;color:#D1D5DB;">每天凌晨自动生成；也可点底部「🔄 重新生成 3+3 篇」</span></div>';
+    if (tab === 'published') return '<div style="padding:60px 20px;text-align:center;color:#9CA3AF;font-size:13px;line-height:1.9;">暂无已发布文章<br><span style="font-size:11px;color:#D1D5DB;">在「AI待审」或「备选草稿箱」里发布后会出现在这里</span></div>';
+    return '<div style="padding:60px 20px;text-align:center;color:#9CA3AF;font-size:13px;line-height:1.9;">备选草稿箱是空的<br><span style="font-size:11px;color:#D1D5DB;">被淘汰、下架或驳回的文章都会汇集到这里</span></div>';
+}
+function _fhMgrCardBtns(a) {
+    var idArg = '\'' + a.id + '\'';
+    if (_fhMgrTab === 'ai_pending') {
+        return _fhMgrBtn('预览', '_fhMgrPreview(' + idArg + ')', '#6B7280')
+            + _fhMgrBtn('编辑', '_fhMgrEdit(' + idArg + ')', '#C2410C')
+            + _fhMgrBtn('✨ 发布并设为今日精选', '_fhMgrPublish(' + idArg + ',this,true)', '#16A34A');
+    }
+    if (_fhMgrTab === 'published') {
+        return _fhMgrBtn('预览', '_fhMgrPreview(' + idArg + ')', '#6B7280')
+            + _fhMgrBtn('编辑', '_fhMgrEdit(' + idArg + ')', '#C2410C')
+            + _fhMgrBtn('撤销下架', '_fhMgrWithdraw(' + idArg + ',this)', '#B45309');
+    }
+    return _fhMgrBtn('预览', '_fhMgrPreview(' + idArg + ')', '#6B7280')
+        + _fhMgrBtn('编辑', '_fhMgrEdit(' + idArg + ')', '#C2410C')
+        + _fhMgrBtn('🚀 直接发布', '_fhMgrPublish(' + idArg + ',this,false)', '#16A34A')
+        + _fhMgrBtn('🗑️ 彻底删除', '_fhMgrDelete(' + idArg + ')', '#DC2626');
+}
+function _fhMgrCard(a, i, btnHtml) {
+    var pick = a.isTodayPick === true;
+    var pickBadge = pick ? '<span style="position:absolute;left:0;top:0;background:linear-gradient(135deg,#F59E0B,#D97706);color:#fff;font-size:10px;font-weight:700;padding:2px 9px;border-radius:12px 0 10px 0;">⭐ 今日精选</span>' : '';
+    var statusBadge = '';
+    if (a.status === 'rejected') statusBadge = '<span style="font-size:11px;color:#DC2626;">❌ 已驳回</span>';
+    else if (a.status === 'archived') statusBadge = '<span style="font-size:11px;color:#9CA3AF;">📚 已归档</span>';
+    else if (a.status === 'pending_review') statusBadge = '<span style="font-size:11px;color:#D97706;">⏳ 审核中</span>';
+    var noteHtml = (a.auditNote && (a.status === 'rejected' || a.auditStatus === 'rejected'))
+        ? '<div style="margin-top:4px;font-size:11px;color:#DC2626;line-height:1.5;">驳回原因：' + escapeHtml(a.auditNote) + '</div>' : '';
+    var summaryHtml = a.summary
+        ? '<div style="margin-top:5px;font-size:12px;color:#6B7280;line-height:1.5;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(a.summary) + '</div>' : '';
+    return '<div style="position:relative;background:white;border:1px solid ' + (pick ? '#F59E0B' : '#F3E9DC') + ';border-radius:12px;padding:12px 14px;margin:10px 14px 0;' + (pick ? 'padding-top:20px;' : '') + '">'
+        + pickBadge
+        + '<div style="display:flex;align-items:baseline;gap:6px;"><span style="font-size:13px;font-weight:700;color:#9CA3AF;">' + (i + 1) + '.</span>'
+        + '<span style="flex:1;font-size:14px;font-weight:600;color:#1F2937;line-height:1.5;">' + escapeHtml(a.title || '(无标题)') + '</span>' + statusBadge + '</div>'
+        + '<div style="margin-top:4px;font-size:11px;color:#9CA3AF;">' + escapeHtml(a.category || '') + (a.date ? ' · ' + escapeHtml(a.date) : '') + '</div>'
+        + summaryHtml + noteHtml
+        + '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">' + btnHtml + '</div></div>';
 }
 function _fhMgrBtn(txt, fn, color) {
     return '<button type="button" onclick="' + fn + '" style="flex:1;border:1px solid #F3E9DC;background:#FAF7F2;color:' + color + ';font-size:12px;font-weight:600;border-radius:8px;padding:6px 4px;cursor:pointer;">' + txt + '</button>';
 }
 // ===== V426: 过期内容一键巡检 =====
 var _fhMgrStale = null;  // { today, currentTerm, scanned, count, items:[...] }
-
-async function _fhMgrScanStale(btn) {
-    if (btn) { btn.disabled = true; btn.textContent = '扫描中…'; }
-    try {
-        var resp = await fetch('/api/food-hall/scan-stale', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-        var out = await resp.json();
-        if (!resp.ok || !out || !out.ok) {
-            showToast && showToast((out && out.error) || '扫描失败，请稍后重试');
-            return;
-        }
-        _fhMgrStale = out;
-        _fhMgrTab = 'stale';
-        _fhMgrRender();
-        showToast && showToast('扫描完成：' + out.scanned + ' 篇已发布，发现 ' + out.count + ' 篇含过期节气');
-    } catch (e) {
-        showToast && showToast('扫描失败，请检查网络');
-    } finally {
-        if (btn) { btn.disabled = false; btn.textContent = '🧹 一键扫描过期内容'; }
-    }
-}
-
-function _fhMgrRenderStaleTab(listEl) {
-    var s = _fhMgrStale;
-    if (!s) {
-        listEl.innerHTML = '<div style="padding:56px 24px;text-align:center;color:#9CA3AF;font-size:13px;line-height:1.9;">'
-            + '还没有扫描结果<br><span style="font-size:11px;color:#D1D5DB;">点击下方「🧹 一键扫描过期内容」，<br>自动检查历史发布的文章是否还在写旧节气</span></div>';
-        return;
-    }
-    var cur = escapeHtml(s.currentTerm || '');
-    if (!s.items || !s.items.length) {
-        listEl.innerHTML = '<div style="padding:56px 24px;text-align:center;color:#16A34A;font-size:13px;line-height:1.9;">'
-            + '✅ 未发现过期内容<br><span style="font-size:11px;color:#9CA3AF;">已扫描 ' + s.scanned + ' 篇 · 当前节气：' + cur + '</span></div>';
-        return;
-    }
-    listEl.innerHTML = '<div style="margin:10px 14px 0;padding:9px 11px;background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;font-size:12px;color:#B91C1C;line-height:1.6;">'
-        + '共扫描 ' + s.scanned + ' 篇，发现 <b>' + s.items.length + '</b> 篇含过期节气（当前节气：' + cur + '）</div>'
-        + s.items.map(function (it, i) {
-            return '<div style="background:#fff;border:1px solid #FECACA;border-radius:12px;padding:12px 14px;margin:10px 14px 0;">'
-                + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
-                + '<span style="font-size:11px;font-weight:700;color:#fff;background:#DC2626;border-radius:6px;padding:1px 7px;">⚠️ 节气过期</span>'
-                + '<span style="font-size:11px;color:#9CA3AF;">' + escapeHtml(it.date || '') + ' · ' + (it.contentType === 'recipe_article' ? '寻味天下' : '饮食文章') + '</span></div>'
-                + '<div style="font-size:14px;font-weight:600;color:#1F2937;line-height:1.5;margin-top:6px;">' + escapeHtml(it.title || '(无标题)') + '</div>'
-                + '<div style="font-size:11px;color:#B91C1C;margin-top:4px;">命中旧节气：' + escapeHtml((it.hits || []).join('、')) + '</div>'
-                + '<div style="display:flex;gap:8px;margin-top:10px;">'
-                + _fhMgrBtn('预览', '_fhMgrPreviewStale(' + i + ')', '#6B7280')
-                + _fhMgrBtn('一键下架', '_fhMgrStaleUnpublish(' + i + ',this)', '#DC2626')
-                + '</div></div>';
-        }).join('') + '<div style="height:14px;"></div>';
-}
 
 function _fhMgrPreviewStale(i) {
     var it = _fhMgrStale && _fhMgrStale.items && _fhMgrStale.items[i];
@@ -36810,17 +36719,179 @@ async function _fhMgrStaleUnpublish(i, btn) {
         if (btn) { btn.disabled = false; btn.textContent = '一键下架'; }
     }
 }
+// ===== V427: 过期巡检重写——大按钮扫描，违规卡片给出修正/打入草稿箱 =====
+async function _fhMgrScanStale(btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '扫描中…'; }
+    try {
+        var resp = await fetch('/api/food-hall/scan-stale', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        var out = await resp.json();
+        if (!resp.ok || !out || !out.ok) {
+            showToast && showToast((out && out.error) || '扫描失败，请稍后重试');
+            return;
+        }
+        _fhMgrStale = out;
+        _fhMgrTab = 'stale';
+        _fhMgrRender();
+        showToast && showToast('扫描完成：' + out.scanned + ' 篇已发布，发现 ' + out.count + ' 篇违规');
+    } catch (e) {
+        showToast && showToast('扫描失败，请检查网络');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🔍 一键扫描全库违规'; }
+    }
+}
+
+function _fhMgrStaleIssues(it) {
+    var out = [];
+    var issues = (it && Array.isArray(it.issues)) ? it.issues : [];
+    issues.forEach(function (is) {
+        if (is.type === 'stale_term') out.push('⚠️ 检测到过期节气词：' + (is.words || []).join('、'));
+        else if (is.type === 'price') out.push('⚠️ 检测到价格偏离：' + (is.amount != null ? ('¥' + is.amount) : (is.text || '')) + (is.ingredient ? '（' + is.ingredient + '）' : ''));
+    });
+    if (!issues.length && it && it.hits && it.hits.length) out.push('⚠️ 检测到过期节气词：' + it.hits.join('、'));
+    return out;
+}
+
+function _fhMgrRenderStaleTab(listEl) {
+    var s = _fhMgrStale;
+    var scanBtn = '<div style="padding:12px 14px 0;"><button type="button" onclick="_fhMgrScanStale(this)" style="width:100%;border:none;background:linear-gradient(135deg,#DC2626,#B91C1C);color:#fff;font-size:15px;font-weight:700;border-radius:14px;padding:16px;cursor:pointer;box-shadow:0 4px 14px rgba(185,28,28,0.25);">🔍 一键扫描全库违规</button></div>';
+    if (!s) {
+        listEl.innerHTML = scanBtn + '<div style="padding:40px 24px;text-align:center;color:#9CA3AF;font-size:13px;line-height:1.9;">'
+            + '还没有扫描结果<br><span style="font-size:11px;color:#D1D5DB;">点击上方按钮，自动检查全库文章的过期节气与异常价格</span></div>';
+        return;
+    }
+    var cur = escapeHtml(s.currentTerm || '');
+    if (!s.items || !s.items.length) {
+        listEl.innerHTML = scanBtn + '<div style="padding:36px 24px;text-align:center;color:#16A34A;font-size:13px;line-height:1.9;">'
+            + '✅ 未发现违规内容<br><span style="font-size:11px;color:#9CA3AF;">已扫描 ' + s.scanned + ' 篇 · 当前节气：' + cur + '</span></div>';
+        return;
+    }
+    listEl.innerHTML = scanBtn
+        + '<div style="margin:10px 14px 0;padding:9px 11px;background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;font-size:12px;color:#B91C1C;line-height:1.6;">'
+        + '共扫描 ' + s.scanned + ' 篇，发现 <b>' + s.items.length + '</b> 篇违规（当前节气：' + cur + '）</div>'
+        + s.items.map(function (it, i) {
+            var warns = _fhMgrStaleIssues(it);
+            return '<div style="background:#fff;border:1px solid #FECACA;border-radius:12px;padding:12px 14px;margin:10px 14px 0;">'
+                + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+                + '<span style="font-size:11px;font-weight:700;color:#fff;background:#DC2626;border-radius:6px;padding:1px 7px;">⚠️ 违规</span>'
+                + '<span style="font-size:11px;color:#9CA3AF;">' + escapeHtml(it.date || '') + ' · ' + (it.contentType === 'recipe_article' ? '寻味天下' : '饮食文章') + '</span></div>'
+                + '<div style="font-size:14px;font-weight:600;color:#1F2937;line-height:1.5;margin-top:6px;">' + escapeHtml(it.title || '(无标题)') + '</div>'
+                + warns.map(function (w) { return '<div style="font-size:11px;color:#B91C1C;margin-top:4px;">' + escapeHtml(w) + '</div>'; }).join('')
+                + '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">'
+                + _fhMgrBtn('预览', '_fhMgrPreviewStale(' + i + ')', '#6B7280')
+                + _fhMgrBtn('修正并重新发布', '_fhMgrFixStale(' + i + ')', '#16A34A')
+                + _fhMgrBtn('打入草稿箱', '_fhMgrStaleToDraft(' + i + ',this)', '#B45309')
+                + '</div></div>';
+        }).join('') + '<div style="height:14px;"></div>';
+}
+
+function _fhEnsureLocalFromStale(it) {
+    if (!it) return null;
+    var local = it.id ? _fhGet(it.id) : null;
+    if (local) return local;
+    return _fhAdd({
+        id: it.id || undefined,
+        date: it.date || _dtTodayKey(), source: 'server', authorId: 'ai',
+        status: 'draft', isPublished: false, isTodayPick: false,
+        contentType: it.contentType || 'diet_article',
+        category: it.category || (it.contentType === 'recipe_article' ? '寻味天下' : '节气食养'),
+        title: it.title || '', summary: it.summary || '', content: it.content || '',
+        tips: it.tips || [], ingredients: it.ingredients || [], steps: it.steps || [],
+        coverImage: it.coverImage || '', imagePrompt: it.imagePrompt || '',
+        auditStatus: 'passed'
+    });
+}
+
+// 打入草稿箱：服务端撤下 + 本地落一篇 draft
+function _fhMgrStaleToDraft(i, btn) {
+    var it = _fhMgrStale && _fhMgrStale.items && _fhMgrStale.items[i];
+    if (!it) return;
+    if (btn) { btn.disabled = true; btn.textContent = '处理中…'; }
+    var local = _fhEnsureLocalFromStale(it);
+    if (local) _fhUpdate(local.id, { status: 'draft', isPublished: false, isTodayPick: false });
+    fetch('/api/food-hall/review', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: it.date || '', action: 'withdraw', contentType: it.contentType || '' })
+    }).catch(function () {});
+    _fhMgrStale.items.splice(i, 1);
+    _fhMgrStale.count = _fhMgrStale.items.length;
+    showToast && showToast('已打入备选草稿箱，线上已撤下');
+    _fhMgrRender();
+}
+
+// 修正并重新发布：打开编辑器，保存后自动审核并重新上架
+function _fhMgrFixStale(i) {
+    var it = _fhMgrStale && _fhMgrStale.items && _fhMgrStale.items[i];
+    if (!it) return;
+    var local = _fhEnsureLocalFromStale(it);
+    if (!local) { showToast && showToast('文章读取失败'); return; }
+    _fhMgrEdit(local.id);
+    _fhEdAfterSave = { type: 'fix_stale', idx: i };
+}
+
+async function _fhMgrFixStalePublish(id, idx) {
+    var it = _fhMgrStale && _fhMgrStale.items && _fhMgrStale.items[idx];
+    var a = _fhGet(id);
+    if (!a) return;
+    var btn = null;
+    try {
+        var resp = await fetch('/api/food-hall/audit', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ articleId: id, title: a.title || '', summary: a.summary || '', content: a.content || '', tips: a.tips || [], category: a.category || '' })
+        });
+        var out = await resp.json();
+        if (!out || !out.ok || !out.passed) {
+            var reason = (out && out.reason) || '内容仍未通过校验，请继续修改';
+            _fhMgrRejectModal(reason, '🚫 修正未通过', '请继续修改正文，确保不再出现过期节气或具体金额。');
+            return;
+        }
+        if (it) {
+            var selResp = await fetch('/api/food-hall/select', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    date: it.date || a.date || '', contentType: it.contentType || a.contentType || 'diet_article',
+                    articleId: it.chosenId || it.id || '', candidate: {
+                        title: a.title, summary: a.summary, content: a.content, tips: a.tips || [],
+                        ingredients: a.ingredients || [], steps: a.steps || [], category: a.category,
+                        coverImage: a.coverImage || '', imagePrompt: a.imagePrompt || ''
+                    }
+                })
+            });
+            var sel = await selResp.json();
+            if (!selResp.ok || !sel || !sel.ok) {
+                if (sel && sel.validationFailed) _fhMgrRejectModal(sel.reason || sel.error, '🚫 发布拦截', '该篇未发布：内容校验未通过，请重写后再发布。');
+                else showToast && showToast((sel && (sel.error || sel.detail)) || '重新发布失败');
+                return;
+            }
+        }
+        var isToday = (a.date === _dtTodayKey());
+        _fhUpdate(id, { status: 'published', isPublished: true, isTodayPick: isToday, auditStatus: 'passed', auditNote: '', publishedAt: Date.now() });
+        if (isToday) {
+            var all = _fhRead();
+            all.forEach(function (x) { if (x && x.id !== id && x.isTodayPick) { x.isTodayPick = false; x.updatedAt = Date.now(); } });
+            _fhWrite(all);
+        }
+        if (it && _fhMgrStale && Array.isArray(_fhMgrStale.items)) {
+            var realIdx = _fhMgrStale.items.indexOf(it);
+            if (realIdx >= 0) _fhMgrStale.items.splice(realIdx, 1);
+            _fhMgrStale.count = _fhMgrStale.items.length;
+        }
+        showToast && showToast('已修正并重新发布');
+        try { renderHomeDailyTipCard(true); } catch (e) {}
+        _fhMgrRender();
+    } catch (e) {
+        showToast && showToast('发布失败，请检查网络');
+    }
+}
 function _fhMgrPreview(id) {
     var a = _fhGet(id);
     if (a) _openDailyTipFull(a);
 }
 // [发布]：AI 合规审核 → 通过=published（同天旧发布自动下架）→ 不通过=弹出原因并转已驳回
-async function _fhMgrPublish(id, btn) {
+async function _fhMgrPublish(id, btn, asPick) {
     var a = _fhGet(id);
     if (!a) return;
+    var oldTxt = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = '审核中…'; }
-    if (!_fhTransition(id, 'pending_review')) { if (btn) { btn.disabled = false; btn.textContent = '发布'; } return; }
-    _fhMgrRender();
     try {
         var resp = await fetch('/api/food-hall/audit', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -36831,26 +36902,55 @@ async function _fhMgrPublish(id, btn) {
         var errMsgs = issues.filter(function (i) { return i.level === 'error'; }).map(function (i) { return i.message; });
         var warnMsgs = issues.filter(function (i) { return i.level === 'warning'; }).map(function (i) { return i.message; });
         if (out && out.ok && out.passed && !errMsgs.length) {
-            var sameDay = _fhRead().filter(function (x) { return x && x.status === 'published' && x.date === a.date && x.id !== id; });
-            sameDay.forEach(function (x) { _fhTransition(x.id, 'archived'); }); // 同一天只能发布 1 篇：被替换的旧发布转入素材库
-            _fhTransition(id, 'published');
-            _fhUpdate(id, { auditStatus: 'passed', auditNote: warnMsgs.length ? '提示：' + warnMsgs.join('；') : '' });
-            _dtRecordHistory(_fhGet(id)); // 自动归档到食养堂往期回顾
-            showToast && showToast(warnMsgs.length ? '已发布（' + warnMsgs[0] + '）' : '已发布');
-            try { renderHomeDailyTipCard(true); } catch (e) {} // 首页卡片立即切换为发布版
+            if (asPick) {
+                _fhSetTodayPick(id);  // 自动取消其他文章的今日精选，状态转 published
+            } else {
+                _fhUpdate(id, { status: 'published', isPublished: true, isTodayPick: false, auditStatus: 'passed', auditNote: warnMsgs.length ? '提示：' + warnMsgs.join('；') : '', publishedAt: Date.now() });
+                showToast && showToast('已发布，可在「✅ 已发布」查看');
+            }
+            try { _dtRecordHistory(_fhGet(id)); } catch (e) {}
+            try { renderHomeDailyTipCard(true); } catch (e) {}
         } else {
             var reason = errMsgs.length ? errMsgs.join('；') : ((out && out.reason) || '审核未通过');
-            _fhTransition(id, 'rejected');
-            _fhUpdate(id, { auditStatus: 'rejected', auditNote: reason });
-            // V425: 过期节气/离谱价格等内容校验未通过 → 弹窗拦截并提示重写
+            _fhUpdate(id, { auditStatus: 'rejected', auditNote: reason });  // 保留在 AI待审/草稿箱，避免文章丢失
             if (out && out.validationFailed) _fhMgrRejectModal(reason, '🚫 发布拦截', '该篇未发布：内容校验未通过，请重写或重新生成后再发布。');
             else _fhMgrRejectModal(reason);
         }
     } catch (e) {
-        _fhTransition(id, 'draft'); // 网络/服务异常：退回草稿
-        showToast && showToast('审核失败，已退回草稿');
+        showToast && showToast('审核失败，请稍后重试');
     }
+    if (btn) { btn.disabled = false; btn.textContent = oldTxt; }
     _fhMgrRender();
+}
+
+// V427: 已发布 → 撤销下架（状态回 draft，进备选草稿箱，同时通知服务端撤下）
+function _fhMgrWithdraw(id, btn) {
+    var a = _fhGet(id);
+    if (!a) return;
+    if (btn) { btn.disabled = true; btn.textContent = '下架中…'; }
+    _fhUpdate(id, { status: 'draft', isPublished: false, isTodayPick: false, publishedAt: 0 });
+    fetch('/api/food-hall/review', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: a.date || '', action: 'withdraw', contentType: a.contentType === 'recipe_article' ? 'recipe_article' : 'diet_article' })
+    }).catch(function () {});
+    showToast && showToast('已撤销下架，文章已移入备选草稿箱');
+    try { renderHomeDailyTipCard(true); } catch (e) {}
+    _fhMgrRender();
+}
+
+// V427: AI待审一键全部淘汰进草稿箱
+function _fhMgrRejectAllPending(btn) {
+    var list = _fhRead().filter(function (x) { return x && x.status === 'pending'; });
+    if (!list.length) { showToast && showToast('没有待审文章'); return; }
+    showConfirmDialog('确认把 ' + list.length + ' 篇 AI 待审全部淘汰进备选草稿箱？', function () {
+        var all = _fhRead();
+        all.forEach(function (x) {
+            if (x && x.status === 'pending') { x.status = 'draft'; x.isTodayPick = false; x.isPublished = false; x.updatedAt = Date.now(); }
+        });
+        _fhWrite(all);
+        showToast && showToast('已全部淘汰进备选草稿箱');
+        _fhMgrRender();
+    });
 }
 function _fhMgrBack(id) { _fhTransition(id, 'draft'); _fhMgrRender(); }
 // 下架/落选 → 下架到草稿箱（保留备用，随时可"采用发布"）
@@ -36895,9 +36995,11 @@ function _fhMgrRejectModal(reason, title, tip) {
 }
 // 编辑器（新编/编辑/上传导入共用）：fhEdId=null 表示新编
 var _fhEdId = null;
+var _fhEdAfterSave = null;  // V427: 保存后动作（如过期巡检「修正并重新发布」）
 var _fhEdSource = 'admin';
 function _fhMgrEdit(id) {
     _fhEdId = id || null;
+    _fhEdAfterSave = null;
     var a = id ? _fhGet(id) : null;
     _fhEdSource = a ? (a.source || 'admin') : 'admin';
     var old = document.getElementById('fhEdOv');
@@ -36978,6 +37080,11 @@ function _fhEdSave() {
     var ed = document.getElementById('fhEdOv');
     if (ed) ed.remove();
     showToast && showToast('已保存（草稿）');
+    if (_fhEdAfterSave && _fhEdAfterSave.type === 'fix_stale' && _fhEdId) {
+        var _afterIdx = _fhEdAfterSave.idx;
+        _fhEdAfterSave = null;
+        try { _fhMgrFixStalePublish(_fhEdId, _afterIdx); } catch (e) {}
+    }
     _fhMgrRender();
 }
 function _fhMgrRegen(btn) {

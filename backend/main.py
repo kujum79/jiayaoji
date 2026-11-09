@@ -2252,9 +2252,34 @@ async def food_hall_scan_stale() -> Dict[str, Any]:
             str(art.get("title") or ""), str(art.get("summary") or ""),
             str(art.get("content") or ""),
         ])
-        hits = _fh_expired_terms(blob, str(art.get("date") or today))
+        # V427: 以「今天」为基准判断是否过期（历史文章即使当时应季，今天再看也可能已过期）
+        hits = _fh_expired_terms(blob, today)
+        # V427: 除了过期节气，同时扫描「异常价格」，供前端展示具体违规原因
+        bad_prices: List[Dict[str, Any]] = []
+        for h in _fh_price_hits(blob):
+            base = h.get("base")
+            amount = h.get("amount")
+            try:
+                amount_f = float(amount)
+            except (TypeError, ValueError):
+                continue
+            if base and (amount_f > float(base) * 3 or amount_f < float(base) / 3):
+                bad_prices.append(h)
+            elif not base:
+                bad_prices.append(h)
+        issues: List[Dict[str, Any]] = []
         if hits:
-            items.append({**art, "hits": hits})
+            issues.append({"type": "stale_term", "words": hits})
+        for h in bad_prices:
+            amount_f = float(h.get("amount"))
+            amount_out: Any = int(amount_f) if amount_f.is_integer() else round(amount_f, 2)
+            issues.append({
+                "type": "price", "amount": amount_out,
+                "ingredient": h.get("ingredient") or "",
+                "base": h.get("base"), "text": h.get("text") or "",
+            })
+        if issues:
+            items.append({**art, "hits": hits, "issues": issues})
     return {
         "ok": True,
         "today": today,
