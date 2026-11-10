@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V457-20261110';
+        var APP_VER = 'V458-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -69621,13 +69621,14 @@ function _riskHit(name, kws) {
     return false;
 }
 
-// 遍历最近 7 天（含今天）的实际记录，估算盐糖脂肪与膳食纤维
-function _reviewWeekIntake() {
+// 遍历最近 N 天（含今天）的实际记录，估算盐糖脂肪与膳食纤维
+function _reviewWeekIntake(rangeDays) {
+    var range = Math.max(1, parseInt(rangeDays, 10) || 7);
     var cal = {};
     try { cal = getDietCalendar() || {}; } catch (e) { cal = {}; }
     var dishes = [], days = 0, meals = 0;
     var base = new Date();
-    for (var i = 0; i < 7; i++) {
+    for (var i = 0; i < range; i++) {
         var d = new Date(base.getFullYear(), base.getMonth(), base.getDate() - i);
         var day = cal[dateToKey(d)] || null;
         if (!day) continue;
@@ -69836,6 +69837,167 @@ function _renderReviewExpertModule() {
         '<div style="margin-top:8px;font-size:11px;color:#9CA3AF;line-height:1.6;">* 专业注册营养师团队正在入驻中，当前由高级 AI 营养模型为您服务。</div>' +
         '</div>';
 }
+
+// ==================== V458: 「深度复盘」独立看板（会员专享） ====================
+var _DR_STATE = { days: 7, ai: null, aiKey: '' };
+
+function _drRangeChips() {
+    function chip(d, label) {
+        var on = _DR_STATE.days === d;
+        return '<button type="button" onclick="_drSetDays(' + d + ')" style="padding:5px 14px;border-radius:999px;border:1px solid ' + (on ? '#F97316' : '#FED7AA') + ';background:' + (on ? '#F97316' : '#fff') + ';color:' + (on ? '#fff' : '#C2410C') + ';font-size:12px;font-weight:700;cursor:pointer;">' + label + '</button>';
+    }
+    return '<div style="display:flex;gap:8px;margin-bottom:12px;">' + chip(7, '近 7 天') + chip(30, '近 30 天') + '</div>';
+}
+window._drSetDays = function (d) { _DR_STATE.days = (parseInt(d, 10) === 30) ? 30 : 7; _drRender(); };
+
+function _drRiskItems(st) {
+    var items = [];
+    var oilPct = Math.round(st.oilRatio * 100), saltPct = Math.round(st.saltRatio * 100);
+    var vegTarget = Math.max(3, st.days * 3);
+    var tagKeys = (typeof _hmFamilyTags === 'function') ? _hmFamilyTags().map(function (t) { return t.key; }) : [];
+    if (saltPct >= 30) {
+        items.push({ lv: saltPct >= 40 ? 'red' : 'amber', title: '高盐负荷', desc: '高盐菜品 ' + st.saltCount + ' 道（' + saltPct + '%）。老人/慢病人群建议每日食盐不超过 5g，少吃腌卤酱菜。' });
+    }
+    if (oilPct >= 30) {
+        items.push({ lv: oilPct >= 40 ? 'red' : 'amber', title: '油脂偏高', desc: '高油/红烧/油炸菜品 ' + st.oilCount + ' 道（' + oilPct + '%）。长期偏高会增加体重与血脂负担。' });
+    }
+    if (st.vegCount < vegTarget) {
+        items.push({ lv: 'amber', title: '蔬菜与膳食纤维不足', desc: '蔬菜类仅 ' + st.vegCount + ' 道，目标约 ' + vegTarget + ' 道。建议每天 300–500g 蔬菜，深色蔬菜占一半。' });
+    }
+    if (tagKeys.indexOf('pregnancy') >= 0) {
+        items.push({ lv: 'amber', title: '孕期营养需重点关注', desc: '孕期建议每餐有优质蛋白（鱼禽蛋瘦肉/豆制品），并搭配富铁、富叶酸食材，忌生冷。' });
+    }
+    if (tagKeys.indexOf('child') >= 0 && st.sugarCount >= 2) {
+        items.push({ lv: 'amber', title: '儿童添加糖偏多', desc: '高糖菜品/饮品 ' + st.sugarCount + ' 道，建议用水果替代甜点与含糖饮料。' });
+    }
+    if (!items.length) {
+        items.push({ lv: 'ok', title: '暂未发现明显膳食风险', desc: '继续保持规律三餐、少油少盐、蔬菜充足。' });
+    }
+    return items;
+}
+function _drLocalAdvice(st) {
+    var out = [];
+    if (st.oilRatio >= 0.2) out.push('烹调方式换成蒸、煮、炖、凉拌，本周至少 3 天不出现红烧/油炸。');
+    if (st.saltRatio >= 0.2) out.push('少用腌卤酱菜与加工肉，用葱姜蒜、柠檬、香醋提味，每日食盐控制在 5g 内。');
+    if (st.vegCount < Math.max(3, st.days * 3)) out.push('每餐保证 1–2 拳蔬菜，深色蔬菜占一半，主食搭配杂粮。');
+    if (!out.length) out.push('保持当前结构，注意三餐规律与足量饮水。');
+    return out.slice(0, 3);
+}
+function _drMetricHtml(label, pct, color) {
+    var w = Math.max(0, Math.min(100, Math.round(pct)));
+    return '<div style="margin-top:9px;">'
+        + '<div style="display:flex;justify-content:space-between;font-size:11px;color:#6B7280;"><span>' + label + '</span><b style="color:' + color + ';">' + w + '%</b></div>'
+        + '<div style="height:6px;background:#F3F4F6;border-radius:4px;margin-top:3px;overflow:hidden;"><div style="height:100%;width:' + w + '%;background:' + color + ';border-radius:4px;"></div></div>'
+        + '</div>';
+}
+function _drRiskListHtml(st) {
+    return _drRiskItems(st).map(function (it) {
+        var c = it.lv === 'red' ? '#991B1B' : (it.lv === 'amber' ? '#92400E' : '#065F46');
+        var bg = it.lv === 'red' ? '#FEF2F2' : (it.lv === 'amber' ? '#FFFBEB' : '#ECFDF5');
+        var bd = it.lv === 'red' ? '#FCA5A5' : (it.lv === 'amber' ? '#FDE68A' : '#A7F3D0');
+        var icon = it.lv === 'ok' ? '✅ ' : '⚠️ ';
+        return '<div style="background:' + bg + ';border:1px solid ' + bd + ';border-radius:11px;padding:10px 12px;margin-top:8px;">'
+            + '<div style="font-size:13px;font-weight:800;color:' + c + ';">' + icon + escapeHtml(it.title) + '</div>'
+            + '<div style="font-size:12px;color:' + c + ';line-height:1.7;margin-top:3px;">' + escapeHtml(it.desc) + '</div>'
+            + '</div>';
+    }).join('');
+}
+function _drRender() {
+    var body = document.getElementById('drBody');
+    if (!body) return;
+    var days = _DR_STATE.days;
+    var st = _reviewWeekIntake(days);
+    if (!st.days || !st.total) {
+        body.innerHTML = _drRangeChips()
+            + '<div style="background:#fff;border-radius:14px;padding:28px 18px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.05);">'
+            + '<div style="font-size:38px;">📊</div>'
+            + '<div style="font-size:14px;font-weight:700;color:#374151;margin-top:10px;">近 ' + days + ' 天还没有实际饮食记录</div>'
+            + '<div style="font-size:12px;color:#9CA3AF;line-height:1.8;margin-top:6px;">先去食记记录三餐，系统才能生成风险预警与深度归因。</div>'
+            + '</div>';
+        return;
+    }
+    var level = _reviewRiskLevel(st);
+    var key = (getFamilyId() || 'default') + '|' + _dtTodayKey() + '|d' + days + '|' + _reviewRiskStatKey(st);
+    var ai = _reviewRiskAiCached(key);
+    if (!ai && _DR_STATE.aiKey === key) ai = _DR_STATE.ai;
+    var vegTarget = Math.max(3, st.days * 3);
+    var levelText = level === 'red' ? '高风险 · 建议尽快调整' : (level === 'yellow' ? '需关注 · 存在结构偏移' : '较均衡 · 继续保持');
+    var levelColor = level === 'red' ? '#991B1B' : (level === 'yellow' ? '#92400E' : '#065F46');
+    var levelBg = level === 'red' ? '#FEF2F2' : (level === 'yellow' ? '#FFFBEB' : '#ECFDF5');
+    var levelBd = level === 'red' ? '#FCA5A5' : (level === 'yellow' ? '#FDE68A' : '#A7F3D0');
+    var aiIssue = ai ? _reviewRiskSanitize(ai.issue) : '';
+    var aiAdvice = ai ? _reviewRiskSanitize(ai.scientificAdvice) : '';
+    var adviceList = _drLocalAdvice(st);
+    var expertRemain = (typeof _expertRemaining === 'function') ? _expertRemaining() : 0;
+    var expertBtn = expertRemain > 0
+        ? '<button type="button" onclick="_openExpertAssessPanel()" style="width:100%;padding:12px;border:none;border-radius:11px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">👨‍⚕️ 呼叫 AI 专家营养师（本月剩余 ' + expertRemain + ' 次）</button>'
+        : '<button type="button" disabled style="width:100%;padding:12px;border:none;border-radius:11px;background:#E5E7EB;color:#9CA3AF;font-size:14px;font-weight:700;cursor:not-allowed;">本月专家评估次数已用完，下月重置</button>';
+    body.innerHTML = _drRangeChips()
+        + '<div style="background:' + levelBg + ';border:1px solid ' + levelBd + ';border-radius:14px;padding:14px;">'
+        +   '<div style="font-size:15px;font-weight:800;color:' + levelColor + ';">👑 家庭健康深度复盘</div>'
+        +   '<div style="font-size:12px;color:' + levelColor + ';font-weight:700;margin-top:4px;">' + levelText + '</div>'
+        +   '<div style="font-size:11px;color:#6B7280;margin-top:3px;">近 ' + days + ' 天有记录 ' + st.days + ' 天 · ' + st.meals + ' 餐 · ' + st.total + ' 道菜</div>'
+        +   '<div style="margin-top:6px;">'
+        +     _drMetricHtml('高油菜品占比', st.oilRatio * 100, '#EA580C')
+        +     _drMetricHtml('高盐菜品占比', st.saltRatio * 100, '#B45309')
+        +     _drMetricHtml('高糖菜品占比', st.sugarRatio * 100, '#BE185D')
+        +     _drMetricHtml('蔬菜达标率', Math.min(100, st.vegCount / vegTarget * 100), '#16A34A')
+        +   '</div>'
+        + '</div>'
+        + '<div style="font-size:14px;font-weight:800;color:#C2410C;margin:14px 0 6px;">⚠️ 治未病风险预警</div>'
+        + _drRiskListHtml(st)
+        + '<div style="font-size:14px;font-weight:800;color:#C2410C;margin:14px 0 6px;">🧠 AI 归因与改进建议</div>'
+        + '<div style="background:#fff;border-radius:12px;padding:12px 14px;box-shadow:0 2px 8px rgba(0,0,0,.05);">'
+        +   (aiIssue ? '<div style="font-size:13px;font-weight:700;color:#92400E;margin-bottom:4px;">' + escapeHtml(aiIssue) + '</div>' : '')
+        +   '<div style="font-size:12px;color:#4B5563;line-height:1.8;">' + escapeHtml(aiAdvice || 'AI 正在根据近 ' + days + ' 天饮食结构生成归因，请稍候；以下为本地规则给出的可执行建议。') + '</div>'
+        +   '<div style="margin-top:8px;font-size:12px;color:#374151;line-height:1.9;">' + adviceList.map(function (a, i) { return '<div>' + (i + 1) + '. ' + escapeHtml(a) + '</div>'; }).join('') + '</div>'
+        + '</div>'
+        + '<div style="font-size:14px;font-weight:800;color:#C2410C;margin:14px 0 6px;">👨‍⚕️ 深度定制与纠偏</div>'
+        + '<div style="background:#fff;border-radius:12px;padding:12px 14px;box-shadow:0 2px 8px rgba(0,0,0,.05);">'
+        +   '<div style="font-size:12px;color:#6B7280;line-height:1.75;margin-bottom:9px;">如有慢病老人，或需要针对体检指标（如高尿酸、脂肪肝）严格配餐，可呼叫 AI 专家营养师 1 对 1 评估。</div>'
+        +   expertBtn
+        + '</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;line-height:1.7;margin:12px 2px 4px;">* 本报告基于家庭饮食记录自动生成，仅供膳食参考，不构成疾病诊断或治疗建议；如有指标异常请遵医嘱复查。</div>';
+    if (!ai) {
+        _reviewRiskFetchAI(st, key).then(function (data) {
+            if (!data) return;
+            var el = document.getElementById('drBody');
+            var sc = el ? el.scrollTop : 0;
+            _DR_STATE.aiKey = key;
+            _DR_STATE.ai = data;
+            _drRender();
+            el = document.getElementById('drBody');
+            if (el) el.scrollTop = sc;
+        });
+    }
+}
+function openDeepReviewBoard() {
+    closeDeepReviewBoard();
+    if (typeof isFoodMember !== 'function' || !isFoodMember()) {
+        _fhShowPaywall('🔒 家庭健康深度复盘为食养会员专享');
+        return;
+    }
+    var overlay = document.createElement('div');
+    overlay.id = 'deepReviewOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:6200;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = '<div style="width:min(430px,100%);height:100%;max-height:900px;background:#FFF7ED;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);">'
+        + '<div style="flex-shrink:0;padding:14px 16px;background:#fff;border-bottom:1px solid #FED7AA;display:flex;align-items:center;gap:8px;">'
+        +   '<div style="font-size:16px;font-weight:800;color:#C2410C;">👑 深度复盘</div>'
+        +   '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
+        +   '<button type="button" onclick="closeDeepReviewBoard()" style="margin-left:auto;width:30px;height:30px;border-radius:15px;border:none;background:#FFF7ED;color:#C2410C;font-size:16px;cursor:pointer;">✕</button>'
+        + '</div>'
+        + '<div id="drBody" style="flex:1;overflow-y:auto;padding:14px;"></div>'
+        + '</div>';
+    document.body.appendChild(overlay);
+    _drRender();
+}
+window.openDeepReviewBoard = openDeepReviewBoard;
+function closeDeepReviewBoard() {
+    var el = document.getElementById('deepReviewOverlay');
+    if (el) el.remove();
+}
+window.closeDeepReviewBoard = closeDeepReviewBoard;
+
 
 // ====== V225: AI 专家评估（每月 1 次；数据模型为未来接入真人预留 channel 字段） ======
 var _EXPERT_MONTHLY_FREE = 1;
@@ -78145,6 +78307,37 @@ function _hmAutoPlanCardHtml() {
         +   '<div style="font-size:11px;color:#6B7280;margin-top:8px;">今日调理重点：<b style="color:#C2410C;">' + escapeHtml(ap.themes[0]) + '</b></div>'
         + '</div></div>';
 }
+// V458: 健康管家内的「深度复盘」会员卡片（数据与独立看板共用 _reviewWeekIntake）
+function _hmDeepReviewCardHtml() {
+    var st = _reviewWeekIntake(7);
+    var level = _reviewRiskLevel(st);
+    var oilPct = Math.round(st.oilRatio * 100), saltPct = Math.round(st.saltRatio * 100);
+    var levelText = level === 'red' ? '高风险' : (level === 'yellow' ? '需关注' : '较均衡');
+    var levelColor = level === 'red' ? '#FCA5A5' : (level === 'yellow' ? '#FCD34D' : '#6EE7B7');
+    var summary = (st.days && st.total)
+        ? ('近 7 天 · ' + st.days + ' 天 · ' + st.total + ' 道菜')
+        : '近 7 天暂无实际饮食记录';
+    var metrics = (st.days && st.total)
+        ? '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">'
+            + '<span style="font-size:10px;color:#FDBA74;background:rgba(249,115,22,.16);border:1px solid rgba(249,115,22,.4);border-radius:8px;padding:2px 7px;">高油 ' + oilPct + '%</span>'
+            + '<span style="font-size:10px;color:#FDBA74;background:rgba(249,115,22,.16);border:1px solid rgba(249,115,22,.4);border-radius:8px;padding:2px 7px;">高盐 ' + saltPct + '%</span>'
+            + '<span style="font-size:10px;color:#86EFAC;background:rgba(22,163,74,.16);border:1px solid rgba(22,163,74,.4);border-radius:8px;padding:2px 7px;">蔬菜 ' + st.vegCount + ' 道</span>'
+            + '</div>'
+        : '';
+    return '<div style="padding:0 14px 12px;">'
+        + '<div style="background:linear-gradient(135deg,#1F2937,#111827);border-radius:14px;padding:14px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.18);">'
+        +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+        +     '<div style="font-size:15px;font-weight:800;">👑 深度复盘</div>'
+        +     '<span style="font-size:10px;color:#FDBA74;background:rgba(249,115,22,.16);border:1px solid rgba(249,115,22,.4);border-radius:8px;padding:1px 6px;">会员专享</span>'
+        +     '<span style="margin-left:auto;font-size:11px;font-weight:800;color:' + levelColor + ';">' + levelText + '</span>'
+        +   '</div>'
+        +   '<div style="font-size:12px;color:#D1D5DB;margin-top:6px;line-height:1.7;">把近 7 天饮食变成治未病风险预警与可执行建议，含 AI 归因与专家评估。</div>'
+        +   '<div style="font-size:11px;color:#FCD34D;margin-top:4px;">' + summary + '</div>'
+        +   metrics
+        +   '<button type="button" onclick="openDeepReviewBoard()" style="width:100%;margin-top:10px;padding:11px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">查看完整深度复盘 →</button>'
+        + '</div></div>';
+}
+
 // 专项计划：计算今天处于第几天、共几天、今日三餐
 function _hmPlanDayInfo(plan) {
     var start = _spParseDate(plan && plan.startDate) || new Date();
@@ -78389,7 +78582,7 @@ function openSpecialPlanBoard() {
         + '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">健康管家</span>'
         + (plan ? '<button type="button" id="spBoardEndBtn" style="margin-left:auto;padding:6px 10px;border:1px solid #FED7AA;border-radius:10px;background:#fff;color:#C2410C;font-size:12px;cursor:pointer;">结束计划</button>' : '')
         + '</div>'
-        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:14px;">' + bodyHtml + _hmAdviceCardHtml() + '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' + _hmAutoPlanCardHtml() + seasonCardHtml + gutCardHtml + '</div>';
+        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:14px;">' + bodyHtml + _hmAdviceCardHtml() + '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' + _hmDeepReviewCardHtml() + _hmAutoPlanCardHtml() + seasonCardHtml + gutCardHtml + '</div>';
 
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
