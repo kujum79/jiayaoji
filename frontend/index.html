@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V453-20261110';
+        var APP_VER = 'V454-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -36743,6 +36743,30 @@ function _fhMgrStaleIssues(it) {
     return out;
 }
 
+// V454: 巡检卡片「AI 重写」——按当前节气重新生成该篇，服务端仍逐篇审核后才覆盖
+async function _fhMgrAIRewrite(i, btn) {
+    var it = _fhMgrStale && _fhMgrStale.items && _fhMgrStale.items[i];
+    if (!it) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'AI 重写中…（约 30 秒，请勿关闭）'; }
+    try {
+        var resp = await fetch('/api/food-hall/rewrite-article', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: it.date || '', contentType: it.contentType || '', id: it.id || '' })
+        });
+        var out = await resp.json();
+        if (!resp.ok || !out || !out.ok) {
+            showToast && showToast((out && (out.error || out.detail)) || 'AI 重写失败');
+            if (btn) { btn.disabled = false; btn.textContent = '🤖 AI 重写（按当前节气重新生成）'; }
+            return;
+        }
+        showToast && showToast('✅ 已重写并通过审核：' + (out.title || ''));
+        await _fhMgrScanStale(null);
+    } catch (e) {
+        showToast && showToast('AI 重写失败，请检查网络');
+        if (btn) { btn.disabled = false; btn.textContent = '🤖 AI 重写（按当前节气重新生成）'; }
+    }
+}
+
 function _fhMgrRenderStaleTab(listEl) {
     var s = _fhMgrStale;
     var scanBtn = '<div style="padding:12px 14px 0;"><button type="button" onclick="_fhMgrScanStale(this)" style="width:100%;border:none;background:linear-gradient(135deg,#DC2626,#B91C1C);color:#fff;font-size:15px;font-weight:700;border-radius:14px;padding:16px;cursor:pointer;box-shadow:0 4px 14px rgba(185,28,28,0.25);">🔍 一键扫描全库违规</button></div>';
@@ -36768,7 +36792,8 @@ function _fhMgrRenderStaleTab(listEl) {
                 + '<span style="font-size:11px;color:#9CA3AF;">' + escapeHtml(it.date || '') + ' · ' + (it.contentType === 'recipe_article' ? '寻味天下' : '饮食文章') + '</span></div>'
                 + '<div style="font-size:14px;font-weight:600;color:#1F2937;line-height:1.5;margin-top:6px;">' + escapeHtml(it.title || '(无标题)') + '</div>'
                 + warns.map(function (w) { return '<div style="font-size:11px;color:#B91C1C;margin-top:4px;">' + escapeHtml(w) + '</div>'; }).join('')
-                + '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">'
+                + '<button type="button" onclick="_fhMgrAIRewrite(' + i + ',this)" style="margin-top:10px;width:100%;border:none;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff;font-size:13px;font-weight:700;border-radius:10px;padding:9px;cursor:pointer;">🤖 AI 重写（按当前节气重新生成）</button>'
+                + '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">'
                 + _fhMgrBtn('预览', '_fhMgrPreviewStale(' + i + ')', '#6B7280')
                 + _fhMgrBtn('修正并重新发布', '_fhMgrFixStale(' + i + ')', '#16A34A')
                 + _fhMgrBtn('打入草稿箱', '_fhMgrStaleToDraft(' + i + ',this)', '#B45309')

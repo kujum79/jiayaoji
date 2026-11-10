@@ -2382,6 +2382,85 @@ async def food_hall_scan_stale() -> Dict[str, Any]:
     }
 
 
+class FoodHallRewriteRequest(BaseModel):
+    date: str = ""
+    contentType: str = ""
+    id: str = ""
+
+
+@app.post("/api/food-hall/rewrite-article", include_in_schema=False)
+async def food_hall_rewrite_article(req: FoodHallRewriteRequest) -> Dict[str, Any]:
+    """V454: 过期巡检「AI 重写」——按当前节气重新生成该篇并原地覆盖，生成后仍逐篇合规审核。"""
+    ct = req.contentType if req.contentType in _FH_CONTENT_TYPES else "diet_article"
+    pub_date = (req.date or "").strip() or _date_cls.today().strftime("%Y-%m-%d")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", pub_date):
+        raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
+    today = _date_cls.today().strftime("%Y-%m-%d")
+    term = _fh_current_term(today) or _fh_solar_term(today)
+    try:
+        drafts, violations, regenerated = await _foodhall_generate_core(today, "", term, {}, ct)
+    except HTTPException as exc:
+        return {"ok": False, "error": str(exc.detail or "AI 生成失败")}
+
+    audited: List[Dict[str, Any]] = []
+    for d in drafts:
+        audit = await _foodhall_audit_core(
+            d.get("title", ""), d.get("summary", ""), d.get("content", ""),
+            d.get("tips", []), d.get("category", ""), today,
+        )
+        audited.append({**d, "audit": audit})
+    passed = [a for a in audited if (a.get("audit") or {}).get("passed")]
+    if not passed:
+        reason = ""
+        for a in audited:
+            reason = (a.get("audit") or {}).get("reason") or reason
+        return {"ok": False, "error": "AI 重写未通过合规审核" + (("：" + str(reason)) if reason else "，请稍后重试"),
+                "candidates": len(audited)}
+    chosen = max(passed, key=lambda a: _fh_pick_score(a, [], 0, ct == "recipe_article"))
+
+    # 保留原行的上线状态；没有状态的老数据按已确认处理
+    keep_status = "confirmed"
+    try:
+        with _fh_db() as conn:
+            cur = conn.execute(
+                "SELECT review_status FROM food_hall_pub_days WHERE publish_date=? AND content_type=?",
+                (pub_date, ct),
+            ).fetchone()
+            if cur and (cur["review_status"] or "").strip():
+                keep_status = (cur["review_status"] or "").strip()
+    except Exception:
+        pass
+
+    now_iso = _dt_cls.now().strftime("%Y-%m-%d %H:%M:%S")
+    note = f"AI 重写：{term}；候选{len(audited)}篇、通过{len(passed)}篇" + ("，触发重试" if regenerated else "")
+    try:
+        with _fh_db() as conn:
+            conn.execute(
+                """
+                UPDATE food_hall_pub_days SET category=?, title=?, summary=?, content=?, tips=?,
+                  related='[]', ingredients=?, steps=?, dishes=?, cover_image=?, image_prompt=?,
+                  drafts=?, chosen_id=?, auto_published=1, review_status=?, run_note=?, updated_at=?
+                WHERE publish_date=? AND content_type=?
+                """,
+                (chosen.get("category", ""), chosen.get("title", ""), chosen.get("summary", ""),
+                 chosen.get("content", ""), json.dumps(chosen.get("tips", []), ensure_ascii=False),
+                 json.dumps(chosen.get("ingredients", []), ensure_ascii=False),
+                 json.dumps(chosen.get("steps", []), ensure_ascii=False),
+                 json.dumps(chosen.get("dishes", []), ensure_ascii=False),
+                 chosen.get("coverImage", ""), chosen.get("imagePrompt", ""),
+                 json.dumps(audited, ensure_ascii=False), chosen.get("id", ""),
+                 keep_status, note, now_iso, pub_date, ct),
+            )
+    except Exception as exc:
+        return {"ok": False, "error": f"重写入库失败：{exc}"}
+
+    if violations:
+        note += f"；禁词提示{len(violations)}处"
+    return {"ok": True, "date": pub_date, "contentType": ct, "solarTerm": term,
+            "title": chosen.get("title", ""), "audited": len(audited),
+            "passed": len(passed), "note": note}
+
+
 class FoodHallReviewRequest(BaseModel):
     date: str
     action: str = ""  # confirm 确认保留 | withdraw 撤回换篇
