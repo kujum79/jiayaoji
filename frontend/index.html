@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V461-20261110';
+        var APP_VER = 'V462-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -30827,6 +30827,9 @@ async function runDiaryMealAudit(dateKey, mealKey, btnEl) {
         try { if (typeof renderDiary === 'function') renderDiary(); } catch (e) {}
         try { if (typeof renderHomeDiaryCard === 'function') renderHomeDiaryCard(); } catch (e) {}
         if (typeof showToast === 'function') showToast('审核未返回评分，请稍后点击「AI 审核」重试');
+    } else {
+        // V462: 审核成功后直接打开报告，展示合规检查与「一键修改」
+        try { openDiaryAuditReport(mealKey); } catch (e) {}
     }
 }
 
@@ -31086,6 +31089,8 @@ function renderDiaryAuditReportBody() {
         html += '<div style="text-align:center;color:#9CA3AF;font-size:12px;padding:14px;">本餐暂无菜品审核明细</div>';
     }
     // ⑤ V109: 价格审核（数据驱动）——每道菜在家成本 vs 外卖参考价 + 合计/人均/省 + 结论徽章
+    // V462: 先给出菜品数量/结构/价格合规检查，并提供一键修改
+    try { html += _renderDiaryComplianceAudit(dk, meal); } catch (eC) { console.warn('[审核报告] 合规检查渲染失败:', eC); }
     // V119f: 子渲染独立兜底——省钱计算器数据异常不再阻塞整份报告
     try {
         var priceHtml = _renderDiaryPriceAudit(dk, meal);
@@ -31095,6 +31100,159 @@ function renderDiaryAuditReportBody() {
     try { html += _renderDiaryFeedbackSection(); } catch (eFb) { console.warn('[审核报告] 反馈区渲染失败:', eFb); }
     body.innerHTML = html;
 }
+
+// ==================== 🧾 V462: 餐单合规检查 + 一键修改 ====================
+function _diaryMealPlanOpts(dateKey, meal) {
+    var day = (typeof getDietCalendar === 'function') ? (getDietCalendar()[dateKey] || null) : null;
+    var slot = day && day[meal];
+    return (slot && slot.plan) ? slot.plan : null;
+}
+function _diaryMealCompliance(dateKey, meal) {
+    var plan = _diaryMealPlanOpts(dateKey, meal);
+    var raw = (plan && Array.isArray(plan.dishes)) ? plan.dishes : [];
+    var dishes = raw.map(function (d) {
+        if (typeof d === 'string') return d;
+        return String((d && (d.name || d.dish)) || '');
+    }).filter(Boolean);
+    var people = 2;
+    try {
+        var mem = (typeof getDiaryDiningMembersInfo === 'function') ? getDiaryDiningMembersInfo() : null;
+        if (Array.isArray(mem) && mem.length) people = mem.length;
+    } catch (e) {}
+    if (plan && plan.servings) people = parseInt(plan.servings, 10) || people;
+    var minDishes = people >= 3 ? 3 : Math.max(1, Math.min(2, people));
+    var issues = [];
+    if (dishes.length < minDishes) {
+        issues.push({ lv: 'warn', title: '菜品数量不足', desc: people + ' 人用餐建议至少 ' + minDishes + ' 道，目前只有 ' + dishes.length + ' 道。' });
+    }
+    var hasStaple = dishes.some(function (n) { return /(饭|面|粥|糊|馒头|包|饺|粉|米线|饼|玉米|山药|南瓜|土豆|红薯)/.test(n); });
+    var hasVeg = dishes.some(function (n) { return !!_hmVegKey(n); });
+    var hasProtein = dishes.some(function (n) { return /(肉|鱼|虾|蛋|鸡|鸭|牛|羊|猪|豆腐|豆干|豆浆|排骨|海鲜|贝|蟹)/.test(n); });
+    if (dishes.length && !hasStaple) issues.push({ lv: 'warn', title: '缺少主食', desc: '建议补充米饭、杂粮饭、面或粥，避免只吃菜和汤。' });
+    if (dishes.length && !hasVeg) issues.push({ lv: 'warn', title: '缺少蔬菜', desc: '建议至少增加 1 道深色蔬菜，保证膳食纤维。' });
+    if (dishes.length && !hasProtein) issues.push({ lv: 'info', title: '优质蛋白偏少', desc: '可加鱼、蛋、瘦肉或豆制品，提升饱腹感与营养。' });
+    var liquidN = dishes.filter(function (n) { return /(粥|糊|羹|汤|面)$/.test(n); }).length;
+    if (liquidN > 1) issues.push({ lv: 'warn', title: '汤/粥/羹/面重复', desc: '同一餐最多 1 道，目前有 ' + liquidN + ' 道。' });
+    var seen = {}, dup = [];
+    dishes.forEach(function (n) { if (seen[n]) { if (dup.indexOf(n) < 0) dup.push(n); } seen[n] = 1; });
+    if (dup.length) issues.push({ lv: 'warn', title: '菜品重复', desc: dup.join('、') + ' 重复出现。' });
+    var vegSeen = {}, vegDup = [];
+    dishes.forEach(function (n) {
+        var v = _hmVegKey(n);
+        if (!v) return;
+        if (vegSeen[v]) { if (vegDup.indexOf(v) < 0) vegDup.push(v); }
+        vegSeen[v] = 1;
+    });
+    if (vegDup.length) issues.push({ lv: 'info', title: '蔬菜主食材重复', desc: vegDup.join('、') + ' 在一餐中重复，建议换一种蔬菜。' });
+    var avgCost = 0, hasPrice = false;
+    try {
+        if (typeof calcDishSaving === 'function') {
+            var tier = (typeof _getCityPriceTier === 'function') ? _getCityPriceTier() : { ingMul: 1 };
+            var sumHome = 0;
+            dishes.forEach(function (n) {
+                var s = calcDishSaving(n, people);
+                if (s && s.home) { sumHome += s.home * (tier.ingMul || 1); hasPrice = true; }
+            });
+            if (hasPrice && people > 0) avgCost = sumHome / people;
+        }
+    } catch (e) {}
+    if (hasPrice) {
+        if (avgCost > 40) issues.push({ lv: 'warn', title: '人均成本偏高', desc: '本餐在家成本约 ¥' + Math.round(avgCost) + '/人，建议用当季平价食材替换高价食材。' });
+        else if (avgCost > 25) issues.push({ lv: 'info', title: '人均成本略高', desc: '本餐在家成本约 ¥' + Math.round(avgCost) + '/人，可适当精简。' });
+    }
+    return { plan: plan, dishes: dishes, people: people, minDishes: minDishes, issues: issues, avgCost: Math.round(avgCost), hasPrice: hasPrice };
+}
+function _renderDiaryComplianceAudit(dateKey, meal) {
+    var r = null;
+    try { r = _diaryMealCompliance(dateKey, meal); } catch (e) { return ''; }
+    if (!r || !r.dishes.length) return '';
+    var warnN = r.issues.filter(function (x) { return x.lv === 'warn'; }).length;
+    var html = '<div style="font-size:13px;font-weight:700;color:#374151;margin:12px 0 6px;">🧾 合规检查 · 菜品数量 / 结构 / 价格</div>';
+    html += '<div style="background:#fff;border:1px solid #F3F4F6;border-radius:10px;padding:10px 12px;">'
+        + '<div style="font-size:11px;color:#6B7280;margin-bottom:6px;">' + r.dishes.length + ' 道菜 · ' + r.people + ' 人用餐' + (r.hasPrice ? ' · 在家人均约 ¥' + r.avgCost : '') + '</div>';
+    if (!r.issues.length) {
+        html += '<div style="font-size:12px;color:#166534;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:7px 10px;">✅ 菜品数量、结构与价格均合规，可放心采纳。</div>';
+    } else {
+        html += r.issues.map(function (it) {
+            var c = it.lv === 'warn' ? '#92400E' : '#1E40AF';
+            var bg = it.lv === 'warn' ? '#FFFBEB' : '#EFF6FF';
+            var bd = it.lv === 'warn' ? '#FDE68A' : '#BFDBFE';
+            return '<div style="background:' + bg + ';border:1px solid ' + bd + ';border-radius:8px;padding:6px 10px;margin-bottom:5px;">'
+                + '<div style="font-size:12px;font-weight:700;color:' + c + ';">' + (it.lv === 'warn' ? '⚠️ ' : 'ℹ️ ') + escapeHtml(it.title) + '</div>'
+                + '<div style="font-size:11px;color:' + c + ';line-height:1.6;margin-top:2px;">' + escapeHtml(it.desc) + '</div>'
+                + '</div>';
+        }).join('');
+        html += '<button type="button" onclick="fixDiaryMealByAI(\'' + dateKey + '\',\'' + meal + '\',this)" style="width:100%;margin-top:4px;padding:10px;border:none;border-radius:9px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:13px;font-weight:800;cursor:pointer;">🪄 一键修改不合理项' + (warnN ? '（' + warnN + ' 项待修）' : '') + '</button>';
+    }
+    html += '</div>';
+    return html;
+}
+function _parseJsonAny(text) {
+    var t = String(text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+    var s = t.indexOf('{'), e = t.lastIndexOf('}');
+    if (s < 0 || e <= s) return null;
+    try { return JSON.parse(t.slice(s, e + 1)); } catch (err) { return null; }
+}
+window.fixDiaryMealByAI = function (dateKey, meal, btnEl) {
+    var r = null;
+    try { r = _diaryMealCompliance(dateKey, meal); } catch (e) {}
+    if (!r || !r.dishes.length) { if (typeof showToast === 'function') showToast('本餐还没有可修改的食谱'); return; }
+    if (btnEl) { btnEl.innerHTML = 'AI 修正中…'; btnEl.style.pointerEvents = 'none'; btnEl.style.opacity = '0.7'; }
+    var mealLabel = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' }[meal] || '这一餐';
+    var tagLabels = '';
+    try { tagLabels = _hmFamilyTags().map(function (t) { return t.label; }).join('、'); } catch (e) {}
+    var issuesText = r.issues.map(function (it) { return it.title + '：' + it.desc; }).join('\n');
+    var systemPrompt = '你是家肴记的AI营养师兼餐单审核员。请在不改变用户用餐场景的前提下，修正不合规菜品，严格返回JSON，不要markdown代码块。';
+    var userPrompt = '请修正以下' + mealLabel + '食谱：\n'
+        + '【现有菜品】' + r.dishes.join('、') + '\n'
+        + '【用餐人数】' + r.people + ' 人\n'
+        + (tagLabels ? '【家庭标签】' + tagLabels + '\n' : '')
+        + '【需要修正的问题】\n' + issuesText + '\n\n'
+        + '【修正要求】\n'
+        + '1. 保留原本合理的菜品，只替换或补充不合理项；\n'
+        + '2. 每人至少 1 道菜，' + r.people + ' 人用餐至少 ' + r.minDishes + ' 道；\n'
+        + '3. 结构完整：1 道主食 + 1 道汤/粥（最多 1 道）+ 1 道蔬菜，可有 1 道优质蛋白；\n'
+        + '4. 同一餐不重复同一道菜或同一蔬菜主食材；\n'
+        + '5. 剔除家庭禁忌与过敏原，老人/慢病软烂低盐，孕妇忌生冷；\n'
+        + '6. 使用当季、平价、易买食材，控制人均成本不超过 40 元。\n\n'
+        + '严格按 JSON 返回：{"dishes":[{"name":"菜名","tag":"一句话说明"}],"summary":"修正说明"}';
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 60000);
+    fetch(API_BASE + '/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system_prompt: systemPrompt, user_prompt: userPrompt, max_tokens: 1200, json_mode: true, task_type: 'meal_fix', meal_scene: meal }),
+        signal: controller.signal
+    }).then(function (res) { return res.ok ? res.json() : null; }).then(function (result) {
+        var reply = '';
+        if (result && result.response) reply = result.response;
+        else if (result && result.choices && result.choices[0] && result.choices[0].message) reply = result.choices[0].message.content;
+        var parsed = _parseJsonAny(reply);
+        var arr = (parsed && Array.isArray(parsed.dishes)) ? parsed.dishes : null;
+        if (!arr || !arr.length) throw new Error('AI 未返回可用的修正食谱');
+        var fixed = arr.map(function (d) {
+            if (typeof d === 'string') return { name: d, tag: '' };
+            return { name: String((d && d.name) || '').trim(), tag: String((d && d.tag) || '').trim() };
+        }).filter(function (d) { return d.name; });
+        if (!fixed.length) throw new Error('AI 返回的菜名为空');
+        var opts = {};
+        if (r.plan) Object.keys(r.plan).forEach(function (k) { opts[k] = r.plan[k]; });
+        opts.dishes = fixed;
+        opts.note = String((r.plan && r.plan.note) || '') + ' · AI合规修正';
+        if (typeof updateMealPlan === 'function') updateMealPlan(dateKey, meal, opts);
+        if (typeof showToast === 'function') showToast('已按 AI 审核建议修改本餐，共 ' + fixed.length + ' 道菜');
+        try {
+            if (typeof _auditPlanAndSaveRecord === 'function') _auditPlanAndSaveRecord(dateKey, meal, true).then(function () {
+                if (typeof renderDiaryAuditReportBody === 'function') renderDiaryAuditReportBody();
+            });
+        } catch (e) {}
+        try { if (typeof renderDiary === 'function') renderDiary(); } catch (e) {}
+        try { if (typeof renderHomeDiaryCard === 'function') renderHomeDiaryCard(); } catch (e) {}
+    }).catch(function (err) {
+        if (typeof showToast === 'function') showToast('一键修改失败：' + ((err && err.message) || '请稍后重试'));
+        if (btnEl) { btnEl.innerHTML = '🪄 一键修改不合理项'; btnEl.style.pointerEvents = ''; btnEl.style.opacity = '1'; }
+    }).then(function () { clearTimeout(timer); });
+};
 
 // ==================== 💰 价格审核（V109：报告页数据驱动的成本明细；V110：城市物价系数）====================
 // 用省钱计算器的真实数据（配方食材成本 / 外卖参考价）审核每道菜价格：
