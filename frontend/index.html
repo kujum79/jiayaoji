@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V465-20261110';
+        var APP_VER = 'V466-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78924,6 +78924,8 @@ window.renderHomeHealthButlerCard = function () {
     try { member = (typeof isFoodMember === 'function') && isFoodMember(); } catch (e) {}
     var tip = '';
     try { tip = _hmTodayAdviceText(); } catch (e) { tip = '立冬时节，注意保暖，饮食宜温润。'; }
+    // V466: 首页仅展示两行，节气文案统一为「立冬节气，…」
+    tip = String(tip || '').replace(/^今日([^，,]+)[，,]/, '$1节气，');
     var care = member ? _careActive() : null;
     if (!member) {
         el.innerHTML = '<div style="flex-shrink:0;text-align:left;line-height:1.25;">'
@@ -78937,7 +78939,7 @@ window.renderHomeHealthButlerCard = function () {
     el.innerHTML = '<div style="flex-shrink:0;text-align:left;line-height:1.25;">'
         + '<div style="font-size:12px;font-weight:700;color:#92400E;">您的专属</div>'
         + '<div style="font-size:17px;font-weight:900;color:#7C2D12;">健康管家</div></div>'
-        + '<div style="flex:1;min-width:0;"><div style="font-size:11px;color:#92400E;line-height:1.55;">' + escapeHtml(tip) + '</div>'
+        + '<div style="flex:1;min-width:0;"><div style="font-size:11px;color:#92400E;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(tip) + '</div>'
         + (care ? '<div style="font-size:11px;color:#C2410C;font-weight:700;margin-top:4px;">今日特供：' + escapeHtml((care.dish && care.dish.name) || '') + '（' + escapeHtml(care.memberName) + '）</div>' : '')
         + '</div><span style="flex-shrink:0;font-size:12px;font-weight:800;color:#C2410C;">进入 ›</span>';
 };
