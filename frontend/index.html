@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V448-20261109';
+        var APP_VER = 'V449-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -41720,7 +41720,8 @@ function renderMyWorksList() {
     // V418: 草稿箱（AI 夸夸一键存入，补全食材/步骤后可发布）
     if (window.__mwTab === 'drafts') {
         var drafts = _getChefWorks().filter(function (w) {
-            return w && w.status === 'draft' && (w.authorId ? w.authorId === curKey : true);
+            // V449: 草稿箱不再按操作人过滤——切换"当前操作人"后自己的草稿会凭空消失，比串号更糟
+            return w && w.status === 'draft';
         }).sort(function (a, b) { return (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0); });
         body.innerHTML = drafts.length ? drafts.map(function (w) {
             var wid = escapeHtml(String(w.id));
@@ -41744,7 +41745,7 @@ function renderMyWorksList() {
                 + '<button onclick="_mwOpenDraftEdit(\'' + wid + '\')" style="flex:1;padding:6px 0;background:#FFF7ED;border:1px solid #FED7AA;color:#C2410C;border-radius:10px;font-size:12px;cursor:pointer;">补充并发布</button>'
                 + '<button onclick="_mwDelDraft(\'' + wid + '\')" style="flex:1;padding:6px 0;background:#FEF2F2;border:1px solid #FECACA;color:#DC2626;border-radius:10px;font-size:12px;cursor:pointer;">删除</button>'
                 + '</div></div>';
-        }).join('') : '<div style="text-align:center;padding:50px 20px;color:#9CA3AF;"><div style="font-size:40px;margin-bottom:10px;">📦</div><div style="font-size:14px;">草稿箱是空的</div><div style="font-size:12px;margin-top:4px;">记录美食后，在 AI 夸夸弹窗点「🚀 发到我的创作」</div></div>';
+        }).join('') : '<div style="text-align:center;padding:50px 20px;color:#9CA3AF;"><div style="font-size:40px;margin-bottom:10px;">📦</div><div style="font-size:14px;">草稿箱是空的</div><div style="font-size:12px;margin-top:4px;">记录一餐后点「📸 生成海报」会自动存入这里</div></div>';
         return;
     }
     // V87: 只显示当前操作人发布的作品（旧数据无 authorId 视为当前用户），按发布时间倒序
@@ -44919,6 +44920,7 @@ function renderRecord() {
             (record.dishes || []).forEach((dish, idx) => {
                 dishesHtml += `<div style="background:#F9FAFB;border-radius:8px;padding:10px;margin-bottom:8px;">
                     <div style="font-size:14px;font-weight:600;color:#374151;">${escapeHtml(dish.name)}</div>
+                    ${dish.rating ? `<div style="font-size:12px;color:#F59E0B;margin-top:2px;">${'★'.repeat(Math.min(5, dish.rating))}${'☆'.repeat(5 - Math.min(5, dish.rating))}${dish.taste ? ' <span style="color:#B91C1C;">' + escapeHtml(dish.taste) + '</span>' : ''}</div>` : (dish.taste ? `<div style="font-size:12px;color:#B91C1C;margin-top:2px;">${escapeHtml(dish.taste)}</div>` : '')}
                     ${dish.userComment ? `<div style="font-size:13px;color:#6B7280;margin-top:4px;">💬 ${escapeHtml(dish.userComment)}</div>` : ''}
                     ${dish.aiFeedback ? `<div style="font-size:13px;color:#9A3412;margin-top:4px;background:#FFF7ED;padding:6px 8px;border-radius:6px;">💡 ${escapeHtml(dish.aiFeedback)}</div>` : ''}
                 </div>`;
@@ -48444,14 +48446,14 @@ function _mrShowPraise(record, praise) {
 }
 
 // ==================== V418: 夸夸 → 我的创作草稿箱 ====================
-function _mrSendToWorks(record) {
-    if (!record) { showToast('未找到本餐记录'); return; }
+function _mrSendToWorks(record, silent) {
+    if (!record) { if (!silent) showToast('未找到本餐记录'); return false; }
     var cur = {};
     try { cur = getCurrentMember() || {}; } catch (e) {}
     var works = _getChefWorks();
     if (works.some(function (w) { return w && w.sourceRecordId && String(w.sourceRecordId) === String(record.id); })) {
-        showToast('这条已经在你的草稿箱里啦');
-        return;
+        if (!silent) showToast('这条已经在你的草稿箱里啦');
+        return false;
     }
     var imgs = [];
     if (record.imageBase64) imgs.push(record.imageBase64);
@@ -48479,8 +48481,9 @@ function _mrSendToWorks(record) {
         clonedCount: 0, good: 0, bad: 0, favCount: 0, viewCount: 0, daily: {}
     });
     lsSet('chefWorks', JSON.stringify(works));
-    showToast('✅ 已自动为您存入【我的创作】草稿箱');
+    if (!silent) showToast('✅ 已自动为您存入【我的创作】草稿箱');
     try { if (typeof renderMyWorksPage === 'function') renderMyWorksPage(); } catch (e) {}
+    return true;
 }
 
 function _mrPosterLoading(show, text) {
@@ -48676,22 +48679,37 @@ function _mrMarkPosterGenerated(record) {
         if (hit) saveFoodDiaries(list);
     } catch (e) { console.warn('[V417] 海报状态写入 foodDiaries 失败:', e); }
 }
-function _mrShowPoster(dataUrl) {
+function _mrShowPoster(dataUrl, saved) {
     var old = document.getElementById('mrPosterOv');
     if (old) old.remove();
     var ov = document.createElement('div');
     ov.id = 'mrPosterOv';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:100005;background:rgba(17,24,39,0.72);display:flex;align-items:center;justify-content:center;padding:16px;';
-    ov.innerHTML = '<div style="width:100%;max-width:330px;text-align:center;">'
-        + '<img src="' + dataUrl + '" alt="夸夸海报" style="display:block;width:100%;border-radius:16px;box-shadow:0 18px 48px rgba(0,0,0,.35);" />'
-        + '<div style="margin-top:12px;font-size:13px;color:#FDE68A;font-weight:600;">长按图片保存或分享给家人</div>'
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100005;background:rgba(17,24,39,0.72);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;';
+    ov.innerHTML = '<div style="width:100%;max-width:330px;margin:auto;text-align:center;">'
+        + '<img src="' + dataUrl + '" alt="夸夸海报" style="display:block;width:100%;max-height:64vh;object-fit:contain;border-radius:16px;box-shadow:0 18px 48px rgba(0,0,0,.35);" />'
+        + '<div style="margin-top:12px;font-size:13px;color:#FDE68A;font-weight:600;">'
+        + (saved ? '已存入「我的创作 · 草稿箱」，长按图片可保存' : '长按图片保存或分享给家人')
+        + '</div>'
         + '<div style="display:flex;gap:8px;margin-top:10px;">'
-        + '<button type="button" onclick="_mrPosterToWorks()" style="flex:1;padding:10px 0;border:1px solid rgba(255,255,255,.6);border-radius:12px;background:rgba(255,255,255,.18);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">存入我的创作</button>'
+        + (saved
+            ? '<button type="button" onclick="_mrOpenWorksDrafts()" style="flex:1;padding:10px 0;border:1px solid rgba(255,255,255,.6);border-radius:12px;background:rgba(255,255,255,.18);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">去我的创作看看</button>'
+            : '<button type="button" onclick="_mrPosterToWorks()" style="flex:1;padding:10px 0;border:1px solid rgba(255,255,255,.6);border-radius:12px;background:rgba(255,255,255,.18);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">存入我的创作</button>')
         + '<button type="button" onclick="document.getElementById(\'mrPosterOv\').remove()" style="flex:1;padding:10px 0;border:none;border-radius:12px;background:rgba(255,255,255,.92);color:#C2410C;font-size:14px;font-weight:700;cursor:pointer;">关闭</button>'
         + '</div>'
         + '</div>';
     ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
     document.body.appendChild(ov);
+}
+// V449: 海报页「去我的创作看看」——关海报并直接打开我的创作·草稿箱
+function _mrOpenWorksDrafts() {
+    var p = document.getElementById('mrPosterOv');
+    if (p) p.remove();
+    try {
+        openMyWorksPage();
+        _mwSetTab('drafts');
+    } catch (e) {
+        showToast('请到「我家 → 我的创作 → 草稿箱」查看');
+    }
 }
 // V448: 海报页可直接存入「我的创作」（与「🚀 发到我的创作」同一条数据，按 sourceRecordId 去重）
 function _mrPosterToWorks() {
@@ -48706,7 +48724,11 @@ function _mrGeneratePoster(record) {
         _mrPosterLoading(false);
         if (!dataUrl || dataUrl.length < 200) throw new Error('海报内容为空');
         _mrMarkPosterGenerated(record);
-        _mrShowPoster(dataUrl);
+        // V449: 生成海报即自动存入「我的创作 · 草稿箱」，不再依赖用户再点按钮
+        var saved = false;
+        try { saved = _mrSendToWorks(record, true); } catch (e2) { console.warn('[V449] 海报自动存入我的创作失败:', e2); }
+        if (saved) { try { showToast('海报已生成，并存入「我的创作 · 草稿箱」'); } catch (e3) {} }
+        _mrShowPoster(dataUrl, saved);
     }).catch(function (e) {
         _mrPosterLoading(false);
         console.warn('[V448] 海报生成失败:', e);
@@ -73343,6 +73365,7 @@ function saveFamilyMealRecord(o) {
                 name: n,
                 userComment: ((o.dishComments && o.dishComments[n]) || '').trim(),
                 rating: parseInt(o.dishRatings && o.dishRatings[n], 10) || 0, // V339(D6-04): 逐道菜星级
+                taste: ((o.dishTastes && o.dishTastes[n]) || '').trim(), // V449: 👎 原因 / 口味标签
                 aiFeedback: ''
             };
         }),
@@ -73413,6 +73436,7 @@ function openMealRecordModal(mealKey, opts) {
     let fLocation = '家';
     let fDishComments = {}; // V182: 每道菜的单独评价 {菜名: 评价}
     let fDishRatings = {}; // V339(D6-04): 每道菜单独星级 {菜名: 1~5}，0/未设置=未评分
+    let fDishTastes = {};  // V449: 👎 时补选的原因（太咸/太淡…），最终写入 dishes[].taste
     // V183: 右上角「🍽️ 在外就餐」开关：接收当天外出就餐计划（餐厅/食谱/人数/预算）
     let fEatingOut = false;
     let fRestaurant = '', fTotalCost = 0, fPeople = 0;
@@ -73549,12 +73573,14 @@ function openMealRecordModal(mealKey, opts) {
                 + '<input type="text" data-name="' + escapeAttr(n) + '" class="umr-f-dish-cmt" value="' + escapeAttr(cmt) + '" placeholder="对这道菜的评价" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #E5E7EB;border-radius:7px;font-size:13px;box-sizing:border-box;">'
                 + '<button type="button" data-i="' + i + '" class="umr-f-dish-del" title="删除" style="background:none;border:none;color:#FB923C;font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;">✕</button>'
                 + '</div>'
-                // V339(D6-04): 逐道菜星级（1~5 星，点击同星取消）
-                + '<div style="display:flex;align-items:center;gap:2px;margin-top:3px;padding-left:20px;">'
-                + [1, 2, 3, 4, 5].map(function (s) {
-                    return '<span class="umr-f-dish-star" data-name="' + escapeAttr(n) + '" data-s="' + s + '" style="font-size:14px;cursor:pointer;color:' + ((fDishRatings[n] || 0) >= s ? '#F59E0B' : '#E5E7EB') + ';">★</span>';
-                }).join('')
-                + '<span class="umr-f-dish-rating-label" style="font-size:11px;color:#9CA3AF;margin-left:4px;">' + (fDishRatings[n] ? fDishRatings[n] + ' 星' : '未评分') + '</span>'
+                // V449: 逐道菜评分简化为 👍/👎（默认不评分，点 👎 再选原因；星级只在「查看详情」展示）
+                + '<div style="display:flex;align-items:center;gap:6px;margin-top:3px;padding-left:20px;flex-wrap:wrap;">'
+                + '<span class="umr-f-dish-sent" data-name="' + escapeAttr(n) + '" data-sent="1" style="font-size:12px;padding:2px 8px;border-radius:10px;cursor:pointer;border:1px solid ' + (fDishRatings[n] === 5 ? '#FDBA74' : '#E5E7EB') + ';background:' + (fDishRatings[n] === 5 ? '#FFF7ED' : '#fff') + ';">👍 好吃</span>'
+                + '<span class="umr-f-dish-sent" data-name="' + escapeAttr(n) + '" data-sent="0" style="font-size:12px;padding:2px 8px;border-radius:10px;cursor:pointer;border:1px solid ' + (fDishRatings[n] === 2 ? '#FCA5A5' : '#E5E7EB') + ';background:' + (fDishRatings[n] === 2 ? '#FEF2F2' : '#fff') + ';">👎 一般</span>'
+                + (fDishRatings[n] === 2 ? ['太咸', '太淡', '太油', '太辣', '不想再吃'].map(function (t) {
+                    const on = fDishTastes[n] === t;
+                    return '<span class="umr-f-dish-taste" data-name="' + escapeAttr(n) + '" data-t="' + escapeAttr(t) + '" style="font-size:11px;padding:1px 7px;border-radius:9px;cursor:pointer;border:1px solid ' + (on ? '#FCA5A5' : '#E5E7EB') + ';background:' + (on ? '#FEE2E2' : '#fff') + ';color:' + (on ? '#B91C1C' : '#6B7280') + ';">' + t + '</span>';
+                }).join('') : '')
                 + '</div>'
                 + '</div>';
         }).join('');
@@ -73563,7 +73589,7 @@ function openMealRecordModal(mealKey, opts) {
                 const idx = parseInt(this.dataset.i, 10);
                 const removed = fDishes[idx];
                 fDishes.splice(idx, 1);
-                if (removed) { delete fDishComments[removed]; delete fDishChecked[removed]; delete fDishRatings[removed]; }
+                if (removed) { delete fDishComments[removed]; delete fDishChecked[removed]; delete fDishRatings[removed]; delete fDishTastes[removed]; }
                 renderFDishTags();
                 renderFPlanHint(); // V181: 删除后提示条可变为"加回今日计划菜"
             });
@@ -73573,12 +73599,20 @@ function openMealRecordModal(mealKey, opts) {
                 fDishComments[this.dataset.name] = this.value;
             });
         });
-        // V339(D6-04): 逐道菜星级点击（再次点击同一星取消）
-        box.querySelectorAll('.umr-f-dish-star').forEach(function (el) {
+        // V449: 👍=5 星、👎=2 星（再次点击取消）；👎 可补选原因，原因写入 taste
+        box.querySelectorAll('.umr-f-dish-sent').forEach(function (el) {
             el.addEventListener('click', function () {
                 const nm = this.dataset.name;
-                const s = parseInt(this.dataset.s, 10);
-                fDishRatings[nm] = (fDishRatings[nm] === s) ? 0 : s;
+                const val = this.dataset.sent === '1' ? 5 : 2;
+                fDishRatings[nm] = (fDishRatings[nm] === val) ? 0 : val;
+                if (val === 5) delete fDishTastes[nm];
+                renderFDishTags();
+            });
+        });
+        box.querySelectorAll('.umr-f-dish-taste').forEach(function (el) {
+            el.addEventListener('click', function () {
+                const nm = this.dataset.name, t = this.dataset.t;
+                fDishTastes[nm] = (fDishTastes[nm] === t) ? '' : t;
                 renderFDishTags();
             });
         });
@@ -73751,7 +73785,8 @@ function openMealRecordModal(mealKey, opts) {
             dishes: dishes, rating: rating, comment: comment, source: opts.source || '',
             dishComments: quick ? {} : fDishComments, // 快速记录单菜评价留空（V178）
             // V344(D7-04): 快速记录=整餐 4 星，逐道菜同步写 4 星，避免明细显示「未评分」、偏好画像拿不到单菜评分
-            dishRatings: quick ? (function () { var m = {}; dishes.forEach(function (n) { m[String(n || '').trim()] = 4; }); return m; })() : fDishRatings
+            dishRatings: quick ? (function () { var m = {}; dishes.forEach(function (n) { m[String(n || '').trim()] = 4; }); return m; })() : fDishRatings,
+            dishTastes: quick ? {} : fDishTastes // V449: 👎 原因（写入 dishes[].taste，供偏好画像排除/纠偏）
         });
         if (!res) return;
         // V235: 回写专项健康饮食计划进度（是=打勾，否=留痕待复盘纠偏）
@@ -73824,7 +73859,7 @@ function openMealRecordModal(mealKey, opts) {
             if (hit && hit.aiPraise) savedPraise = hit.aiPraise;
         } catch (e) {}
         _mrGeneratePoster({
-            id: 'preview_' + Date.now(),
+            id: 'preview_' + dateKey + '_' + mealKey, // V449: 稳定 id，重复生成海报不会在草稿箱堆多条
             date: dateKey,
             mealType: mealKey,
             dishes: dishes.map(function (n) { return { name: n }; }),
