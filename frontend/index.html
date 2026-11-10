@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V472-20261110';
+        var APP_VER = 'V473-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode','commissionRecords','expertConsultations','fridgeCleanupRecords','healthButlerCare'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode','commissionRecords','expertConsultations','fridgeCleanupRecords','healthButlerCare','savedMoneyLedger','healthWhitePaper'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -14377,6 +14377,8 @@ function updateMealActual(date, mealType, actualData) {
     finalizeActualIngredients(date, mealType, oldActual);
     // V410: 若这餐来自「冰箱残局清理」，记录完成后弹出成就反馈
     try { _fcAfterMealRecorded(date, mealType); } catch (e) {}
+    // V473: 在家做饭替代外卖，按外卖均价累计节省
+    try { _ledgerMealSaving(date, mealType); } catch (e) {}
     // V146: 行为统计层——保存实际记录后刷新饮食偏好画像
     try { buildBehaviorProfile(getFamilyId() || 'default'); } catch(e) {}
 }
@@ -18716,6 +18718,8 @@ function _fcAfterMealRecorded(date, mealType) {
         saved += Number(p.info.savedAmount) || 0;
     });
     var st = _fcWeekStats();
+    // V473: 冰箱残局清理节省金额计入家庭省钱账本
+    try { _ledgerAdd('fridge', saved, '冰箱残局清理', { key: 'fc|' + date + '|' + mealType, date: date }); } catch (e) {}
     _fcShowAchievement({
         ingredients: ings,
         savedAmount: saved,
@@ -35393,6 +35397,8 @@ function _applySubscription(kind, needsArr) {
     // V390: 家庭特殊需求单独存键；不再写入 subscriptionStatus（保持 4 字段）
     _subNeedsSet(needs);
     _setSubscriptionStatus(s);
+    // V473: 支付成功 → 标记开箱白皮书待生成（页面刷新后自动生成并弹窗）
+    try { _wpMarkPending(); } catch (e) {}
     try { _dtLoadedKey = ''; renderHomeDailyTipCard && renderHomeDailyTipCard(true); } catch (e) {}
 }
 // 已订阅用户点击「已解锁：xxx」→ 打开专属方案页（占位弹层，后续可扩展）
@@ -40601,6 +40607,7 @@ function renderFamily() {
         familyList.insertAdjacentHTML('beforeend', `
             <div style="${topCardStyle}display:flex;align-items:center;gap:8px;padding:10px 16px;">
                 <span style="font-size:14px;color:#374151;font-weight:500;white-space:nowrap;flex:0 0 auto;">当前就餐组</span>
+                ${_memberTagHtml()}
                 <select id="diningGroupInlineSelect" style="padding:4px 8px;border:1px solid #FED7AA;border-radius:6px;background:#FFFBEB;font-size:13px;color:#C2410C;cursor:pointer;outline:none;max-width:120px;">${dgOptions}</select>
                 ${familyData.length === 1 ? `<button id="singleMealBtn" style="margin-left:auto;height:24px;padding:0 12px;border:1px solid #F97316;border-radius:10px;background:${_singleMealBannerOpen ? '#FFEDD5' : 'white'};color:#F97316;font-size:12px;cursor:pointer;white-space:nowrap;flex:0 0 auto;">一人餐</button>` : ''}
                 <button id="addDiningGroupBtn" style="margin-left:${familyData.length === 1 ? '6px' : 'auto'};height:24px;padding:0 12px;border:1px solid #F97316;border-radius:10px;background:white;color:#F97316;font-size:12px;cursor:pointer;white-space:nowrap;flex:0 0 auto;">新建就餐组</button>
@@ -41044,6 +41051,8 @@ window.editMemberCard = function(id) {
             });
 }
 
+    // V473: 家庭成员卡下方展示「为您家累计省下」账本
+    try { _renderSavedMoneyCard(); } catch (e) {}
     // V78: 膳食日记卡放在「家庭设施」上面（小家成员之后）
     _renderDiaryTopCard();
     // ============ V70 组2：家庭设施 ============
@@ -41832,7 +41841,7 @@ function openMyWorksPage() {
     ov.innerHTML = ''
         + '<div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:white;border-bottom:1px solid #F3F4F6;">'
         + '<button onclick="closeMyWorksPage()" style="background:none;border:none;font-size:20px;color:#374151;cursor:pointer;padding:4px 8px;line-height:1;">←</button>'
-        + '<div style="font-size:16px;font-weight:700;color:#1F2937;">👨‍🍳 我的创作</div>'
+        + '<div style="font-size:16px;font-weight:700;color:#1F2937;display:flex;align-items:center;gap:6px;">👨‍🍳 我的创作' + _memberTagHtml() + '</div>'
         + '<span style="width:30px;flex-shrink:0;"></span>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;padding:12px 14px 90px;">'
@@ -78840,7 +78849,7 @@ function openSpecialPlanBoard() {
         + '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">健康管家</span>'
         + (plan ? '<button type="button" id="spBoardEndBtn" style="margin-left:auto;padding:6px 10px;border:1px solid #FED7AA;border-radius:10px;background:#fff;color:#C2410C;font-size:12px;cursor:pointer;">结束计划</button>' : '')
         + '</div>'
-        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:14px;">' + bodyHtml + _hmAdviceCardHtml() + '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' + _hmCareCardHtml() + _hmDeepReviewCardHtml() + _hmAutoPlanCardHtml() + seasonCardHtml + gutCardHtml + '</div>';
+        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:14px;">' + (window._wpCardHtml ? _wpCardHtml() : '') + bodyHtml + _hmAdviceCardHtml() + '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' + _hmCareCardHtml() + _hmDeepReviewCardHtml() + _hmAutoPlanCardHtml() + seasonCardHtml + gutCardHtml + '</div>';
 
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
@@ -78922,6 +78931,396 @@ window._hmToggleCare = function (el) {
     var arrow = el.querySelector('.hm-care-arrow');
     if (arrow) arrow.textContent = open ? '▾' : '▸';
 };
+// ===================== V473: 付费用户价值感（省钱账本 / 开箱白皮书 / 会员标识 / 年度账单） =====================
+/* ---------- 1. 省钱账本 ---------- */
+var _LEDGER_KEY = 'savedMoneyLedger';
+function _ledgerLoad() {
+    try { var a = JSON.parse(lsGet(_LEDGER_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+}
+function _ledgerSave(a) { try { lsSet(_LEDGER_KEY, JSON.stringify(a)); } catch (e) {} }
+window._ledgerAdd = function (type, amount, label, meta) {
+    var amt = Math.round((Number(amount) || 0) * 10) / 10;
+    if (!(amt > 0)) return;
+    var arr = _ledgerLoad();
+    var key = meta && meta.key ? String(meta.key) : '';
+    if (key && arr.some(function (x) { return x && x.key === key; })) return;
+    arr.push({
+        id: 'lg' + Date.now() + Math.floor(Math.random() * 1000),
+        key: key, type: type, amount: amt, label: label || '',
+        date: (meta && meta.date) || dateToKey(new Date()), ts: Date.now()
+    });
+    if (arr.length > 800) arr = arr.slice(arr.length - 800);
+    _ledgerSave(arr);
+};
+function _ledgerTotal() {
+    return Math.round(_ledgerLoad().reduce(function (s, x) { return s + (Number(x && x.amount) || 0); }, 0));
+}
+function _ledgerByType(type) {
+    return Math.round(_ledgerLoad().reduce(function (s, x) { return s + ((x && x.type === type) ? (Number(x.amount) || 0) : 0); }, 0));
+}
+// 记录实际餐饮后：在家做饭对比外卖均价，累计节省
+window._ledgerMealSaving = function (date, mealType) {
+    var md = null;
+    try { md = (getDietCalendar()[date] || {})[mealType]; } catch (e) { return; }
+    if (!md || !_savingIsHomeCooked(md)) return;
+    if (!md.actual || !Array.isArray(md.actual.dishes) || !md.actual.dishes.length) return;
+    var r = null;
+    try { r = calcMealSaving(md); } catch (e) { r = null; }
+    if (!r || !(r.saved > 0)) return;
+    _ledgerAdd('takeout', r.saved, '在家做饭替代外卖', { key: 'meal|' + date + '|' + mealType, date: date });
+};
+window._renderSavedMoneyCard = function () {
+    var box = document.getElementById('familyList');
+    if (!box) return;
+    var total = _ledgerTotal();
+    var takeout = _ledgerByType('takeout');
+    var fridge = _ledgerByType('fridge');
+    box.insertAdjacentHTML('beforeend',
+        '<div style="background:linear-gradient(135deg,#ECFDF5,#FFFFFF);border:1px solid #A7F3D0;border-radius:16px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+        + '<div style="font-size:15px;font-weight:800;color:#065F46;min-width:0;">💰 为您家累计省下 <span style="font-size:21px;color:#047857;">¥' + total + '</span> 元</div>'
+        + '<button type="button" onclick="_ybOpen()" style="flex-shrink:0;border:1px solid #6EE7B7;background:#fff;color:#047857;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;">📅 年度账单</button>'
+        + '</div>'
+        + '<div style="font-size:11px;color:#6B7280;line-height:1.8;margin-top:6px;">替代外卖 ¥' + takeout + ' · 冰箱残局 ¥' + fridge + '（按每次实际记录自动累计）</div>'
+        + '</div>');
+};
+
+/* ---------- 2. 付费开箱报告（家庭膳食健康白皮书） ---------- */
+var _WP_KEY = 'healthWhitePaper';
+function _wpGet() { try { return JSON.parse(lsGet(_WP_KEY) || 'null'); } catch (e) { return null; } }
+function _wpSave(d) { try { lsSet(_WP_KEY, JSON.stringify(d)); } catch (e) {} }
+window._wpMarkPending = function () { try { lsSet('whitePaperPending', '1'); } catch (e) {} };
+function _memberTagHtml() {
+    try {
+        if (typeof isFoodMember !== 'function' || !isFoodMember()) return '';
+        return '<span style="display:inline-block;font-size:10px;font-weight:800;color:#92400E;background:linear-gradient(135deg,#FEF3C7,#FDE68A);border:1px solid #F59E0B;border-radius:999px;padding:1px 7px;white-space:nowrap;vertical-align:middle;">👑 食养会员</span>';
+    } catch (e) { return ''; }
+}
+window._memberTagHtml = _memberTagHtml;
+function _wpFallback() {
+    return {
+        ts: Date.now(),
+        mistakes: [
+            '晚餐吃得太晚太油：把重油菜挪到午餐，晚餐以蒸煮为主，主食减三分之一。',
+            '蔬菜总量够但种类单一：每天至少 3 种颜色蔬菜，深色叶菜占一半。',
+            '蛋白质集中在晚餐：早午餐各加一个鸡蛋或一杯奶，全天更均衡。'
+        ],
+        direction: '未来 30 天先把「晚餐清淡 + 每天 3 种蔬菜 + 早午餐补蛋白」做稳，再谈进补；每周留 1 天弹性外食，避免过度克制后反弹。'
+    };
+}
+window._wpRun = function () {
+    if (document.getElementById('wpLoading')) return;
+    var ov = document.createElement('div');
+    ov.id = 'wpLoading';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100060;background:rgba(17,24,39,0.82);display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;';
+    ov.innerHTML = '<style>@keyframes wpPulse{0%,100%{transform:scaleY(.4);opacity:.5}50%{transform:scaleY(1);opacity:1}}</style>'
+        + '<div style="width:320px;max-width:100%;background:linear-gradient(180deg,#1F2937,#111827);border-radius:20px;padding:26px 22px;text-align:center;color:#fff;">'
+        + '<div style="display:flex;align-items:flex-end;justify-content:center;gap:5px;height:44px;margin-bottom:16px;">'
+        + '<span style="width:7px;height:36px;background:#F97316;border-radius:4px;animation:wpPulse 1s ease-in-out infinite;"></span>'
+        + '<span style="width:7px;height:44px;background:#FBBF24;border-radius:4px;animation:wpPulse 1s ease-in-out .15s infinite;"></span>'
+        + '<span style="width:7px;height:30px;background:#34D399;border-radius:4px;animation:wpPulse 1s ease-in-out .3s infinite;"></span>'
+        + '<span style="width:7px;height:40px;background:#F97316;border-radius:4px;animation:wpPulse 1s ease-in-out .45s infinite;"></span>'
+        + '<span style="width:7px;height:26px;background:#FBBF24;border-radius:4px;animation:wpPulse 1s ease-in-out .6s infinite;"></span>'
+        + '</div>'
+        + '<div style="font-size:16px;font-weight:800;">AI 正在为您家分析数据…</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;line-height:1.8;margin-top:8px;">结合家庭档案、近期三餐与健康标签<br>生成专属《家庭膳食健康白皮书》</div>'
+        + '</div>';
+    document.body.appendChild(ov);
+    var famTxt = '';
+    try {
+        famTxt = (typeof familyData !== 'undefined' ? familyData : []).filter(function (m) { return m && m.isFamily !== false; })
+            .map(function (m) { return (m.name || m.memberName || '家人') + (m.age ? '(' + m.age + '岁)' : '') + (m.tags && m.tags.length ? '[' + m.tags.join('/') + ']' : ''); }).join('、');
+    } catch (e) {}
+    var mealTxt = '';
+    try {
+        var cal = getDietCalendar() || {};
+        var keys = Object.keys(cal).sort().slice(-3);
+        mealTxt = keys.map(function (k) {
+            var arr = [];
+            ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+                var md = cal[k] && cal[k][mt];
+                var src = (md && md.actual && md.actual.dishes) || (md && md.plan && md.plan.dishes) || [];
+                var names = src.map(function (d) { return typeof d === 'string' ? d : (d && d.name); }).filter(Boolean);
+                if (names.length) arr.push(mt + ':' + names.join('/'));
+            });
+            return k + ' ' + arr.join('；');
+        }).join('\n');
+    } catch (e) {}
+    var systemPrompt = '你是家肴记的家庭营养师。只给日常饮食建议，不做医疗诊断、不开药方。严格返回 JSON，不要 markdown 代码块。禁止出现“治疗、治愈、根治、药方、处方、用药、疗效”等词。';
+    var userPrompt = '请为这个家庭生成一份《家庭膳食健康白皮书》摘要。\n'
+        + '家庭成员：' + (famTxt || '未填写') + '\n'
+        + '近三天饮食：\n' + (mealTxt || '暂无记录') + '\n'
+        + '要求：\n1. 输出 3 个该家庭最容易踩的饮食误区，每条 45 字内，包含“问题 + 怎么改”；\n2. 输出 1 个未来 30 天的健康大方向，80 字内，可执行；\n3. 语言温和，不制造焦虑，不出现疾病诊断和医疗承诺。\n'
+        + '严格按 JSON 返回：{"mistakes":["","",""],"direction":""}';
+    var done = false;
+    var finish = function (d) {
+        if (done) return; done = true;
+        _wpSave(d);
+        try { lsSet('whitePaperPending', ''); } catch (e) {}
+        var ld = document.getElementById('wpLoading'); if (ld) ld.remove();
+        _wpShowModal(d);
+        try { if (document.getElementById('specialPlanBoardOverlay')) { closeSpecialPlanBoard(); openSpecialPlanBoard(); } } catch (e) {}
+    };
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 40000);
+    fetch(API_BASE + '/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system_prompt: systemPrompt, user_prompt: userPrompt, max_tokens: 900, json_mode: true, task_type: 'white_paper' }),
+        signal: controller.signal
+    }).then(function (res) { return res.ok ? res.json() : null; }).then(function (result) {
+        clearTimeout(timer);
+        var reply = '';
+        if (result && result.response) reply = result.response;
+        else if (result && result.choices && result.choices[0] && result.choices[0].message) reply = result.choices[0].message.content;
+        var parsed = null;
+        try { parsed = _parseJsonAny(reply); } catch (e) {}
+        var ms = (parsed && Array.isArray(parsed.mistakes)) ? parsed.mistakes.filter(Boolean).slice(0, 3) : [];
+        var dir = String((parsed && parsed.direction) || '').trim();
+        if (ms.length < 3 || !dir) throw new Error('AI 内容不完整');
+        finish({ ts: Date.now(), mistakes: ms, direction: dir });
+    }).catch(function () {
+        clearTimeout(timer);
+        finish(_wpFallback());
+    });
+};
+window._wpMaybeGenerate = function () {
+    try {
+        if (!lsGet('whitePaperPending')) return;
+        if (typeof isFoodMember !== 'function' || !isFoodMember()) return;
+        var old = _wpGet();
+        if (old) { lsSet('whitePaperPending', ''); _wpShowModal(old); return; }
+        _wpRun();
+    } catch (e) {}
+};
+window._wpCardHtml = function () {
+    var d = _wpGet();
+    if (!d || typeof isFoodMember !== 'function' || !isFoodMember()) return '';
+    return '<div onclick="_wpShowModal()" style="margin:12px 12px 0;background:linear-gradient(135deg,#78350F,#B45309);border-radius:14px;padding:12px 14px;cursor:pointer;box-shadow:0 4px 14px rgba(120,53,15,0.18);">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+        + '<div style="min-width:0;"><div style="font-size:13px;font-weight:800;color:#FEF3C7;">👑 您的《家庭膳食健康白皮书》</div>'
+        + '<div style="font-size:11px;color:#FDE68A;margin-top:3px;">3 个易踩雷误区 + 30 天健康大方向</div></div>'
+        + '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#78350F;background:#FDE68A;border-radius:999px;padding:4px 9px;">查看 ›</span>'
+        + '</div></div>';
+};
+function _vpWrapText(ctx, text, x, y, maxWidth, lineHeight) {
+    var line = '', lines = [];
+    for (var i = 0; i < text.length; i++) {
+        var t = line + text[i];
+        if (ctx.measureText(t).width > maxWidth && line) { lines.push(line); line = text[i]; } else { line = t; }
+    }
+    if (line) lines.push(line);
+    lines.forEach(function (l, i) { ctx.fillText(l, x, y + i * lineHeight); });
+    return y + lines.length * lineHeight;
+}
+function _vpShowImage(dataUrl, filename) {
+    var old = document.getElementById('vpImgOv'); if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'vpImgOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100070;background:rgba(17,24,39,0.9);display:flex;flex-direction:column;align-items:center;padding:16px;box-sizing:border-box;overflow-y:auto;';
+    ov.innerHTML = '<div style="width:100%;max-width:430px;display:flex;justify-content:flex-end;"><button type="button" onclick="this.closest(\'#vpImgOv\').remove()" style="border:none;background:rgba(255,255,255,.15);color:#fff;width:32px;height:32px;border-radius:50%;font-size:16px;cursor:pointer;">×</button></div>'
+        + '<img src="' + dataUrl + '" style="width:100%;max-width:400px;border-radius:14px;margin-top:6px;box-shadow:0 12px 40px rgba(0,0,0,.4);" />'
+        + '<div style="font-size:11px;color:#D1D5DB;margin-top:10px;">长按图片可保存，或点下方按钮下载</div>'
+        + '<a download="' + filename + '" href="' + dataUrl + '" style="margin-top:12px;width:100%;max-width:400px;text-align:center;padding:12px;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;text-decoration:none;">⬇️ 保存图片</a>';
+    document.body.appendChild(ov);
+}
+window._wpDownloadPoster = function () {
+    var d = _wpGet() || _wpFallback();
+    var W = 750, H = 1150;
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var ctx = c.getContext('2d');
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#78350F'); g.addColorStop(0.45, '#B45309'); g.addColorStop(1, '#FFF7ED');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#FEF3C7'; ctx.font = 'bold 26px sans-serif';
+    ctx.fillText('家肴记 · 食养会员专享', W / 2, 80);
+    ctx.fillStyle = '#FFFFFF'; ctx.font = 'bold 46px sans-serif';
+    ctx.fillText('家庭膳食健康白皮书', W / 2, 150);
+    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '22px sans-serif';
+    ctx.fillText(new Date().toLocaleDateString('zh-CN') + ' · 基于家庭档案与近期三餐', W / 2, 192);
+    // 白卡
+    var y = 240;
+    ctx.fillStyle = 'rgba(255,255,255,.97)';
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(40, y, W - 80, 640, 24); ctx.fill(); }
+    else { ctx.fillRect(40, y, W - 80, 640); }
+    ctx.textAlign = 'left';
+    var ty = y + 64;
+    ctx.fillStyle = '#B45309'; ctx.font = 'bold 30px sans-serif';
+    ctx.fillText('3 个最容易踩的饮食误区', 72, ty); ty += 46;
+    (d.mistakes || []).forEach(function (m, i) {
+        ctx.fillStyle = '#F97316'; ctx.font = 'bold 26px sans-serif';
+        ctx.fillText((i + 1) + '.', 72, ty);
+        ctx.fillStyle = '#374151'; ctx.font = '22px sans-serif';
+        ty = _vpWrapText(ctx, String(m || ''), 106, ty, W - 190, 34) + 26;
+    });
+    ty += 12;
+    ctx.fillStyle = '#B45309'; ctx.font = 'bold 30px sans-serif';
+    ctx.fillText('未来 30 天健康大方向', 72, ty); ty += 44;
+    ctx.fillStyle = '#374151'; ctx.font = '22px sans-serif';
+    ty = _vpWrapText(ctx, String(d.direction || ''), 72, ty, W - 150, 34);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#7C2D12'; ctx.font = 'bold 30px sans-serif';
+    ctx.fillText('吃对一日三餐，就是最好的家庭健康投资', W / 2, 960);
+    ctx.fillStyle = '#92400E'; ctx.font = 'bold 24px sans-serif';
+    ctx.fillText('👑 食养会员 · 全年家庭膳食深度管理', W / 2, 1006);
+    ctx.fillStyle = '#9CA3AF'; ctx.font = '19px sans-serif';
+    ctx.fillText('⚠️ 本内容仅为日常饮食参考，不构成医疗诊断。如有疾病请遵医嘱。', W / 2, 1060);
+    ctx.fillText('家肴记 · AI 家庭膳食助理', W / 2, 1096);
+    _vpShowImage(c.toDataURL('image/png'), '家庭膳食健康白皮书.png');
+};
+window._wpShowModal = function (data) {
+    var d = data || _wpGet() || _wpFallback();
+    var old = document.getElementById('wpModalOv'); if (old) old.remove();
+    var items = (d.mistakes || []).map(function (m, i) {
+        return '<div style="display:flex;gap:8px;background:#FFF7ED;border:1px solid #FDE68A;border-radius:12px;padding:10px;margin-top:8px;">'
+            + '<div style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:#F97316;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;">' + (i + 1) + '</div>'
+            + '<div style="font-size:12px;color:#7C2D12;line-height:1.7;min-width:0;">' + escapeHtml(String(m || '')) + '</div>'
+            + '</div>';
+    }).join('');
+    var ov = document.createElement('div');
+    ov.id = 'wpModalOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100065;background:rgba(17,24,39,0.6);display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;';
+    ov.onclick = function (e) { if (e.target === ov) ov.remove(); };
+    ov.innerHTML = '<div style="width:360px;max-width:100%;max-height:88vh;overflow-y:auto;background:#fff;border-radius:20px;padding:18px;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,.3);">'
+        + '<div style="text-align:center;"><div style="font-size:30px;">👑</div>'
+        + '<div style="font-size:17px;font-weight:800;color:#7C2D12;margin-top:4px;">家庭膳食健康白皮书</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">已结合您家家庭档案与近期三餐生成</div></div>'
+        + '<div style="font-size:13px;font-weight:800;color:#B45309;margin-top:14px;">⚠️ 3 个最容易踩的饮食误区</div>'
+        + items
+        + '<div style="margin-top:12px;background:linear-gradient(135deg,#FFEDD5,#FEF3C7);border:1px solid #FDBA74;border-radius:12px;padding:12px;">'
+        + '<div style="font-size:13px;font-weight:800;color:#C2410C;">🎯 未来 30 天健康大方向</div>'
+        + '<div style="font-size:12px;color:#7C2D12;line-height:1.75;margin-top:5px;">' + escapeHtml(String(d.direction || '')) + '</div></div>'
+        + '<button type="button" onclick="_wpDownloadPoster()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">🖼 下载完整版海报</button>'
+        + '<button type="button" onclick="document.getElementById(\'wpModalOv\').remove()" style="width:100%;margin-top:8px;padding:10px;border:none;border-radius:12px;background:#F3F4F6;color:#6B7280;font-size:13px;font-weight:600;cursor:pointer;">稍后再看</button>'
+        + '<div style="font-size:10px;color:#9CA3AF;line-height:1.6;text-align:center;margin-top:10px;">⚠️ 本内容仅为日常饮食参考，不构成医疗诊断。如患有疾病，请务必遵医嘱。</div>'
+        + '</div>';
+    document.body.appendChild(ov);
+};
+
+/* ---------- 4. 年度账单 ---------- */
+function _ybStats() {
+    var cal = {};
+    try { cal = getDietCalendar() || {}; } catch (e) {}
+    var d = new Date(); d.setDate(d.getDate() - 365);
+    var from = dateToKey(d);
+    var mealCnt = 0, dishMap = {}, veg = 0, heavy = 0, total = 0;
+    Object.keys(cal).forEach(function (dk) {
+        if (String(dk) < from) return;
+        ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+            var a = cal[dk] && cal[dk][mt] && cal[dk][mt].actual;
+            if (!a || !Array.isArray(a.dishes) || !a.dishes.length) return;
+            mealCnt++;
+            a.dishes.forEach(function (x) {
+                var n = typeof x === 'string' ? x : ((x && x.name) || '');
+                if (!n) return;
+                dishMap[n] = 1; total++;
+                if (/菜|蔬|瓜|菌|笋|苗|菠菜|生菜|西兰花|番茄|萝卜|茄子|青椒|芹菜|藕/.test(n)) veg++;
+                if (/炸|红烧|干锅|回锅|油焖|酥/.test(n)) heavy++;
+            });
+        });
+    });
+    var vegPct = total ? Math.round(veg * 100 / total) : 0;
+    return {
+        meals: mealCnt,
+        dishes: Object.keys(dishMap).length,
+        saved: _ledgerTotal(),
+        vegPct: vegPct,
+        heavy: heavy
+    };
+}
+window._ybOpen = function () {
+    var st = _ybStats();
+    var W = 750, H = 1500;
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var ctx = c.getContext('2d');
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#F97316'); g.addColorStop(0.5, '#FDBA74'); g.addColorStop(1, '#FFF7ED');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#FFFFFF'; ctx.font = 'bold 28px sans-serif';
+    ctx.fillText('家肴记 · 年度家庭食养账单', W / 2, 88);
+    ctx.font = 'bold 54px sans-serif';
+    ctx.fillText(new Date().getFullYear() + ' 年', W / 2, 160);
+    ctx.font = '22px sans-serif';
+    ctx.fillText('这一年的每一餐，都在为家人攒健康', W / 2, 204);
+    ctx.textAlign = 'left';
+    var y = 270;
+    ctx.fillStyle = 'rgba(255,255,255,.96)';
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(40, y, W - 80, 760, 26); ctx.fill(); }
+    else { ctx.fillRect(40, y, W - 80, 760); }
+    var rows = [
+        ['🍚', '记录餐数', String(st.meals) + ' 餐'],
+        ['🥬', '菜品 / 食材种类', String(st.dishes) + ' 种'],
+        ['💰', '累计为家省下', '¥' + st.saved],
+        ['🌿', '蔬菜菜式占比', st.vegPct + '%'],
+        ['🔥', '油炸重油菜式', String(st.heavy) + ' 道']
+    ];
+    var ry = y + 90;
+    rows.forEach(function (r) {
+        ctx.fillStyle = '#F97316'; ctx.font = '34px sans-serif';
+        ctx.fillText(r[0], 80, ry);
+        ctx.fillStyle = '#6B7280'; ctx.font = '24px sans-serif';
+        ctx.fillText(r[1], 140, ry);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#C2410C'; ctx.font = 'bold 36px sans-serif';
+        ctx.fillText(r[2], W - 80, ry);
+        ctx.textAlign = 'left';
+        ry += 96;
+    });
+    ctx.fillStyle = '#B45309'; ctx.font = 'bold 28px sans-serif';
+    ctx.fillText('关键健康变化', 80, ry + 6);
+    ctx.fillStyle = '#7C2D12'; ctx.font = '22px sans-serif';
+    _vpWrapText(ctx, '蔬菜菜式占 ' + st.vegPct + '%，重油菜式 ' + st.heavy + ' 道。建议下一年把蔬菜占比提到 50%，重油菜式控制在每月 4 道以内。', 80, ry + 48, W - 160, 34);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#7C2D12'; ctx.font = 'bold 34px sans-serif';
+    ctx.fillText('吃好一日三餐，是最稳的家庭投资', W / 2, 1140);
+    ctx.fillStyle = '#92400E'; ctx.font = 'bold 26px sans-serif';
+    ctx.fillText('👑 食养会员 · 续费立减 50 元', W / 2, 1204);
+    ctx.fillStyle = '#FFFFFF'; ctx.font = 'bold 28px sans-serif';
+    ctx.fillText('扫码/回到家肴记，继续为全家攒健康', W / 2, 1268);
+    ctx.fillStyle = '#9CA3AF'; ctx.font = '19px sans-serif';
+    ctx.fillText('⚠️ 本内容仅为日常饮食参考，不构成医疗诊断。', W / 2, 1340);
+    ctx.fillText('家肴记 · AI 家庭膳食助理', W / 2, 1376);
+    var dataUrl = c.toDataURL('image/png');
+    var old = document.getElementById('ybOv'); if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'ybOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100066;background:rgba(17,24,39,0.7);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;overflow-y:auto;';
+    ov.onclick = function (e) { if (e.target === ov) ov.remove(); };
+    ov.innerHTML = '<div style="width:360px;max-width:100%;background:#fff;border-radius:20px;padding:14px;box-sizing:border-box;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;"><div style="font-size:15px;font-weight:800;color:#7C2D12;">📅 我的年度账单</div>'
+        + '<button type="button" onclick="document.getElementById(\'ybOv\').remove()" style="border:none;background:none;font-size:18px;color:#9CA3AF;cursor:pointer;">×</button></div>'
+        + '<img src="' + dataUrl + '" style="width:100%;border-radius:12px;margin-top:10px;border:1px solid #FDE68A;" />'
+        + '<div style="display:flex;gap:8px;margin-top:12px;">'
+        + '<button type="button" onclick="_ybSave()" style="flex:1;padding:11px;border:1px solid #FED7AA;border-radius:11px;background:#FFF7ED;color:#C2410C;font-size:13px;font-weight:800;cursor:pointer;">保存长图</button>'
+        + '<button type="button" onclick="_ybRenew()" style="flex:1;padding:11px;border:none;border-radius:11px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:13px;font-weight:800;cursor:pointer;">续费立减 50 元</button>'
+        + '</div>'
+        + '<div style="font-size:10px;color:#9CA3AF;text-align:center;line-height:1.6;margin-top:8px;">⚠️ 本内容仅为日常饮食参考，不构成医疗诊断。</div>'
+        + '</div>';
+    window.__ybDataUrl = dataUrl;
+    document.body.appendChild(ov);
+};
+window._ybSave = function () { if (window.__ybDataUrl) _vpShowImage(window.__ybDataUrl, '家肴记年度账单.png'); };
+window._ybRenew = function () {
+    var ov = document.getElementById('ybOv'); if (ov) ov.remove();
+    try { lsSet('renewDiscount50', '1'); } catch (e) {}
+    showToast('续费立减 50 元权益已记录，请在订阅中心查看');
+    setTimeout(function () { try { _openSubscribeModal(); } catch (e) {} }, 300);
+};
+// 会员到期前 30 天提醒一次（20 天内不重复弹）
+window._ybMaybeRemind = function () {
+    try {
+        if (typeof isFoodMember !== 'function' || !isFoodMember()) return;
+        var left = _subFoodDaysLeft();
+        if (!(left > 0 && left <= 30)) return;
+        var last = Number(lsGet('annualBillShownAt') || 0);
+        if (last && Date.now() - last < 20 * 86400000) return;
+        lsSet('annualBillShownAt', String(Date.now()));
+        setTimeout(function () { window._ybOpen(); }, 2600);
+    } catch (e) {}
+};
+
 window.renderHomeHealthButlerCard = function () {
     var el = document.getElementById('homeHealthButlerCard');
     if (!el) return;
@@ -79099,6 +79498,11 @@ window._careAddToDiary = function (btn) {
 };
 // V464: 首屏兜底渲染（部分入口不会立即触发 renderHomeDiaryCard）
 setTimeout(function () { try { renderHomeHealthButlerCard(); } catch (e) {} }, 1500);
+// V473: 支付成功后的开箱白皮书 & 会员到期前的年度账单提醒
+setTimeout(function () {
+    try { _wpMaybeGenerate(); } catch (e) {}
+    try { _ybMaybeRemind(); } catch (e) {}
+}, 1900);
 
 // V236: 关闭看板后回到食记「今天」并高亮今日三餐卡片
 function focusTodayDiaryMeals() {
@@ -81216,6 +81620,7 @@ function _communityPostCardHtml(p, opts) {
         +   (p.volunteer ? '<span style="font-size:10px;font-weight:700;color:#047857;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;padding:1px 6px;">♿ 助老助残志愿服务</span>' : '')
         +   statusHtml
         +   '<span style="font-size:12px;color:#374151;font-weight:600;">' + escapeHtml(p.authorName || '邻居') + '</span>'
+        +   (opts.mine ? _memberTagHtml() : '')
         +   (_communityAuthorVerified(p)
                 ? '<span style="font-size:10px;font-weight:700;color:#047857;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;padding:1px 5px;white-space:nowrap;">✅ 实名认证</span>'
                 : '<span style="font-size:10px;font-weight:700;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 5px;white-space:nowrap;">⚠️ 未认证</span>')
