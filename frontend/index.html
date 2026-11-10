@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V477-20261111';
+        var APP_VER = 'V478-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -22720,6 +22720,18 @@ function _normalizeMealComposition(dishes, mealType) {
             arr.push({ name: n, ingredients: null, reason: '搭配调整：汤羹不能作为唯一菜品' });
         });
     }
+    // V478: 早餐至少两道——避免只剩一张「芝麻饼」，缺蛋白/饮品时自动补
+    if (mealType === 'breakfast' && arr.length < 2) {
+        var _bNames = arr.map(_mealDishName);
+        var _firstB = _bNames[0] || '';
+        var _bFill = /(粥|汤|羹|糊|面|粉)$/.test(_firstB) ? ['水煮蛋'] : ['水煮蛋', '无糖豆浆'];
+        _bFill.forEach(function (n) {
+            if (_bNames.indexOf(n) >= 0) return;
+            if (_blocked && _blocked(n, '')) return;
+            arr.push({ name: n, ingredients: null, reason: '搭配调整：早餐至少两道' });
+            _bNames.push(n);
+        });
+    }
     // 排序：主食第1、汤品第2、其余保持原顺序
     if (arr.length > 1) {
         var _firstIdx = -1;
@@ -34029,6 +34041,7 @@ function _hdMealStatusBadgeHtml(dk, mealKey) {
 }
 
 function renderHomeDiaryCard() {
+    try { _repairSparseBreakfasts(); } catch (e) {}
     try { renderHomeHealthButlerCard(); } catch (e) {}
     var mealEl = document.getElementById('hdMealName');
     var dateEl = document.getElementById('hdDateLine');
@@ -34067,7 +34080,7 @@ function renderHomeDiaryCard() {
             if (isOut) {
                 costHtml = '';
             } else {
-                var sv = calcMealSaving(md);
+                var sv = calcMealSaving(md, mealKey);
                 if (sv && (sv.home > 0 || sv.out > 0)) {
                     // V159: 去掉「💰 预计：」前缀；行右侧挂「本月已省」入口（flex 两端布局）
                     costHtml = '<div class="hd-cost"><span>在家 <b>¥' + sv.home.toFixed(1) + '</b> / 外食 <b>¥' + (Math.round(sv.out * 10) / 10) + '</b>' + (sv.saved > 0 ? ' ｜ <span style="color:#10B981;font-weight:700;">省 ¥' + sv.saved.toFixed(1) + '</span>' : '') + '</span><span id="homeCostSaveSlot" style="flex-shrink:0;"></span></div>';
@@ -79009,6 +79022,29 @@ function _ledgerTakeoutFromCalendar() {
         });
     });
     return Math.round(sum);
+}
+// V478: 修复历史计划中「早餐只有一道」的数据（仅今天/未来、且未记录实际）
+function _repairSparseBreakfasts() {
+    if (window.__sparseBfRepairedV478) return;
+    window.__sparseBfRepairedV478 = true;
+    var cal = null;
+    try { cal = getDietCalendar() || {}; } catch (e) { return; }
+    var today = dateToKey(new Date());
+    var changed = false;
+    Object.keys(cal).forEach(function (dk) {
+        if (dk < today) return;
+        var slot = cal[dk] && cal[dk].breakfast;
+        if (!slot || !Array.isArray(slot.dishes) || slot.dishes.length !== 1) return;
+        if (slot.actual && slot.actual.dishes && slot.actual.dishes.length) return;
+        var n = _mealDishName(slot.dishes[0]);
+        if (!n || /粥|汤|羹|糊|面|粉/.test(n)) return;
+        ['水煮蛋', '无糖豆浆'].forEach(function (f) {
+            if (slot.dishes.map(_mealDishName).indexOf(f) >= 0) return;
+            slot.dishes.push({ name: f, taste: '', reason: '搭配调整：早餐至少两道' });
+            changed = true;
+        });
+    });
+    if (changed) { try { saveDietCalendar(cal); } catch (e) {} }
 }
 window._renderSavedMoneyCard = function () {
     var box = document.getElementById('familyList');
