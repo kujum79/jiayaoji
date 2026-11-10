@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V470-20261110';
+        var APP_VER = 'V471-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78889,7 +78889,6 @@ function _hmCareCardHtml() {
         + '<button type="button" onclick="openCareForm()" style="flex-shrink:0;padding:8px 12px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:12px;font-weight:800;cursor:pointer;">发起调理</button>'
         + '</div>';
     if (o) {
-        var added = o.addedDate === dateToKey(new Date());
         var dishName = (o.dish && o.dish.name) || '';
         html += '<div style="margin-top:10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:11px;padding:10px;">'
             + _careDisclaimerHtml()
@@ -78897,7 +78896,13 @@ function _hmCareCardHtml() {
             + '<div style="font-size:11px;color:#92400E;margin-top:3px;">症状：' + escapeHtml(o.symptom) + (o.desc ? ' · ' + escapeHtml(o.desc) : '') + '</div>'
             + (o.advice ? '<div style="font-size:12px;color:#78350F;line-height:1.65;margin-top:6px;">' + escapeHtml(o.advice) + '</div>' : '')
             + '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">主菜仍是全家菜，这道特供只额外加给 ' + escapeHtml(o.memberName) + '。</div>'
-            + '<button type="button" onclick="_careAddToDiary(this)" ' + (added ? 'disabled' : '') + ' style="width:100%;margin-top:8px;padding:9px;border:none;border-radius:9px;background:' + (added ? '#D1FAE5' : '#F97316') + ';color:' + (added ? '#065F46' : '#fff') + ';font-size:12px;font-weight:800;cursor:' + (added ? 'default' : 'pointer') + ';">' + (added ? '✅ 已加入今日午餐' : '➕ 加入今日食记（午餐）') + '</button>'
+            + '<div style="display:flex;gap:6px;margin-top:8px;">'
+            + '<select id="hmCareDaySel" style="flex:1;min-width:0;padding:7px 6px;border:1px solid #FDBA74;border-radius:9px;background:#fff;font-size:12px;color:#7C2D12;">'
+            + '<option value="0">今天</option><option value="1">明天</option><option value="2">后天</option></select>'
+            + '<select id="hmCareMealSel" style="flex:1;min-width:0;padding:7px 6px;border:1px solid #FDBA74;border-radius:9px;background:#fff;font-size:12px;color:#7C2D12;">'
+            + '<option value="breakfast">早餐</option><option value="lunch" selected>午餐</option><option value="dinner">晚餐</option></select>'
+            + '</div>'
+            + '<button type="button" onclick="_careAddToDiary(this)" style="width:100%;margin-top:8px;padding:9px;border:none;border-radius:9px;background:#F97316;color:#fff;font-size:12px;font-weight:800;cursor:pointer;">➕ 加入所选餐次</button>'
             + _careDisclaimerHtml()
             + '</div>';
     }
@@ -79035,20 +79040,30 @@ window.submitCareForm = function () {
 window._careAddToDiary = function (btn) {
     var o = _careLoad();
     if (!o || !o.dish || !o.dish.name) return;
-    var dk = dateToKey(new Date());
+    // V471: 让用户自选日期与餐次
+    var dayEl = document.getElementById('hmCareDaySel');
+    var mealEl = document.getElementById('hmCareMealSel');
+    var dayOff = dayEl ? (parseInt(dayEl.value, 10) || 0) : 0;
+    var mealType = (mealEl && mealEl.value) ? mealEl.value : 'lunch';
+    var _d = new Date(); _d.setDate(_d.getDate() + dayOff);
+    var dk = dateToKey(_d);
+    var MEAL_CN = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
+    var mealCn = MEAL_CN[mealType] || '午餐';
+    var dayCn = dayOff === 0 ? '今日' : (dayOff === 1 ? '明日' : '后日');
     var day = {};
     try { day = getDietCalendar()[dk] || {}; } catch (e) {}
     var opts = {};
-    if (day.lunch && day.lunch.plan) Object.keys(day.lunch.plan).forEach(function (k) { opts[k] = day.lunch.plan[k]; });
+    if (day[mealType] && day[mealType].plan) Object.keys(day[mealType].plan).forEach(function (k) { opts[k] = day[mealType].plan[k]; });
     var dishes = Array.isArray(opts.dishes) ? opts.dishes.slice() : [];
     var exists = dishes.some(function (d) {
         var n = typeof d === 'string' ? d : String((d && d.name) || '');
         return n === o.dish.name;
     });
     if (!exists) dishes.push({ name: o.dish.name, tag: (o.memberName || '') + '特供' });
-    // 午餐原本没有菜时，补主食和蔬菜，避免一餐只有一碗粥
+    // 该餐原本没有菜时，补主食和蔬菜，避免一餐只有一碗粥
     if (dishes.length < 2) {
-        ['杂粮饭', '清炒时蔬'].forEach(function (n) {
+        var _fill = mealType === 'breakfast' ? ['水煮蛋', '全麦面包'] : ['杂粮饭', '清炒时蔬'];
+        _fill.forEach(function (n) {
             if (!dishes.some(function (d) { var x = typeof d === 'string' ? d : String((d && d.name) || ''); return x === n; })) {
                 dishes.push({ name: n, tag: '搭配均衡' });
             }
@@ -79058,17 +79073,13 @@ window._careAddToDiary = function (btn) {
     opts.note = String(opts.note || '') + ' · ' + o.memberName + '特供';
     opts.state = 'pending';
     delete opts.confirmed;
-    updateMealPlan(dk, 'lunch', opts);
+    updateMealPlan(dk, mealType, opts);
     o.addedDate = dk;
     _careSave(o);
     if (btn) {
-        btn.textContent = '✅ 已加入今日午餐';
-        btn.disabled = true;
-        btn.style.background = '#D1FAE5';
-        btn.style.color = '#065F46';
-        btn.style.cursor = 'default';
+        btn.textContent = '✅ 已加入' + dayCn + mealCn;
     }
-    showToast(o.memberName + '的特供菜已加入今日午餐，全家主菜不变');
+    showToast(o.memberName + '的特供菜已加入' + dayCn + mealCn + '，全家主菜不变');
     try { renderHomeDiaryCard(); } catch (e) {}
     try { if (typeof renderDiary === 'function') renderDiary(); } catch (e) {}
     try { renderHomeHealthButlerCard(); } catch (e) {}
