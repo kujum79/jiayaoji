@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V475-20261111';
+        var APP_VER = 'V476-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -40607,7 +40607,6 @@ function renderFamily() {
         familyList.insertAdjacentHTML('beforeend', `
             <div style="${topCardStyle}display:flex;align-items:center;gap:8px;padding:10px 16px;">
                 <span style="font-size:14px;color:#374151;font-weight:500;white-space:nowrap;flex:0 0 auto;">当前就餐组</span>
-                ${_memberTagHtml()}
                 <select id="diningGroupInlineSelect" style="padding:4px 8px;border:1px solid #FED7AA;border-radius:6px;background:#FFFBEB;font-size:13px;color:#C2410C;cursor:pointer;outline:none;max-width:120px;">${dgOptions}</select>
                 ${familyData.length === 1 ? `<button id="singleMealBtn" style="margin-left:auto;height:24px;padding:0 12px;border:1px solid #F97316;border-radius:10px;background:${_singleMealBannerOpen ? '#FFEDD5' : 'white'};color:#F97316;font-size:12px;cursor:pointer;white-space:nowrap;flex:0 0 auto;">一人餐</button>` : ''}
                 <button id="addDiningGroupBtn" style="margin-left:${familyData.length === 1 ? '6px' : 'auto'};height:24px;padding:0 12px;border:1px solid #F97316;border-radius:10px;background:white;color:#F97316;font-size:12px;cursor:pointer;white-space:nowrap;flex:0 0 auto;">新建就餐组</button>
@@ -40728,7 +40727,10 @@ function renderFamily() {
         var _smmBanner = (familyData.length === 1 && _singleMealBannerOpen) ? _singleMealGuideHtml() : '';
         _xjWrap.innerHTML = _smmBanner + `
             <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px 8px;gap:8px;">
-                <span style="font-weight:600;color:#374151;font-size:13px;flex-shrink:0;">👪 小家 · ${xiaojiaMembers.length} 人</span>
+                <div style="display:flex;align-items:center;gap:6px;min-width:0;">
+                    <span style="font-weight:600;color:#374151;font-size:13px;flex-shrink:0;">👪 小家 · ${xiaojiaMembers.length} 人</span>
+                    ${_memberTagHtml()}
+                </div>
                 <div style="display:flex;align-items:center;gap:6px;min-width:0;">
                     <button type="button" onclick="openInviteFamilyModal()" style="flex:0 0 auto;height:26px;padding:0 10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:13px;font-size:12px;font-weight:600;color:#C2410C;cursor:pointer;white-space:nowrap;">邀请码</button>
                     ${xiaojiaMembers.length > 1 ? `<select id="xjMemberSelect" aria-label="切换当前操作人" style="max-width:110px;height:26px;padding:0 6px;border:1px solid #FDBA74;border-radius:13px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;outline:none;cursor:pointer;">
