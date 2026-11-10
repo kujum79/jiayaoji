@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V455-20261110';
+        var APP_VER = 'V456-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -77745,7 +77745,7 @@ try {
 // ==================== V455: 健康管家升级为「主动式 AI 营养师」 ====================
 // 订阅用户打开即看到：今日专属健康建议 → 今日 AI 定制三餐 → 7 天自动调理计划；
 // 专项计划（生病调理等）置顶展示今日专项食谱，并支持一键采纳到餐单。
-var _HM_MENU_CACHE = { dateKey: '', menu: null, loading: false, aiTried: false };
+var _HM_MENU_CACHE = { key: '', menu: null, loading: false, aiTriedKey: '' };
 var _HM_FANG_DEFAULT_SOURCE = '中国食疗大全';
 var _HM_ADVICE_MAP = {
     elder: '需注意控温补肾、软烂低盐',
@@ -77867,56 +77867,127 @@ function _hmMenuFromStyle(style) {
     });
     return out;
 }
-function _hmPickStyle(styles) {
-    var tags = _hmFamilyTags();
-    var wellness = tags.some(function (t) { return /elder|pregnancy|child|growth|illness|infant/.test(t.key); });
-    var prefer = wellness ? '养生风' : '家常风';
-    for (var i = 0; i < styles.length; i++) {
-        if (styles[i] && styles[i].name === prefer) return styles[i];
+// V456: 健康管家专属食方菜单（与「食记 → 规划食谱」完全独立，不走 _getFallbackStyles）
+var _HM_FANG_MENUS = {
+    elder: {
+        breakfast: [['山药小米粥', '健脾养胃'], ['水煮蛋', '优质蛋白'], ['蒸南瓜', '软烂低盐']],
+        lunch: [['当归生姜羊肉汤', '温补气血'], ['糙米饭', '粗细搭配'], ['清炒菠菜', '补铁']],
+        dinner: [['山药排骨汤', '补肾强骨'], ['杂粮饭', '低GI主食'], ['白灼西兰花', '清淡低盐']]
+    },
+    pregnancy: {
+        breakfast: [['红枣桂圆小米粥', '补铁养血'], ['水煮蛋', '优质蛋白'], ['温热牛奶', '补钙']],
+        lunch: [['菠菜猪肝汤', '富铁补血'], ['糙米饭', '粗细搭配'], ['番茄炖牛腩', '优质蛋白']],
+        dinner: [['鲫鱼豆腐汤', '补钙安胎'], ['杂粮饭', '低GI主食'], ['清炒油麦菜', '叶酸蔬果']]
+    },
+    child: {
+        breakfast: [['山药瘦肉粥', '健脾开胃'], ['蒸蛋羹', '优质蛋白'], ['温热牛奶', '补钙长个']],
+        lunch: [['番茄炒蛋', '优质蛋白'], ['米饭', '主食'], ['玉米胡萝卜排骨汤', '补钙护眼']],
+        dinner: [['南瓜小米粥', '健脾易消化'], ['清蒸鲈鱼', 'DHA'], ['蒜蓉西兰花', '维生素']]
+    },
+    illness: {
+        breakfast: [['小米粥', '清淡补液'], ['蒸蛋羹', '易消化蛋白']],
+        lunch: [['山药瘦肉粥', '健脾易消化'], ['清蒸鲈鱼', '优质蛋白']],
+        dinner: [['蔬菜鸡汤', '温补恢复'], ['软米饭', '易消化主食'], ['白灼菜心', '维生素']]
+    },
+    default: {
+        breakfast: [['山药小米粥', '健脾养胃'], ['水煮蛋', '优质蛋白'], ['温热牛奶', '补钙']],
+        lunch: [['当归生姜羊肉汤', '温补气血'], ['糙米饭', '粗细搭配'], ['清炒时蔬', '当季蔬菜']],
+        dinner: [['鲫鱼豆腐汤', '补钙易吸收'], ['杂粮饭', '低GI主食'], ['蒜蓉西兰花', '膳食纤维']]
     }
-    return styles[0];
+};
+// 缓存键：日期 + 家庭标签 + 人数，家庭信息变化后自动重新生成
+function _hmMenuCacheKey() {
+    var tagKeys = _hmFamilyTags().map(function (t) { return t.key; }).join(',');
+    var single = (typeof isSingleMealMode === 'function' && isSingleMealMode()) ? '1' : '0';
+    return _hmDateKey(new Date()) + '|' + tagKeys + '|' + single + '|' + _mealPlanEffectiveServings();
 }
-function _hmExistingMenu() {
-    var existing = _loadExistingPlanAsStyle(_hmDateKey(new Date()));
-    return existing ? _hmMenuFromStyle(existing) : null;
+// 今日食记里是否已采纳健康管家方案（只有带此备注的餐单才复用，普通规划食谱不复用）
+function _hmAdoptedToday() {
+    try {
+        var day = getDietCalendar()[_hmDateKey(new Date())];
+        if (!day) return false;
+        return ['breakfast', 'lunch', 'dinner'].some(function (mt) {
+            var note = day[mt] && day[mt].plan && day[mt].plan.note;
+            return String(note || '').indexOf('健康管家') >= 0;
+        });
+    } catch (e) { return false; }
 }
-function _hmDefaultMenu() {
-    var style = _hmPickStyle(_getFallbackStyles());
-    var trimmed = _trimStylesForServings([style], _mealPlanEffectiveServings())[0] || style;
-    return _hmMenuFromStyle(trimmed);
+function _hmFallbackMenu() {
+    var tags = _hmFamilyTags();
+    var key = (tags.length && _HM_FANG_MENUS[tags[0].key]) ? tags[0].key : 'default';
+    var base = _HM_FANG_MENUS[key];
+    var termName = '当季';
+    try { var term = getSolarTermForDate(new Date()); if (term && term.name) termName = term.name; } catch (e) {}
+    var servings = _mealPlanEffectiveServings();
+    var menu = { name: '营养师食方风', breakfast: [], lunch: [], dinner: [], reasons: {} };
+    ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+        (base[mt] || []).forEach(function (p) { menu[mt].push({ name: p[0], tag: p[1] }); });
+        // 自动剔除家庭禁忌/过敏原（如牛奶、海鲜），全被剔除时保留原方案兜底
+        try {
+            if (typeof _familyForbiddenWords === 'function' && typeof _dishBlockedByFamily === 'function') {
+                var words = _familyForbiddenWords();
+                var kept = menu[mt].filter(function (d) { return !_dishBlockedByFamily(d.name, d.tag, words); });
+                if (kept.length) menu[mt] = kept;
+            }
+        } catch (e) {}
+        if (servings <= 1) menu[mt] = menu[mt].slice(0, 2);
+        menu.reasons[mt] = '按' + termName + '节气与家庭标签（' + (tags.length ? tags.map(function (t) { return t.label; }).join('、') : '全家') + '）搭配，优先食方调养。';
+    });
+    return menu;
 }
 function _hmTodayMenu() {
-    var dateKey = _hmDateKey(new Date());
-    if (_HM_MENU_CACHE.dateKey === dateKey && _HM_MENU_CACHE.menu) return _HM_MENU_CACHE.menu;
-    var existing = _hmExistingMenu();
-    if (existing) {
-        _HM_MENU_CACHE = { dateKey: dateKey, menu: existing, loading: false, aiTried: true };
-        return existing;
+    var key = _hmMenuCacheKey();
+    if (_HM_MENU_CACHE.key === key && _HM_MENU_CACHE.menu) return _HM_MENU_CACHE.menu;
+    // 今天已采纳过健康管家方案 → 直接复用那份（它本来就源自营养师）
+    if (_hmAdoptedToday()) {
+        var adopted = _loadExistingPlanAsStyle(_hmDateKey(new Date()));
+        if (adopted) {
+            _HM_MENU_CACHE = { key: key, menu: _hmMenuFromStyle(adopted), loading: false, aiTriedKey: key };
+            return _HM_MENU_CACHE.menu;
+        }
     }
-    var menu = _hmDefaultMenu();
-    _HM_MENU_CACHE = { dateKey: dateKey, menu: menu, loading: false, aiTried: false };
-    _hmGenerateTodayMenu(dateKey);
+    var menu = _hmFallbackMenu();
+    _HM_MENU_CACHE = { key: key, menu: menu, loading: false, aiTriedKey: '' };
+    _hmGenerateTodayMenu();
     return menu;
 }
 // 后台异步生成更贴合的 AI 三餐；失败时保留内置方案，不打断用户
-function _hmGenerateTodayMenu(dateKey) {
-    if (_HM_MENU_CACHE.loading || _HM_MENU_CACHE.aiTried) return;
+// V456: 营养师专属 Prompt——以食方/药膳为主，明确区别于普通规划食谱
+function _hmBuildMenuPrompt() {
+    var ctx = _collectMealPlanContext(new Date());
+    var termName = '当季';
+    try { var term = getSolarTermForDate(new Date()); if (term && term.name) termName = term.name; } catch (e) {}
+    var tags = _hmFamilyTags();
+    var tagLabels = tags.length ? tags.map(function (t) { return t.label; }).join('、') : '全家';
+    var fangText = '';
+    try { fangText = _fangRagToText(searchFoodTherapy((getHealthCoreTags() || '') + ' ' + tagLabels)); } catch (e) {}
+    var servings = _mealPlanEffectiveServings();
+    var p = '请为今天设计一套「主动式营养师调理三餐」，必须区别于普通家常规划食谱：\n'
+        + '1. 以食方/药膳为主：早餐、午餐、晚餐至少各有 1 道传统食方（如当归生姜羊肉汤、山药排骨汤、红枣小米粥、菠菜猪肝汤等），并在 tag 中写明功效；\n'
+        + '2. 按家庭标签（' + tagLabels + '）与当前节气（' + termName + '）定制，优先调理该人群的核心需求；\n'
+        + '3. 每餐 1 道主食 + 1 道食方汤/粥/羹 + 1 道菜，避免与近 3 天重复；\n'
+        + '4. 自动剔除家庭禁忌与过敏原：有老人/慢病时软烂低盐，孕妇忌生冷，儿童少辛辣；\n'
+        + '5. 每餐不超过 3 道菜，按 ' + servings + ' 人份设计。\n\n';
+    if (ctx.tasteProfile) p += '【口味与禁忌】\n' + ctx.tasteProfile + '\n\n';
+    if (ctx.fridgeItems && ctx.fridgeItems.length) p += '【家中食材】' + ctx.fridgeItems.map(function (f) { return f.name; }).join('、') + '\n\n';
+    if (ctx.recentMeals) p += '【近 3 天已吃】\n' + ctx.recentMeals + '\n\n';
+    if (fangText) p += '【食方库参考】\n' + fangText + '\n\n';
+    p += '严格按以下 JSON 返回（不要包含 markdown 代码块标记）：\n'
+        + '{"styles":[{"name":"营养师食方风","breakfast":[{"name":"菜名","tag":"功效标签"}],"lunch":[{"name":"菜名","tag":"功效标签"}],"dinner":[{"name":"菜名","tag":"功效标签"}],"breakfastReason":"早餐搭配理由","lunchReason":"午餐搭配理由","dinnerReason":"晚餐搭配理由"}]}';
+    return p;
+}
+function _hmGenerateTodayMenu() {
+    var key = _hmMenuCacheKey();
+    if (_HM_MENU_CACHE.loading || _HM_MENU_CACHE.aiTriedKey === key) return;
     _HM_MENU_CACHE.loading = true;
-    _HM_MENU_CACHE.aiTried = true;
-    var d = new Date();
-    var ctx = _collectMealPlanContext(d);
-    try {
-        var fangText = _fangRagToText(searchFoodTherapy(getHealthCoreTags()));
-        if (fangText) ctx.knowledgeBits = (ctx.knowledgeBits ? ctx.knowledgeBits + '\n' : '') + '【食方库参考】\n' + fangText;
-    } catch (e) {}
-    var prompt = _buildMealPlanPrompt(_mpFormatDate(d), ctx, 2);
-    var systemPrompt = '你是家肴记的主动式AI营养师，擅长结合家庭标签、节气与营养缺口安排今日三餐。请严格返回JSON格式，不要包含markdown代码块标记。';
+    _HM_MENU_CACHE.aiTriedKey = key;
+    var systemPrompt = '你是家肴记的主动式AI营养师，擅长用传统食方结合家庭标签与节气安排调理三餐。请严格返回JSON格式，不要包含markdown代码块标记。';
     var controller = new AbortController();
     var timer = setTimeout(function () { controller.abort(); }, 60000);
     fetch(API_BASE + '/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ system_prompt: systemPrompt, user_prompt: prompt, max_tokens: 2500 }),
+        body: JSON.stringify({ system_prompt: systemPrompt, user_prompt: _hmBuildMenuPrompt(), max_tokens: 2500 }),
         signal: controller.signal
     }).then(function (res) {
         clearTimeout(timer);
@@ -77927,10 +77998,10 @@ function _hmGenerateTodayMenu(dateKey) {
         else if (result && result.choices && result.choices[0] && result.choices[0].message) reply = result.choices[0].message.content;
         var parsed = reply ? _parseMealPlanJSON(reply) : null;
         if (!parsed || !parsed.styles || !parsed.styles.length) return;
-        if (_hmExistingMenu()) return; // 用户可能已采纳，避免覆盖
+        if (_hmAdoptedToday()) return; // 已采纳，避免覆盖
+        if (_hmMenuCacheKey() !== key) return; // 家庭信息已变化，丢弃旧结果
         var styles = _trimStylesForServings(parsed.styles, _mealPlanEffectiveServings());
-        var pick = _hmPickStyle(styles) || styles[0];
-        _HM_MENU_CACHE.menu = _hmMenuFromStyle(pick);
+        _HM_MENU_CACHE.menu = _hmMenuFromStyle(styles[0]);
         _hmRenderMenuSection();
     }).catch(function () { clearTimeout(timer); }).then(function () {
         _HM_MENU_CACHE.loading = false;
@@ -77953,6 +78024,7 @@ function _hmMenuCardHtml() {
     var single = (typeof isSingleMealMode === 'function') && isSingleMealMode();
     var title = single ? '🍱 一人食专属三餐' : '🍽️ 今日 AI 定制三餐';
     var servings = _mealPlanEffectiveServings();
+    var adopted = _hmAdoptedToday();
     var mealDefs = [['breakfast', '🌅 早餐'], ['lunch', '☀️ 午餐'], ['dinner', '🌙 晚餐']];
     var rows = '', hasFang = false;
     mealDefs.forEach(function (md) {
@@ -77974,9 +78046,10 @@ function _hmMenuCardHtml() {
         + '<div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.05);">'
         +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
         +     '<div style="font-size:15px;font-weight:800;color:#C2410C;">' + title + '</div>'
-        +     '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">AI 为您定制 · ' + servings + ' 人份</span>'
+        +     '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">AI 营养师 · ' + servings + ' 人份</span>'
+        +     (adopted ? '<span style="font-size:10px;color:#16A34A;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:1px 6px;">✅ 已采纳到今日食记</span>' : '')
         +   '</div>'
-        +   '<div style="font-size:11px;color:#9A3412;margin-top:4px;">按家庭标签、节气与近 3 天营养缺口自动生成，今天可直接采纳。</div>'
+        +   '<div style="font-size:11px;color:#9A3412;line-height:1.7;margin-top:4px;">营养师专属方案：以食方/药膳为主，按家庭标签与节气定制，区别于「食记 → 规划食谱」；采纳后会覆盖今日三餐计划。</div>'
         +   rows + note
         + '</div></div>';
 }
