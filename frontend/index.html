@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V450-20261109';
+        var APP_VER = 'V451-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -48266,8 +48266,8 @@ function submitAddRecord() {
     if (autoBankCount > 0) toast += '（含从现购清单入库 ' + autoBankCount + ' 道后再扣）';
     if (tonightShopping && record.source === 'shopping') toast += '｜来源标记：现购食材 ✓';
     showToast(toast);
-    // V415: 带图片的记录保存后 → Loading「AI 正在为你撰写夸夸...」→ 夸夸弹窗
-    try { if (record.imageBase64) _mrGeneratePraise(record, mealKey); } catch (e) { console.warn('[V415] AI 夸夸触发失败:', e); }
+    // V451: 保存后一律弹「今日夸夸」（不再要求先有照片；无照片时海报用菜名渐变卡）
+    try { _mrGeneratePraise(record, mealKey); } catch (e) { console.warn('[V415] AI 夸夸触发失败:', e); }
     // V373: 晚餐记录后询问就餐时间（复盘「晚餐作息」用），已有选择则不再打扰
     if (typeof _maybeAskDinnerTime === 'function') {
         try { _maybeAskDinnerTime(date, mealKey); } catch (e) { console.warn('[V373] 晚餐时段询问失败:', e); }
