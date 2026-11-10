@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V476-20261111';
+        var APP_VER = 'V477-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -17096,11 +17096,26 @@ function _savingHomeCeiling(name, servings) {
     if (/肉|鱼|虾|鸡|鸭|鹅|牛|猪|羊|排骨|肘子|海鲜|蛋|豆腐/.test(n)) return null;
     return Math.round((3 + 1.2 * (sv - 1)) * 10) / 10; // 素菜/凉拌/时蔬
 }
+// V477: 早餐外卖价上限——四个小菜/粥点被按正餐价估成 ¥77 属明显虚高
+function _savingBreakfastOutCap(name) {
+    var n = String(name || '');
+    if (/粥|稀饭|米糊|糊/.test(n)) return 6;
+    if (/汤|羹/.test(n)) return 6;
+    if (/面|粉|米线/.test(n)) return 14;
+    if (/包|饺|馒头|花卷|饼|面包|吐司|三明治/.test(n)) return 6;
+    if (/蛋/.test(n)) return 4;
+    if (/奶|豆浆|果汁|酸奶/.test(n)) return 5;
+    if (/肉|鱼|虾|鸡|鸭|牛|猪|羊/.test(n)) return 12;
+    return 8; // 小菜/素菜
+}
 // 单道菜算账（按人数）：{home, out, saved}
-function calcDishSaving(dishName, servings) {
+function calcDishSaving(dishName, servings, mealType) {
     var sv = Math.max(1, Number(servings) || 1);
     var perOut = getDishRestaurantPerPerson(dishName);
     var out = Math.round(perOut * _savingOutFactor(dishName, sv));
+    if (mealType === 'breakfast') {
+        out = Math.min(out, Math.round(_savingBreakfastOutCap(dishName) * _savingOutFactor(dishName, sv)));
+    }
     var home = getDishHomeCost(dishName, sv);
     if (home == null) {
         // V99: 无食材用量表的菜 → 按餐厅价比例估算在家成本（V238 改为按菜品类型取 30%~45%）
@@ -17182,7 +17197,7 @@ function _savingIsHomeCooked(md) {
     return dt !== '外出就餐' && dt !== '外卖' && dt !== '外带+自制';
 }
 // 一餐算账：dishes 来源优先 actual（已实际吃），否则 plan（仅展示预计）
-function calcMealSaving(md) {
+function calcMealSaving(md, mealType) {
     if (!md) return null;
     var src, isProjected = false;
     if (md.actual && md.actual.dishes && md.actual.dishes.length) src = md.actual.dishes;
@@ -17198,9 +17213,14 @@ function calcMealSaving(md) {
     if (!names.length) return null;
     var sv = _savingServingsOf(md);
     // V97: noRecipe 菜现在带比例估算值（estimated），不再整道剔除
-    var dishes = names.map(function (nm) { return calcDishSaving(nm, sv); });
+    var dishes = names.map(function (nm) { return calcDishSaving(nm, sv, mealType); });
     var home = dishes.reduce(function (s, x) { return s + x.home; }, 0);
     var out = dishes.reduce(function (s, x) { return s + x.out; }, 0);
+    // V477: 早餐整餐外卖价按人均 14 元封顶（3 人约 ¥42），避免家常早餐被算成 ¥77
+    if (mealType === 'breakfast') {
+        out = Math.min(out, Math.round(sv * 14));
+        if (home > out * 0.8) home = Math.round(out * 0.8 * 10) / 10;
+    }
     return { dishes: dishes, home: Math.round(home * 10) / 10, out: out, saved: Math.round((out - home) * 10) / 10, servings: sv, projected: isProjected };
 }
 // V360: 价格区默认折叠（只露一行「省 ¥X」），点开才看在家做/外面吃/省下的完整明细
@@ -17219,9 +17239,9 @@ function toggleMealPriceBar(el) {
     if (key) window.__mealPriceOpen[key] = toOpen;
 }
 // 食记餐卡上的省钱条 HTML（非在家做饭/无菜不显示）
-function buildMealSavingBarHtml(md, foldKey) {
+function buildMealSavingBarHtml(md, foldKey, mealType) {
     if (!_savingIsHomeCooked(md)) return '';
-    var r = calcMealSaving(md);
+    var r = calcMealSaving(md, mealType);
     if (!r || r.saved <= 0) return '';
     var tag = r.projected ? '预计' : '';
     var key = String(foldKey || '');
@@ -17263,7 +17283,7 @@ function aggregateSaving(start, end) {
             var md = dd[mt];
             if (!md || !md.actual || !md.actual.dishes || !md.actual.dishes.length) return;
             if (!_savingIsHomeCooked(md)) return;
-            var r = calcMealSaving(md);
+            var r = calcMealSaving(md, mt);
             if (!r || r.saved <= 0) return;
             home += r.home; out += r.out; count++;
             perMeal.push({ date: dk, meal: mt, home: r.home, out: r.out, saved: r.saved });
@@ -31156,8 +31176,10 @@ function _diaryMealCompliance(dateKey, meal) {
         if (typeof calcDishSaving === 'function') {
             var tier = (typeof _getCityPriceTier === 'function') ? _getCityPriceTier() : { ingMul: 1 };
             var sumHome = 0;
+            // V477: 与食记省钱条使用同一份数与餐次口径，避免“审核人均¥6 / 省钱条在家¥18”互相打架
+            var sv = (typeof _savingServingsOf === 'function') ? _savingServingsOf(slot) : people;
             dishes.forEach(function (n) {
-                var s = calcDishSaving(n, people);
+                var s = calcDishSaving(n, sv, meal);
                 if (s && s.home) { sumHome += s.home * (tier.ingMul || 1); hasPrice = true; }
             });
             if (hasPrice && people > 0) avgCost = sumHome / people;
@@ -61887,7 +61909,7 @@ function renderDiary() {
                     ${hasActual && !data.actual.groupRecord && data.actual.location && data.actual.location !== '家' ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">📍 ${escapeHtml(data.actual.location)} 就餐</div>` : ''}
                     ${hasActual && data.actual.groupRecord && data.actual.locationSummary ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">👥 ${escapeHtml(data.actual.locationSummary)}</div>` : ''}
                     ${hasActual && data.actual.photos && data.actual.photos.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${data.actual.photos.slice(0,4).map(p => `<img src="${p}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">`).join('')}</div>` : ''}
-                    ${buildMealSavingBarHtml(data, dateKey + '|' + meal.key)}
+                    ${buildMealSavingBarHtml(data, dateKey + '|' + meal.key, meal.key)}
                 </div>
             `}
         ${_renderMealDiarySummary(dateKey, meal.key)}
@@ -78967,16 +78989,33 @@ window._ledgerMealSaving = function (date, mealType) {
     if (!md || !_savingIsHomeCooked(md)) return;
     if (!md.actual || !Array.isArray(md.actual.dishes) || !md.actual.dishes.length) return;
     var r = null;
-    try { r = calcMealSaving(md); } catch (e) { r = null; }
+    try { r = calcMealSaving(md, mealType); } catch (e) { r = null; }
     if (!r || !(r.saved > 0)) return;
     _ledgerAdd('takeout', r.saved, '在家做饭替代外卖', { key: 'meal|' + date + '|' + mealType, date: date });
 };
+// V477: 历史已记录的在家餐次也计入省钱账本（避免只有 V473 之后的记录）
+function _ledgerTakeoutFromCalendar() {
+    var cal = {};
+    try { cal = getDietCalendar() || {}; } catch (e) { return 0; }
+    var sum = 0;
+    Object.keys(cal).forEach(function (dk) {
+        ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+            var md = cal[dk] && cal[dk][mt];
+            if (!md || !_savingIsHomeCooked(md)) return;
+            if (!md.actual || !Array.isArray(md.actual.dishes) || !md.actual.dishes.length) return;
+            var r = null;
+            try { r = calcMealSaving(md, mt); } catch (e) {}
+            if (r && r.saved > 0) sum += r.saved;
+        });
+    });
+    return Math.round(sum);
+}
 window._renderSavedMoneyCard = function () {
     var box = document.getElementById('familyList');
     if (!box) return;
-    var total = _ledgerTotal();
-    var takeout = _ledgerByType('takeout');
+    var takeout = Math.max(_ledgerByType('takeout'), _ledgerTakeoutFromCalendar());
     var fridge = _ledgerByType('fridge');
+    var total = takeout + fridge;
     box.insertAdjacentHTML('beforeend',
         '<div style="background:linear-gradient(135deg,#ECFDF5,#FFFFFF);border:1px solid #A7F3D0;border-radius:16px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">'
         + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
@@ -79232,7 +79271,7 @@ function _ybStats() {
     return {
         meals: mealCnt,
         dishes: Object.keys(dishMap).length,
-        saved: _ledgerTotal(),
+        saved: Math.max(_ledgerTotal(), _ledgerTakeoutFromCalendar()) + _ledgerByType('fridge'),
         vegPct: vegPct,
         heavy: heavy
     };
