@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V458-20261110';
+        var APP_VER = 'V459-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -69979,7 +69979,7 @@ function openDeepReviewBoard() {
     }
     var overlay = document.createElement('div');
     overlay.id = 'deepReviewOverlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:6200;display:flex;align-items:center;justify-content:center;';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100010;display:flex;align-items:center;justify-content:center;';
     overlay.innerHTML = '<div style="width:min(430px,100%);height:100%;max-height:900px;background:#FFF7ED;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);">'
         + '<div style="flex-shrink:0;padding:14px 16px;background:#fff;border-bottom:1px solid #FED7AA;display:flex;align-items:center;gap:8px;">'
         +   '<div style="font-size:16px;font-weight:800;color:#C2410C;">👑 深度复盘</div>'
