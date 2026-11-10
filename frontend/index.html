@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V460-20261110';
+        var APP_VER = 'V461-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -22682,6 +22682,16 @@ function _normalizeMealComposition(dishes, mealType) {
             }
         });
         arr = _nextD;
+    }
+    // V461: 汤/羹不能作为一餐唯一菜品（避免“三人晚餐只有一碗汤”）
+    var _liquidNames = arr.map(_mealDishName);
+    if (_liquidNames.length > 0 && _liquidNames.every(function (n) { return /(汤|羹)$/.test(n); })) {
+        var _fill = mealType === 'breakfast' ? ['水煮蛋', '全麦面包'] : ['杂粮饭', '清炒时蔬'];
+        _fill.forEach(function (n) {
+            if (_liquidNames.indexOf(n) >= 0) return;
+            if (_blocked && _blocked(n, '')) return;
+            arr.push({ name: n, ingredients: null, reason: '搭配调整：汤羹不能作为唯一菜品' });
+        });
     }
     // 排序：主食第1、汤品第2、其余保持原顺序
     if (arr.length > 1) {
@@ -77237,6 +77247,21 @@ function applySpecialPlanToToday(plan) {
                 note: (note ? note + '；' : '') + (plan.memberName || '家人') + label + '特供'
             });
             slot.plan = planData;
+            // V461: 汤/羹不能作为一餐唯一菜品（避免“三人晚餐只有一碗汤”）
+            var _liquidOnly = mergedDishes.length > 0 && mergedDishes.every(function (n) {
+                return /(汤|羹)$/.test(typeof n === 'string' ? n : String((n && n.name) || ''));
+            });
+            if (_liquidOnly) {
+                ['杂粮饭', '清炒时蔬'].forEach(function (n) {
+                    var _blocked = false;
+                    try { _blocked = (typeof _dishBlockedByFamily === 'function') && _dishBlockedByFamily(n, '', _familyForbiddenWords()); } catch (e) {}
+                    if (_blocked || mergedDishes.indexOf(n) >= 0) return;
+                    mergedDishes.push(n);
+                    mergedMeta[n] = { source: 'ai', confirmed: false, addedAt: Date.now() };
+                    appliedDishes++;
+                });
+                planData.dishes = mergedDishes;
+            }
             appliedDishes += newNames.length;
         }
 
@@ -78067,6 +78092,24 @@ function _hmMenuCacheKey() {
     return _hmDateKey(new Date()) + '|' + tagKeys + '|' + single + '|' + _mealPlanEffectiveServings();
 }
 function _hmSnapshotKey() { return '_hmMenuSnapshot_' + _hmDateKey(new Date()); }
+// V461: 修复 AI 生成的「只有一碗汤」餐次（仅对健康管家/专项特供写入的餐单，不碰用户手动菜）
+function _repairSoupOnlyMealsToday() {
+    var dateKey = _hmDateKey(new Date());
+    var day = getDietCalendar()[dateKey];
+    if (!day) return;
+    ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+        var plan = day[mt] && day[mt].plan;
+        if (!plan || !Array.isArray(plan.dishes) || !plan.dishes.length) return;
+        var note = String(plan.note || '');
+        if (note.indexOf('健康管家') < 0 && note.indexOf('特供') < 0) return;
+        var names = plan.dishes.map(function (d) { return String((typeof d === 'string' ? d : (d && d.name)) || ''); });
+        if (!names.length || !names.every(function (n) { return /(汤|羹)$/.test(n); })) return;
+        var opts = {};
+        Object.keys(plan).forEach(function (k) { opts[k] = plan[k]; });
+        opts.dishes = plan.dishes.slice();
+        updateMealPlan(dateKey, mt, opts);
+    });
+}
 // 今日食记里是否已采纳健康管家方案（只有带此备注的餐单才复用，普通规划食谱不复用）
 function _hmAdoptedToday() {
     try {
@@ -78105,17 +78148,17 @@ function _hmApplyMenuRules(menu) {
             if (veg) usedVeg[veg] = 1;
             out.push(d);
         });
-        // 去重后不足 2 道时补一道安全菜，避免只剩汤/羹
-        if (out.length < 2) {
-            var fillers = mt === 'breakfast' ? ['水煮蛋', '温热牛奶', '蒸南瓜'] : ['糙米饭', '杂粮饭', '米饭', '清炒时蔬'];
-            for (var i = 0; i < fillers.length; i++) {
+        // 去重后不足本餐最低道数时补安全菜（3 人及以上至少 3 道），避免只剩一碗汤
+        var minDishes = _mealPlanEffectiveServings() >= 3 ? 3 : 2;
+        if (out.length < minDishes) {
+            var fillers = mt === 'breakfast' ? ['水煮蛋', '温热牛奶', '蒸南瓜', '全麦面包'] : ['糙米饭', '杂粮饭', '米饭', '清炒时蔬', '蒜蓉西兰花'];
+            for (var i = 0; i < fillers.length && out.length < minDishes; i++) {
                 var f = fillers[i];
                 var fv = _hmVegKey(f);
                 if (seenDish[f] || (fv && usedVeg[fv])) continue;
                 out.push({ name: f, tag: '清淡少油' });
                 seenDish[f] = 1;
                 if (fv) usedVeg[fv] = 1;
-                break;
             }
         }
         menu[mt] = out;
@@ -78443,6 +78486,19 @@ function _hmAddSelectedToDiary() {
             seen[d.name] = 1;
             added++;
         });
+        // V461: 汤/羹不能作为一餐唯一菜品，自动补主食与蔬菜
+        var liquidOnly = merged.length > 0 && merged.every(function (d) { return /(汤|羹)$/.test(d.name); });
+        if (liquidOnly) {
+            ['杂粮饭', '清炒时蔬'].forEach(function (n) {
+                if (seen[n]) return;
+                var blocked = false;
+                try { blocked = (typeof _dishBlockedByFamily === 'function') && _dishBlockedByFamily(n, '', _familyForbiddenWords()); } catch (e) {}
+                if (blocked) return;
+                merged.push({ name: n, tag: '搭配均衡' });
+                seen[n] = 1;
+                added++;
+            });
+        }
         opts.dishes = merged;
         opts.note = '健康管家 · 今日推荐';
         opts.servings = opts.servings || servings;
@@ -78469,6 +78525,7 @@ function openSpecialPlanBoard() {
         _fhShowPaywall('🔒 健康管家 · 主动式 AI 营养师为食养会员专享');
         return;
     }
+    try { _repairSoupOnlyMealsToday(); } catch (e) {}
     var plan = _getActiveSpecialPlan();
     var overlay = document.createElement('div');
     overlay.id = 'specialPlanBoardOverlay';
