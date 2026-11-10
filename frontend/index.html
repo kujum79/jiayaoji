@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V463-20261110';
+        var APP_VER = 'V464-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode','commissionRecords','expertConsultations','fridgeCleanupRecords'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode','commissionRecords','expertConsultations','fridgeCleanupRecords','healthButlerCare'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -4443,6 +4443,8 @@ async function _submitFeedback() {
             </div>
             <div class="hd-body" id="hdBody"></div>
         </div>
+        <!-- V464: 健康管家入口（食记卡下方、食养堂上方） -->
+        <div class="home-card" id="homeHealthButlerCard" onclick="openSpecialPlanBoard()" style="background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FDBA74;border-radius:14px;padding:12px;margin:10px 0;display:flex;gap:10px;align-items:center;cursor:pointer;"></div>
         <!-- V139: 食养堂·今日一课卡片（食记卡片下方、试问 chips 上方） -->
         <div class="home-card daily-tip-card" id="homeDailyTipCard"></div>
         <!-- V246: 食邦邻聚·公告栏（食养堂卡片下方） -->
@@ -34001,6 +34003,7 @@ function _hdMealStatusBadgeHtml(dk, mealKey) {
 }
 
 function renderHomeDiaryCard() {
+    try { renderHomeHealthButlerCard(); } catch (e) {}
     var mealEl = document.getElementById('hdMealName');
     var dateEl = document.getElementById('hdDateLine');
     var body = document.getElementById('hdBody');
@@ -70158,6 +70161,10 @@ function openDeepReviewBoard() {
         + '<div id="drBody" style="flex:1;overflow-y:auto;padding:14px;"></div>'
         + '</div>';
     document.body.appendChild(overlay);
+    try {
+        var _drb = document.getElementById('drBody');
+        if (_drb) _drb.insertAdjacentHTML('beforebegin', '<div style="flex-shrink:0;padding:6px 12px 0;">' + _careDisclaimerHtml() + '</div>');
+    } catch (e) {}
     _drRender();
 }
 window.openDeepReviewBoard = openDeepReviewBoard;
@@ -78846,7 +78853,7 @@ function openSpecialPlanBoard() {
         + '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">健康管家</span>'
         + (plan ? '<button type="button" id="spBoardEndBtn" style="margin-left:auto;padding:6px 10px;border:1px solid #FED7AA;border-radius:10px;background:#fff;color:#C2410C;font-size:12px;cursor:pointer;">结束计划</button>' : '')
         + '</div>'
-        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:14px;">' + bodyHtml + _hmAdviceCardHtml() + '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' + _hmDeepReviewCardHtml() + _hmAutoPlanCardHtml() + seasonCardHtml + gutCardHtml + '</div>';
+        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:14px;">' + bodyHtml + _hmAdviceCardHtml() + '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' + _hmCareCardHtml() + _hmDeepReviewCardHtml() + _hmAutoPlanCardHtml() + seasonCardHtml + gutCardHtml + '</div>';
 
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
@@ -78859,6 +78866,223 @@ function openSpecialPlanBoard() {
     if (endBtn && plan) endBtn.onclick = function () { _confirmEndSpecialPlan(plan); };
 }
 window.openSpecialPlanBoard = openSpecialPlanBoard;
+
+// ==================== V464: 健康管家 · 家庭调理特供 ====================
+var _CARE_SYMPTOMS = [
+    { k: '感冒发烧', d: '陈皮姜丝粥', a: '饮食以温热、易消化为主，少量多次喝温水，暂避生冷油腻。' },
+    { k: '肠胃不适', d: '山药小米粥', a: '选择软烂少油的食物，少量多餐，暂避辛辣、冰饮和过饱。' },
+    { k: '术后恢复', d: '鲈鱼豆腐汤', a: '优先优质蛋白和易消化食材，少盐少油，循序渐进增加食量。' },
+    { k: '孕期反应', d: '陈皮瘦肉粥', a: '清淡少油、少量多餐，避开气味刺激；具体请以产科医嘱为准。' },
+    { k: '咽喉不适', d: '雪梨百合羹', a: '温热湿润的食物更友好，避免过烫、过咸和辛辣。' },
+    { k: '其他', d: '山药排骨汤', a: '以清淡易消化为主，保证主食和蔬菜搭配。' }
+];
+var _CARE_MED_WORDS = /治疗|治愈|根治|药方|处方|用药|疗效|痊愈|药到病除|专治|主治/g;
+function _careSafeText(t) {
+    var map = { '治疗': '调理', '治愈': '改善', '根治': '长期调理', '药方': '饮食建议', '处方': '饮食方案', '用药': '饮食', '疗效': '效果', '痊愈': '恢复', '药到病除': '逐步改善', '专治': '适合', '主治': '适合' };
+    return String(t || '').replace(_CARE_MED_WORDS, function (w) { return map[w] || '调理'; });
+}
+function _careDisclaimerHtml() {
+    return '<div style="background:#FEF3C7;border:1px solid #FCD34D;color:#92400E;border-radius:9px;padding:7px 10px;font-size:11px;line-height:1.6;margin:6px 0;">⚠️ 本内容仅为日常饮食参考，不构成医疗诊断。如患有疾病，请务必遵医嘱。</div>';
+}
+function _careLoad() {
+    try { var o = JSON.parse(lsGet('healthButlerCare') || 'null'); return (o && o.date) ? o : null; } catch (e) { return null; }
+}
+function _careSave(o) { try { lsSet('healthButlerCare', JSON.stringify(o)); } catch (e) {} }
+function _careActive() {
+    var o = _careLoad();
+    if (!o) return null;
+    return o.date === dateToKey(new Date()) ? o : null;
+}
+function _hmCareCardHtml() {
+    var o = _careActive();
+    var html = '<div style="margin:12px 12px 0;background:#fff;border:1px solid #FED7AA;border-radius:14px;padding:12px;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+        + '<div style="min-width:0;"><div style="font-size:14px;font-weight:800;color:#C2410C;">💊 发起生病 / 特殊期饮食调理</div>'
+        + '<div style="font-size:11px;color:#92400E;margin-top:3px;">选家人 + 症状，AI 生成当日家庭融合特供菜</div></div>'
+        + '<button type="button" onclick="openCareForm()" style="flex-shrink:0;padding:8px 12px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:12px;font-weight:800;cursor:pointer;">发起调理</button>'
+        + '</div>';
+    if (o) {
+        var added = o.addedDate === dateToKey(new Date());
+        var dishName = (o.dish && o.dish.name) || '';
+        html += '<div style="margin-top:10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:11px;padding:10px;">'
+            + _careDisclaimerHtml()
+            + '<div style="font-size:13px;font-weight:800;color:#7C2D12;">👨‍⚕️ ' + escapeHtml(o.memberName) + '特供：' + escapeHtml(dishName) + '</div>'
+            + '<div style="font-size:11px;color:#92400E;margin-top:3px;">症状：' + escapeHtml(o.symptom) + (o.desc ? ' · ' + escapeHtml(o.desc) : '') + '</div>'
+            + (o.advice ? '<div style="font-size:12px;color:#78350F;line-height:1.65;margin-top:6px;">' + escapeHtml(o.advice) + '</div>' : '')
+            + '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">主菜仍是全家菜，这道特供只额外加给 ' + escapeHtml(o.memberName) + '。</div>'
+            + '<button type="button" onclick="_careAddToDiary(this)" ' + (added ? 'disabled' : '') + ' style="width:100%;margin-top:8px;padding:9px;border:none;border-radius:9px;background:' + (added ? '#D1FAE5' : '#F97316') + ';color:' + (added ? '#065F46' : '#fff') + ';font-size:12px;font-weight:800;cursor:' + (added ? 'default' : 'pointer') + ';">' + (added ? '✅ 已加入今日午餐' : '➕ 加入今日食记（午餐）') + '</button>'
+            + _careDisclaimerHtml()
+            + '</div>';
+    }
+    html += '</div>';
+    return html;
+}
+window.renderHomeHealthButlerCard = function () {
+    var el = document.getElementById('homeHealthButlerCard');
+    if (!el) return;
+    var member = false;
+    try { member = (typeof isFoodMember === 'function') && isFoodMember(); } catch (e) {}
+    var tip = '';
+    try { tip = _hmTodayAdviceText(); } catch (e) { tip = '立冬时节，注意保暖，饮食宜温润。'; }
+    var care = member ? _careActive() : null;
+    if (!member) {
+        el.innerHTML = '<div style="font-size:24px;line-height:1;">👑</div>'
+            + '<div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:800;color:#7C2D12;">您的专属健康管家</div>'
+            + '<div style="font-size:11px;color:#92400E;line-height:1.55;margin-top:3px;">升级后按家人症状生成特供调理食谱，并与全家三餐融合。</div></div>'
+            + '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#C2410C;background:#FFEDD5;border:1px solid #FDBA74;border-radius:999px;padding:4px 8px;">升级解锁</span>';
+        return;
+    }
+    el.innerHTML = '<div style="font-size:24px;line-height:1;">👑</div>'
+        + '<div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:800;color:#7C2D12;">您的专属健康管家</div>'
+        + '<div style="font-size:11px;color:#92400E;line-height:1.55;margin-top:3px;">' + escapeHtml(tip) + '</div>'
+        + (care ? '<div style="font-size:11px;color:#C2410C;font-weight:700;margin-top:4px;">今日特供：' + escapeHtml((care.dish && care.dish.name) || '') + '（' + escapeHtml(care.memberName) + '）</div>' : '')
+        + '</div><span style="flex-shrink:0;font-size:12px;font-weight:800;color:#C2410C;">进入 ›</span>';
+};
+window.openCareForm = function () {
+    if (document.getElementById('careFormOverlay')) return;
+    var members = [];
+    try { members = getFamilyMembers(); } catch (e) {}
+    if (!members.length) {
+        if (typeof showToast === 'function') showToast('请先在「我家」添加家人');
+        return;
+    }
+    var memberOpts = members.map(function (m, i) {
+        var n = m.memberName || m.name || ('家人' + (i + 1));
+        return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>';
+    }).join('');
+    var symOpts = _CARE_SYMPTOMS.map(function (s) { return '<option value="' + escapeHtml(s.k) + '">' + escapeHtml(s.k) + '</option>'; }).join('');
+    var overlay = document.createElement('div');
+    overlay.id = 'careFormOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100020;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center;';
+    overlay.innerHTML = '<div style="width:100%;max-width:430px;background:#FFF7ED;border-radius:18px 18px 0 0;padding:16px 16px 22px;max-height:88vh;overflow-y:auto;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
+        + '<div style="font-size:16px;font-weight:800;color:#C2410C;">💊 发起饮食调理</div>'
+        + '<button type="button" onclick="closeCareForm()" style="border:none;background:#FFEDD5;color:#C2410C;width:30px;height:30px;border-radius:9px;font-size:16px;cursor:pointer;">×</button></div>'
+        + _careDisclaimerHtml()
+        + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">选择家人</div>'
+        + '<select id="careMemberSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + memberOpts + '</select>'
+        + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">选择症状 / 特殊期</div>'
+        + '<select id="careSymptomSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + symOpts + '</select>'
+        + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">补充描述（选填）</div>'
+        + '<textarea id="careDescInput" rows="3" placeholder="例如：这两天有点低烧、没胃口，想吃清淡的" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:13px;resize:none;"></textarea>'
+        + '<button type="button" id="careSubmitBtn" onclick="submitCareForm()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:11px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">AI 生成专属特供食谱</button>'
+        + '</div>';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeCareForm(); });
+};
+window.closeCareForm = function () {
+    var el = document.getElementById('careFormOverlay');
+    if (el) el.remove();
+};
+window.submitCareForm = function () {
+    var memberEl = document.getElementById('careMemberSel');
+    var symEl = document.getElementById('careSymptomSel');
+    var descEl = document.getElementById('careDescInput');
+    var btn = document.getElementById('careSubmitBtn');
+    if (!memberEl || !symEl) return;
+    var memberName = memberEl.value;
+    var symptom = symEl.value;
+    var desc = descEl ? String(descEl.value || '').trim() : '';
+    if (!memberName || !symptom) { showToast('请选择家人和症状'); return; }
+    btn.disabled = true;
+    btn.textContent = 'AI 生成中…';
+    btn.style.opacity = '0.75';
+    var fallback = _CARE_SYMPTOMS.filter(function (s) { return s.k === symptom; })[0] || _CARE_SYMPTOMS[_CARE_SYMPTOMS.length - 1];
+    var tags = '';
+    try { tags = _hmFamilyTags().map(function (t) { return t.label; }).join('、'); } catch (e) {}
+    var systemPrompt = '你是家肴记的家庭营养师。只给日常饮食调理建议，不做医疗诊断，不开药方。严格返回JSON，不要markdown代码块。禁止出现“治疗、治愈、根治、药方、处方、用药、疗效”等词。';
+    var userPrompt = '请为家庭成员「' + memberName + '」设计一道今日特供调理菜，并给出饮食调理建议。\n'
+        + '症状/特殊期：' + symptom + '\n'
+        + (desc ? '补充描述：' + desc + '\n' : '')
+        + (tags ? '家庭其他标签：' + tags + '\n' : '')
+        + '要求：\n'
+        + '1. 只输出 1 道适合该成员的菜，清淡易消化，食材家常易买；\n'
+        + '2. 必须是饮食调理建议，不是药方，不得出现药物名称、剂量或医疗承诺；\n'
+        + '3. 避开家庭过敏原与禁忌；\n'
+        + '4. 这道菜是额外加给该成员的，不能替代全家主菜。\n\n'
+        + '严格按 JSON 返回：{"dish":{"name":"菜名","tag":"一句话说明"},"advice":"80字以内饮食调理建议"}';
+    var finish = function (dishName, advice) {
+        var o = {
+            date: dateToKey(new Date()), memberName: memberName, symptom: symptom, desc: desc,
+            dish: { name: _careSafeText(dishName), tag: symptom + '特供' },
+            advice: _careSafeText(advice), addedDate: '', createdAt: Date.now()
+        };
+        _careSave(o);
+        closeCareForm();
+        showToast('已生成 ' + memberName + ' 的特供食谱');
+        try { if (document.getElementById('specialPlanBoardOverlay')) { closeSpecialPlanBoard(); openSpecialPlanBoard(); } } catch (e) {}
+        try { renderHomeHealthButlerCard(); } catch (e) {}
+    };
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 45000);
+    fetch(API_BASE + '/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system_prompt: systemPrompt, user_prompt: userPrompt, max_tokens: 800, json_mode: true, task_type: 'care_plan', meal_scene: 'lunch' }),
+        signal: controller.signal
+    }).then(function (res) { return res.ok ? res.json() : null; }).then(function (result) {
+        var reply = '';
+        if (result && result.response) reply = result.response;
+        else if (result && result.choices && result.choices[0] && result.choices[0].message) reply = result.choices[0].message.content;
+        var parsed = _parseJsonAny(reply);
+        var dish = parsed && parsed.dish;
+        var dishName = String((dish && dish.name) || '').trim();
+        var advice = String((parsed && parsed.advice) || '').trim();
+        if (!dishName) throw new Error('AI 未返回菜名');
+        finish(dishName, advice || fallback.a);
+    }).catch(function (err) {
+        if (String((err && err.message) || '').indexOf('未返回') >= 0) {
+            finish(fallback.d, fallback.a);
+            showToast('AI 暂未返回，已使用营养师内置方案');
+        } else {
+            finish(fallback.d, fallback.a);
+            showToast('AI 暂不可用，已使用营养师内置调理方案');
+        }
+    }).then(function () { clearTimeout(timer); });
+};
+window._careAddToDiary = function (btn) {
+    var o = _careLoad();
+    if (!o || !o.dish || !o.dish.name) return;
+    var dk = dateToKey(new Date());
+    var day = {};
+    try { day = getDietCalendar()[dk] || {}; } catch (e) {}
+    var opts = {};
+    if (day.lunch && day.lunch.plan) Object.keys(day.lunch.plan).forEach(function (k) { opts[k] = day.lunch.plan[k]; });
+    var dishes = Array.isArray(opts.dishes) ? opts.dishes.slice() : [];
+    var exists = dishes.some(function (d) {
+        var n = typeof d === 'string' ? d : String((d && d.name) || '');
+        return n === o.dish.name;
+    });
+    if (!exists) dishes.push({ name: o.dish.name, tag: (o.memberName || '') + '特供' });
+    // 午餐原本没有菜时，补主食和蔬菜，避免一餐只有一碗粥
+    if (dishes.length < 2) {
+        ['杂粮饭', '清炒时蔬'].forEach(function (n) {
+            if (!dishes.some(function (d) { var x = typeof d === 'string' ? d : String((d && d.name) || ''); return x === n; })) {
+                dishes.push({ name: n, tag: '搭配均衡' });
+            }
+        });
+    }
+    opts.dishes = dishes;
+    opts.note = String(opts.note || '') + ' · ' + o.memberName + '特供';
+    opts.state = 'pending';
+    delete opts.confirmed;
+    updateMealPlan(dk, 'lunch', opts);
+    o.addedDate = dk;
+    _careSave(o);
+    if (btn) {
+        btn.textContent = '✅ 已加入今日午餐';
+        btn.disabled = true;
+        btn.style.background = '#D1FAE5';
+        btn.style.color = '#065F46';
+        btn.style.cursor = 'default';
+    }
+    showToast(o.memberName + '的特供菜已加入今日午餐，全家主菜不变');
+    try { renderHomeDiaryCard(); } catch (e) {}
+    try { if (typeof renderDiary === 'function') renderDiary(); } catch (e) {}
+    try { renderHomeHealthButlerCard(); } catch (e) {}
+};
+// V464: 首屏兜底渲染（部分入口不会立即触发 renderHomeDiaryCard）
+setTimeout(function () { try { renderHomeHealthButlerCard(); } catch (e) {} }, 1500);
 
 // V236: 关闭看板后回到食记「今天」并高亮今日三餐卡片
 function focusTodayDiaryMeals() {
