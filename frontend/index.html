@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V462-20261110';
+        var APP_VER = 'V463-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -358,9 +358,9 @@
         .hd-head { display: flex; align-items: center; gap: 4px; }
         /* V106: 2人▼ 紧跟日期（周一）右侧，不再推右；＋ 与 确认 仍靠行右（margin-left:auto 移至 hd-plus-btn） */
         #homeDiaryDiningSlot { padding-left: 0; }
-        #homeDiaryCard .hd-plus-btn { margin-left: 4px; }
-        /* V125: [3人▼][＋][确认] 整组推右（auto 移到 3人 挂载槽上），与家中食材卡「做法/采购/＋」右缘对齐；组内仍各 8px */
-        #homeDiaryCard #homeDiaryDiningSlot { margin-left: auto; }
+        /* V463: ＋ 移到「N人」左侧，并把整组推右的 auto 改到 ＋ 上，保证 [＋][N人] 紧挨 */
+        #homeDiaryCard .hd-plus-btn { margin-left: auto; }
+        #homeDiaryCard #homeDiaryDiningSlot { margin-left: 0; }
         /* V124: ＋ 不再单独推右（取消 V106 的 margin-left:auto）——「3人▼」「＋」「确认」各 gap4+margin4=8px 均匀排列 */
         .hd-arrow-plain {
             background: none; border: none;
@@ -4410,10 +4410,11 @@ async function _submitFeedback() {
         <div class="home-card" id="homeFridgeCard" style="margin-top:6px;">
             <div class="home-card-title" style="display:flex;align-items:center;gap:4px;">
                 <span>家中食材</span>
+                <!-- V463: ＋ 移到「家中食材」标题右侧 -->
+                <button class="hd-plus-btn" onclick="openAddFridgeModal()" title="添加食材">＋</button>
                 <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;position:relative;"> <!-- V107: 做法/采购/＋ 间距 12→8px; V411: 残局清理入口移到做法左侧 -->
                     <button type="button" id="homeFridgeCleanupBtn" onclick="openFridgeCleanup()" style="border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:700;border-radius:999px;padding:4px 10px;cursor:pointer;white-space:nowrap;">🧹 清理冰箱残局</button>
                     <button id="homeRecipeDropBtn" class="hd-pill-btn" onclick="toggleHomeRecipeDropdown(event)" title="食材做法">做法 ▼</button>
-                    <button class="hd-plus-btn" onclick="openAddFridgeModal()" title="添加食材">＋</button>
                     <button class="hd-pill-btn" onclick="_homeGotoShopping()" title="打开食材页采购计划">采购</button>
                     <div id="homeRecipeDropdown" style="display:none;position:absolute;right:0;top:30px;z-index:60;background:white;border:1px solid #FED7AA;border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,0.10);min-width:136px;overflow:hidden;">
                         <button class="home-recipe-menu-item" onclick="_closeHomeRecipeDropdown();generateFridgeMealPlan();">现有食材食谱</button>
@@ -4434,9 +4435,9 @@ async function _submitFeedback() {
                 <!-- V111: 状态标签（与三餐计划页餐次标签同款）；V121: 移到日期（周二）右侧，间距由 hd-head gap:8px 承担 -->
                 <span id="hdStatusBadge" style="display:inline-flex;align-items:center;"></span>
                 <!-- 就餐人（V371: 首页仅只读展示人数，选择器只在食记页可点） -->
-                <span id="homeDiaryDiningSlot" style="display:inline-flex;align-items:center;"><span id="homeDiaryDiningReadonly" style="font-size:12px;color:#C2410C;font-weight:600;white-space:nowrap;"></span></span>
-                <!-- V61: ＋ 紧跟 2人▼（间距由 hd-head gap:8px 承担）；V439: 去掉首页重复的「确认」入口，确认统一在食记页 -->
                 <button class="hd-plus-btn" onclick="openMealPlanPage()" title="规划食谱">＋</button>
+                <span id="homeDiaryDiningSlot" style="display:inline-flex;align-items:center;"><span id="homeDiaryDiningReadonly" style="font-size:12px;color:#C2410C;font-weight:600;white-space:nowrap;"></span></span>
+                <!-- V463: ＋ 已移到「N人」左侧；V439: 去掉首页重复的「确认」入口，确认统一在食记页 -->
                 <!-- V442: 记录入口移到 ＋ 右侧，首页正文只展示计划与成本 -->
                 <button class="hd-pill-btn" onclick="_hdRecordCurrent()" title="记录本餐实际吃了什么">记录</button>
             </div>
