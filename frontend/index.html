@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V474-20261111';
+        var APP_VER = 'V475-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79095,13 +79095,19 @@ window._wpMaybeGenerate = function () {
 };
 window._wpCardHtml = function () {
     var d = _wpGet();
-    if (!d || typeof isFoodMember !== 'function' || !isFoodMember()) return '';
-    return '<div onclick="_wpShowModal()" style="margin:12px 12px 0;background:linear-gradient(135deg,#78350F,#B45309);border-radius:14px;padding:12px 14px;cursor:pointer;box-shadow:0 4px 14px rgba(120,53,15,0.18);">'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
-        + '<div style="min-width:0;"><div style="font-size:13px;font-weight:800;color:#FEF3C7;">👑 您的《家庭膳食健康白皮书》</div>'
-        + '<div style="font-size:11px;color:#FDE68A;margin-top:3px;">3 个易踩雷误区 + 30 天健康大方向</div></div>'
-        + '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#78350F;background:#FDE68A;border-radius:999px;padding:4px 9px;">查看 ›</span>'
-        + '</div></div>';
+    var isM = false;
+    try { isM = (typeof isFoodMember === 'function' && isFoodMember()); } catch (e) {}
+    var shell = function (sub, btn, onclick) {
+        return '<div onclick="' + onclick + '" style="margin:12px 12px 0;background:linear-gradient(135deg,#78350F,#B45309);border-radius:14px;padding:12px 14px;cursor:pointer;box-shadow:0 4px 14px rgba(120,53,15,0.18);">'
+            + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+            + '<div style="min-width:0;"><div style="font-size:13px;font-weight:800;color:#FEF3C7;">👑 您的《家庭膳食健康白皮书》</div>'
+            + '<div style="font-size:11px;color:#FDE68A;margin-top:3px;">' + sub + '</div></div>'
+            + '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#78350F;background:#FDE68A;border-radius:999px;padding:4px 9px;white-space:nowrap;">' + btn + '</span>'
+            + '</div></div>';
+    };
+    if (!isM) return shell('会员专享 · 升级后自动生成', '升级解锁 ›', '_fhShowPaywall()');
+    if (!d) return shell('尚未生成，点击立即分析您家档案', '立即生成 ›', '_wpRun()');
+    return shell('3 个易踩雷误区 + 30 天健康大方向', '查看 ›', '_wpShowModal()');
 };
 function _vpWrapText(ctx, text, x, y, maxWidth, lineHeight) {
     var line = '', lines = [];
