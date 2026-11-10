@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V473-20261110';
+        var APP_VER = 'V474-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79286,9 +79286,10 @@ window._ybOpen = function () {
     var old = document.getElementById('ybOv'); if (old) old.remove();
     var ov = document.createElement('div');
     ov.id = 'ybOv';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:100066;background:rgba(17,24,39,0.7);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;overflow-y:auto;';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100066;background:rgba(17,24,39,0.7);display:flex;align-items:flex-start;justify-content:center;padding:56px 16px 24px;box-sizing:border-box;overflow-y:auto;-webkit-overflow-scrolling:touch;';
     ov.onclick = function (e) { if (e.target === ov) ov.remove(); };
-    ov.innerHTML = '<div style="width:360px;max-width:100%;background:#fff;border-radius:20px;padding:14px;box-sizing:border-box;">'
+    ov.innerHTML = '<button type="button" onclick="document.getElementById(\'ybOv\').remove()" style="position:fixed;top:14px;right:14px;z-index:100071;width:38px;height:38px;border-radius:50%;border:none;background:rgba(255,255,255,.95);color:#374151;font-size:22px;font-weight:700;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);">×</button>'
+        + '<div style="width:360px;max-width:100%;background:#fff;border-radius:20px;padding:14px;box-sizing:border-box;">'
         + '<div style="display:flex;align-items:center;justify-content:space-between;"><div style="font-size:15px;font-weight:800;color:#7C2D12;">📅 我的年度账单</div>'
         + '<button type="button" onclick="document.getElementById(\'ybOv\').remove()" style="border:none;background:none;font-size:18px;color:#9CA3AF;cursor:pointer;">×</button></div>'
         + '<img src="' + dataUrl + '" style="width:100%;border-radius:12px;margin-top:10px;border:1px solid #FDE68A;" />'
@@ -79297,6 +79298,7 @@ window._ybOpen = function () {
         + '<button type="button" onclick="_ybRenew()" style="flex:1;padding:11px;border:none;border-radius:11px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:13px;font-weight:800;cursor:pointer;">续费立减 50 元</button>'
         + '</div>'
         + '<div style="font-size:10px;color:#9CA3AF;text-align:center;line-height:1.6;margin-top:8px;">⚠️ 本内容仅为日常饮食参考，不构成医疗诊断。</div>'
+        + '<button type="button" onclick="document.getElementById(\'ybOv\').remove()" style="width:100%;margin-top:10px;padding:10px;border:none;border-radius:11px;background:#F3F4F6;color:#6B7280;font-size:13px;font-weight:700;cursor:pointer;">关闭</button>'
         + '</div>';
     window.__ybDataUrl = dataUrl;
     document.body.appendChild(ov);
