@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V466-20261110';
+        var APP_VER = 'V467-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -61732,22 +61732,8 @@ function renderDiary() {
             actualText = '（未记录）';
             actualClass = 'diary-section-empty';
         }
-        // V441: 记录后与计划不一致的菜明确标出（计划外 / 未按计划），首页不再重复展示实际
+        // V467: 移除「未按计划 / 计划外」差异提示（计划菜品可能是对象，曾显示 [object Object]）
         var actualDiffHtml = '';
-        if (hasActual && hasPlan && !isDiningOut) {
-            var _planSet = new Set(data.plan.dishes);
-            var _actNames = data.actual.dishes.map(function (d) { return d.name || ''; }).filter(Boolean);
-            var _actSet = new Set(_actNames);
-            var _extraDishes = _actNames.filter(function (n) { return !_planSet.has(n); });
-            var _missDishes = data.plan.dishes.filter(function (n) { return !_actSet.has(n); });
-            if (_extraDishes.length || _missDishes.length) {
-                actualDiffHtml = '<div style="font-size:11px;line-height:1.7;margin-top:3px;">'
-                    + (_extraDishes.length ? '<span style="color:#C2410C;">计划外：' + _extraDishes.map(escapeHtml).join('、') + '</span>' : '')
-                    + (_extraDishes.length && _missDishes.length ? '<span style="color:#D1D5DB;"> ｜ </span>' : '')
-                    + (_missDishes.length ? '<span style="color:#6B7280;">未按计划：' + _missDishes.map(escapeHtml).join('、') + '</span>' : '')
-                    + '</div>';
-            }
-        }
         
         // AI建议区
         let aiSuggestion = '';
@@ -61886,7 +61872,7 @@ function renderDiary() {
                     })()}
                     <div><span class="diary-section-label">实际：</span>${actualText}${actualEmoji}${_siDoneTag}</div>
                     ${actualDiffHtml}
-                    ${hasActual && !data.actual.groupRecord && data.actual.location ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">📍 ${escapeHtml(data.actual.location)}${data.actual.location !== '家' ? ' 就餐' : ''}</div>` : ''}
+                    ${hasActual && !data.actual.groupRecord && data.actual.location && data.actual.location !== '家' ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">📍 ${escapeHtml(data.actual.location)} 就餐</div>` : ''}
                     ${hasActual && data.actual.groupRecord && data.actual.locationSummary ? `<div style="font-size:12px;color:#6B7280;margin-top:2px;">👥 ${escapeHtml(data.actual.locationSummary)}</div>` : ''}
                     ${hasActual && data.actual.photos && data.actual.photos.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${data.actual.photos.slice(0,4).map(p => `<img src="${p}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">`).join('')}</div>` : ''}
                     ${buildMealSavingBarHtml(data, dateKey + '|' + meal.key)}
