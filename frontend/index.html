@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V449-20261109';
+        var APP_VER = 'V450-20261109';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -48354,19 +48354,17 @@ function _mrSavePraise(record, praise) {
         if (hit) saveFoodDiaries(list);
     } catch (e) { console.warn('[V415] 写入 foodDiaries.aiPraise 失败:', e); }
 }
-// V448: 夸夸弹层里补拍/选照片（可选）——写回本条记录，海报会用这张图
-function _mrPickPhoto() {
-    var rec = window._mrPraiseRecord;
-    if (!rec) { showToast('未找到本餐记录'); return; }
+// V450: 通用选图/拍照 → 压缩后的 JPEG dataURL（记录页与夸夸弹层共用）
+function _pickImageDataUrl(useCamera, cb) {
     var input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.setAttribute('capture', 'environment');
+    if (useCamera) input.setAttribute('capture', 'environment');
     input.style.display = 'none';
     document.body.appendChild(input);
     input.onchange = function () {
         var file = input.files && input.files[0];
-        document.body.removeChild(input);
+        try { document.body.removeChild(input); } catch (e) {}
         if (!file) return;
         if (!/^image\//.test(file.type || '')) { showToast('请选择图片文件'); return; }
         var reader = new FileReader();
@@ -48384,25 +48382,7 @@ function _mrPickPhoto() {
                     data = canvas.toDataURL('image/jpeg', 0.82);
                 } catch (e) { data = String(ev.target.result || ''); }
                 if (!data) { showToast('照片读取失败'); return; }
-                rec.imageBase64 = data;
-                try {
-                    var records = JSON.parse(lsGet('mealRecords')) || [];
-                    records.forEach(function (r) { if (r && String(r.id) === String(rec.id)) r.imageBase64 = data; });
-                    lsSet('mealRecords', JSON.stringify(records));
-                } catch (e) {}
-                try {
-                    var list = getFoodDiaries();
-                    var hit = false;
-                    (list || []).forEach(function (d) {
-                        if (d && d.type === 'meal' && d.relatedDate === rec.date && d.relatedMealType === rec.mealType) {
-                            d.imageBase64 = data;
-                            hit = true;
-                        }
-                    });
-                    if (hit) saveFoodDiaries(list);
-                } catch (e) {}
-                _mrShowPraise(rec, rec.aiPraise || '');
-                showToast('照片已添加，可以生成海报了');
+                cb(data);
             };
             img.onerror = function () { showToast('照片读取失败'); };
             img.src = String(ev.target.result || '');
@@ -48410,6 +48390,32 @@ function _mrPickPhoto() {
         reader.readAsDataURL(file);
     };
     input.click();
+}
+// V448: 夸夸弹层里补拍/选照片（可选）——写回本条记录，海报会用这张图
+function _mrPickPhoto() {
+    var rec = window._mrPraiseRecord;
+    if (!rec) { showToast('未找到本餐记录'); return; }
+    _pickImageDataUrl(true, function (data) {
+        rec.imageBase64 = data;
+        try {
+            var records = JSON.parse(lsGet('mealRecords')) || [];
+            records.forEach(function (r) { if (r && String(r.id) === String(rec.id)) r.imageBase64 = data; });
+            lsSet('mealRecords', JSON.stringify(records));
+        } catch (e) {}
+        try {
+            var list = getFoodDiaries();
+            var hit = false;
+            (list || []).forEach(function (d) {
+                if (d && d.type === 'meal' && d.relatedDate === rec.date && d.relatedMealType === rec.mealType) {
+                    d.imageBase64 = data;
+                    hit = true;
+                }
+            });
+            if (hit) saveFoodDiaries(list);
+        } catch (e) {}
+        _mrShowPraise(rec, rec.aiPraise || '');
+        showToast('照片已添加，可以生成海报了');
+    });
 }
 function _mrShowPraise(record, praise) {
     var old = document.getElementById('mrPraiseOv');
@@ -48718,15 +48724,55 @@ function _mrPosterToWorks() {
 }
 function _mrGeneratePoster(record) {
     if (!record) { showToast('未找到本餐记录'); return; }
-    window._mrPosterRecord = record;
+    // V450: 有多张照片时先让用户挑一张（或选择不用照片）
+    var imgs = (record.images && record.images.length) ? record.images.slice() : (record.imageBase64 ? [record.imageBase64] : []);
+    if (imgs.length > 1) { _mrChoosePosterImage(record, imgs); return; }
+    _mrRunPoster(record, imgs[0] || '');
+}
+// V450: 海报选图弹层——从本餐多张照片里选一张，或不用照片
+function _mrChoosePosterImage(record, imgs) {
+    var old = document.getElementById('mrPosterPickOv');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'mrPosterPickOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100004;background:rgba(31,41,55,0.62);display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:18px;padding:16px;width:100%;max-width:330px;margin:auto;">'
+        + '<div style="font-size:15px;font-weight:800;color:#C2410C;margin-bottom:4px;">选择用于海报的照片</div>'
+        + '<div style="font-size:12px;color:#9CA3AF;margin-bottom:12px;">选一张最好看的，或不用照片</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">'
+        + imgs.map(function (u, i) {
+            return '<img src="' + u + '" alt="照片' + (i + 1) + '" class="mr-poster-pick" data-i="' + i + '" style="width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:10px;border:1px solid #E5E7EB;cursor:pointer;">';
+        }).join('')
+        + '</div>'
+        + '<button type="button" class="mr-poster-nophoto" style="margin-top:12px;width:100%;padding:10px 0;border:1px dashed #FDBA74;border-radius:10px;background:#FFFBF5;color:#C2410C;font-size:13px;font-weight:600;cursor:pointer;">不用照片（用菜名渐变卡）</button>'
+        + '<button type="button" class="mr-poster-cancel" style="margin-top:8px;width:100%;padding:10px 0;border:none;border-radius:10px;background:#F3F4F6;color:#4B5563;font-size:13px;font-weight:600;cursor:pointer;">取消</button>'
+        + '</div>';
+    document.body.appendChild(ov);
+    ov.querySelectorAll('.mr-poster-pick').forEach(function (el) {
+        el.addEventListener('click', function () {
+            var u = imgs[parseInt(this.dataset.i, 10)] || '';
+            ov.remove();
+            _mrRunPoster(record, u);
+        });
+    });
+    ov.querySelector('.mr-poster-nophoto').addEventListener('click', function () { ov.remove(); _mrRunPoster(record, ''); });
+    ov.querySelector('.mr-poster-cancel').addEventListener('click', function () { ov.remove(); });
+}
+function _mrRunPoster(record, chosenUrl) {
+    var r = {};
+    try { r = Object.assign({}, record); } catch (e) { r = record; }
+    r.imageBase64 = chosenUrl || '';
+    var all = (record.images && record.images.length) ? record.images.slice() : [];
+    r.images = chosenUrl ? [chosenUrl].concat(all.filter(function (u) { return u !== chosenUrl; })) : all;
+    window._mrPosterRecord = r;
     _mrPosterLoading(true, '正在生成海报...');
-    _mrRenderPoster(record).then(function (dataUrl) {
+    _mrRenderPoster(r).then(function (dataUrl) {
         _mrPosterLoading(false);
         if (!dataUrl || dataUrl.length < 200) throw new Error('海报内容为空');
-        _mrMarkPosterGenerated(record);
+        _mrMarkPosterGenerated(r);
         // V449: 生成海报即自动存入「我的创作 · 草稿箱」，不再依赖用户再点按钮
         var saved = false;
-        try { saved = _mrSendToWorks(record, true); } catch (e2) { console.warn('[V449] 海报自动存入我的创作失败:', e2); }
+        try { saved = _mrSendToWorks(r, true); } catch (e2) { console.warn('[V449] 海报自动存入我的创作失败:', e2); }
         if (saved) { try { showToast('海报已生成，并存入「我的创作 · 草稿箱」'); } catch (e3) {} }
         _mrShowPoster(dataUrl, saved);
     }).catch(function (e) {
@@ -73357,7 +73403,8 @@ function saveFamilyMealRecord(o) {
             const pp = parseInt(o.people);
             return (total > 0 && pp > 0) ? Math.round(total / pp) : 0;
         })(),
-        imageBase64: '',
+        imageBase64: (o.images && o.images[0]) || '',
+        images: (o.images || []).slice(), // V450: 本餐多张照片（海报可选其一）
         rating: parseInt(o.rating) || 0,
         dishes: names.map(function (n, i) {
             return {
@@ -73437,6 +73484,7 @@ function openMealRecordModal(mealKey, opts) {
     let fDishComments = {}; // V182: 每道菜的单独评价 {菜名: 评价}
     let fDishRatings = {}; // V339(D6-04): 每道菜单独星级 {菜名: 1~5}，0/未设置=未评分
     let fDishTastes = {};  // V449: 👎 时补选的原因（太咸/太淡…），最终写入 dishes[].taste
+    let fPhotos = [];      // V450: 本餐照片（拍照/上传，最多 6 张），生成海报时可选其中一张
     // V183: 右上角「🍽️ 在外就餐」开关：接收当天外出就餐计划（餐厅/食谱/人数/预算）
     let fEatingOut = false;
     let fRestaurant = '', fTotalCost = 0, fPeople = 0;
@@ -73499,7 +73547,12 @@ function openMealRecordModal(mealKey, opts) {
         +       '<div style="display:flex;align-items:center;gap:10px;margin-top:14px;">'
         +         '<span style="font-size:13px;font-weight:600;color:#374151;">⭐ 总体评分</span>'
         +         '<span id="umrFStars" style="font-size:24px;line-height:1;letter-spacing:2px;user-select:none;"></span>'
+        +         '<span style="margin-left:auto;display:flex;gap:6px;">'
+        +           '<button id="umrFCameraBtn" type="button" style="padding:6px 9px;border:1px solid #FDBA74;background:#FFFBF5;color:#C2410C;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📷 拍照</button>'
+        +           '<button id="umrFAlbumBtn" type="button" style="padding:6px 9px;border:1px solid #E5E7EB;background:white;color:#4B5563;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">🖼️ 上传图片</button>'
+        +         '</span>'
         +       '</div>'
+        +       '<div id="umrFPhotos" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>'
         +       '<input id="umrFComment" maxlength="60" placeholder="一句话评价（可选）" style="margin-top:10px;width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;box-sizing:border-box;">'
         +       '<div style="margin-top:12px;">'
         +         '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">📍 其他就餐地点<span style="font-size:12px;color:#9CA3AF;font-weight:400;">（默认在家，外食可不选）</span></div>'
@@ -73622,6 +73675,30 @@ function openMealRecordModal(mealKey, opts) {
                 fDishChecked[this.dataset.name] = this.checked;
                 renderFDishTags();
             });
+        });
+    }
+    // V450: 本餐照片缩略图（拍照/上传，生成海报时可选）
+    function renderFPhotos() {
+        const box = $('umrFPhotos');
+        if (!box) return;
+        box.innerHTML = fPhotos.map(function (u, i) {
+            return '<span style="position:relative;display:inline-block;">'
+                + '<img src="' + u + '" alt="本餐照片" style="display:block;width:58px;height:58px;object-fit:cover;border-radius:9px;border:1px solid #E5E7EB;">'
+                + '<span class="umr-f-photo-del" data-i="' + i + '" title="删除" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:rgba(17,24,39,.75);color:#fff;font-size:11px;line-height:18px;text-align:center;cursor:pointer;">✕</span>'
+                + '</span>';
+        }).join('') + (fPhotos.length ? '' : '<span style="font-size:11px;color:#9CA3AF;line-height:58px;">可选：拍张照片，海报更好看</span>');
+        box.querySelectorAll('.umr-f-photo-del').forEach(function (el) {
+            el.addEventListener('click', function () {
+                fPhotos.splice(parseInt(this.dataset.i, 10), 1);
+                renderFPhotos();
+            });
+        });
+    }
+    function addFPhoto(useCamera) {
+        if (fPhotos.length >= 6) { showToast('最多添加 6 张照片'); return; }
+        _pickImageDataUrl(useCamera, function (data) {
+            fPhotos.push(data);
+            renderFPhotos();
         });
     }
     function renderFStars() {
@@ -73786,7 +73863,8 @@ function openMealRecordModal(mealKey, opts) {
             dishComments: quick ? {} : fDishComments, // 快速记录单菜评价留空（V178）
             // V344(D7-04): 快速记录=整餐 4 星，逐道菜同步写 4 星，避免明细显示「未评分」、偏好画像拿不到单菜评分
             dishRatings: quick ? (function () { var m = {}; dishes.forEach(function (n) { m[String(n || '').trim()] = 4; }); return m; })() : fDishRatings,
-            dishTastes: quick ? {} : fDishTastes // V449: 👎 原因（写入 dishes[].taste，供偏好画像排除/纠偏）
+            dishTastes: quick ? {} : fDishTastes, // V449: 👎 原因（写入 dishes[].taste，供偏好画像排除/纠偏）
+            images: fPhotos.slice() // V450: 拍照/上传的本餐照片
         });
         if (!res) return;
         // V235: 回写专项健康饮食计划进度（是=打勾，否=留痕待复盘纠偏）
@@ -73844,6 +73922,9 @@ function openMealRecordModal(mealKey, opts) {
     $('umrFDishAdd').addEventListener('click', addFDish);
     $('umrFDishInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addFDish(); } });
     $('umrEatOutBtn').addEventListener('click', toggleEatOut);
+    // V450: 总体评分行右侧的拍照/上传图片
+    $('umrFCameraBtn').addEventListener('click', function () { addFPhoto(true); });
+    $('umrFAlbumBtn').addEventListener('click', function () { addFPhoto(false); });
     $('umrQuickBtn').addEventListener('click', function () { doSave(true); });
     $('umrSaveBtn').addEventListener('click', function () { doSave(false); });
     // V419: 实际记录页底部「生成海报」——用当前已填内容即时出图，无需先保存
@@ -73865,7 +73946,8 @@ function openMealRecordModal(mealKey, opts) {
             dishes: dishes.map(function (n) { return { name: n }; }),
             rating: fRating,
             diningType: fEatingOut ? '外出就餐' : '在家做饭',
-            imageBase64: '',
+            imageBase64: fPhotos[0] || '',
+            images: fPhotos.slice(),
             aiPraise: savedPraise || comment || '这一餐的用心，家人都尝到了 ❤'
         });
     });
@@ -73873,6 +73955,7 @@ function openMealRecordModal(mealKey, opts) {
     renderFDishTags();
     renderFSpecial();
     renderFStars();
+    renderFPhotos();
     renderFPills();
     renderFPlanHint();
     renderEatOut();
