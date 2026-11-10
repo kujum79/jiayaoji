@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V459-20261110';
+        var APP_VER = 'V460-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -77905,7 +77905,7 @@ try {
 } catch (e) {}
 
 // ==================== V455: 健康管家升级为「主动式 AI 营养师」 ====================
-// 订阅用户打开即看到：今日专属健康建议 → 今日 AI 定制三餐 → 7 天自动调理计划；
+// 订阅用户打开即看到：今日专属健康建议 → 今日 AI 推荐营养食谱 → 7 天自动调理计划；
 // 专项计划（生病调理等）置顶展示今日专项食谱，并支持一键采纳到餐单。
 var _HM_MENU_CACHE = { key: '', menu: null, loading: false, aiTriedKey: '' };
 // V457: 三餐版块默认折叠；勾选状态按 餐次|菜名 记录，重渲染后仍保留
@@ -78078,6 +78078,50 @@ function _hmAdoptedToday() {
         });
     } catch (e) { return false; }
 }
+// V460: 营养师菜单结构校验——同餐只留 1 道糊/粥/羹/汤/面；全天不重复同一道菜、同一蔬菜主食材
+var _HM_VEG_WORDS = ['菠菜', '西兰花', '菜心', '油麦菜', '生菜', '小白菜', '大白菜', '青菜', '时蔬', '芹菜', '韭菜', '黄瓜', '番茄', '西红柿', '胡萝卜', '白萝卜', '萝卜', '南瓜', '山药', '土豆', '茄子', '豆角', '青椒', '彩椒', '木耳', '香菇', '杏鲍菇', '菌菇', '莲藕', '冬瓜'];
+function _hmVegKey(name) {
+    for (var i = 0; i < _HM_VEG_WORDS.length; i++) {
+        if (String(name).indexOf(_HM_VEG_WORDS[i]) >= 0) return _HM_VEG_WORDS[i];
+    }
+    return '';
+}
+function _hmApplyMenuRules(menu) {
+    if (!menu) return menu;
+    var liquidRe = /(粥|糊|羹|汤|面)$/;
+    var seenDish = {}, usedVeg = {};
+    ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+        var out = [], hasLiquid = false;
+        (menu[mt] || []).forEach(function (d) {
+            var name = String((d && d.name) || '').trim();
+            if (!name) return;
+            var dishKey = name.replace(/\s+/g, '');
+            if (seenDish[dishKey]) return;
+            if (liquidRe.test(name) && hasLiquid) return;
+            var veg = _hmVegKey(name);
+            if (veg && usedVeg[veg]) return;
+            seenDish[dishKey] = 1;
+            if (liquidRe.test(name)) hasLiquid = true;
+            if (veg) usedVeg[veg] = 1;
+            out.push(d);
+        });
+        // 去重后不足 2 道时补一道安全菜，避免只剩汤/羹
+        if (out.length < 2) {
+            var fillers = mt === 'breakfast' ? ['水煮蛋', '温热牛奶', '蒸南瓜'] : ['糙米饭', '杂粮饭', '米饭', '清炒时蔬'];
+            for (var i = 0; i < fillers.length; i++) {
+                var f = fillers[i];
+                var fv = _hmVegKey(f);
+                if (seenDish[f] || (fv && usedVeg[fv])) continue;
+                out.push({ name: f, tag: '清淡少油' });
+                seenDish[f] = 1;
+                if (fv) usedVeg[fv] = 1;
+                break;
+            }
+        }
+        menu[mt] = out;
+    });
+    return menu;
+}
 function _hmFallbackMenu() {
     var tags = _hmFamilyTags();
     var key = (tags.length && _HM_FANG_MENUS[tags[0].key]) ? tags[0].key : 'default';
@@ -78099,7 +78143,7 @@ function _hmFallbackMenu() {
         if (servings <= 1) menu[mt] = menu[mt].slice(0, 2);
         menu.reasons[mt] = '按' + termName + '节气与家庭标签（' + (tags.length ? tags.map(function (t) { return t.label; }).join('、') : '全家') + '）搭配，优先食方调养。';
     });
-    return menu;
+    return _hmApplyMenuRules(menu);
 }
 function _hmTodayMenu() {
     var key = _hmMenuCacheKey();
@@ -78111,6 +78155,7 @@ function _hmTodayMenu() {
             if (snap) {
                 var snapMenu = JSON.parse(snap);
                 if (snapMenu && snapMenu.breakfast) {
+                    snapMenu = _hmApplyMenuRules(snapMenu);
                     _HM_MENU_CACHE = { key: key, menu: snapMenu, loading: false, aiTriedKey: key };
                     return snapMenu;
                 }
@@ -78118,8 +78163,9 @@ function _hmTodayMenu() {
         } catch (e) {}
         var adopted = _loadExistingPlanAsStyle(_hmDateKey(new Date()));
         if (adopted) {
-            _HM_MENU_CACHE = { key: key, menu: _hmMenuFromStyle(adopted), loading: false, aiTriedKey: key };
-            return _HM_MENU_CACHE.menu;
+            var adoptedMenu = _hmApplyMenuRules(_hmMenuFromStyle(adopted));
+            _HM_MENU_CACHE = { key: key, menu: adoptedMenu, loading: false, aiTriedKey: key };
+            return adoptedMenu;
         }
     }
     var menu = _hmFallbackMenu();
@@ -78142,8 +78188,10 @@ function _hmBuildMenuPrompt() {
         + '1. 以食方/药膳为主：早餐、午餐、晚餐至少各有 1 道传统食方（如当归生姜羊肉汤、山药排骨汤、红枣小米粥、菠菜猪肝汤等），并在 tag 中写明功效；\n'
         + '2. 按家庭标签（' + tagLabels + '）与当前节气（' + termName + '）定制，优先调理该人群的核心需求；\n'
         + '3. 每餐 1 道主食 + 1 道食方汤/粥/羹 + 1 道菜，避免与近 3 天重复；\n'
-        + '4. 自动剔除家庭禁忌与过敏原：有老人/慢病时软烂低盐，孕妇忌生冷，儿童少辛辣；\n'
-        + '5. 每餐不超过 3 道菜，按 ' + servings + ' 人份设计。\n\n';
+        + '4. 同一餐最多只能有 1 道「粥/糊/羹/汤/面」类，不能同时出现两道（例如不能「黑豆核桃糊 + 菠菜蛋花羹」，也不能「羊肉汤 + 牛肉面」）；\n'
+        + '5. 同一天不得重复同一道菜，也不得重复同一蔬菜主食材（例如早餐已有菠菜，午晚餐不得再出现菠菜）；\n'
+        + '6. 自动剔除家庭禁忌与过敏原：有老人/慢病时软烂低盐，孕妇忌生冷，儿童少辛辣；\n'
+        + '7. 每餐不超过 3 道菜，按 ' + servings + ' 人份设计。\n\n';
     if (ctx.tasteProfile) p += '【口味与禁忌】\n' + ctx.tasteProfile + '\n\n';
     if (ctx.fridgeItems && ctx.fridgeItems.length) p += '【家中食材】' + ctx.fridgeItems.map(function (f) { return f.name; }).join('、') + '\n\n';
     if (ctx.recentMeals) p += '【近 3 天已吃】\n' + ctx.recentMeals + '\n\n';
@@ -78177,7 +78225,7 @@ function _hmGenerateTodayMenu() {
         if (_hmAdoptedToday()) return; // 已采纳，避免覆盖
         if (_hmMenuCacheKey() !== key) return; // 家庭信息已变化，丢弃旧结果
         var styles = _trimStylesForServings(parsed.styles, _mealPlanEffectiveServings());
-        _HM_MENU_CACHE.menu = _hmMenuFromStyle(styles[0]);
+        _HM_MENU_CACHE.menu = _hmApplyMenuRules(_hmMenuFromStyle(styles[0]));
         _hmRenderMenuSection();
     }).catch(function () { clearTimeout(timer); }).then(function () {
         _HM_MENU_CACHE.loading = false;
@@ -78210,7 +78258,7 @@ window._hmToggleDish = function (el) {
 function _hmMenuCardHtml() {
     var menu = _hmTodayMenu();
     var single = (typeof isSingleMealMode === 'function') && isSingleMealMode();
-    var title = single ? '🍱 一人食专属三餐' : '🍽️ 今日 AI 定制三餐';
+    var title = single ? '🍱 一人食推荐营养食谱' : '🍽️ 今日 AI 推荐营养食谱';
     var servings = _mealPlanEffectiveServings();
     var adopted = _hmAdoptedToday();
     var mealDefs = [['breakfast', '🌅 早餐'], ['lunch', '☀️ 午餐'], ['dinner', '🌙 晚餐']];
