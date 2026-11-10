@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V468-20261110';
+        var APP_VER = 'V469-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -61683,18 +61683,18 @@ function renderDiary() {
                     if (_rt) _reasonItems.push({ name: it.name, text: _rt });
                 });
             }
-            var planReasonHtml = '';
+            // V469: 推荐理由移到餐次头部「确认」左侧，展开内容以浮层显示
+            window.__diaryReasonHtml = '';
             if (_reasonItems.length > 0) {
-                planReasonHtml = '<details style="flex-basis:100%;width:100%;margin:2px 0 0;">'
-                    + '<summary style="cursor:pointer;list-style:none;font-size:11px;color:#9A3412;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:1px 8px;display:inline-block;">推荐理由</summary>'
-                    + '<div style="margin-top:4px;font-size:12px;color:#7A4A21;background:#FFFDF7;border:1px solid #FDE68A;border-radius:8px;padding:6px 8px;line-height:1.7;">'
+                window.__diaryReasonHtml = '<details style="position:relative;display:inline-block;">'
+                    + '<summary style="cursor:pointer;list-style:none;font-size:11px;color:#9A3412;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:2px 8px;display:inline-block;white-space:nowrap;">推荐理由</summary>'
+                    + '<div style="position:absolute;right:0;top:calc(100% + 5px);width:260px;max-width:72vw;z-index:40;font-size:12px;color:#7A4A21;background:#FFFDF7;border:1px solid #FDE68A;border-radius:8px;padding:7px 9px;line-height:1.7;box-shadow:0 8px 20px rgba(0,0,0,0.12);">'
                     + _reasonItems.map(function(r){ return '<div><b>' + escapeHtml(r.name) + '</b>：' + escapeHtml(r.text) + '</div>'; }).join('')
                     + '</div></details>';
             }
             planHtml = '<div class="diary-source-group" style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px 8px;flex:1 1 0;min-width:120px;margin:0;padding:0;background:transparent;border:none;border-radius:0;">'
                 + rowsHtml + '</div>'
-                + _renderMealNutritionSummary(allDishes)
-                + planReasonHtml;
+                + _renderMealNutritionSummary(allDishes);
             var planConfirmedLocal = (data.plan.state === 'confirmed' || data.plan.confirmed === true || data.plan.state === 'completed');
             var btnLabel = planConfirmedLocal ? '复核' : '确认'; // V372: 已确认时按钮承担复核/撤销职责
             window.__diaryPlanBtnHtml = '<button onclick="confirmDiaryMealPlan(\'' + escapeAttr(meal.key) + '\',\'' + escapeAttr(dateKey) + '\')" class="diary-plan-btn' + (planConfirmedLocal ? ' diary-plan-btn-review' : '') + '" title="' + (planConfirmedLocal ? '复核/调整本餐计划' : '确认本餐计划') + '">' + btnLabel + '</button>';
@@ -61704,6 +61704,7 @@ function renderDiary() {
                 + '<div class="diary-empty-source">（暂无计划，点 ☰ 选择食谱）</div>'
                 + '</div>';
             window.__diaryPlanBtnHtml = '<button disabled class="diary-plan-btn diary-plan-btn-disabled">确认</button>';
+            window.__diaryReasonHtml = '';
             planClass = 'diary-section-empty';
         }
         // planConfirmed 口径：只有点了「确认计划」按钮（state=confirmed/completed 或 confirmed=true）才算已确认；逐道勾选只影响确认按钮，不改变徽章
@@ -61819,7 +61820,7 @@ function renderDiary() {
                         : outStatus === 'confirmed'
                         ? `<button onclick="openDiningOutModal('${meal.key}','confirmed')" style="background:#EFF6FF;color:#1E40AF;">记录实际</button>`
                         : `<button onclick="openDiningOutModal('${meal.key}','planning')" style="background:#FEF3C7;color:#92400E;">继续规划</button>`
-                    ) : (window.__diaryPlanBtnHtml || '') + `
+                    ) : (window.__diaryReasonHtml || '') + (window.__diaryPlanBtnHtml || '') + `
                         <button onclick="openMealRecordModal('${meal.key}')">记录</button>
                     `}
                     ${(typeof isChildMode === 'function' && isChildMode()) ? '<button onclick="openChildDiaryGuide(\'' + meal.key + '\',\'' + dateKey + '\')" style="background:linear-gradient(135deg,#FBBF24,#F472B6);color:white;font-weight:700;">🌈 写作引导</button>' : ''}
