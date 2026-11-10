@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V452-20261109';
+        var APP_VER = 'V453-20261110';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -29330,39 +29330,47 @@ function getDiversityConstraints(dateKey) {
     return constraints;
 }
 
-// 粥汤互斥 post-filter：同一餐次中不能同时有粥类和汤羹类
-// 识别规则：菜名含"粥"为粥类，含"汤"或"羹"为汤羹类
-// 策略：保留粥（更常作为主食），替换汤羹为炒菜/凉拌备选
+// V453: 家常同餐互斥 post-filter（粥+汤 / 粥+面 都不合理；外食大餐不走这里）
+// 识别规则：菜名含"粥"为粥类，含"汤|羹"为汤羹类，含面条/米线等为面类
+// 策略：保留粥（更常作为主食），把冲突的汤羹替换为炒菜/凉拌，把面替换为固体主食
 function _filterNoPorridgeWithSoup(dishes, mealKey) {
     if (!Array.isArray(dishes) || dishes.length < 2) return dishes;
-    var hasPorridge = dishes.some(function(d){ var n = typeof d === 'string' ? d : (d && d.dish); return /粥/.test(n || ''); });
-    var hasSoup = dishes.some(function(d){ var n = typeof d === 'string' ? d : (d && d.dish); return /汤|羹/.test(n || ''); });
-    if (!hasPorridge || !hasSoup) return dishes;
-    // 备选池：炒菜/凉拌/蒸菜（不含粥/汤/羹）
+    var nameOf = function (d) { return typeof d === 'string' ? d : (d && d.dish); };
+    var hasPorridge = dishes.some(function (d) { return /粥/.test(nameOf(d) || ''); });
+    if (!hasPorridge) return dishes;
     var pool = {
         breakfast: ['韭菜鸡蛋饼','拌黄瓜','水煮蛋','蒸南瓜','葱油饼','鸡蛋羹','酸奶麦片','菜包','花卷','燕麦牛奶','蒸蛋羹','皮蛋瘦肉粥'],
         lunch:     ['蒜蓉西兰花','青椒肉丝','清炒时蔬','凉拌三丝','麻婆豆腐','西芹炒肉','拍黄瓜','清炒豆芽','凉拌木耳','蒜蓉油麦菜','蚝油生菜','苦瓜炒蛋'],
         dinner:    ['红烧茄子','白灼生菜','清炒丝瓜','素炒什锦','香菇青菜','清炒小白菜','蒜蓉西兰花','凉拌菠菜','清炒茼蒿','蒜蓉油麦菜','蚝油生菜','苦瓜炒蛋']
     };
-    var candidates = (pool[mealKey] || pool.lunch).filter(function(name){ return !/粥|汤|羹/.test(name); });
-    // 找到汤羹类菜品并替换
-    for (var i = 0; i < dishes.length; i++) {
-        var item = dishes[i];
-        var n = typeof item === 'string' ? item : (item && item.dish);
-        if (/汤|羹/.test(n || '')) {
-            // 从备选池里挑一个不在当前列表里的
-            var existingNames = dishes.map(function(d){ return typeof d === 'string' ? d : (d && d.dish); });
-            var replacement = candidates.find(function(c){ return existingNames.indexOf(c) === -1; });
-            if (replacement) {
-                if (typeof item === 'string') {
-                    dishes[i] = replacement;
-                } else if (item && typeof item === 'object') {
-                    var reason = (item.reason || '').replace(/汤|羹/g, '').slice(0, 28);
-                    dishes[i] = { dish: replacement, reason: reason || '搭配替换，避免粥汤同餐', ingredients: item.ingredients || [replacement] };
-                }
-            }
-            break; // 只替换第一个汤羹，避免过度改动
+    var existingNames = function () { return dishes.map(function (d) { return nameOf(d); }); };
+    var replaceAt = function (idx, replacement, tag) {
+        var item = dishes[idx];
+        if (typeof item === 'string') {
+            dishes[idx] = replacement;
+        } else if (item && typeof item === 'object') {
+            var reason = (item.reason || '').replace(/汤|羹/g, '').slice(0, 28);
+            dishes[idx] = { dish: replacement, reason: reason || tag, ingredients: item.ingredients || [replacement] };
         }
+    };
+    // 1) 粥 + 汤/羹 → 汤羹换成炒菜/凉拌
+    var soupIdx = dishes.findIndex(function (d) { return /汤|羹/.test(nameOf(d) || ''); });
+    if (soupIdx !== -1) {
+        var candidates = (pool[mealKey] || pool.lunch).filter(function (name) { return !/粥|汤|羹/.test(name); });
+        var names = existingNames();
+        var replacement = candidates.find(function (c) { return names.indexOf(c) === -1; });
+        if (replacement) replaceAt(soupIdx, replacement, '搭配替换，避免粥汤同餐');
+    }
+    // 2) 粥 + 面（面条/米线类）→ 面换成固体主食
+    var noodleRe = /面条|拉面|刀削面|拌面|汤面|炒面|意面|挂面|牛肉面|炸酱面|焖面|烩面|凉面|米线|米粉/;
+    var noodleIdx = dishes.findIndex(function (d) { return noodleRe.test(nameOf(d) || ''); });
+    if (noodleIdx !== -1) {
+        var staplePool = mealKey === 'breakfast'
+            ? ['馒头','花卷','鸡蛋饼','蒸南瓜','菜包']
+            : ['米饭','杂粮饭','玉米','红薯'];
+        var sn = existingNames();
+        var staple = staplePool.find(function (c) { return sn.indexOf(c) === -1; }) || '米饭';
+        replaceAt(noodleIdx, staple, '搭配替换，避免粥面同餐');
     }
     return dishes;
 }
@@ -36724,6 +36732,12 @@ function _fhMgrStaleIssues(it) {
     issues.forEach(function (is) {
         if (is.type === 'stale_term') out.push('⚠️ 检测到过期节气词：' + (is.words || []).join('、'));
         else if (is.type === 'price') out.push('⚠️ 检测到价格偏离：' + (is.amount != null ? ('¥' + is.amount) : (is.text || '')) + (is.ingredient ? '（' + is.ingredient + '）' : ''));
+        else if (is.type === 'meal_conflict') out.push('⚠️ ' + (is.reason || '同一餐搭配不合理'));
+        else if (is.type === 'user_report') {
+            var fb = String(is.text || '');
+            if (fb.length > 60) fb = fb.slice(0, 60) + '…';
+            out.push('🙋 用户反馈：' + fb);
+        }
     });
     if (!issues.length && it && it.hits && it.hits.length) out.push('⚠️ 检测到过期节气词：' + it.hits.join('、'));
     return out;
@@ -58123,7 +58137,7 @@ async function generateAiMealRecommendation() {
             userMessage += `请在返回的 JSON 数据中，将专门为特殊成员准备的菜品，标注在 specialInterventions 字段中（每餐一个数组，没有专项干预的餐返回 []）。\n`;
             userMessage += `specialInterventions 中 planType 只能取：illness/fitness/growth/athlete/pregnancy/infant。\n\n`;
         }
-        userMessage += `\n【硬性规则·流质同餐互斥】粥/稀饭/汤/羹/豆浆/米糊/牛奶/酸奶/果汁/奶茶等流质与饮品，同一餐合计最多1道：早餐若已有粥，就不要再给酸奶/牛奶/豆浆/果汁；午餐/晚餐若已有汤，就不要再给粥/羹。早餐必须至少有1道固体主食（面包/馒头/包子/饼/蛋/饭团等），不能只给流食。\n`;
+        userMessage += `\n【硬性规则·流质同餐互斥】粥/稀饭/汤/羹/豆浆/米糊/牛奶/酸奶/果汁/奶茶等流质与饮品，同一餐合计最多1道：早餐若已有粥，就不要再给酸奶/牛奶/豆浆/果汁；午餐/晚餐若已有汤，就不要再给粥/羹；粥/稀饭与面条/米线不得同餐（外食大餐除外）。早餐必须至少有1道固体主食（面包/馒头/包子/饼/蛋/饭团等），不能只给流食。\n`;
         userMessage += `\n请严格按照以下JSON格式返回推荐方案，不要添加任何其他文字。\n**每道菜必须含 ingredients 字段（全部食材及每人份用量），不可省略。**\n`;
         var _spMealFrag1 = _hasSP1 ? ',"specialInterventions":[{"memberName":"儿子","planType":"illness","targetDish":"菜名","note":"低油少盐，易消化"}]' : '';
         userMessage += `{"date":"${targetDateStr}","solarTerm":"${solarTerm.name}","meals":{"breakfast":{"dishes":[{"name":"菜名","ingredients":[{"name":"食材","quantity":2,"unit":"个"}]}],"reason":"理由"${_spMealFrag1}},"lunch":{"dishes":[同上结构]${_spMealFrag1}},"dinner":{"dishes":[同上结构]${_spMealFrag1}}},"summary":"综合说明（如何结合节气/食材/成员/历史）"}`;
@@ -59105,7 +59119,7 @@ function buildRecommendationPrompt(data, weekDatesStr) {
     prompt += `${startIdx + 2}. 7天内菜品尽量不重复，避免连续两天出现相同菜；跨天去重时主食（米饭/粥/面/馒头/饼/玉米/红薯等）允许重复，仅主菜、副菜、汤品严格不重复\n`;
     prompt += `${startIdx + 3}. 【硬性规则】同一餐中甜品类/甜汤类（如银耳羹、莲子羹、雪梨羹、糖水、水果沙拉、酸奶等）最多只能出现1道，严禁同餐出现2道或以上的甜食/甜汤\n`;
     prompt += `${startIdx + 4}. 同一餐中主食类最多1-2道（如同时有米饭+汤是允许的，但不能同时有米饭+面条+粥），主菜（蛋白质类）至少1道，素菜至少1道\n`;
-    prompt += `【硬性规则·流质同餐互斥】粥/稀饭/汤/羹/豆浆/米糊/牛奶/酸奶/果汁/奶茶等流质与饮品，同一餐合计最多1道：早餐若已有粥，就不要再给酸奶/牛奶/豆浆/果汁；午餐/晚餐若已有汤，就不要再给粥/羹。早餐必须至少有1道固体主食（面包/馒头/包子/饼/蛋/饭团等），不能只给流食。\n`;
+    prompt += `【硬性规则·流质同餐互斥】粥/稀饭/汤/羹/豆浆/米糊/牛奶/酸奶/果汁/奶茶等流质与饮品，同一餐合计最多1道：早餐若已有粥，就不要再给酸奶/牛奶/豆浆/果汁；午餐/晚餐若已有汤，就不要再给粥/羹；粥/稀饭与面条/米线不得同餐（外食大餐除外）。早餐必须至少有1道固体主食（面包/馒头/包子/饼/蛋/饭团等），不能只给流食。\n`;
     prompt += `【硬性规则·食材用量口径】每道菜 ingredients 中的 quantity 必须是「每人份」用量（不是全家总用量），单位用克/毫升/个/片/颗；前端会按实际就餐人数自动倍乘。\n`;
     prompt += `\n请严格按照以下JSON格式返回，不要添加任何其他文字：\n`;
     // V234: 有激活专项健康饮食计划时，每餐 JSON 追加 specialInterventions 字段
@@ -67815,13 +67829,13 @@ function _buildMealPlanPrompt(dateStr, ctx, styleCount) {
         p += '方案一：快手风（简单快做，15分钟内可完成）\n';
         p += '方案二：养生风（注重营养搭配，当季养生）\n';
         p += _mpCountText + '午餐和晚餐必须包含1道主食（米饭/馒头等干食），主食外至少有' + Math.max(1, _mpDc.lunchNum - 1) + '道菜品（荤素搭配，含1道优质蛋白主菜；干食主食时可配1道汤或羹）。\n'
-          + '【硬性规则·流质互斥】若本餐主食是粥/稀饭/汤面等流食，则不得再出现汤或羹，粥与汤只能二选一，用1道蛋白主菜或素菜补足道数；每餐流质（粥/汤/羹/豆浆/米糊）合计最多1道。\n\n';
+          + '【硬性规则·流质互斥】若本餐主食是粥/稀饭/汤面等流食，则不得再出现汤或羹，粥与汤只能二选一，粥与面条/米线也不得同餐，用1道蛋白主菜或素菜补足道数；每餐流质（粥/汤/羹/豆浆/米糊）合计最多1道。\n\n';
     } else {
         p += '方案A：家常风（日常家庭菜品，口味适中，食材易得）\n';
         p += '方案B：快手风（简单快做，15分钟内可完成）\n';
         p += '方案C：养生风（注重营养搭配，当季养生）\n';
         p += _mpCountText + '午餐和晚餐必须包含1道主食（米饭/馒头等干食），主食外至少有' + Math.max(1, _mpDc.lunchNum - 1) + '道菜品（荤素搭配，含1道优质蛋白主菜；干食主食时可配1道汤或羹）。\n'
-          + '【硬性规则·流质互斥】若本餐主食是粥/稀饭/汤面等流食，则不得再出现汤或羹，粥与汤只能二选一，用1道蛋白主菜或素菜补足道数；每餐流质（粥/汤/羹/豆浆/米糊）合计最多1道。\n\n';
+          + '【硬性规则·流质互斥】若本餐主食是粥/稀饭/汤面等流食，则不得再出现汤或羹，粥与汤只能二选一，粥与面条/米线也不得同餐，用1道蛋白主菜或素菜补足道数；每餐流质（粥/汤/羹/豆浆/米糊）合计最多1道。\n\n';
     }
     p += '请综合参考以下信息进行推荐：\n\n';
     // V352(P1-2): 高龄/慢病硬约束——AI 单日三餐方案同样禁用油煎/腌制，强制软烂低盐

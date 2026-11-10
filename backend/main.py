@@ -1556,6 +1556,60 @@ def _fh_price_hits(text: str) -> List[Dict[str, Any]]:
     return hits
 
 
+def _fh_meal_conflict_hits(text: str) -> List[Dict[str, Any]]:
+    """V453: 同一餐里主食/流食重复（粥+面、粥+汤）——家常餐不合理；外食大餐豁免。
+
+    只分析带「早餐/午餐/晚餐/加餐」结构的段落，避免普通叙述被误判。
+    """
+    s = str(text or "")
+    marks = ("早餐", "早饭", "午餐", "午饭", "中餐", "晚餐", "晚饭", "加餐", "夜宵")
+    # 同一句里出现多个餐次时先断开，避免"早餐吃粥，午餐吃面"被误判成同餐
+    s = re.sub("(" + "|".join(marks) + ")", r"\n\1", s)
+    out_words = ("餐厅", "饭店", "酒楼", "外卖", "火锅", "烧烤", "自助", "宴", "聚餐",
+                 "下馆子", "堂食", "大餐", "包间", "排档")
+    noodle_words = ("面条", "拉面", "刀削面", "拌面", "汤面", "炒面", "意面", "挂面",
+                    "面食", "牛肉面", "炸酱面", "焖面", "烩面", "凉面", "面馆")
+    buckets: Dict[str, List[str]] = {}
+    cur = ""
+    for raw in re.split(r"[\n\r]+", s):
+        line = raw.strip()
+        if not line:
+            continue
+        hit = next((m for m in marks if m in line), "")
+        if hit:
+            cur = hit
+            buckets.setdefault(cur, []).append(line)
+        elif cur:
+            buckets[cur].append(line)
+    if not buckets:
+        return []
+    hits: List[Dict[str, Any]] = []
+    seen = set()
+    for meal, segs in buckets.items():
+        blob = "".join(segs)
+        if any(w in blob for w in out_words):
+            continue
+        has_zhou = ("粥" in blob) or ("稀饭" in blob)
+        has_noodle = any(w in blob for w in noodle_words)
+        soup_blob = blob
+        for w in noodle_words:
+            soup_blob = soup_blob.replace(w, "")
+        has_soup = "汤" in soup_blob
+        if has_zhou and has_noodle:
+            key = (meal, "粥面")
+            if key not in seen:
+                seen.add(key)
+                hits.append({"type": "meal_conflict", "meal": meal, "words": ["粥", "面"],
+                             "reason": f"{meal}既安排了粥又安排了面（家常餐主食重复）"})
+        elif has_zhou and has_soup:
+            key = (meal, "粥汤")
+            if key not in seen:
+                seen.add(key)
+                hits.append({"type": "meal_conflict", "meal": meal, "words": ["粥", "汤"],
+                             "reason": f"{meal}既安排了粥又安排了汤（流食重复）"})
+    return hits
+
+
 def validate_content(
     text: str, category: str = "", title: str = "", date_str: str = "",
 ) -> Dict[str, Any]:
@@ -1590,6 +1644,10 @@ def validate_content(
         else:
             return {"passed": False, "type": "price", "words": [h["text"]],
                     "reason": "内容出现了具体金额，请改为只写食材与用量（价格由前端计算），请重新生成"}
+    # 规则 3（V453）：同一餐里粥/面/汤重复搭配（家常餐不合理；外食大餐豁免）
+    for c in _fh_meal_conflict_hits(body):
+        return {"passed": False, "type": "meal_conflict", "words": c.get("words") or [],
+                "reason": str(c.get("reason") or "同一餐搭配不合理") + "，请重新生成"}
     return {"passed": True}
 
 
@@ -2255,6 +2313,20 @@ async def food_hall_scan_stale() -> Dict[str, Any]:
         print(f"[foodhall] 过期巡检读取失败: {exc}")
         return {"ok": False, "error": f"巡检读取失败：{exc}"}
     items: List[Dict[str, Any]] = []
+    # V453: 把用户「内容纠错」反馈（群众监督）按文章挂到巡检结果上
+    fb_map: Dict[str, List[Dict[str, Any]]] = {}
+    try:
+        for rec in _feedback_read_all():
+            if str(rec.get("kind") or "") != "content_correction":
+                continue
+            aid = str(rec.get("articleId") or "").strip()
+            title = str(rec.get("articleTitle") or "").strip()
+            if aid:
+                fb_map.setdefault(aid, []).append(rec)
+            elif title:
+                fb_map.setdefault("t:" + title, []).append(rec)
+    except Exception:
+        pass
     for r in rows:
         art = _fh_row_to_article(r)
         blob = "".join([
@@ -2287,6 +2359,17 @@ async def food_hall_scan_stale() -> Dict[str, Any]:
                 "ingredient": h.get("ingredient") or "",
                 "base": h.get("base"), "text": h.get("text") or "",
             })
+        # V453: 同餐粥/面/汤重复搭配
+        for c in _fh_meal_conflict_hits(blob):
+            issues.append({"type": "meal_conflict", "meal": c.get("meal", ""),
+                           "words": c.get("words") or [], "reason": c.get("reason", "")})
+        # V453: 用户纠错反馈（群众监督）
+        for rec in (fb_map.get(str(art.get("id") or ""), [])
+                    + fb_map.get("t:" + str(art.get("title") or ""), [])):
+            issues.append({"type": "user_report",
+                           "text": str(rec.get("content") or ""),
+                           "ts": str(rec.get("ts") or ""),
+                           "familyId": str(rec.get("familyId") or "")})
         if issues:
             items.append({**art, "hits": hits, "issues": issues})
     return {
