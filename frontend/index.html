@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V495-20261111';
+        var APP_VER = 'V496-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79492,6 +79492,7 @@ function _careSafeText(t) {
 function _careDisclaimerHtml() {
     return '<div style="background:#FEF3C7;border:1px solid #FCD34D;color:#92400E;border-radius:9px;padding:7px 10px;font-size:11px;line-height:1.6;margin:6px 0;">⚠️ 本内容仅为日常饮食参考，不构成医疗诊断。如患有疾病，请务必遵医嘱。</div>';
 }
+var _HM_CARE_FOLDED = false; // V496: 加入食记后收起「特殊饮食调理」版块
 function _careLoad() {
     try { var o = JSON.parse(lsGet('healthButlerCare') || 'null'); return (o && o.date) ? o : null; } catch (e) { return null; }
 }
@@ -79504,12 +79505,18 @@ function _careActive() {
 function _hmCareCardHtml() {
     var o = _careActive();
     // V494: 标题改名「特殊饮食调理」；取消折叠，标题与按钮常显；副标题移到「发起饮食调理」弹窗
-    var html = '<div style="margin:12px 12px 0;background:#fff;border:1px solid #FED7AA;border-radius:14px;padding:12px;">'
+    // V496: 加入食记后整个版块收起为一行摘要，可点「查看详情」展开
+    var html = '<div id="hmCareCard" style="margin:12px 12px 0;background:#fff;border:1px solid #FED7AA;border-radius:14px;padding:12px;">'
         + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
         + '<div style="font-size:14px;font-weight:800;color:#C2410C;">💊 特殊饮食调理</div>'
         + '<button type="button" onclick="openCareForm()" style="flex-shrink:0;padding:8px 12px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:12px;font-weight:800;cursor:pointer;">发起调理</button>'
         + '</div>';
-    if (o) {
+    if (o && _HM_CARE_FOLDED) {
+        html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:#166534;">'
+            + '<span>✅ 已加入' + escapeHtml(String(o.addedMeal || '')) + '：' + escapeHtml(o.memberName) + '特供 · ' + escapeHtml((o.dish && o.dish.name) || '') + '</span>'
+            + '<span onclick="_careExpand()" style="margin-left:auto;color:#C2410C;font-weight:800;cursor:pointer;">查看详情 ›</span>'
+            + '</div>';
+    } else if (o) {
         var dishName = (o.dish && o.dish.name) || '';
         html += '<div style="margin-top:10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:11px;padding:10px;">'
             + '<div style="font-size:13px;font-weight:800;color:#7C2D12;">👨‍⚕️ ' + escapeHtml(o.memberName) + '特供：' + escapeHtml(dishName) + '</div>'
@@ -80063,6 +80070,7 @@ window.submitCareForm = function () {
             dish: { name: _careSafeText(dishName), tag: symptom + '特供' },
             advice: _careSafeText(advice), addedDate: '', createdAt: Date.now()
         };
+        _HM_CARE_FOLDED = false; // V496: 新生成的调理方案默认展开
         _careSave(o);
         closeCareForm();
         showToast('已生成 ' + memberName + ' 的特供食谱');
@@ -80134,14 +80142,25 @@ window._careAddToDiary = function (btn) {
     delete opts.confirmed;
     updateMealPlan(dk, mealType, opts);
     o.addedDate = dk;
+    o.addedMeal = mealCn;
     _careSave(o);
     if (btn) {
         btn.textContent = '✅ 已加入' + dayCn + mealCn;
     }
     showToast(o.memberName + '的特供菜已加入' + dayCn + mealCn + '，全家主菜不变');
+    // V496: 加入成功后「特殊饮食调理」版块收起为一行摘要
+    _HM_CARE_FOLDED = true;
+    var _careCardEl = document.getElementById('hmCareCard');
+    if (_careCardEl) _careCardEl.outerHTML = _hmCareCardHtml();
     try { renderHomeDiaryCard(); } catch (e) {}
     try { if (typeof renderDiary === 'function') renderDiary(); } catch (e) {}
     try { renderHomeHealthButlerCard(); } catch (e) {}
+};
+// V496: 展开已收起的「特殊饮食调理」版块
+window._careExpand = function () {
+    _HM_CARE_FOLDED = false;
+    var el = document.getElementById('hmCareCard');
+    if (el) el.outerHTML = _hmCareCardHtml();
 };
 // V464: 首屏兜底渲染（部分入口不会立即触发 renderHomeDiaryCard）
 setTimeout(function () { try { renderHomeHealthButlerCard(); } catch (e) {} }, 1500);
