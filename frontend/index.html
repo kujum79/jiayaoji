@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V504-20261111';
+        var APP_VER = 'V505-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79456,13 +79456,13 @@ function openSpecialPlanBoard() {
     var _termFoods = getSolarTermFoods(_term).slice(0, 5).join('、');
     var seasonCardHtml = '<div style="padding:0 14px 12px;">'
         + '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
-        +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
-        +     '<div style="font-size:15px;font-weight:800;color:#166534;">🌿 顺时养生 · ' + escapeHtml(_term.name || '当季') + '</div>'
-        +     '<span style="font-size:10px;color:#166534;background:#DCFCE7;border:1px solid #BBF7D0;border-radius:8px;padding:1px 6px;">' + escapeHtml(_term.diet || '顺时而食') + '</span>'
+        +   '<div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;margin-bottom:6px;">'
+        +     '<div style="font-size:15px;font-weight:800;color:#166534;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🌿 顺时养生 · ' + escapeHtml(_term.name || '当季') + '</div>'
+        +     '<span style="flex-shrink:0;font-size:10px;color:#166534;background:#DCFCE7;border:1px solid #BBF7D0;border-radius:8px;padding:1px 6px;">' + escapeHtml(_term.diet || '顺时而食') + '</span>'
+        +     '<span style="flex-shrink:0;margin-left:auto;font-size:11px;color:#9CA3AF;white-space:nowrap;">' + escapeHtml(solarTermRangeText(_term)) + '</span>'
         +   '</div>'
         +   '<div style="font-size:13px;color:#166534;line-height:1.8;">' + escapeHtml(_term.tip || '跟着节气吃饭，身体更轻松。') + '</div>'
         +   (_termFoods ? '<div style="font-size:12px;color:#4B5563;line-height:1.8;margin-top:6px;">当季宜吃：<b style="color:#166534;">' + escapeHtml(_termFoods) + '</b></div>' : '')
-        +   '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">' + escapeHtml(solarTermRangeText(_term)) + '</div>'
         + '</div></div>';
 
     // V373/V374: 肠道休息时钟（可视化 24 小时；原首页底部横幅已下线）
@@ -79481,8 +79481,10 @@ function openSpecialPlanBoard() {
     var freeToolsHtml = seasonCardHtml + gutCardHtml;
     panel.innerHTML = '<div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:14px 12px;background:#fff;border-bottom:1px solid #FED7AA;">'
         + '<button type="button" id="spBoardCloseBtn" style="width:34px;height:34px;border:none;background:#FFF7ED;border-radius:10px;font-size:18px;color:#C2410C;cursor:pointer;line-height:1;">＜</button>'
-        + '<div style="font-size:17px;font-weight:700;color:#C2410C;">主动式 AI 营养师</div>'
-        + '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">健康管家</span>'
+        + '<div style="display:flex;align-items:baseline;gap:6px;min-width:0;">'
+        +   '<div style="font-size:17px;font-weight:700;color:#C2410C;white-space:nowrap;">健康管家</div>'
+        +   '<div style="font-size:11px;color:#B45309;white-space:nowrap;">您的家庭营养师</div>'
+        + '</div>'
         + (plan ? '<button type="button" id="spBoardEndBtn" style="margin-left:auto;padding:6px 10px;border:1px solid #FED7AA;border-radius:10px;background:#fff;color:#C2410C;font-size:12px;cursor:pointer;">结束计划</button>' : '')
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:14px;">' + (window._wpCardHtml ? _wpCardHtml() : '') + bodyHtml + '<div id="hmAdviceSlot">' + _hmAdviceCardHtml() + '</div>' + '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' + _hmCareCardHtml() + _hmDeepReviewCardHtml() + freeToolsHtml + '</div>';
