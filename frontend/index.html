@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V503-20261111';
+        var APP_VER = 'V504-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79477,14 +79477,8 @@ function openSpecialPlanBoard() {
         +   '<div id="gutRestSummaryLine" style="font-size:12px;color:#6B7280;line-height:1.7;margin-top:10px;border-top:1px dashed #F3F4F6;padding-top:8px;"></div>'
         + '</div></div>';
 
-    // V479: 免费养生内容合并为一个可折叠块，避免页面过长
-    var freeToolsHtml = '<div style="padding:0 14px 8px;">'
-        + '<div onclick="(function(){var b=document.getElementById(\'hmFreeBody\');var a=document.getElementById(\'hmFreeArrow\');if(!b)return;var open=b.style.display!==\'none\';b.style.display=open?\'none\':\'block\';if(a)a.textContent=open?\'▾\':\'▴\';})()" style="background:#fff;border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:8px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
-        +   '<div style="font-size:14px;font-weight:800;color:#166534;">🌿 免费养生工具</div>'
-        +   '<span style="font-size:10px;color:#166534;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:1px 6px;">顺时养生 · 肠道休息时钟</span>'
-        +   '<span id="hmFreeArrow" style="margin-left:auto;font-size:12px;color:#9CA3AF;">▾</span>'
-        + '</div></div>'
-        + '<div id="hmFreeBody" style="display:none;">' + seasonCardHtml + gutCardHtml + '</div>';
+    // V504: 去掉「免费养生工具」折叠卡，顺时养生与肠道休息时钟直接展示
+    var freeToolsHtml = seasonCardHtml + gutCardHtml;
     panel.innerHTML = '<div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:14px 12px;background:#fff;border-bottom:1px solid #FED7AA;">'
         + '<button type="button" id="spBoardCloseBtn" style="width:34px;height:34px;border:none;background:#FFF7ED;border-radius:10px;font-size:18px;color:#C2410C;cursor:pointer;line-height:1;">＜</button>'
         + '<div style="font-size:17px;font-weight:700;color:#C2410C;">主动式 AI 营养师</div>'
