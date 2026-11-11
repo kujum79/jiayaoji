@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V506-20261111';
+        var APP_VER = 'V507-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78235,7 +78235,6 @@ function _gutRestHoursText(mins) {
 // V374: 可视化 24 小时肠道休息时钟（橙色=禁食区间，红线=当前时间）
 function _gutRestClockInnerHtml(now) {
     var s = getGutRestSettings();
-    var st = _gutRestStatus(now || new Date());
     var stMin = _gutRestParse(s.start), enMin = _gutRestParse(s.end);
     if (stMin === null) stMin = 19 * 60;
     if (enMin === null) enMin = 7 * 60;
@@ -78246,10 +78245,6 @@ function _gutRestClockInnerHtml(now) {
     var grad = (stMin < enMin)
         ? ('conic-gradient(#E5E7EB 0 ' + sp + '%, #F97316 ' + sp + '% ' + ep + '%, #E5E7EB ' + ep + '% 100%)')
         : ('conic-gradient(#F97316 0 ' + ep + '%, #E5E7EB ' + ep + '% ' + sp + '%, #F97316 ' + sp + '% 100%)');
-    var statusText = st.inRest ? ('肠胃休息中（已坚持 ' + _gutRestHoursText(st.mins) + '）') : '肠道工作中 · 可以正常进食';
-    var nextText;
-    if (st.inRest) nextText = '禁食时段：' + s.start + ' – ' + ((enMin <= stMin) ? '次日 ' : '') + s.end;
-    else nextText = '下一次休息：' + ((stMin < enMin && cur >= enMin) ? '明日 ' : '') + s.start;
     var chip = function (mode, label) {
         var on = s.mode === mode;
         return '<button type="button" onclick="setGutRestPreset(\'' + mode + '\')" style="padding:6px 10px;border-radius:999px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ' + (on ? '#FDBA74' : '#E5E7EB') + ';background:' + (on ? '#FFF1E6' : '#fff') + ';color:' + (on ? '#C2410C' : '#6B7280') + ';">' + label + '</button>';
@@ -78267,9 +78262,7 @@ function _gutRestClockInnerHtml(now) {
         +   '<div style="position:absolute;left:calc(50% - 1px);top:8px;width:2px;height:48px;background:#DC2626;border-radius:2px;transform-origin:50% 100%;transform:rotate(' + (curPct * 3.6) + 'deg);"></div>'
         + '</div>'
         + '<div style="flex:1;min-width:0;">'
-        +   '<div style="font-size:13px;font-weight:800;color:' + (st.inRest ? '#C2410C' : '#374151') + ';line-height:1.5;">' + statusText + '</div>'
-        +   '<div style="font-size:11px;color:#9CA3AF;line-height:1.7;margin-top:2px;">' + nextText + '</div>'
-        +   '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">' + chip('default', '常规 · 19:00 后') + chip('advanced', '过五不食 · 17:00 后') + '</div>'
+        +   '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">' + chip('default', '常规 · 19:00 后') + chip('advanced', '过五不食 · 17:00 后') + '</div>'
         +   '<div style="font-size:11px;color:#6B7280;line-height:1.7;margin-top:6px;">当前：<b style="color:#9A3412;">' + curLabel + '</b> · ' + escapeHtml(s.start) + ' – ' + (curCross ? '次日 ' : '') + escapeHtml(s.end)
         +     (curTip ? '<br>' + curTip : '') + '</div>'
         + '</div>'
@@ -79458,10 +79451,17 @@ function openSpecialPlanBoard() {
         + '</div></div>';
 
     // V373/V374: 肠道休息时钟（可视化 24 小时；原首页底部横幅已下线）
+    // V507: 恢复中/禁食时段文案移除，「已坚持 X 小时」移到卡片标题右侧
+    var gutRestHeldText = '';
+    try {
+        var _gst = _gutRestStatus(new Date());
+        if (_gst.inRest) gutRestHeldText = '（已坚持 ' + _gutRestHoursText(_gst.mins) + '）';
+    } catch (e) {}
     var gutCardHtml = '<div style="padding:0 14px 18px;">'
         + '<div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
         +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
         +     '<div style="font-size:15px;font-weight:800;color:#C2410C;">🕒 肠道休息时钟</div>'
+        +     (gutRestHeldText ? '<span style="font-size:11px;color:#C2410C;font-weight:700;">' + gutRestHeldText + '</span>' : '')
         +     '<button type="button" onclick="openGutRestSettings()" style="margin-left:auto;padding:7px 14px;border:1px solid #FDBA74;border-radius:10px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:700;cursor:pointer;">设置</button>'
         +   '</div>'
         +   '<div id="gutRestClock" style="margin-top:12px;">' + _gutRestClockInnerHtml(new Date()) + '</div>'
