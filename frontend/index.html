@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V501-20261111';
+        var APP_VER = 'V502-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78483,6 +78483,11 @@ function _hmAutoPlanThemes() {
         themes: _HM_WEEK_THEMES[primary] || _HM_WEEK_THEMES.default
     };
 }
+// V502: 取第 idx 天的调理主题（原独立「7 天专项调理计划」已并入营养食谱）
+function _hmThemeForIdx(idx) {
+    var ap = _hmAutoPlanThemes();
+    return (ap.themes && ap.themes[idx]) ? ap.themes[idx] : '';
+}
 // 食方出处：优先取本地食方库 source，未收录时按食方类型回落到《中国食疗大全》
 function _hmFangSourceFor(dishName) {
     var name = String(dishName || '').replace(/[（(][^）)]*[）)]/g, '').trim();
@@ -78832,9 +78837,13 @@ function _hmBuildRangePrompt(days) {
     try { fangText = _fangRagToText(searchFoodTherapy((getHealthCoreTags() || '') + ' ' + tagLabels)); } catch (e) {}
     var servings = _mealPlanEffectiveServings();
     var dates = _hmRangeDates(days).map(_hmDateKey);
+    // V502: 把「7 天专项调理计划」的主题接入生成提示词
+    var apThemes = _hmAutoPlanThemes().themes || [];
+    var themeLine = dates.map(function (dk, i) { return (i === 0 ? '今天' : dk) + ' ' + (apThemes[i] || ''); }).join('；');
     var p = '请为今天起连续 ' + days + ' 天（' + dates[0] + ' 至 ' + dates[dates.length - 1] + '）设计「主动式营养师调理三餐」，必须区别于普通家常规划食谱：\n'
         + '1. 每天早、午、晚餐至少各有 1 道传统食方（如当归生姜羊肉汤、山药排骨汤、红枣小米粥、菠菜猪肝汤等），并在 tag 中写明功效；\n'
         + '2. 按家庭标签（' + tagLabels + '）与当前节气（' + termName + '）定制，优先调理该人群的核心需求；\n'
+        + '2.1 每天的主题重点依次为：' + themeLine + '。菜品应尽量呼应当天主题，但不必每餐都体现；\n'
         + '3. 每餐 1 道主食 + 1 道食方汤/粥/羹 + 1 道菜，' + days + ' 天内尽量不重复同一道菜；\n'
         + '4. 同一餐最多只能有 1 道「粥/糊/羹/汤/面」类，不能同时出现两道；\n'
         + '5. 同一天不得重复同一道菜，也不得重复同一蔬菜主食材（例如早餐已有菠菜，午晚餐不得再出现菠菜）；\n'
@@ -78905,6 +78914,24 @@ window._hmSetRange = function (n, ev) {
     _HM_MENU_OPEN = true;
     _hmRenderMenuSection();
 };
+// V502: 点主题条里的某一天，直接切到 7 天视图并展开该天
+window._hmPickThemeDay = function (idx, ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    _HM_MENU_OPEN = true;
+    _HM_RANGE = 7;
+    _hmEnsureRange(7);
+    var days = _hmRangeDates(7);
+    var d = days[idx] || days[0];
+    var dk = _hmDateKey(d);
+    _HM_DAY_OPEN[dk] = true;
+    _hmRenderMenuSection();
+    setTimeout(function () {
+        var el = document.getElementById('hmDay_' + dk);
+        if (!el || !el.scrollIntoView) return;
+        try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); }
+    }, 80);
+};
 function _hmTodayBodyHtml(menu, adopted) {
     var todayKey = _hmDateKey(new Date());
     var mealDefs = [['breakfast', '🌅 早餐'], ['lunch', '☀️ 午餐'], ['dinner', '🌙 晚餐']];
@@ -78942,9 +78969,10 @@ function _hmRangeDayHtml(d, dk, menu, idx) {
         });
         if (_parts.length) summary = _parts.join(' · ') + ' · 已勾选 ' + _hmCheckedCount(menu, dk) + ' 道';
     }
-    var html = '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed #FED7AA;">'
+    var html = '<div id="hmDay_' + dk + '" style="margin-top:12px;padding-top:10px;border-top:1px dashed #FED7AA;">'
         + '<div onclick="_hmToggleDay(\'' + dk + '\',event)" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;cursor:pointer;">'
         +   '<div style="font-size:13px;font-weight:800;color:#C2410C;">' + _hmDayLabel(d, idx) + '</div>'
+        +   (_hmThemeForIdx(idx) ? '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">' + escapeHtml(_hmThemeForIdx(idx)) + '</span>' : '')
         +   (adopted ? '<span style="font-size:10px;color:#16A34A;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:1px 6px;">✅ 已加入</span>' : '')
         +   '<span style="font-size:11px;color:#B45309;font-weight:700;margin-left:auto;">' + (open ? '▲ 收起' : '▼ 展开') + '</span>'
         + '</div>'
@@ -79001,6 +79029,26 @@ function _hmMenuCardHtml() {
         });
         rangeTabs += '</div>';
     }
+    // V502: 「7 天专项调理计划」并入营养食谱，作为本周主题条
+    var themeBar = '';
+    if (_HM_MENU_OPEN) {
+        var ap = _hmAutoPlanThemes();
+        var days7 = _hmRangeDates(7);
+        themeBar = '<div style="margin-top:10px;">'
+            + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;color:#9A3412;">'
+            +   '<b style="color:#C2410C;">🗓️ 本周调理主题</b>'
+            +   '<span style="color:#9CA3AF;">按家庭标签「' + escapeHtml(ap.label) + '」自动编排</span>'
+            + '</div>'
+            + '<div style="display:flex;gap:6px;overflow-x:auto;margin-top:6px;padding-bottom:2px;">';
+        days7.forEach(function (d, i) {
+            var on = (i === 0);
+            themeBar += '<div onclick="_hmPickThemeDay(' + i + ',event)" style="flex:0 0 auto;width:64px;border-radius:10px;padding:6px 4px;text-align:center;cursor:pointer;background:' + (on ? '#FFF1E6' : '#F9FAFB') + ';border:1px solid ' + (on ? '#FDBA74' : '#F3F4F6') + ';">'
+                +   '<div style="font-size:10px;color:#9CA3AF;">' + (on ? '今天' : ((d.getMonth() + 1) + '/' + d.getDate())) + '</div>'
+                +   '<div style="font-size:11px;font-weight:700;color:' + (on ? '#C2410C' : '#4B5563') + ';line-height:1.4;">' + escapeHtml(ap.themes[i] || '') + '</div>'
+                + '</div>';
+        });
+        themeBar += '</div><div style="font-size:10px;color:#9CA3AF;margin-top:4px;">点任一天可直接查看该日食谱；想调整主题请到「我家 → 家庭成员」修改标签。</div></div>';
+    }
     var expandedBody = _HM_MENU_OPEN ? ((_HM_RANGE === 1) ? _hmTodayBodyHtml(menu, adopted) : _hmRangeBodyHtml()) : '';
     return '<div style="padding:0 14px 12px;">'
         + '<div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.05);">'
@@ -79011,7 +79059,7 @@ function _hmMenuCardHtml() {
         +     '<span style="flex-shrink:0;margin-left:auto;font-size:12px;color:#B45309;font-weight:700;">' + (_HM_MENU_OPEN ? '▲ 收起' : '▼ 展开') + '</span>'
         +   '</div>'
         +   (_HM_MENU_OPEN ? '<div style="font-size:11px;color:#9A3412;line-height:1.7;margin-top:4px;">营养师专属方案：以食方/药膳为主，按家庭标签与节气定制，区别于「食记 → 规划食谱」。可切换今日 / 3 天 / 7 天。</div>' : '')
-        +   rangeTabs + expandedBody
+        +   rangeTabs + themeBar + expandedBody
         + '</div></div>';
 }
 window._hmToggleMenu = function (ev) {
@@ -79103,28 +79151,6 @@ function _hmAdviceCardHtml() {
         + '<div style="font-size:12px;color:#9A3412;line-height:1.7;margin-top:6px;">' + escapeHtml(a.why) + '</div>'
         + '<button type="button" onclick="_hmAdviceAct(event)" style="margin-top:10px;padding:8px 14px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:13px;font-weight:800;cursor:pointer;">就这么办 ›</button>'
         + '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">来自家庭记录与节气，仅供日常饮食参考，不替代医疗建议。</div>'
-        + '</div></div>';
-}
-function _hmAutoPlanCardHtml() {
-    var ap = _hmAutoPlanThemes();
-    var chips = '';
-    for (var i = 0; i < 7; i++) {
-        var d = new Date(); d.setDate(d.getDate() + i);
-        var on = (i === 0);
-        chips += '<div style="flex:0 0 auto;width:64px;border-radius:10px;padding:6px 4px;text-align:center;background:' + (on ? '#FFF1E6' : '#F9FAFB') + ';border:1px solid ' + (on ? '#FDBA74' : '#F3F4F6') + ';">'
-            +   '<div style="font-size:10px;color:#9CA3AF;">' + (on ? '今天' : ((d.getMonth() + 1) + '/' + d.getDate())) + '</div>'
-            +   '<div style="font-size:11px;font-weight:700;color:' + (on ? '#C2410C' : '#4B5563') + ';line-height:1.4;">' + escapeHtml(ap.themes[i]) + '</div>'
-            + '</div>';
-    }
-    return '<div style="padding:0 14px 12px;">'
-        + '<div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
-        +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
-        +     '<div style="font-size:15px;font-weight:800;color:#C2410C;">🗓️ 7 天专项调理计划</div>'
-        +     '<span style="font-size:10px;color:#16A34A;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:1px 6px;">自动驱动</span>'
-        +   '</div>'
-        +   '<div style="font-size:11px;color:#9A3412;line-height:1.7;margin-top:4px;">系统已按家庭标签（' + escapeHtml(ap.label) + '）自动生成 7 天专项调理计划，无需手动发起；想调整请到「我家 → 家庭成员」修改标签。</div>'
-        +   '<div style="display:flex;gap:6px;overflow-x:auto;margin-top:10px;padding-bottom:2px;">' + chips + '</div>'
-        +   '<div style="font-size:11px;color:#6B7280;margin-top:8px;">今日调理重点：<b style="color:#C2410C;">' + escapeHtml(ap.themes[0]) + '</b></div>'
         + '</div></div>';
 }
 // V458: 健康管家内的「深度复盘」会员卡片（数据与独立看板共用 _reviewWeekIntake）
@@ -79465,7 +79491,7 @@ function openSpecialPlanBoard() {
         + '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">健康管家</span>'
         + (plan ? '<button type="button" id="spBoardEndBtn" style="margin-left:auto;padding:6px 10px;border:1px solid #FED7AA;border-radius:10px;background:#fff;color:#C2410C;font-size:12px;cursor:pointer;">结束计划</button>' : '')
         + '</div>'
-        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:14px;">' + (window._wpCardHtml ? _wpCardHtml() : '') + bodyHtml + '<div id="hmAdviceSlot">' + _hmAdviceCardHtml() + '</div>' + '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' + _hmCareCardHtml() + _hmDeepReviewCardHtml() + _hmAutoPlanCardHtml() + freeToolsHtml + '</div>';
+        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:14px;">' + (window._wpCardHtml ? _wpCardHtml() : '') + bodyHtml + '<div id="hmAdviceSlot">' + _hmAdviceCardHtml() + '</div>' + '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' + _hmCareCardHtml() + _hmDeepReviewCardHtml() + freeToolsHtml + '</div>';
 
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
