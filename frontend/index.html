@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V482-20261111';
+        var APP_VER = 'V483-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78525,7 +78525,7 @@ function _hmMenuCardHtml() {
     var expandedBody = _HM_MENU_OPEN
         ? (rows + note
             + '<div style="margin-top:10px;font-size:11px;color:#9A3412;">已勾选 <b id="hmCheckedCount">' + _hmCheckedCount(menu) + '</b> 道，加入后写入「食记 → 规划食谱」的今日三餐，可在那里继续调整。</div>'
-            + '<button type="button" onclick="_hmAddSelectedToDiary()" style="width:100%;margin-top:8px;padding:13px;border:none;border-radius:11px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 12px rgba(249,115,22,.28);">✅ 加入今日食记</button>')
+            + '<button type="button" onclick="_hmAddSelectedToDiary()" style="width:100%;margin-top:8px;padding:13px;border:none;border-radius:11px;background:' + (adopted ? 'linear-gradient(135deg,#22C55E,#16A34A)' : 'linear-gradient(135deg,#F97316,#EA580C)') + ';color:#fff;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 12px rgba(249,115,22,.28);">' + (adopted ? '✅ 已加入今日食记' : '✅ 加入今日食记') + '</button>')
         : '';
     return '<div style="padding:0 14px 12px;">'
         + '<div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.05);">'
@@ -78777,6 +78777,7 @@ function _hmAddSelectedToDiary() {
     // 保存本次营养师菜单快照，重开健康管家时原样展示，不混入用户自己的规划菜
     try { sessionStorage.setItem(_hmSnapshotKey(), JSON.stringify(menu)); } catch (e) {}
     showToast('✅ 已加入今日食记 · 规划食谱（新增 ' + added + ' 道）');
+    _HM_MENU_OPEN = false; // V483: 加入后自动收起，回到单行折叠态
     _hmRenderMenuSection();
 }
 
