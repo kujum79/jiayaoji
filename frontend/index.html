@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V507-20261111';
+        var APP_VER = 'V508-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78249,8 +78249,8 @@ function _gutRestClockInnerHtml(now) {
         var on = s.mode === mode;
         return '<button type="button" onclick="setGutRestPreset(\'' + mode + '\')" style="padding:6px 10px;border-radius:999px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ' + (on ? '#FDBA74' : '#E5E7EB') + ';background:' + (on ? '#FFF1E6' : '#fff') + ';color:' + (on ? '#C2410C' : '#6B7280') + ';">' + label + '</button>';
     };
-    var curLabel = s.mode === 'advanced' ? '进阶模式（过五不食）' : (s.mode === 'custom' ? '自定义' : '默认模式');
-    var curTip = s.mode === 'advanced' ? '17 点后不进食，把「过五不食」落到每天的作息里。' : (s.mode === 'default' ? '晚餐后留出 12 小时，让肠道按时休整。' : '');
+    var curLabel = s.mode === 'advanced' ? '进阶模式' : (s.mode === 'custom' ? '自定义' : '默认模式');
+    var curTip = s.mode === 'advanced' ? '17 点后不再进食。' : (s.mode === 'default' ? '晚餐后留出 12 小时，让肠道按时休整。' : '');
     var curCross = (stMin !== null && enMin !== null && enMin <= stMin);
     return '<div style="display:flex;align-items:center;gap:12px;">'
         + '<div style="position:relative;width:112px;height:112px;flex-shrink:0;border-radius:50%;background:' + grad + ';">'
