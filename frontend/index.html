@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V485-20261111';
+        var APP_VER = 'V486-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -67752,9 +67752,33 @@ function openMealPlanPage() {
     _generateMealPlanStyles(planDate);
 }
 
+// V486: 对比当前选择与日历已存计划是否完全一致；一致则不回写，避免把健康管家/特供方案改写成"来自规划食谱"
+function _mpSameAsCalendar(dateKey, plan) {
+    try {
+        var day = getDietCalendar()[dateKey] || {};
+        var same = true;
+        ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+            var p = day[mt] && day[mt].plan;
+            var oldNames = (p && Array.isArray(p.dishes)) ? p.dishes.map(function (d) {
+                return typeof d === 'string' ? d : ((d && d.name) || '');
+            }).filter(Boolean).sort() : [];
+            var newNames = (plan && Array.isArray(plan[mt]) ? plan[mt] : []).slice().sort();
+            if (oldNames.join('|') !== newNames.join('|')) same = false;
+        });
+        return same;
+    } catch (e) { return false; }
+}
+
 function closeMealPlanPage(alreadySaved) {
     if (!alreadySaved && !_mealPlanState._saved) {
         var result = _collectAllSelectedDishes();
+        // V486: 与已存计划一致时不覆盖（保留健康管家已加入的三餐及来源标记）
+        if (_mpSameAsCalendar(_mealPlanState.dateKey, result.plan)) {
+            _mealPlanState._saved = false;
+            var ov0 = document.getElementById('mealPlanOverlay');
+            if (ov0) ov0.remove();
+            return;
+        }
         // 无论有无选中菜，都保存当前状态（包括删除/取消勾选操作）
         var allPlans = JSON.parse(lsGet('mealPlans')||'{}');
         allPlans[_mealPlanState.dateKey] = { date:_mpFormatDate(_mealPlanState.planDate), style:result.styleName, breakfast:result.plan.breakfast, lunch:result.plan.lunch, dinner:result.plan.dinner, status:'confirmed', createdAt:new Date().toISOString() };
@@ -67779,13 +67803,13 @@ function _loadExistingPlanAsStyle(dateKey) {
         var calendar = getDietCalendar();
         var dayData = calendar[dateKey];
         if (!dayData) return null;
-        var hasPlan = ['breakfast','lunch','dinner'].every(function(mt){
+        var hasPlan = ['breakfast','lunch','dinner'].some(function(mt){
             return dayData[mt] && dayData[mt].plan && dayData[mt].plan.dishes && dayData[mt].plan.dishes.length > 0;
         });
         if (!hasPlan) return null;
         var style = { name:'家常风', breakfast:[], lunch:[], dinner:[] };
         ['breakfast','lunch','dinner'].forEach(function(mt){
-            var dishes = dayData[mt].plan.dishes || [];
+            var dishes = (dayData[mt] && dayData[mt].plan && dayData[mt].plan.dishes) ? dayData[mt].plan.dishes : [];
             style[mt] = dishes.map(function(d){
                 return typeof d === 'string' ? { name:d, tag:'' } : { name:d.name||'', tag:'' };
             });
