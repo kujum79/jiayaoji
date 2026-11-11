@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V484-20261111';
+        var APP_VER = 'V485-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -57930,6 +57930,13 @@ function confirmAddFromKnowledgeDialog(knowledgeId) {
 // AI 自动提取与推荐（无需用户手动触发）
 // ============================================================
 
+// V485: 当天是否已有「健康管家 / 特供」方案——这类餐次视为用户已采纳，自动推荐不得整日覆盖
+function _dayHasHmPlan(dd) {
+    return ['breakfast', 'lunch', 'dinner'].some(function (mt) {
+        var p = dd && dd[mt] && dd[mt].plan;
+        return p && /健康管家|特供/.test(String(p.note || ''));
+    });
+}
 // 进入食记时自动检测：是否需要生成AI推荐
 async function autoCheckAndRecommend() {
     const now = new Date();
@@ -57955,7 +57962,7 @@ async function autoCheckAndRecommend() {
         const hasPlan = ['breakfast', 'lunch', 'dinner'].every(mt => {
             return dd[mt] && dd[mt].plan && dd[mt].plan.dishes && dd[mt].plan.dishes.length > 0;
         });
-        if (!hasPlan) {
+        if (!hasPlan && !_dayHasHmPlan(dd)) {
             missingDays.push(i);
         }
     }
@@ -58170,12 +58177,15 @@ async function generateMultiDayRecommendation(days) {
         const hasPlan = ['breakfast', 'lunch', 'dinner'].every(mt => {
             return dayData[mt] && dayData[mt].plan && dayData[mt].plan.dishes && dayData[mt].plan.dishes.length > 0;
         });
-        if (hasPlan) return;
+        if (hasPlan || _dayHasHmPlan(dayData)) return;
 
         const meals = day.meals || {};
         // 获取当前就餐人信息，保存到计划数据中
         let diningGroup = (typeof getDiaryDiningGroup === 'function') ? getDiaryDiningGroup() : null;
         ['breakfast', 'lunch', 'dinner'].forEach(mealType => {
+            // V485: 该餐已有健康管家/特供方案时保留不动，只补空缺餐次
+            var _curP = dayData[mealType] && dayData[mealType].plan;
+            if (_curP && /健康管家|特供/.test(String(_curP.note || ''))) return;
             const meal = meals[mealType];
             if (meal && (meal._normalizedDishes || meal.dishes)) {
                 const dishList = meal._normalizedDishes || (Array.isArray(meal.dishes) ? meal.dishes.map(d => typeof d === 'string' ? {name:d,ingredients:null} : d) : []);
@@ -78780,6 +78790,8 @@ function _hmAddSelectedToDiary() {
     showToast('✅ 已加入今日食记 · 规划食谱（新增 ' + added + ' 道）');
     _HM_MENU_OPEN = false; // V483: 加入后自动收起，回到单行折叠态
     _hmRenderMenuSection();
+    // V485: 立即刷新「三餐计划、记录」页，避免用户切过去时看到的还是旧渲染
+    try { if (typeof renderDiary === 'function') renderDiary(); } catch (e) {}
 }
 
 function openSpecialPlanBoard() {
