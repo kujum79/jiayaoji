@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V478-20261111';
+        var APP_VER = 'V479-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78570,8 +78570,7 @@ function _hmAdviceCardHtml() {
         +     '<div style="font-size:15px;font-weight:800;color:#C2410C;">🎯 今日专属健康建议</div>'
         +     (tags.length ? '<span style="font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">' + escapeHtml(tags.join(' · ')) + '</span>' : '')
         +   '</div>'
-        +   '<div style="font-size:14px;color:#7C2D12;line-height:1.85;margin-top:8px;font-weight:600;">' + escapeHtml(_hmTodayAdviceText()) + '</div>'
-        +   (foods ? '<div style="font-size:12px;color:#9A3412;line-height:1.7;margin-top:6px;">今日宜吃：<b>' + escapeHtml(foods) + '</b></div>' : '')
+        +   '<div style="font-size:14px;color:#7C2D12;line-height:1.75;margin-top:8px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(_hmTodayAdviceText()) + '</div>'
         +   '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">来自家庭标签与节气，仅供日常饮食参考，不替代医疗建议。</div>'
         + '</div></div>';
 }
@@ -78880,13 +78879,21 @@ function openSpecialPlanBoard() {
         +   '<div id="gutRestSummaryLine" style="font-size:12px;color:#6B7280;line-height:1.7;margin-top:10px;border-top:1px dashed #F3F4F6;padding-top:8px;"></div>'
         + '</div></div>';
 
+    // V479: 免费养生内容合并为一个可折叠块，避免页面过长
+    var freeToolsHtml = '<div style="padding:0 14px 8px;">'
+        + '<div onclick="(function(){var b=document.getElementById(\'hmFreeBody\');var a=document.getElementById(\'hmFreeArrow\');if(!b)return;var open=b.style.display!==\'none\';b.style.display=open?\'none\':\'block\';if(a)a.textContent=open?\'▾\':\'▴\';})()" style="background:#fff;border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:8px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
+        +   '<div style="font-size:14px;font-weight:800;color:#166534;">🌿 免费养生工具</div>'
+        +   '<span style="font-size:10px;color:#166534;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:1px 6px;">顺时养生 · 肠道休息时钟</span>'
+        +   '<span id="hmFreeArrow" style="margin-left:auto;font-size:12px;color:#9CA3AF;">▾</span>'
+        + '</div></div>'
+        + '<div id="hmFreeBody" style="display:none;">' + seasonCardHtml + gutCardHtml + '</div>';
     panel.innerHTML = '<div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:14px 12px;background:#fff;border-bottom:1px solid #FED7AA;">'
         + '<button type="button" id="spBoardCloseBtn" style="width:34px;height:34px;border:none;background:#FFF7ED;border-radius:10px;font-size:18px;color:#C2410C;cursor:pointer;line-height:1;">＜</button>'
         + '<div style="font-size:17px;font-weight:700;color:#C2410C;">主动式 AI 营养师</div>'
         + '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">健康管家</span>'
         + (plan ? '<button type="button" id="spBoardEndBtn" style="margin-left:auto;padding:6px 10px;border:1px solid #FED7AA;border-radius:10px;background:#fff;color:#C2410C;font-size:12px;cursor:pointer;">结束计划</button>' : '')
         + '</div>'
-        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:14px;">' + (window._wpCardHtml ? _wpCardHtml() : '') + bodyHtml + _hmAdviceCardHtml() + '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' + _hmCareCardHtml() + _hmDeepReviewCardHtml() + _hmAutoPlanCardHtml() + seasonCardHtml + gutCardHtml + '</div>';
+        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:14px;">' + (window._wpCardHtml ? _wpCardHtml() : '') + bodyHtml + _hmAdviceCardHtml() + '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' + _hmCareCardHtml() + _hmDeepReviewCardHtml() + _hmAutoPlanCardHtml() + freeToolsHtml + '</div>';
 
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
