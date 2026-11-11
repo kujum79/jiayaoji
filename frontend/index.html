@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V502-20261111';
+        var APP_VER = 'V503-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79018,7 +79018,6 @@ function _hmMenuCardHtml() {
     var menu = _hmTodayMenu();
     var single = (typeof isSingleMealMode === 'function') && isSingleMealMode();
     var title = single ? '🍱 一人食营养食谱' : '🍽️ 营养食谱';
-    var servings = _mealPlanEffectiveServings();
     var adopted = _hmAdoptedToday();
     var rangeTabs = '';
     if (_HM_MENU_OPEN) {
@@ -79054,8 +79053,7 @@ function _hmMenuCardHtml() {
         + '<div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.05);">'
         +   '<div onclick="_hmToggleMenu(event)" style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow:hidden;cursor:pointer;">'
         +     '<div style="font-size:' + (_HM_MENU_OPEN ? 15 : 14) + 'px;font-weight:800;color:#C2410C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">' + title + '</div>'
-        +     '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">AI 营养师 · ' + servings + ' 人份</span>'
-        +     (adopted ? '<span style="flex-shrink:0;font-size:10px;color:#16A34A;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:1px 6px;">✅ 已加入</span>' : '')
+        +     '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
         +     '<span style="flex-shrink:0;margin-left:auto;font-size:12px;color:#B45309;font-weight:700;">' + (_HM_MENU_OPEN ? '▲ 收起' : '▼ 展开') + '</span>'
         +   '</div>'
         +   (_HM_MENU_OPEN ? '<div style="font-size:11px;color:#9A3412;line-height:1.7;margin-top:4px;">营养师专属方案：以食方/药膳为主，按家庭标签与节气定制，区别于「食记 → 规划食谱」。可切换今日 / 3 天 / 7 天。</div>' : '')
@@ -79138,6 +79136,7 @@ function _hmAdviceCardHtml() {
         return '<div style="padding:0 14px 12px;"><div style="' + box + 'padding:12px 14px;">'
             + '<div onclick="_hmToggleAdvice(event)" style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow:hidden;cursor:pointer;">'
             +   '<div style="font-size:14px;font-weight:800;color:#C2410C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">' + head + '</div>'
+            +   '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
             +   '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">今日 1 个动作</span>'
             +   '<span style="flex-shrink:0;margin-left:auto;font-size:12px;color:#B45309;font-weight:700;">▼ 展开</span>'
             + '</div></div></div>';
@@ -79145,6 +79144,7 @@ function _hmAdviceCardHtml() {
     return '<div style="padding:0 14px 12px;"><div style="' + box + 'padding:14px;">'
         + '<div onclick="_hmToggleAdvice(event)" style="display:flex;align-items:center;gap:8px;cursor:pointer;">'
         +   '<div style="font-size:15px;font-weight:800;color:#C2410C;">' + head + '</div>'
+        +   '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
         +   '<span style="margin-left:auto;font-size:12px;color:#B45309;font-weight:700;">▲ 收起</span>'
         + '</div>'
         + '<div style="font-size:14px;color:#7C2D12;line-height:1.75;margin-top:8px;font-weight:700;">' + escapeHtml(a.action) + '</div>'
@@ -79537,9 +79537,10 @@ function _hmCareCardHtml() {
     // V494: 标题改名「特殊饮食调理」；取消折叠，标题与按钮常显；副标题移到「发起饮食调理」弹窗
     // V496: 加入食记后整个版块收起为一行摘要，可点「查看详情」展开
     var html = '<div id="hmCareCard" style="margin:12px 12px 0;background:#fff;border:1px solid #FED7AA;border-radius:14px;padding:12px;">'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+        + '<div style="display:flex;align-items:center;gap:8px;">'
         + '<div style="font-size:14px;font-weight:800;color:#C2410C;">💊 特殊饮食调理</div>'
-        + '<button type="button" onclick="openCareForm()" style="flex-shrink:0;padding:8px 12px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:12px;font-weight:800;cursor:pointer;">发起调理</button>'
+        + '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
+        + '<button type="button" onclick="openCareForm()" style="flex-shrink:0;margin-left:auto;padding:8px 12px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:12px;font-weight:800;cursor:pointer;">发起调理</button>'
         + '</div>';
     if (o && _HM_CARE_FOLDED) {
         html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:' + (o.addedDate ? '#166534' : '#92400E') + ';">'
@@ -79780,7 +79781,7 @@ window._wpCardHtml = function () {
     var shell = function (sub, btn, onclick) {
         return '<div onclick="' + onclick + '" style="margin:12px 12px 0;background:linear-gradient(135deg,#78350F,#B45309);border-radius:14px;padding:12px 14px;cursor:pointer;box-shadow:0 4px 14px rgba(120,53,15,0.18);">'
             + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
-            + '<div style="min-width:0;"><div style="font-size:13px;font-weight:800;color:#FEF3C7;">👑 您的《家庭膳食健康白皮书》</div>'
+            + '<div style="min-width:0;"><div style="font-size:13px;font-weight:800;color:#FEF3C7;">👑 您的《家庭膳食健康白皮书》<span style="margin-left:5px;font-size:10px;font-weight:700;color:#FDE68A;background:rgba(253,230,138,.18);border:1px solid rgba(253,230,138,.5);border-radius:8px;padding:1px 5px;">会员专享</span></div>'
             + '<div style="font-size:11px;color:#FDE68A;margin-top:3px;">' + sub + '</div></div>'
             + '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#78350F;background:#FDE68A;border-radius:999px;padding:4px 9px;white-space:nowrap;">' + btn + '</span>'
             + '</div></div>';
