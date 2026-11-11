@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V505-20261111';
+        var APP_VER = 'V506-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78254,6 +78254,9 @@ function _gutRestClockInnerHtml(now) {
         var on = s.mode === mode;
         return '<button type="button" onclick="setGutRestPreset(\'' + mode + '\')" style="padding:6px 10px;border-radius:999px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ' + (on ? '#FDBA74' : '#E5E7EB') + ';background:' + (on ? '#FFF1E6' : '#fff') + ';color:' + (on ? '#C2410C' : '#6B7280') + ';">' + label + '</button>';
     };
+    var curLabel = s.mode === 'advanced' ? '进阶模式（过五不食）' : (s.mode === 'custom' ? '自定义' : '默认模式');
+    var curTip = s.mode === 'advanced' ? '17 点后不进食，把「过五不食」落到每天的作息里。' : (s.mode === 'default' ? '晚餐后留出 12 小时，让肠道按时休整。' : '');
+    var curCross = (stMin !== null && enMin !== null && enMin <= stMin);
     return '<div style="display:flex;align-items:center;gap:12px;">'
         + '<div style="position:relative;width:112px;height:112px;flex-shrink:0;border-radius:50%;background:' + grad + ';">'
         +   '<div style="position:absolute;inset:11px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;">'
@@ -78266,9 +78269,9 @@ function _gutRestClockInnerHtml(now) {
         + '<div style="flex:1;min-width:0;">'
         +   '<div style="font-size:13px;font-weight:800;color:' + (st.inRest ? '#C2410C' : '#374151') + ';line-height:1.5;">' + statusText + '</div>'
         +   '<div style="font-size:11px;color:#9CA3AF;line-height:1.7;margin-top:2px;">' + nextText + '</div>'
-        +   '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">' + chip('default', '常规 · 19:00 后') + chip('advanced', '过五不食 · 17:00 后')
-        +     '<button type="button" onclick="openGutRestSettings()" style="padding:6px 10px;border-radius:999px;font-size:11px;font-weight:700;cursor:pointer;border:1px dashed #D1D5DB;background:#fff;color:#6B7280;">自定义</button>'
-        +   '</div>'
+        +   '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">' + chip('default', '常规 · 19:00 后') + chip('advanced', '过五不食 · 17:00 后') + '</div>'
+        +   '<div style="font-size:11px;color:#6B7280;line-height:1.7;margin-top:6px;">当前：<b style="color:#9A3412;">' + curLabel + '</b> · ' + escapeHtml(s.start) + ' – ' + (curCross ? '次日 ' : '') + escapeHtml(s.end)
+        +     (curTip ? '<br>' + curTip : '') + '</div>'
         + '</div>'
         + '</div>';
 }
@@ -78280,16 +78283,6 @@ function setGutRestPreset(mode) {
     saveGutRestSettings(s);
     showToast(mode === 'advanced' ? '🕒 已切换为「过五不食」：17:00 后肠道休息' : '🕒 已切换为常规模式：19:00 后肠道休息');
 }
-function refreshGutRestSummaryLine() {
-    var el = document.getElementById('gutRestSummaryLine');
-    if (!el) return;
-    var s = getGutRestSettings();
-    var stMin = _gutRestParse(s.start), enMin = _gutRestParse(s.end);
-    var cross = (stMin !== null && enMin !== null && enMin <= stMin);
-    var label = s.mode === 'advanced' ? '进阶模式（过五不食）' : (s.mode === 'custom' ? '自定义' : '默认模式');
-    el.innerHTML = '当前：<b style="color:#9A3412;">' + label + '</b> · ' + escapeHtml(s.start) + ' – ' + (cross ? '次日 ' : '') + escapeHtml(s.end)
-        + (s.mode === 'advanced' ? '<br>17 点后不进食，把「过五不食」落到每天的作息里。' : (s.mode === 'default' ? '<br>晚餐后留出 12 小时，让肠道按时休整。' : ''));
-}
 function updateGutRestBanner() {
     try {
         // V374: 首页底部悬浮横幅已下线，改为健康管家页内的可视化肠道休息时钟
@@ -78297,7 +78290,6 @@ function updateGutRestBanner() {
         if (old && old.parentNode) old.parentNode.removeChild(old);
         var el = document.getElementById('gutRestClock');
         if (el) el.innerHTML = _gutRestClockInnerHtml(new Date());
-        refreshGutRestSummaryLine();
     } catch (e) {}
 }
 // 打开设置面板（健康管家页内入口）
@@ -79470,11 +79462,9 @@ function openSpecialPlanBoard() {
         + '<div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
         +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
         +     '<div style="font-size:15px;font-weight:800;color:#C2410C;">🕒 肠道休息时钟</div>'
-        +     '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">免费</span>'
         +     '<button type="button" onclick="openGutRestSettings()" style="margin-left:auto;padding:7px 14px;border:1px solid #FDBA74;border-radius:10px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:700;cursor:pointer;">设置</button>'
         +   '</div>'
         +   '<div id="gutRestClock" style="margin-top:12px;">' + _gutRestClockInnerHtml(new Date()) + '</div>'
-        +   '<div id="gutRestSummaryLine" style="font-size:12px;color:#6B7280;line-height:1.7;margin-top:10px;border-top:1px dashed #F3F4F6;padding-top:8px;"></div>'
         + '</div></div>';
 
     // V504: 去掉「免费养生工具」折叠卡，顺时养生与肠道休息时钟直接展示
