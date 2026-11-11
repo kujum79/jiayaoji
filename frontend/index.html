@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V480-20261111';
+        var APP_VER = 'V481-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78559,19 +78559,83 @@ function _hmRenderMenuSection() {
     if (!slot) return;
     slot.innerHTML = _hmMenuCardHtml();
 }
+// V481: 今日建议改为「1 个具体动作 + 理由」，并且折叠为单行
+var _HM_ADVICE_OPEN = false;
+function _hmTodayAction() {
+    try {
+        var items = lsGet('fridgeItems') || [];
+        if (typeof items === 'string') items = JSON.parse(items);
+        var soon = items.filter(function (it) {
+            if (!it || !it.expiryDate) return false;
+            var t = new Date(String(it.expiryDate).replace(/-/g, '/')).getTime();
+            return t >= Date.now() - 86400000 && t <= Date.now() + 2 * 86400000;
+        });
+        if (soon.length) {
+            var nm = soon[0].name || '临期食材';
+            return { action: '今天优先把冰箱里的' + nm + '吃掉，午餐加一道蒜蓉' + nm, why: nm + '临近保质期，先吃它既不浪费也更新鲜', source: 'fridge' };
+        }
+    } catch (e) {}
+    try {
+        var cal = (typeof getDietCalendar === 'function') ? (getDietCalendar() || {}) : {};
+        var y = new Date(); y.setDate(y.getDate() - 1);
+        var yd = cal[dateToKey(y)] || {};
+        var heavy = '';
+        ['dinner', 'lunch'].forEach(function (mt) {
+            if (heavy) return;
+            var md = yd[mt] || {};
+            var arr = (md.actual && md.actual.dishes && md.actual.dishes.length) ? md.actual.dishes : (md.dishes || []);
+            arr.forEach(function (d) {
+                var n = _mealDishName(d);
+                if (!heavy && /红烧|炸|煎|扣肉|回锅|干锅|糖醋|油焖|梅菜/.test(n)) heavy = n;
+            });
+        });
+        if (heavy) return { action: '今晚加一道清蒸鱼，主食换成杂粮饭', why: '昨晚吃了「' + heavy + '」，油脂偏高，今天给肠胃减减负', source: 'yesterday' };
+    } catch (e) {}
+    var tagText = '';
+    try { tagText = _hmFamilyTags().map(function (t) { return t.label; }).join(' '); } catch (e) {}
+    if (tagText.indexOf('老人') >= 0) return { action: '晚餐给老人加一道山药蒸蛋，配软烂青菜', why: '家里有老人，软烂少盐更好入口', source: 'tag' };
+    if (tagText.indexOf('孕') >= 0) return { action: '今天加一份菠菜猪肝汤或鲫鱼豆腐汤', why: '孕期需要补铁补蛋白，汤水更好入口', source: 'tag' };
+    if (tagText.indexOf('青少年') >= 0) return { action: '早餐加一个水煮蛋，晚餐加一份清蒸鱼', why: '家有青少年，优质蛋白和钙要跟上', source: 'tag' };
+    var t = null;
+    try { t = getSolarTermForDate(new Date()); } catch (e) {}
+    var soup = (t && t.name === '立冬') ? '萝卜羊肉汤' : ((t && t.name === '冬至') ? '山药排骨汤' : '当季蔬菜豆腐汤');
+    return { action: '今晚加一碗' + soup, why: (t && t.name ? t.name : '当季') + '宜温补，一碗热汤最稳妥', source: 'term' };
+}
+window._hmToggleAdvice = function (ev) {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    _HM_ADVICE_OPEN = !_HM_ADVICE_OPEN;
+    var slot = document.getElementById('hmAdviceSlot');
+    if (slot) slot.innerHTML = _hmAdviceCardHtml();
+};
+window._hmAdviceAct = function (ev) {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    _HM_MENU_OPEN = true;
+    var slot = document.getElementById('hmMenuSlot');
+    if (slot) slot.innerHTML = _hmMenuCardHtml();
+    var el = document.getElementById('hmMenuSlot');
+    if (el && el.scrollIntoView) { try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {} }
+};
 function _hmAdviceCardHtml() {
-    var term = null, foods = '';
-    try { term = (typeof getSolarTermForDate === 'function') ? getSolarTermForDate(new Date()) : null; } catch (e) {}
-    try { foods = (typeof getSolarTermFoods === 'function') ? (getSolarTermFoods(term) || []).slice(0, 5).join('、') : ''; } catch (e) {}
-    var tags = _hmFamilyTags().map(function (t) { return t.label; });
-    return '<div style="padding:0 14px 12px;">'
-        + '<div style="background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FDBA74;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.05);">'
-        +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
-        +     '<div style="font-size:15px;font-weight:800;color:#C2410C;">🎯 今日专属健康建议</div>'
-        +     (tags.length ? '<span style="font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">' + escapeHtml(tags.join(' · ')) + '</span>' : '')
-        +   '</div>'
-        +   '<div style="font-size:14px;color:#7C2D12;line-height:1.75;margin-top:8px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(_hmTodayAdviceText()) + '</div>'
-        +   '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">来自家庭标签与节气，仅供日常饮食参考，不替代医疗建议。</div>'
+    var a = _hmTodayAction();
+    var head = '🎯 今日专属健康建议';
+    var box = 'background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FDBA74;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,0.05);';
+    if (!_HM_ADVICE_OPEN) {
+        return '<div style="padding:0 14px 12px;"><div style="' + box + 'padding:12px 14px;">'
+            + '<div onclick="_hmToggleAdvice(event)" style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow:hidden;cursor:pointer;">'
+            +   '<div style="font-size:14px;font-weight:800;color:#C2410C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">' + head + '</div>'
+            +   '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">今日 1 个动作</span>'
+            +   '<span style="flex-shrink:0;margin-left:auto;font-size:12px;color:#B45309;font-weight:700;">▼ 展开</span>'
+            + '</div></div></div>';
+    }
+    return '<div style="padding:0 14px 12px;"><div style="' + box + 'padding:14px;">'
+        + '<div onclick="_hmToggleAdvice(event)" style="display:flex;align-items:center;gap:8px;cursor:pointer;">'
+        +   '<div style="font-size:15px;font-weight:800;color:#C2410C;">' + head + '</div>'
+        +   '<span style="margin-left:auto;font-size:12px;color:#B45309;font-weight:700;">▲ 收起</span>'
+        + '</div>'
+        + '<div style="font-size:14px;color:#7C2D12;line-height:1.75;margin-top:8px;font-weight:700;">' + escapeHtml(a.action) + '</div>'
+        + '<div style="font-size:12px;color:#9A3412;line-height:1.7;margin-top:6px;">' + escapeHtml(a.why) + '</div>'
+        + '<button type="button" onclick="_hmAdviceAct(event)" style="margin-top:10px;padding:8px 14px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:13px;font-weight:800;cursor:pointer;">就这么办 ›</button>'
+        + '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">来自家庭记录与节气，仅供日常饮食参考，不替代医疗建议。</div>'
         + '</div></div>';
 }
 function _hmAutoPlanCardHtml() {
@@ -78893,7 +78957,7 @@ function openSpecialPlanBoard() {
         + '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">健康管家</span>'
         + (plan ? '<button type="button" id="spBoardEndBtn" style="margin-left:auto;padding:6px 10px;border:1px solid #FED7AA;border-radius:10px;background:#fff;color:#C2410C;font-size:12px;cursor:pointer;">结束计划</button>' : '')
         + '</div>'
-        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:14px;">' + (window._wpCardHtml ? _wpCardHtml() : '') + bodyHtml + _hmAdviceCardHtml() + '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' + _hmCareCardHtml() + _hmDeepReviewCardHtml() + _hmAutoPlanCardHtml() + freeToolsHtml + '</div>';
+        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:14px;">' + (window._wpCardHtml ? _wpCardHtml() : '') + bodyHtml + '<div id="hmAdviceSlot">' + _hmAdviceCardHtml() + '</div>' + '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' + _hmCareCardHtml() + _hmDeepReviewCardHtml() + _hmAutoPlanCardHtml() + freeToolsHtml + '</div>';
 
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
