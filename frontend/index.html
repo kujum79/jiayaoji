@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V487-20261111';
+        var APP_VER = 'V488-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -13156,7 +13156,37 @@ function getDietCalendar() {
     catch(e) { return {}; }
 }
 
+// V488: 写入保护——任何流程把「健康管家 / 特供」已采纳的今日餐次清空时自动还原，
+// 杜绝「加入后只出现一次、再进就没有」的数据被异步流程抹掉。
+function _protectHmPlans(calendar) {
+    try {
+        if (!calendar || window.__allowHmClear) return calendar;
+        var raw = lsGet('dietCalendar');
+        if (!raw || (raw.indexOf('健康管家') < 0 && raw.indexOf('特供') < 0)) return calendar;
+        var old = raw ? JSON.parse(raw) : null;
+        if (!old) return calendar;
+        var todayKey = dateToKey(new Date());
+        Object.keys(old).forEach(function (dk) {
+            if (dk !== todayKey) return;
+            var od = old[dk] || {};
+            ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+                var op = od[mt] && od[mt].plan;
+                if (!op || !Array.isArray(op.dishes) || !op.dishes.length) return;
+                if (!/健康管家|特供/.test(String(op.note || ''))) return;
+                if (!calendar[dk]) calendar[dk] = {};
+                var slot = calendar[dk][mt];
+                if (!slot) { calendar[dk][mt] = { plan: op, actual: null }; return; }
+                var np = slot.plan;
+                var nLen = (np && Array.isArray(np.dishes)) ? np.dishes.length : 0;
+                if (nLen === 0) slot.plan = op;
+            });
+        });
+    } catch (e) {}
+    return calendar;
+}
+
 function saveDietCalendar(calendar) {
+    try { calendar = _protectHmPlans(calendar); } catch (e) {}
     lsSet('dietCalendar', JSON.stringify(calendar));
 }
 
@@ -57930,11 +57960,11 @@ function confirmAddFromKnowledgeDialog(knowledgeId) {
 // AI 自动提取与推荐（无需用户手动触发）
 // ============================================================
 
-// V485: 当天是否已有「健康管家 / 特供」方案——这类餐次视为用户已采纳，自动推荐不得整日覆盖
-function _dayHasHmPlan(dd) {
+// V485: 当天是否已有任意计划（含健康管家/特供/用户自建）——自动推荐不得整日覆盖
+function _dayHasAnyPlan(dd) {
     return ['breakfast', 'lunch', 'dinner'].some(function (mt) {
         var p = dd && dd[mt] && dd[mt].plan;
-        return p && /健康管家|特供/.test(String(p.note || ''));
+        return p && Array.isArray(p.dishes) && p.dishes.length > 0;
     });
 }
 // 进入食记时自动检测：是否需要生成AI推荐
@@ -57962,7 +57992,7 @@ async function autoCheckAndRecommend() {
         const hasPlan = ['breakfast', 'lunch', 'dinner'].every(mt => {
             return dd[mt] && dd[mt].plan && dd[mt].plan.dishes && dd[mt].plan.dishes.length > 0;
         });
-        if (!hasPlan && !_dayHasHmPlan(dd)) {
+        if (!hasPlan && !_dayHasAnyPlan(dd)) {
             missingDays.push(i);
         }
     }
@@ -58177,7 +58207,7 @@ async function generateMultiDayRecommendation(days) {
         const hasPlan = ['breakfast', 'lunch', 'dinner'].every(mt => {
             return dayData[mt] && dayData[mt].plan && dayData[mt].plan.dishes && dayData[mt].plan.dishes.length > 0;
         });
-        if (hasPlan || _dayHasHmPlan(dayData)) return;
+        if (hasPlan || _dayHasAnyPlan(dayData)) return;
 
         const meals = day.meals || {};
         // 获取当前就餐人信息，保存到计划数据中
@@ -62324,7 +62354,8 @@ function clearMealPlan(mealKey) {
     const calendar = getDietCalendar();
     if (calendar[dateKey] && calendar[dateKey][mealKey]) {
         calendar[dateKey][mealKey].plan = null;
-        saveDietCalendar(calendar);
+        window.__allowHmClear = true;   // V488: 用户主动清空，跳过健康管家计划保护
+        try { saveDietCalendar(calendar); } finally { window.__allowHmClear = false; }
     }
     const overlay = document.getElementById('mealPlanEditOverlay');
     if (overlay) overlay.remove();
@@ -78836,6 +78867,8 @@ function _hmAddSelectedToDiaryCore() {
     _hmRenderMenuSection();
     // V485: 立即刷新「三餐计划、记录」页，避免用户切过去时看到的还是旧渲染
     try { if (typeof renderDiary === 'function') renderDiary(); } catch (e) {}
+    // V488: 同步刷新首页食记卡
+    try { if (typeof renderHomeDiaryCard === 'function') renderHomeDiaryCard(); } catch (e) {}
 }
 
 function openSpecialPlanBoard() {
