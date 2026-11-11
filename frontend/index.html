@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V497-20261111';
+        var APP_VER = 'V498-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -80021,7 +80021,7 @@ window.openCareForm = function () {
         + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
         + '<div style="font-size:16px;font-weight:800;color:#C2410C;">💊 发起饮食调理</div>'
         + '<button type="button" onclick="closeCareForm()" style="border:none;background:#FFEDD5;color:#C2410C;width:30px;height:30px;border-radius:9px;font-size:16px;cursor:pointer;">×</button></div>'
-        + '<div style="font-size:11px;color:#92400E;line-height:1.6;margin:0 0 4px;">选家人 + 症状，AI 生成当日家庭融合特供菜</div>'
+        + '<div style="font-size:11px;color:#92400E;line-height:1.6;margin:0 0 4px;">选家人 + 症状，生成当日家庭融合特供菜</div>'
         + _careDisclaimerHtml()
         + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">选择家人</div>'
         + '<select id="careMemberSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + memberOpts + '</select>'
@@ -80029,7 +80029,7 @@ window.openCareForm = function () {
         + '<select id="careSymptomSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + symOpts + '</select>'
         + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">补充描述（选填）</div>'
         + '<textarea id="careDescInput" rows="3" placeholder="例如：这两天有点低烧、没胃口，想吃清淡的" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:13px;resize:none;"></textarea>'
-        + '<button type="button" id="careSubmitBtn" onclick="submitCareForm()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:11px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">AI 生成专属特供食谱</button>'
+        + '<button type="button" id="careSubmitBtn" onclick="submitCareForm()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:11px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">生成专属特供食谱</button>'
         + '</div>';
     document.body.appendChild(overlay);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) closeCareForm(); });
