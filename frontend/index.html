@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V481-20261111';
+        var APP_VER = 'V482-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78129,7 +78129,7 @@ try {
 } catch (e) {}
 
 // ==================== V455: 健康管家升级为「主动式 AI 营养师」 ====================
-// 订阅用户打开即看到：今日专属健康建议 → 今日 AI 推荐营养食谱 → 7 天自动调理计划；
+// 订阅用户打开即看到：今日专属健康建议 → 今日营养食谱 → 7 天自动调理计划；
 // 专项计划（生病调理等）置顶展示今日专项食谱，并支持一键采纳到餐单。
 var _HM_MENU_CACHE = { key: '', menu: null, loading: false, aiTriedKey: '' };
 // V457: 三餐版块默认折叠；勾选状态按 餐次|菜名 记录，重渲染后仍保留
@@ -78500,7 +78500,7 @@ window._hmToggleDish = function (el) {
 function _hmMenuCardHtml() {
     var menu = _hmTodayMenu();
     var single = (typeof isSingleMealMode === 'function') && isSingleMealMode();
-    var title = single ? '🍱 一人食推荐营养食谱' : '🍽️ 今日 AI 推荐营养食谱';
+    var title = single ? '🍱 一人食营养食谱' : '🍽️ 今日营养食谱';
     var servings = _mealPlanEffectiveServings();
     var adopted = _hmAdoptedToday();
     var mealDefs = [['breakfast', '🌅 早餐'], ['lunch', '☀️ 午餐'], ['dinner', '🌙 晚餐']];
