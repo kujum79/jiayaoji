@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V500-20261111';
+        var APP_VER = 'V501-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79496,7 +79496,7 @@ function _careSafeText(t) {
 function _careDisclaimerHtml() {
     return '<div style="background:#FEF3C7;border:1px solid #FCD34D;color:#92400E;border-radius:9px;padding:7px 10px;font-size:11px;line-height:1.6;margin:6px 0;">⚠️ 本内容仅为日常饮食参考，不构成医疗诊断。如患有疾病，请务必遵医嘱。</div>';
 }
-var _HM_CARE_FOLDED = false; // V496: 加入食记后收起「特殊饮食调理」版块
+var _HM_CARE_FOLDED = true; // V501: 进入健康管家默认只显示标题行；生成新方案或点「查看详情」时展开
 function _careLoad() {
     try { var o = JSON.parse(lsGet('healthButlerCare') || 'null'); return (o && o.date) ? o : null; } catch (e) { return null; }
 }
@@ -79516,14 +79516,18 @@ function _hmCareCardHtml() {
         + '<button type="button" onclick="openCareForm()" style="flex-shrink:0;padding:8px 12px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:12px;font-weight:800;cursor:pointer;">发起调理</button>'
         + '</div>';
     if (o && _HM_CARE_FOLDED) {
-        html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:#166534;">'
-            + '<span>✅ 已加入' + escapeHtml(o.addedMeal || '食记') + '：' + escapeHtml(o.memberName) + '特供 · ' + escapeHtml((o.dish && o.dish.name) || '') + '</span>'
+        html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:' + (o.addedDate ? '#166534' : '#92400E') + ';">'
+            + '<span>' + (o.addedDate ? '✅ 已加入' + escapeHtml(o.addedMeal || '食记') + '：' : '💡 待加入：') + escapeHtml(o.memberName) + '特供 · ' + escapeHtml((o.dish && o.dish.name) || '') + '</span>'
             + '<span onclick="_careExpand()" style="margin-left:auto;color:#C2410C;font-weight:800;cursor:pointer;">查看详情 ›</span>'
+            + '<span onclick="_careDismiss()" style="color:#9CA3AF;font-weight:700;cursor:pointer;padding:0 2px;">✕</span>'
             + '</div>';
     } else if (o) {
         var dishName = (o.dish && o.dish.name) || '';
         html += '<div style="margin-top:10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:11px;padding:10px;">'
-            + '<div style="font-size:13px;font-weight:800;color:#7C2D12;">👨‍⚕️ ' + escapeHtml(o.memberName) + '特供：' + escapeHtml(dishName) + '</div>'
+            + '<div style="display:flex;align-items:flex-start;gap:8px;">'
+            +   '<div style="flex:1;min-width:0;font-size:13px;font-weight:800;color:#7C2D12;">👨‍⚕️ ' + escapeHtml(o.memberName) + '特供：' + escapeHtml(dishName) + '</div>'
+            +   '<span onclick="_careDismiss()" title="关闭" style="flex-shrink:0;color:#9CA3AF;font-size:14px;font-weight:700;cursor:pointer;line-height:1;">✕</span>'
+            + '</div>'
             + '<div style="font-size:11px;color:#92400E;margin-top:3px;">症状：' + escapeHtml(o.symptom) + (o.desc ? ' · ' + escapeHtml(o.desc) : '') + '</div>'
             + (o.advice ? '<div style="font-size:12px;color:#78350F;line-height:1.65;margin-top:6px;">' + escapeHtml(o.advice) + '</div>' : '')
             + '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">主菜仍是全家菜，这道特供只额外加给 ' + escapeHtml(o.memberName) + '。</div>'
@@ -80169,6 +80173,13 @@ window._careExpand = function () {
 };
 // V497: 手动把已加入的调理版块重新收起
 window._careCollapse = function () {
+    _HM_CARE_FOLDED = true;
+    var el = document.getElementById('hmCareCard');
+    if (el) el.outerHTML = _hmCareCardHtml();
+};
+// V501: 关闭当前调理卡片（不删除已加入食记的菜）
+window._careDismiss = function () {
+    try { lsSet('healthButlerCare', ''); } catch (e) {}
     _HM_CARE_FOLDED = true;
     var el = document.getElementById('hmCareCard');
     if (el) el.outerHTML = _hmCareCardHtml();
