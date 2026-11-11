@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V496-20261111';
+        var APP_VER = 'V497-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79513,7 +79513,7 @@ function _hmCareCardHtml() {
         + '</div>';
     if (o && _HM_CARE_FOLDED) {
         html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:#166534;">'
-            + '<span>✅ 已加入' + escapeHtml(String(o.addedMeal || '')) + '：' + escapeHtml(o.memberName) + '特供 · ' + escapeHtml((o.dish && o.dish.name) || '') + '</span>'
+            + '<span>✅ 已加入' + escapeHtml(o.addedMeal || '食记') + '：' + escapeHtml(o.memberName) + '特供 · ' + escapeHtml((o.dish && o.dish.name) || '') + '</span>'
             + '<span onclick="_careExpand()" style="margin-left:auto;color:#C2410C;font-weight:800;cursor:pointer;">查看详情 ›</span>'
             + '</div>';
     } else if (o) {
@@ -79531,6 +79531,7 @@ function _hmCareCardHtml() {
             + '</div>'
             + '<button type="button" onclick="_careAddToDiary(this)" style="width:100%;margin-top:8px;padding:9px;border:none;border-radius:9px;background:#F97316;color:#fff;font-size:12px;font-weight:800;cursor:pointer;">➕ 加入所选餐次</button>'
             + _careDisclaimerHtml()
+            + (o.addedDate ? '<div onclick="_careCollapse()" style="text-align:right;font-size:11px;color:#C2410C;font-weight:800;cursor:pointer;margin-top:6px;">收起 ›</div>' : '')
             + '</div>';
     }
     html += '</div>';
@@ -80159,6 +80160,12 @@ window._careAddToDiary = function (btn) {
 // V496: 展开已收起的「特殊饮食调理」版块
 window._careExpand = function () {
     _HM_CARE_FOLDED = false;
+    var el = document.getElementById('hmCareCard');
+    if (el) el.outerHTML = _hmCareCardHtml();
+};
+// V497: 手动把已加入的调理版块重新收起
+window._careCollapse = function () {
+    _HM_CARE_FOLDED = true;
     var el = document.getElementById('hmCareCard');
     if (el) el.outerHTML = _hmCareCardHtml();
 };
