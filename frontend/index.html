@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V489-20261111';
+        var APP_VER = 'V490-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -30932,7 +30932,7 @@ function closeDiaryRecipePicker() {
 // ==================== 📋 审核报告（V102）====================
 // 数据存储：localStorage 键 auditRecords，结构 { "<dateKey>|<meal>": { dateKey, meal, time, source, totalScore, dimensions, score, passed, auditNote, passItems, warnItems, suggestions } }
 // V104: 五维度评分——dimensions=[{name,score,max,reasons[]}], totalScore=五维度分之和（各菜维度平均后求和）
-// passItems=[{dish,score}] 通过项；warnItems=[{dish,score,messages[]}] 提醒项；
+// passItems=[{dish,score,dims}] 通过项；warnItems=[{dish,score,messages[],dims}] 提醒项；V490: dims=逐菜五维实际得分
 // suggestions=[...] AI 建议（去重汇总）；score=各菜总分平均值（兼容保留）
 function _saveAuditRecord(dateKey, meal, aiResult) {
     try {
@@ -30968,10 +30968,26 @@ function _saveAuditRecord(dateKey, meal, aiResult) {
             }).filter(Boolean);
             var sugg = (Array.isArray(a.suggestions) ? a.suggestions : []).filter(Boolean);
             sugg.forEach(function(s){ var t = '审核建议：' + s; if (msgs.indexOf(t) === -1) msgs.push(t); });
+            // V490: 逐菜五维明细（满分固定 30/25/15/15/15），供报告按菜展示实际得分
+            var dishDims = null;
+            if (Array.isArray(a.dimensions) && a.dimensions.length) {
+                var dmMap = {};
+                a.dimensions.forEach(function(dim){ if (dim && dim.name) dmMap[dim.name] = dim; });
+                dishDims = DIM_ORDER.map(function(nm2){
+                    var dm = dmMap[nm2];
+                    if (!dm) return null;
+                    var mx2 = (typeof dm.max === 'number' && dm.max > 0) ? dm.max : DIM_MAX[nm2];
+                    return {
+                        name: nm2, max: mx2,
+                        score: (typeof dm.score === 'number') ? Math.round(dm.score) : 0,
+                        reason: (typeof dm.reason === 'string') ? dm.reason : ''
+                    };
+                }).filter(Boolean);
+            }
             if (msgs.length || (sc !== null && sc < 80)) {
-                warnItems.push({ dish: nm, score: sc, messages: msgs });
+                warnItems.push({ dish: nm, score: sc, messages: msgs, dims: dishDims });
             } else {
-                passItems.push({ dish: nm, score: sc });
+                passItems.push({ dish: nm, score: sc, dims: dishDims });
             }
             sugg.forEach(function(s){ if (s && suggestions.indexOf(s) === -1) suggestions.push(s); });
         });
@@ -31004,6 +31020,64 @@ function _getAuditRecord(dateKey, meal) {
         var all = JSON.parse(lsGet('auditRecords') || '{}') || {};
         return all[dateKey + '|' + meal] || null;
     } catch(e) { return null; }
+}
+// V490: 逐菜五维明细渲染——满分固定 营养均衡30/口味适配25/时令适宜15/操作可行15/成本合理15
+var _AUDIT_DIM_DEFS = [['营养均衡', 30], ['口味适配', 25], ['时令适宜', 15], ['操作可行', 15], ['成本合理', 15]];
+var _AUDIT_DIM_TIP = {
+    '营养均衡': '建议补一道优质蛋白或蔬菜，让这一餐更均衡',
+    '口味适配': '可按家人口味微调咸淡与做法',
+    '时令适宜': '换成当季食材，更新鲜也更实惠',
+    '操作可行': '做法偏费时，忙时可简化为清蒸/快炒',
+    '成本合理': '可用营养相近的平价食材替代'
+};
+function _auditDimChipsHtml(dims) {
+    if (!Array.isArray(dims) || !dims.length) return '';
+    var map = {};
+    dims.forEach(function(d){ if (d && d.name) map[d.name] = d; });
+    var out = '';
+    _AUDIT_DIM_DEFS.forEach(function(def){
+        var d = map[def[0]];
+        if (!d) {
+            out += '<span style="display:inline-block;font-size:10px;color:#9CA3AF;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:6px;padding:1px 5px;margin:0 4px 4px 0;white-space:nowrap;">'
+                + escapeHtml(def[0]) + ' <b>—</b>/' + def[1] + '</span>';
+            return;
+        }
+        var mx = (typeof d.max === 'number' && d.max > 0) ? d.max : def[1];
+        var sc = (typeof d.score === 'number') ? Math.round(d.score) : 0;
+        var pct = mx > 0 ? sc / mx : 0;
+        var c = pct >= 0.8 ? '#16A34A' : (pct >= 0.6 ? '#D97706' : '#DC2626');
+        out += '<span style="display:inline-block;font-size:10px;color:' + c + ';background:#F9FAFB;border:1px solid #E5E7EB;border-radius:6px;padding:1px 5px;margin:0 4px 4px 0;white-space:nowrap;">'
+            + escapeHtml(def[0]) + ' <b>' + sc + '</b>/' + mx + '</span>';
+    });
+    return out ? '<div style="margin-top:4px;">' + out + '</div>' : '';
+}
+function _auditLowestDim(dims) {
+    if (!Array.isArray(dims) || !dims.length) return null;
+    var low = null;
+    dims.forEach(function(d){
+        if (!d || typeof d.score !== 'number') return;
+        var mx = (typeof d.max === 'number' && d.max > 0) ? d.max : 100;
+        var pct = d.score / mx;
+        if (!low || pct < low.pct) low = { name: d.name || '', score: d.score, max: mx, reason: String(d.reason || ''), pct: pct };
+    });
+    return low;
+}
+// 提醒文字：优先 AI 给出的具体问题/建议；没有时用最低分维度生成可执行原因
+function _auditWarnText(it) {
+    var msgs = (it && Array.isArray(it.messages)) ? it.messages.filter(Boolean) : [];
+    if (msgs.length) return msgs;
+    var low = _auditLowestDim(it && it.dims);
+    if (!low) return [];
+    var t = '主要扣分：' + low.name + ' ' + Math.round(low.score) + '/' + low.max;
+    if (low.reason) t += '（' + low.reason + '）';
+    var tip = _AUDIT_DIM_TIP[low.name];
+    return tip ? [t, tip] : [t];
+}
+function _auditLevelMeta(it) {
+    var sc = (it && typeof it.score === 'number') ? it.score : null;
+    if (sc !== null && sc < 60) return { label: '⛔ 需调整', color: '#DC2626', bg: '#FEF2F2', order: 0 };
+    if (sc === null || sc < 80) return { label: '⚠️ 建议调整', color: '#D97706', bg: '#FFFBEB', order: 1 };
+    return { label: '💡 可选优化', color: '#2563EB', bg: '#EFF6FF', order: 2 };
 }
 // 打开审核报告（餐卡「📋 报告」触发；meal 缺省用上次查看的餐次）
 // V119f 修复：此前渲染在弹层显示之前执行，历史数据结构异常（如旧版 passItems/warnItems 为字符串）会抛错
@@ -31100,7 +31174,7 @@ function renderDiaryAuditReportBody() {
     // ①.5 五维度评分（V104：条形图 得分/满分 + 扣分说明）
     var dims = Array.isArray(rec.dimensions) ? rec.dimensions : null;
     if (dims && dims.length) {
-        html += '<div style="font-size:13px;font-weight:700;color:#374151;margin:10px 0 6px;">📊 五维度评分</div>';
+        html += '<div style="font-size:13px;font-weight:700;color:#374151;margin:10px 0 6px;">📊 全餐五维度平均分<span style="font-size:11px;font-weight:600;color:#9CA3AF;margin-left:6px;">（逐菜实际得分见下方）</span></div>';
         html += '<div style="background:#fff;border:1px solid #F3F4F6;border-radius:10px;padding:10px 12px;margin-bottom:10px;">';
         dims.forEach(function(dm){
             var mx = (typeof dm.max === 'number' && dm.max > 0) ? dm.max : 0;
@@ -31119,29 +31193,57 @@ function renderDiaryAuditReportBody() {
         });
         html += '</div>';
     }
-    // ② 通过项（绿色 ✅）
+    // ② 通过项（绿色 ✅）——每道菜列出五维实际得分
     if (passN > 0) {
         html += '<div style="font-size:13px;font-weight:700;color:#16A34A;margin:2px 0 6px;">✅ 通过项（' + passN + '）</div>';
         html += passItems.map(function(it){
             var itSc = (it && typeof it.score === 'number') ? it.score : null;
-            return '<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;margin-bottom:4px;">'
-                + '<span style="flex:1;font-size:13px;color:#166534;font-weight:600;">' + escapeHtml(it && it.dish) + '</span>'
+            return '<div style="padding:6px 10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;margin-bottom:4px;">'
+                + '<div style="display:flex;align-items:center;gap:6px;">'
+                + '<span style="flex:1;font-size:13px;color:#166534;font-weight:600;">' + escapeHtml((it && it.dish) || '') + '</span>'
                 + (itSc !== null ? '<span style="padding:1px 7px;border-radius:8px;font-size:11px;font-weight:700;background:#DCFCE7;color:#16A34A;flex:0 0 auto;">' + itSc + '分</span>' : '')
+                + '</div>'
+                + _auditDimChipsHtml(it && it.dims)
                 + '</div>';
         }).join('');
     }
-    // ③ 提醒项（橙色 ⚠️）
+    // ③ 提醒项（按严重程度排序：需调整 → 建议调整 → 可选优化）
     if (warnN > 0) {
-        html += '<div style="font-size:13px;font-weight:700;color:#D97706;margin:10px 0 6px;">⚠️ 提醒项（' + warnN + '）</div>';
-        html += warnItems.map(function(it){
-            var itSc = (typeof it === 'object' && it && typeof it.score === 'number') ? it.score : null;
+        var warnSorted = warnItems.map(function(it){
+            return { it: it, m: _auditLevelMeta(it) };
+        }).sort(function(a, b){
+            if (a.m.order !== b.m.order) return a.m.order - b.m.order;
+            var as = (a.it && typeof a.it.score === 'number') ? a.it.score : 999;
+            var bs = (b.it && typeof b.it.score === 'number') ? b.it.score : 999;
+            return as - bs;
+        });
+        var lvN = [0, 0, 0];
+        warnSorted.forEach(function(x){ lvN[x.m.order]++; });
+        var lvText = [];
+        if (lvN[0]) lvText.push('需调整 ' + lvN[0]);
+        if (lvN[1]) lvText.push('建议调整 ' + lvN[1]);
+        if (lvN[2]) lvText.push('可选优化 ' + lvN[2]);
+        var lackDims = warnItems.some(function(it){ return !(it && Array.isArray(it.dims) && it.dims.length); });
+        html += '<div style="font-size:13px;font-weight:700;color:#D97706;margin:10px 0 6px;">⚠️ 提醒项（' + warnN + '）'
+            + (lvText.length ? '<span style="font-size:11px;font-weight:600;color:#B45309;margin-left:6px;">' + lvText.join(' · ') + '</span>' : '')
+            + (lackDims ? '<button type="button" onclick="runDiaryMealAudit(\'' + dk + '\',\'' + meal + '\',this)" style="margin-left:6px;padding:2px 8px;border:1px solid #FDE68A;border-radius:7px;background:#fff;color:#B45309;font-size:11px;font-weight:700;cursor:pointer;">🔄 重新审核看明细</button>' : '')
+            + '</div>';
+        html += warnSorted.map(function(x){
+            var it = x.it || {};
+            var m = x.m;
+            var itSc = (typeof it.score === 'number') ? it.score : null;
             var itColor = itSc === null ? '#D97706' : (itSc >= 80 ? '#16A34A' : (itSc >= 60 ? '#D97706' : '#DC2626'));
-            return '<div style="padding:6px 10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;margin-bottom:4px;">'
-                + '<div style="display:flex;align-items:center;gap:6px;">'
-                + '<span style="flex:1;font-size:13px;color:#92400E;font-weight:600;">' + escapeHtml(it && it.dish) + '</span>'
+            var reasons = _auditWarnText(it);
+            return '<div style="padding:7px 10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;margin-bottom:5px;">'
+                + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+                + '<span style="flex:1;min-width:90px;font-size:13px;color:#92400E;font-weight:600;">' + escapeHtml((it && it.dish) || '') + '</span>'
+                + '<span style="padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;background:' + m.bg + ';color:' + m.color + ';flex:0 0 auto;">' + m.label + '</span>'
                 + (itSc !== null ? '<span style="padding:1px 7px;border-radius:8px;font-size:11px;font-weight:700;background:#FEF3C7;color:' + itColor + ';flex:0 0 auto;">' + itSc + '分</span>' : '')
                 + '</div>'
-                + ((it && Array.isArray(it.messages) && it.messages.length) ? '<div style="font-size:11px;color:#92400E;margin-top:3px;line-height:1.6;">· ' + it.messages.map(escapeHtml).join('<br>· ') + '</div>' : '')
+                + _auditDimChipsHtml(it.dims)
+                + (reasons.length
+                    ? '<div style="font-size:11px;color:#92400E;margin-top:4px;line-height:1.65;">· ' + reasons.map(escapeHtml).join('<br>· ') + '</div>'
+                    : '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;line-height:1.65;">该菜暂无具体扣分说明（旧版审核记录），点上方「重新审核看明细」可补全。</div>')
                 + '</div>';
         }).join('');
     }
