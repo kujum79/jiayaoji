@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V490-20261111';
+        var APP_VER = 'V491-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -17231,7 +17231,27 @@ function calcMealSaving(md, mealType) {
     if (!md) return null;
     var src, isProjected = false;
     if (md.actual && md.actual.dishes && md.actual.dishes.length) src = md.actual.dishes;
-    else if (md.plan && md.plan.dishes && md.plan.dishes.length) { src = md.plan.dishes; isProjected = true; }
+    else if (md.plan && md.plan.dishes && md.plan.dishes.length) {
+        // V491(A2): 预计成本只按「已确认」的菜估算，与首页展示口径一致
+        var _allDishes = md.plan.dishes;
+        var _confDishes = [];
+        var _hasDishMeta = false;
+        _allDishes.forEach(function (d) {
+            var nm = _savingDishName(d);
+            var mc = false;
+            try {
+                var mm = getDishMetaSafe(md.plan, nm);
+                mc = mm.confirmed === true;
+                if (md.plan.dishMeta && md.plan.dishMeta[nm] && typeof md.plan.dishMeta[nm].confirmed === 'boolean') _hasDishMeta = true;
+            } catch (e) {}
+            if (mc) _confDishes.push(d);
+        });
+        var _planConfirmed = md.plan.state === 'confirmed' || md.plan.confirmed === true || md.plan.state === 'completed';
+        if (_confDishes.length) { src = _confDishes; isProjected = true; }
+        // 旧数据兜底：整餐已确认但完全没有逐菜 confirmed 记录时，仍按全部菜估算
+        else if (!_hasDishMeta && _planConfirmed) { src = _allDishes; isProjected = true; }
+        else return null;
+    }
     else return null;
     var names = [];
     src.forEach(function (d) {
@@ -30753,6 +30773,8 @@ function diaryToggleDishConfirmed(dateKey, mealType, dishName, checked) {
         if (!meta.addedAt) meta.addedAt = Date.now();
         plan.dishMeta[dishName] = meta;
         saveDietCalendar(cal);
+        // V491(A2): 勾选后同步刷新首页（已确认菜/待选数/成本行）
+        try { if (typeof renderHomeDiaryCard === 'function') renderHomeDiaryCard(); } catch (e) {}
         // 不立即驱动 reserve/unreserve（避免勾选抖动），留给「✅ 确认计划」按钮统一驱动
     } catch(e) { console.warn('diaryToggleDishConfirmed err', e); }
 }
@@ -34204,6 +34226,31 @@ function renderHomeDiaryCard() {
         body.innerHTML = '<div style="padding:18px 0 8px;text-align:center;font-size:13px;color:#9CA3AF;">登录后可查看膳食计划与记录，<span onclick="showLoginPage()" style="color:#F97316;font-weight:600;cursor:pointer;">去登录</span></div>';
         return;
     }
+    // ====== V491(A2): 首页只展示已确认菜；未确认/手动菜折叠为入口，成本按已确认菜估算 ======
+    var planObj = (md && md.plan) ? md.plan : null;
+    var allDishNames = (planObj && Array.isArray(planObj.dishes))
+        ? planObj.dishes.map(function (d) { return typeof d === 'string' ? d : (d.name || d.dish || ''); }).filter(Boolean)
+        : [];
+    var confirmedArr = [], pendingArr = [], manualPendingArr = [];
+    var _metaAny = false;
+    if (planObj && allDishNames.length) {
+        allDishNames.forEach(function (n) {
+            var m = { source: 'ai', confirmed: false };
+            try {
+                m = getDishMetaSafe(planObj, n);
+                if (planObj.dishMeta && planObj.dishMeta[n] && typeof planObj.dishMeta[n].confirmed === 'boolean') _metaAny = true;
+            } catch (e) {}
+            if (m.confirmed === true) confirmedArr.push(n);
+            else if (m.source === 'manual') manualPendingArr.push(n);
+            else pendingArr.push(n);
+        });
+        // 旧数据兜底：整餐已确认但没有逐菜 confirmed 记录 → 全部视为已确认
+        if (!_metaAny && !confirmedArr.length && (planObj.state === 'confirmed' || planObj.confirmed === true || planObj.state === 'completed')) {
+            confirmedArr = allDishNames.slice();
+            pendingArr = [];
+            manualPendingArr = [];
+        }
+    }
     var costHtml = '';
     if (md) {
         // V138: 外出就餐不显示在家/外食/省成本计算（已在外就餐，对比无意义）
@@ -34211,6 +34258,9 @@ function renderHomeDiaryCard() {
         try {
             if (isOut) {
                 costHtml = '';
+            } else if (planObj && allDishNames.length && !confirmedArr.length && !(md.actual && Array.isArray(md.actual.dishes) && md.actual.dishes.length)) {
+                // 尚未确认任何菜，也没有实际记录 → 不按全部计划菜虚算
+                costHtml = '<div class="hd-cost"><span>待确认</span><span id="homeCostSaveSlot" style="flex-shrink:0;"></span></div>';
             } else {
                 var sv = calcMealSaving(md, mealKey);
                 if (sv && (sv.home > 0 || sv.out > 0)) {
@@ -34223,16 +34273,31 @@ function renderHomeDiaryCard() {
         } catch (e) { costHtml = ''; }
     }
     // ====== V46: 计划确认/记录实际 交互结构 ======
-    var dishesArr = (md && md.plan && md.plan.dishes) ? md.plan.dishes.map(function (d) { return typeof d === 'string' ? d : (d.name || d.dish || ''); }).filter(Boolean) : [];
-    // V441: 首页不再显示「实际：」——实际与计划的差异统一在「三餐计划、记录」页展示
-    // V439: 首页只读展示计划，确认/复核统一在食记页
-    body.innerHTML = '<div class="hd-plan-row">'
-        + '<div class="hd-dishes">' + (dishesArr.length ? dishesArr.map(function (name) {
+    var dishListHtml;
+    if (!allDishNames.length) {
+        dishListHtml = '<span style="font-size:13px;color:#9CA3AF;">（未计划，点右上角 ＋ 规划）</span>';
+    } else if (!confirmedArr.length) {
+        // 一道都没确认：给明确入口，而不是空白或平铺未确认菜
+        dishListHtml = '<span style="font-size:13px;color:#B45309;font-weight:600;cursor:pointer;" onclick="_hdGotoDiaryMeal()">⚠️ 尚未确认，去勾选 ' + allDishNames.length + ' 道 →</span>';
+    } else {
+        dishListHtml = confirmedArr.map(function (name) {
             return '<span class="hd-dish">'
                 + '<span class="hd-dish-name" onclick="_hdViewDishByName(\'' + escapeAttr(name) + '\')" title="看做法">' + escapeHtml(name) + '</span>'
                 + '</span>';
-        }).join('') : '<span style="font-size:13px;color:#9CA3AF;">（未计划，点右上角 ＋ 规划）</span>') + '</div>'
+        }).join('');
+    }
+    var _foldParts = [];
+    if (pendingArr.length) _foldParts.push(pendingArr.length + ' 道待选');
+    if (manualPendingArr.length) _foldParts.push(manualPendingArr.length + ' 道手动菜');
+    var foldHtml = (confirmedArr.length && _foldParts.length)
+        ? '<div style="margin-top:6px;font-size:11.5px;color:#9CA3AF;border:1px dashed #FED7AA;border-radius:8px;padding:4px 8px;background:#FFFBF5;cursor:pointer;" onclick="_hdGotoDiaryMeal()">⏳ 另有 ' + _foldParts.join(' + ') + ' · <span style="color:#F97316;font-weight:600;">去食记确认 →</span></div>'
+        : '';
+    // V441: 首页不再显示「实际：」——实际与计划的差异统一在「三餐计划、记录」页展示
+    // V439: 首页只读展示计划，确认/复核统一在食记页
+    body.innerHTML = '<div class="hd-plan-row">'
+        + '<div class="hd-dishes">' + dishListHtml + '</div>'
         + '</div>'
+        + foldHtml
         + costHtml;
     // V159: 餐卡重建后刷新成本行右侧「本月已省」槽
     try { renderHomeSavingCard(); } catch (e) {}
@@ -34249,6 +34314,19 @@ function _hdGotoDiary() {
     document.getElementById('pageHome').classList.add('slide-up');
     document.querySelector('.main-app').style.display = 'flex';
     switchTab('diary');
+}
+// V491(A2): 首页「另有 N 道待选」/「尚未确认」入口 → 食记页对应餐次
+function _hdGotoDiaryMeal() {
+    var idx = (typeof _hdCurrentIdx === 'function') ? _hdCurrentIdx() : 2;
+    var mealKey = (_hdMeals && _hdMeals[idx]) || 'dinner';
+    try { currentDiaryDate = new Date(); } catch (e) {}
+    _hdGotoDiary();
+    setTimeout(function () {
+        try {
+            var el = document.getElementById('diaryMealCard-' + mealKey);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch (e) {}
+    }, 80);
 }
 
 // 顶部 🗂️ 图标：直达饮食文库（先切到食知页，再切文库视图）
@@ -61836,7 +61914,7 @@ function renderDiary() {
                 var meta = typeof getDishMetaSafe === 'function' ? getDishMetaSafe(data.plan, n) : (dm[n] || { source: 'ai', confirmed: false });
                 if (!/^(existing|shopping|weekend|ai|preferred|manual)$/.test(String(meta.source||''))) meta.source = 'ai';
                 if (typeof meta.confirmed !== 'boolean') meta.confirmed = false;
-                if (meta.source === 'manual') return; // 跳过手动添加来源
+                // V491(C): 手动添加的菜不再隐藏——与其它菜一样展示、可勾选、可参与确认
                 var srcPri = /^(existing|shopping|weekend)$/.test(String(meta.source)) ? 0 : (meta.source === 'preferred' ? 1 : 2);
                 var sortKey = srcPri * 100;
                 if (isRdrStaple(n)) sortKey += 1; else if (isRdrSoup(n)) sortKey += 2; else sortKey += 10;
@@ -61860,6 +61938,7 @@ function renderDiary() {
                     + (it.meta.confirmed ? ' checked' : '')
                     + ' onchange="diaryToggleDishConfirmed(\'' + escapeAttr(dateKey) + '\',\'' + escapeAttr(meal.key) + '\',\'' + escapeAttr(it.name) + '\', this.checked)"/>'
                     + '<span class="dish-tag-clickable"' + (_isSpecial ? ' style="color:#C2410C;font-weight:700;"' : '') + ' onclick="showDishDetail(\'' + escapeAttr(it.name) + '\',\'' + escapeAttr(dateKey) + '\',\'' + escapeAttr(meal.key) + '\')">' + escapeHtml(it.name) + '</span>'
+                    + (it.meta.source === 'manual' ? '<span style="font-size:10px;line-height:16px;color:#B45309;background:#FEF3C7;border-radius:4px;padding:0 4px;margin-left:2px;white-space:nowrap;">手动</span>' : '')
                     + (typeof specialInterventionBadgesHtml === 'function' ? specialInterventionBadgesHtml(_siList, it.name) : '')
                     + '</label>';
             }).join('');
@@ -61998,7 +62077,7 @@ function renderDiary() {
             ? '<span class="diary-status-badge" style="background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;border-radius:9px;font-size:10px;font-weight:700;line-height:16px;padding:0 6px;margin-left:4px;">🌙 晚吃减负餐</span>'
             : '';
 
-        html += `<div class="diary-meal-card" style="border:none !important;box-shadow:none !important;background:transparent !important;">
+        html += `<div id="diaryMealCard-${meal.key}" class="diary-meal-card" style="border:none !important;box-shadow:none !important;background:transparent !important;">
             <div class="diary-meal-header">
                 <div><span class="diary-meal-label">${meal.name}</span>${_siMealBadge}${_lightDinnerBadge}${statusBadge}</div>
                 <div class="diary-meal-actions">
