@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V491-20261111';
+        var APP_VER = 'V492-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -30824,6 +30824,14 @@ function confirmDiaryMealPlan(mealType, dateKey) {
         });
         showToast('✅ 已确认 '+confirmedCnt+' 道菜，未确认 '+unconfirmedCnt+' 道。采购清单仅读取已确认项。');
         if (typeof renderDiary === 'function') renderDiary();
+        // V492: 确认后首页自动定位到本餐（仅当天），避免首页停在其他餐次仍显示「尚未确认」
+        try {
+            if (dateKey === dateToKey(new Date())) {
+                var _mi = _hdMeals.indexOf(mealType);
+                if (_mi >= 0) _hdManualIdx = _mi;
+                if (typeof renderHomeDiaryCard === 'function') renderHomeDiaryCard();
+            }
+        } catch (e) {}
         // 异步后台 AI-2 审核 → 写 auditRecords → 刷新后显示"评分 ›"标签（不阻塞主流程）
         _auditPlanAndSaveRecord(dateKey, mealType).then(function(){
             try { renderDiary(); } catch(e) {}
@@ -34278,7 +34286,7 @@ function renderHomeDiaryCard() {
         dishListHtml = '<span style="font-size:13px;color:#9CA3AF;">（未计划，点右上角 ＋ 规划）</span>';
     } else if (!confirmedArr.length) {
         // 一道都没确认：给明确入口，而不是空白或平铺未确认菜
-        dishListHtml = '<span style="font-size:13px;color:#B45309;font-weight:600;cursor:pointer;" onclick="_hdGotoDiaryMeal()">⚠️ 尚未确认，去勾选 ' + allDishNames.length + ' 道 →</span>';
+        dishListHtml = '<span style="font-size:13px;color:#B45309;font-weight:600;cursor:pointer;" onclick="_hdGotoDiaryMeal()">⚠️ 本餐尚未确认，去勾选 ' + allDishNames.length + ' 道 →</span>';
     } else {
         dishListHtml = confirmedArr.map(function (name) {
             return '<span class="hd-dish">'
