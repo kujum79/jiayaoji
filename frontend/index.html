@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V483-20261111';
+        var APP_VER = 'V484-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78553,7 +78553,8 @@ window._hmToggleMenu = function (ev) {
     _HM_MENU_OPEN = !_HM_MENU_OPEN;
     _hmRenderMenuSection();
 };
-window._hmAddSelectedToDiary = function () { _hmAddSelectedToDiary(); };
+// V484: 原 window._hmAddSelectedToDiary 包装函数内部又调用同名函数，全局作用域下形成无限递归（栈溢出），点击无任何反应，现直接暴露原函数
+window._hmAddSelectedToDiary = _hmAddSelectedToDiary;
 function _hmRenderMenuSection() {
     var slot = document.getElementById('hmMenuSlot');
     if (!slot) return;
