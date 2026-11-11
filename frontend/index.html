@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V486-20261111';
+        var APP_VER = 'V487-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78752,8 +78752,15 @@ function _hmAdoptPlanToday() {
     try { _confirmAdoptedMeals(dateToKey(new Date()), ['breakfast', 'lunch', 'dinner']); } catch (e) {}
     showToast((applied && applied.dishes > 0) ? ('✅ 已采纳今日专项食谱，新增 ' + applied.dishes + ' 道到餐单') : '✅ 今日专项食谱已在餐单中');
 }
-// V457: 把勾选的营养师菜品并入「食记 → 规划食谱」的今日三餐（追加，不覆盖原有菜品）
+// V487: 捕获异常并明确提示，避免点击后毫无反馈（"没反应/没看见"无法定位）
 function _hmAddSelectedToDiary() {
+    try { _hmAddSelectedToDiaryCore(); } catch (e) {
+        try { console.error('[健康管家] 加入今日食记失败', e); } catch (e2) {}
+        showToast('⚠️ 加入失败：' + ((e && e.message) ? e.message : String(e)));
+    }
+}
+// V457: 把勾选的营养师菜品并入「食记 → 规划食谱」的今日三餐（追加，不覆盖原有菜品）
+function _hmAddSelectedToDiaryCore() {
     var menu = _hmTodayMenu();
     var dateKey = _hmDateKey(new Date());
     var servings = _mealPlanEffectiveServings();
@@ -78811,7 +78818,20 @@ function _hmAddSelectedToDiary() {
     }
     // 保存本次营养师菜单快照，重开健康管家时原样展示，不混入用户自己的规划菜
     try { sessionStorage.setItem(_hmSnapshotKey(), JSON.stringify(menu)); } catch (e) {}
-    showToast('✅ 已加入今日食记 · 规划食谱（新增 ' + added + ' 道）');
+    // V487: 写入后回读校验，把真实结果告诉用户，避免"加入后没看见"无从判断
+    var chk = {};
+    try { chk = getDietCalendar()[dateKey] || {}; } catch (e) { chk = {}; }
+    var parts = [];
+    ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+        var p = chk[mt] && chk[mt].plan;
+        var n = (p && Array.isArray(p.dishes)) ? p.dishes.length : 0;
+        if (n) parts.push(({ breakfast: '早', lunch: '午', dinner: '晚' })[mt] + n);
+    });
+    if (!parts.length) {
+        showToast('⚠️ 加入未生效：' + ((typeof getFamilyId === 'function' && !getFamilyId()) ? '未识别到家庭身份，请重新登录' : '数据未保存，请刷新后重试'));
+    } else {
+        showToast('✅ 已加入今日食记（今日规划：' + parts.join(' / ') + ' 道）');
+    }
     _HM_MENU_OPEN = false; // V483: 加入后自动收起，回到单行折叠态
     _hmRenderMenuSection();
     // V485: 立即刷新「三餐计划、记录」页，避免用户切过去时看到的还是旧渲染
