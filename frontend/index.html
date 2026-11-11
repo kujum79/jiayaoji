@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V492-20261111';
+        var APP_VER = 'V493-20261111';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78742,6 +78742,7 @@ function _hmGenerateTodayMenu() {
 }
 // ==================== V489: 营养食谱支持「今日 / 3 天 / 7 天」 ====================
 var _HM_RANGE = 1; // 1 今日 / 3 三天 / 7 七天
+var _HM_DAY_OPEN = {}; // V493: 3/7 天视图里每一天的展开状态（按 dateKey 记忆，默认只展开第一天）
 var _HM_MULTI = { key: '', range: 0, days: [], loading: false };
 function _hmCkKey(dateKey, mealType, name) { return String(dateKey || '') + '|' + String(mealType || '') + '|' + String(name || ''); }
 function _hmChecked(dateKey, mealType, name) {
@@ -78928,11 +78929,26 @@ function _hmTodayBodyHtml(menu, adopted) {
 }
 function _hmRangeDayHtml(d, dk, menu, idx) {
     var adopted = _hmDayAdopted(dk);
+    // V493: 每天可单独折叠——默认只展开第一天，其余显示摘要，避免 3/7 天视图过长
+    var open = (_HM_DAY_OPEN[dk] !== undefined) ? !!_HM_DAY_OPEN[dk] : (idx === 0);
+    _HM_DAY_OPEN[dk] = open;
+    var summary = '';
+    if (menu) {
+        var _parts = [];
+        [['breakfast', '早'], ['lunch', '午'], ['dinner', '晚']].forEach(function (m) {
+            var c = (menu[m[0]] || []).length;
+            if (c) _parts.push(m[1] + ' ' + c);
+        });
+        if (_parts.length) summary = _parts.join(' · ') + ' · 已勾选 ' + _hmCheckedCount(menu, dk) + ' 道';
+    }
     var html = '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed #FED7AA;">'
-        + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+        + '<div onclick="_hmToggleDay(\'' + dk + '\',event)" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;cursor:pointer;">'
         +   '<div style="font-size:13px;font-weight:800;color:#C2410C;">' + _hmDayLabel(d, idx) + '</div>'
         +   (adopted ? '<span style="font-size:10px;color:#16A34A;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:1px 6px;">✅ 已加入</span>' : '')
-        + '</div>';
+        +   '<span style="font-size:11px;color:#B45309;font-weight:700;margin-left:auto;">' + (open ? '▲ 收起' : '▼ 展开') + '</span>'
+        + '</div>'
+        + (!open ? '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;line-height:1.6;">' + escapeHtml(summary || '点击展开查看三餐') + '</div>' : '');
+    if (!open) return html + '</div>';
     if (!menu) {
         return html + '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">食谱生成中…</div></div>';
     }
@@ -78950,6 +78966,13 @@ function _hmRangeDayHtml(d, dk, menu, idx) {
         + '<button type="button" onclick="_hmAddDayToDiary(\'' + dk + '\',event)" style="width:100%;margin-top:6px;padding:11px;border:none;border-radius:10px;background:' + (adopted ? 'linear-gradient(135deg,#22C55E,#16A34A)' : 'linear-gradient(135deg,#F97316,#EA580C)') + ';color:#fff;font-size:14px;font-weight:800;cursor:pointer;">' + (adopted ? '✅ 已加入 ' : '✅ 加入 ') + (d.getMonth() + 1) + '月' + d.getDate() + '日食记</button>'
         + '</div>';
 }
+// V493: 展开/收起某一天的食谱
+window._hmToggleDay = function (dk, ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    _HM_DAY_OPEN[dk] = !_HM_DAY_OPEN[dk];
+    _hmRenderMenuSection();
+};
 function _hmRangeBodyHtml() {
     _hmEnsureRange(_HM_RANGE);
     var html = '';
