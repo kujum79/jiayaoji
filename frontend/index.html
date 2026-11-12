@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V523-20261112';
+        var APP_VER = 'V524-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -40994,11 +40994,6 @@ function renderFamily() {
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;min-width:0;">
                     <button type="button" onclick="openInviteFamilyModal()" style="flex:0 0 auto;height:26px;padding:0 10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:13px;font-size:12px;font-weight:600;color:#C2410C;cursor:pointer;white-space:nowrap;">邀请码</button>
-                    ${xiaojiaMembers.length > 1 ? `<select id="xjMemberSelect" aria-label="切换当前操作人" style="max-width:110px;height:26px;padding:0 6px;border:1px solid #FDBA74;border-radius:13px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;outline:none;cursor:pointer;">
-                        ${xiaojiaMembers.map(function(m) {
-                            return `<option value="${m.id}" ${m.name === selectedFamilyMemberName ? 'selected' : ''}>${escapeHtml(m.name)}</option>`;
-                        }).join('')}
-                    </select>` : `<span style="font-size:12px;color:#9CA3AF;">当前：${escapeHtml(_selMember ? _selMember.name : '')}</span>`}
                 </div>
             </div>
             ${_selMember ? (function(m) {
@@ -41008,7 +41003,11 @@ function renderFamily() {
                 <div class="member-card" data-member-id="${m.id}" style="border:1px solid #FDBA74;background:#FFF7ED;">
                     <div class="member-info" style="min-width:0;flex:1;">
                         <div class="detail" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                            <span style="font-weight:600;color:#1F2937;">${escapeHtml(m.name)}</span>
+                            ${xiaojiaMembers.length > 1 ? `<select id="xjMemberSelect" aria-label="切换当前操作人" style="max-width:110px;height:24px;padding:0;border:none;background:transparent;color:#1F2937;font-size:14px;font-weight:700;outline:none;cursor:pointer;">
+                                ${xiaojiaMembers.map(function(mm) {
+                                    return `<option value="${mm.id}" ${mm.name === selectedFamilyMemberName ? 'selected' : ''}>${escapeHtml(mm.name)}</option>`;
+                                }).join('')}
+                            </select>` : `<span style="font-weight:600;color:#1F2937;">${escapeHtml(m.name)}</span>`}
                             ${m.age ? '<span style="font-size:12px;color:#6B7280;">' + m.age + '岁</span>' : ''}
                             ${_cst}
                         </div>
