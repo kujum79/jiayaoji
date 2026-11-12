@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V516-20261112';
+        var APP_VER = 'V517-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -77497,7 +77497,7 @@ var QUOTA_RULES = {
 var SPECIAL_PLAN_TYPES = {
     illness:   { label: '生病',   quotaPeriod: 'year' },
     fitness:   { label: '健身',   quotaPeriod: 'year' },
-    growth:    { label: '增高',   quotaPeriod: 'year', longTerm: true, termDays: 180 },
+    growth:    { label: '孩子成长', quotaPeriod: 'year', longTerm: true, termDays: 180 },
     athlete:   { label: '体育生', quotaPeriod: 'year', longTerm: true, termDays: 180 },
     pregnancy: { label: '孕妇',   quotaPeriod: 'lifetime' },
     infant:    { label: '婴儿',   quotaPeriod: 'lifetime' }
@@ -77649,6 +77649,7 @@ function createSpecialPlan(options) {
         memberName: options.memberName || '',
         planType: planType,
         description: options.description || '',
+        growthFocus: options.growthFocus || '',
         status: 'active',
         startDate: startDate,
         endDate: options.endDate || _specialPlanAddDays(startDate, cfg.termDays || 7),
@@ -77858,7 +77859,7 @@ function applySpecialPlanQuotaToButton(btn, planType) {
 // ==================== V226: 专项饮食计划——发起弹窗与 AI 生成 ====================
 var SPECIAL_PLAN_UI_TYPES = [
     { type: 'illness',   label: '生病调理' },
-    { type: 'growth',    label: '增高冲刺' },
+    { type: 'growth',    label: '孩子成长' },
     { type: 'athlete',   label: '体育生备赛' },
     { type: 'fitness',   label: '健身减脂' },
     { type: 'pregnancy', label: '孕期护理' },
@@ -78052,6 +78053,15 @@ function openSpecialPlanModal(memberId) {
             + '<input type="radio" name="spPlanType" value="' + item.type + '"' + (idx === 0 ? ' checked' : '') + ' style="accent-color:#F97316;">'
             + item.label + '</label>';
     }).join('');
+    var focusRadios = [
+        { v: 'grow', t: '长高优先' },
+        { v: 'eye',  t: '护眼优先' },
+        { v: 'both', t: '两者都要' }
+    ].map(function (item) {
+        return '<label style="display:flex;align-items:center;gap:6px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:6px 9px;font-size:12px;color:#9A3412;cursor:pointer;">'
+            + '<input type="radio" name="spGrowthFocus" value="' + item.v + '"' + (item.v === 'both' ? ' checked' : '') + ' style="accent-color:#F97316;">'
+            + item.t + '</label>';
+    }).join('');
     panel.innerHTML = ''
         + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
         +   '<div style="font-size:16px;font-weight:700;color:#1F2937;">🎯 发起专项健康饮食计划</div>'
@@ -78060,6 +78070,11 @@ function openSpecialPlanModal(memberId) {
         + '<div style="font-size:13px;color:#6B7280;margin-bottom:12px;">为 <b style="color:#F97316;">' + escapeHtml(member.name || '家人') + '</b> 发起专项健康饮食计划</div>'
         + '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">计划类型</div>'
         + '<div id="spTypeGroup" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">' + radios + '</div>'
+        + '<div id="spGrowthBox" style="display:none;margin-bottom:12px;">'
+        +   '<div style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:9px 10px;line-height:1.65;">长高、护眼都是孩子成长过程需要的：长高侧重钙 + 蛋白 + 维D，护眼侧重维A / 叶黄素 + 深色蔬菜，一套食谱可同时覆盖。</div>'
+        +   '<div style="font-size:13px;font-weight:600;color:#374151;margin:10px 0 6px;">成长侧重</div>'
+        +   '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + focusRadios + '</div>'
+        + '</div>'
         + '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">具体情况</div>'
         + '<textarea id="spDescInput" rows="4" placeholder="如：感冒发烧第三天，食欲差、想吃清淡易消化的；或：体育生备赛期，需要高蛋白高能量" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:13px;line-height:1.6;resize:vertical;outline:none;"></textarea>'
         + '<div id="spQuotaLine" style="margin:10px 0 12px;font-size:12px;color:#6B7280;background:#F9FAFB;border:1px solid #F3F4F6;border-radius:8px;padding:8px 10px;line-height:1.5;"></div>'
@@ -78078,6 +78093,9 @@ function openSpecialPlanModal(memberId) {
         var type = selectedType();
         var btn = document.getElementById('spGenerateBtn');
         var line = document.getElementById('spQuotaLine');
+        // V517: 「孩子成长」显示成长侧重选择（长高 / 护眼 / 两者都要）
+        var growBox = document.getElementById('spGrowthBox');
+        if (growBox) growBox.style.display = (type === 'growth') ? 'block' : 'none';
         var quota = applySpecialPlanQuotaToButton(btn, type) || getSpecialPlanQuota(type);
         if (!quota || !line) return;
         line.textContent = _specialPlanUiLabel(type) + '：' + (quota.quotaPeriod === 'lifetime'
@@ -78106,6 +78124,12 @@ function openSpecialPlanModal(memberId) {
         var descEl = document.getElementById('spDescInput');
         var desc = descEl ? descEl.value.trim() : '';
         if (!desc) { showToast('请填写具体情况'); if (descEl) descEl.focus(); return; }
+        // V517: 孩子成长计划的成长侧重（不新增配额类型，仅影响配餐侧重）
+        var growthFocus = '';
+        if (type === 'growth') {
+            var fc = panel.querySelector('input[name="spGrowthFocus"]:checked');
+            growthFocus = fc ? fc.value : 'both';
+        }
 
         // 生成成功后写入 specialPlans（状态 active），失败则不占用配额
         overlay.__busy = true;
@@ -78135,10 +78159,19 @@ function openSpecialPlanModal(memberId) {
 
         // V381: 本地 RAG 检索——家庭核心标签（体质/节气/年龄段）→ 3-5 条食方 JSON 参考语料
         var fangRag = searchFoodTherapy(getHealthCoreTags());
+        // V517: 把成长侧重带进提示词，长高/护眼可同时覆盖
+        var descForAI = desc;
+        if (type === 'growth') {
+            descForAI += '（成长侧重：' + (growthFocus === 'grow'
+                ? '长高优先，重点钙 + 蛋白 + 维D'
+                : (growthFocus === 'eye'
+                    ? '护眼优先，重点维A / 叶黄素 + 深色蔬菜'
+                    : '长高与护眼并重，钙 + 蛋白 + 维D 与 维A / 叶黄素 + 深色蔬菜兼顾')) + '）';
+        }
         var payload = {
             memberBrief: memberBrief,
             planType: type,
-            description: desc,
+            description: descForAI,
             familyBrief: familyBrief,
             solarTerm: solarTerm,
             fangRefs: _fangRagToText(fangRag),
@@ -78155,6 +78188,7 @@ function openSpecialPlanModal(memberId) {
                     memberName: member.name || '',
                     planType: type,
                     description: desc,
+                    growthFocus: growthFocus,
                     weeklyPlan: data.weeklyPlan || {},
                     report: data.report || '',
                     fangRefs: data.fangRefsUsed || payload.fangRag || payload.fangRefs || []
