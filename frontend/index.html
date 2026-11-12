@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V535-20261112';
+        var APP_VER = 'V536-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78870,7 +78870,8 @@ window._hmOpenMealSchedule = function (ev) {
     }
     var box = document.createElement('div');
     box.id = 'hmScheduleModal';
-    box.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:18px;';
+    box.onclick = function (e) { if (e.target === box) window._hmCloseMealSchedule(e); };
+    box.style.cssText = 'position:fixed;inset:0;z-index:100030;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:18px;';
     box.innerHTML = '<div style="width:100%;max-width:360px;background:#fff;border-radius:16px;padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.18);">'
         + '<div style="display:flex;align-items:center;gap:8px;"><div style="font-size:15px;font-weight:800;color:#C2410C;">🕒 就餐安排</div>'
         +   '<span onclick="_hmCloseMealSchedule(event)" style="margin-left:auto;font-size:18px;color:#9CA3AF;cursor:pointer;line-height:1;">✕</span></div>'
