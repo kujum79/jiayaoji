@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V534-20261112';
+        var APP_VER = 'V535-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode','commissionRecords','expertConsultations','fridgeCleanupRecords','healthButlerCare','savedMoneyLedger','healthWhitePaper'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode','commissionRecords','expertConsultations','fridgeCleanupRecords','healthButlerCare','savedMoneyLedger','healthWhitePaper','homeMealSetting'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -78782,6 +78782,131 @@ function _hmVegKey(name) {
     }
     return '';
 }
+// V535: 就餐安排——某些天某些餐不在家吃，食谱只安排在家餐次
+var _HM_MEAL_DEFS = [['breakfast', '早餐', '早'], ['lunch', '午餐', '午'], ['dinner', '晚餐', '晚']];
+var _HM_MEAL_TEMP = {}; // 临时“今天在家吃”覆盖：dk_meal = 1
+function _hmHomeMealSetting() {
+    var def = {};
+    for (var i = 0; i < 7; i++) def[i] = { breakfast: true, lunch: true, dinner: true };
+    try {
+        var raw = lsGet('homeMealSetting');
+        if (!raw) return def;
+        var obj = JSON.parse(raw) || {};
+        for (var d = 0; d < 7; d++) {
+            var row = obj[d];
+            if (!row) continue;
+            for (var j = 0; j < _HM_MEAL_DEFS.length; j++) {
+                var mk = _HM_MEAL_DEFS[j][0];
+                if (row[mk] === false) def[d][mk] = false;
+            }
+        }
+    } catch (e) {}
+    return def;
+}
+function _hmSaveHomeMealSetting(obj) {
+    try { lsSet('homeMealSetting', JSON.stringify(obj || {})); } catch (e) {}
+}
+function _hmIsHomeMeal(dateOrKey, mealKey) {
+    var dt = (dateOrKey instanceof Date) ? dateOrKey : new Date(String(dateOrKey).replace(/-/g, '/'));
+    if (!dt || isNaN(dt.getTime())) return true;
+    var dk = _hmDateKey(dt);
+    if (_HM_MEAL_TEMP[dk + '_' + mealKey]) return true;
+    var st = _hmHomeMealSetting();
+    var row = st[dt.getDay()];
+    return !row || row[mealKey] !== false;
+}
+// 把不在家的餐次清空（AI 若仍返回菜品，这里兜底剔除）
+function _hmFitHomeMeals(menu, dk) {
+    if (!menu) return menu;
+    _HM_MEAL_DEFS.forEach(function (m) {
+        if (!_hmIsHomeMeal(dk, m[0])) {
+            menu[m[0]] = [];
+            if (menu.reasons) menu.reasons[m[0]] = '';
+        }
+    });
+    return menu;
+}
+function _hmOutMealHint(dk) {
+    var out = [];
+    _HM_MEAL_DEFS.forEach(function (m) { if (!_hmIsHomeMeal(dk, m[0])) out.push(m[1]); });
+    return out;
+}
+function _hmHomeMealSummary() {
+    var st = _hmHomeMealSetting();
+    var allFull = true;
+    for (var d = 0; d < 7; d++) {
+        for (var j = 0; j < _HM_MEAL_DEFS.length; j++) {
+            if (!st[d][_HM_MEAL_DEFS[j][0]]) allFull = false;
+        }
+    }
+    if (allFull) return '每天三餐都在家';
+    var week = ['日', '一', '二', '三', '四', '五', '六'];
+    var parts = [];
+    for (var i = 0; i < 7; i++) {
+        var on = '';
+        for (var k = 0; k < _HM_MEAL_DEFS.length; k++) {
+            if (st[i][_HM_MEAL_DEFS[k][0]]) on += _HM_MEAL_DEFS[k][2];
+        }
+        parts.push('周' + week[i] + (on || '无'));
+    }
+    return parts.join(' / ');
+}
+window._hmOpenMealSchedule = function (ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    var st = _hmHomeMealSetting();
+    var old = document.getElementById('hmScheduleModal');
+    if (old) old.parentNode.removeChild(old);
+    var week = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    var rows = '';
+    for (var d = 0; d < 7; d++) {
+        rows += '<div style="display:flex;align-items:center;gap:6px;margin-top:8px;">'
+            + '<div style="width:40px;font-size:12px;font-weight:800;color:#7C2D12;flex-shrink:0;">' + week[d] + '</div>';
+        for (var j = 0; j < _HM_MEAL_DEFS.length; j++) {
+            var mk = _HM_MEAL_DEFS[j][0], on = st[d][mk] !== false;
+            rows += '<button type="button" onclick="_hmToggleHomeMeal(' + d + ',\'' + mk + '\',event)" style="flex:1;padding:7px 0;border-radius:9px;border:1px solid ' + (on ? '#F97316' : '#FED7AA') + ';background:' + (on ? 'linear-gradient(135deg,#F97316,#EA580C)' : '#fff') + ';color:' + (on ? '#fff' : '#C2410C') + ';font-size:12px;font-weight:800;cursor:pointer;">' + _HM_MEAL_DEFS[j][1] + '</button>';
+        }
+        rows += '</div>';
+    }
+    var box = document.createElement('div');
+    box.id = 'hmScheduleModal';
+    box.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:18px;';
+    box.innerHTML = '<div style="width:100%;max-width:360px;background:#fff;border-radius:16px;padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.18);">'
+        + '<div style="display:flex;align-items:center;gap:8px;"><div style="font-size:15px;font-weight:800;color:#C2410C;">🕒 就餐安排</div>'
+        +   '<span onclick="_hmCloseMealSchedule(event)" style="margin-left:auto;font-size:18px;color:#9CA3AF;cursor:pointer;line-height:1;">✕</span></div>'
+        + '<div style="font-size:11px;color:#9CA3AF;line-height:1.7;margin-top:4px;">点亮表示该餐在家吃。在外吃的餐次不生成食谱、不计采购成本。</div>'
+        + rows
+        + '<div style="font-size:11px;color:#B45309;background:#FFFBEB;border:1px dashed #FDE68A;border-radius:9px;padding:7px 9px;margin-top:10px;line-height:1.7;">例：周一至周五只点“早餐”，周六周日三餐全点。</div>'
+        + '<button type="button" onclick="_hmCloseMealSchedule(event)" style="width:100%;margin-top:12px;padding:12px;border:none;border-radius:11px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">完成</button>'
+        + '</div>';
+    document.body.appendChild(box);
+};
+window._hmToggleHomeMeal = function (d, mk, ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    var st = _hmHomeMealSetting();
+    st[d][mk] = !(st[d][mk] !== false);
+    _hmSaveHomeMealSetting(st);
+    _HM_MEAL_TEMP = {};
+    window._hmOpenMealSchedule();
+};
+window._hmCloseMealSchedule = function (ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    var box = document.getElementById('hmScheduleModal');
+    if (box && box.parentNode) box.parentNode.removeChild(box);
+    _HM_MULTI = { key: '', range: 1, days: null, loading: false };
+    _HM_MENU_CACHE.menu = null;
+    _hmRenderMenuSection();
+};
+window._hmForceHomeMeal = function (dk, mk, ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    _HM_MEAL_TEMP[dk + '_' + mk] = 1;
+    _HM_MULTI = { key: '', range: 1, days: null, loading: false };
+    _HM_MENU_CACHE.menu = null;
+    _hmRenderMenuSection();
+};
 function _hmApplyMenuRules(menu) {
     if (!menu) return menu;
     var liquidRe = /(粥|糊|羹|汤|面)$/;
@@ -78863,7 +78988,7 @@ function _hmTodayMenu() {
             if (snap) {
                 var snapMenu = JSON.parse(snap);
                 if (snapMenu && snapMenu.breakfast) {
-                    snapMenu = _hmApplyMenuRules(snapMenu);
+                    snapMenu = _hmFitHomeMeals(_hmApplyMenuRules(snapMenu), _hmDateKey(new Date()));
                     _HM_MENU_CACHE = { key: key, menu: snapMenu, loading: false, aiTriedKey: key };
                     return snapMenu;
                 }
@@ -78871,7 +78996,7 @@ function _hmTodayMenu() {
         } catch (e) {}
         var adopted = _loadExistingPlanAsStyle(_hmDateKey(new Date()));
         if (adopted) {
-            var adoptedMenu = _hmApplyMenuRules(_hmMenuFromStyle(adopted));
+            var adoptedMenu = _hmFitHomeMeals(_hmApplyMenuRules(_hmMenuFromStyle(adopted)), _hmDateKey(new Date()));
             _HM_MENU_CACHE = { key: key, menu: adoptedMenu, loading: false, aiTriedKey: key };
             return adoptedMenu;
         }
@@ -78902,7 +79027,9 @@ function _hmBuildMenuPrompt() {
         + '4. 同一餐最多只能有 1 道「粥/糊/羹/汤/面」类，不能同时出现两道（例如不能「黑豆核桃糊 + 菠菜蛋花羹」，也不能「羊肉汤 + 牛肉面」）；\n'
         + '5. 同一天不得重复同一道菜，也不得重复同一蔬菜主食材（例如早餐已有菠菜，午晚餐不得再出现菠菜）；\n'
         + '6. 自动剔除家庭禁忌与过敏原：有老人/慢病时软烂低盐，孕妇忌生冷，儿童少辛辣；\n'
-        + '7. 每餐不超过 3 道菜，按 ' + servings + ' 人份设计。\n\n';
+        + '7. 每餐不超过 3 道菜，按 ' + servings + ' 人份设计。\n'
+        + (_hmOutMealHint(_hmDateKey(new Date())).length ? ('8. 本家庭今天不在家吃：' + _hmOutMealHint(_hmDateKey(new Date())).join('、') + '，这些餐次的数组必须返回 []，不要为它们设计菜品。\n') : '')
+        + '\n';
     if (ctx.tasteProfile) p += '【口味与禁忌】\n' + ctx.tasteProfile + '\n\n';
     if (ctx.fridgeItems && ctx.fridgeItems.length) p += '【家中食材】' + ctx.fridgeItems.map(function (f) { return f.name; }).join('、') + '\n\n';
     if (ctx.recentMeals) p += '【近 3 天已吃】\n' + ctx.recentMeals + '\n\n';
@@ -78936,7 +79063,7 @@ function _hmGenerateTodayMenu() {
         if (_hmAdoptedToday()) return; // 已采纳，避免覆盖
         if (_hmMenuCacheKey() !== key) return; // 家庭信息已变化，丢弃旧结果
         var styles = _trimStylesForServings(parsed.styles, _mealPlanEffectiveServings());
-        _HM_MENU_CACHE.menu = _hmApplyMenuRules(_hmMenuFromStyle(styles[0]));
+        _HM_MENU_CACHE.menu = _hmFitHomeMeals(_hmApplyMenuRules(_hmMenuFromStyle(styles[0])), _hmDateKey(new Date()));
         _hmRenderMenuSection();
     }).catch(function () { clearTimeout(timer); }).then(function () {
         _HM_MENU_CACHE.loading = false;
@@ -79085,7 +79212,7 @@ function _hmMenuForDateKey(dateKey) {
 // 3/7 天内置兜底：立即可看可勾选，AI 返回后再替换
 function _hmBuildFallbackRange(n) {
     return _hmRangeDates(n).map(function (d, i) {
-        return { dateKey: _hmDateKey(d), menu: (i === 0 ? _hmTodayMenu() : _hmApplyMenuRules(_hmFallbackMenu(d))) };
+        return { dateKey: _hmDateKey(d), menu: (i === 0 ? _hmTodayMenu() : _hmFitHomeMeals(_hmApplyMenuRules(_hmFallbackMenu(d)), _hmDateKey(d))) };
     });
 }
 function _hmBuildRangePrompt(days) {
@@ -79101,6 +79228,11 @@ function _hmBuildRangePrompt(days) {
     try { fangText = _fangRagToText(searchFoodTherapy((getHealthCoreTags() || '') + ' ' + tagLabels)); } catch (e) {}
     var servings = _mealPlanEffectiveServings();
     var dates = _hmRangeDates(days).map(_hmDateKey);
+    // V535: 按天汇总“不在家吃”的餐次，生成时只安排在家餐次
+    var outByDay = dates.map(function (dk) {
+        var o = _hmOutMealHint(dk);
+        return o.length ? (dk + ' ' + o.join('、')) : '';
+    }).filter(Boolean).join('；');
     // V502: 把「7 天专项调理计划」的主题接入生成提示词
     var apThemes = _hmAutoPlanThemes().themes || [];
     var themeLine = dates.map(function (dk, i) { return (i === 0 ? '今天' : dk) + ' ' + (apThemes[i] || ''); }).join('；');
@@ -79112,7 +79244,9 @@ function _hmBuildRangePrompt(days) {
         + '4. 同一餐最多只能有 1 道「粥/糊/羹/汤/面」类，不能同时出现两道；\n'
         + '5. 同一天不得重复同一道菜，也不得重复同一蔬菜主食材（例如早餐已有菠菜，午晚餐不得再出现菠菜）；\n'
         + '6. 自动剔除家庭禁忌与过敏原：有老人/慢病时软烂低盐，孕妇忌生冷，儿童少辛辣；\n'
-        + '7. 每餐不超过 3 道菜，按 ' + servings + ' 人份设计。\n\n';
+        + '7. 每餐不超过 3 道菜，按 ' + servings + ' 人份设计。\n'
+        + (outByDay ? ('8. 以下日期有在外就餐，只为在家餐次设计菜品，这些餐次的数组必须返回 []：' + outByDay + '。\n') : '')
+        + '\n';
     if (ctx.tasteProfile) p += '【口味与禁忌】\n' + ctx.tasteProfile + '\n\n';
     if (ctx.fridgeItems && ctx.fridgeItems.length) p += '【家中食材】' + ctx.fridgeItems.map(function (f) { return f.name; }).join('、') + '\n\n';
     if (ctx.recentMeals) p += '【近 3 天已吃】\n' + ctx.recentMeals + '\n\n';
@@ -79147,9 +79281,9 @@ function _hmGenerateRange(days, key) {
         _HM_MULTI.days = dates.map(function (d, i) {
             var dk = _hmDateKey(d);
             var src = byDate[dk] || arr[i];
-            var menu = src ? _hmApplyMenuRules(_hmMenuFromStyle(src)) : null;
+            var menu = src ? _hmFitHomeMeals(_hmApplyMenuRules(_hmMenuFromStyle(src)), dk) : null;
             if (!menu || (!menu.breakfast.length && !menu.lunch.length && !menu.dinner.length)) {
-                menu = _hmApplyMenuRules(_hmFallbackMenu(d));
+                menu = _hmFitHomeMeals(_hmApplyMenuRules(_hmFallbackMenu(d)), dk);
             }
             return { dateKey: dk, menu: menu };
         });
@@ -79202,6 +79336,13 @@ function _hmTodayBodyHtml(menu, adopted) {
     var rows = '', hasFang = false;
     mealDefs.forEach(function (md) {
         var dishes = menu[md[0]] || [];
+        if (!_hmIsHomeMeal(todayKey, md[0])) {
+            rows += '<div style="margin-top:10px;display:flex;align-items:center;gap:8px;background:#F9FAFB;border:1px dashed #E5E7EB;border-radius:10px;padding:8px 10px;">'
+                +   '<span style="font-size:12px;color:#9CA3AF;font-weight:700;">' + md[1] + ' · 外食，不安排备菜</span>'
+                +   '<span onclick="_hmForceHomeMeal(\'' + todayKey + '\',\'' + md[0] + '\',event)" style="margin-left:auto;font-size:11px;color:#C2410C;font-weight:800;cursor:pointer;">今天在家吃 ›</span>'
+                + '</div>';
+            return;
+        }
         if (!dishes.length) return;
         rows += '<div style="margin-top:10px;"><div style="font-size:12px;font-weight:800;color:#C2410C;">' + md[1] + ' · ' + dishes.length + ' 道</div>';
         dishes.forEach(function (d) {
@@ -79247,6 +79388,13 @@ function _hmRangeDayHtml(d, dk, menu, idx) {
     }
     [['breakfast', '🌅 早餐'], ['lunch', '☀️ 午餐'], ['dinner', '🌙 晚餐']].forEach(function (md) {
         var dishes = menu[md[0]] || [];
+        if (!_hmIsHomeMeal(dk, md[0])) {
+            html += '<div style="margin-top:8px;display:flex;align-items:center;gap:8px;background:#F9FAFB;border:1px dashed #E5E7EB;border-radius:10px;padding:7px 10px;">'
+                +   '<span style="font-size:12px;color:#9CA3AF;font-weight:700;">' + md[1] + ' · 外食，不安排备菜</span>'
+                +   '<span onclick="_hmForceHomeMeal(\'' + dk + '\',\'' + md[0] + '\',event)" style="margin-left:auto;font-size:11px;color:#C2410C;font-weight:800;cursor:pointer;">这天在家吃 ›</span>'
+                + '</div>';
+            return;
+        }
         if (!dishes.length) return;
         html += '<div style="margin-top:8px;"><div style="font-size:12px;font-weight:800;color:#C2410C;">' + md[1] + ' · ' + dishes.length + ' 道</div>';
         dishes.forEach(function (d2) { html += _hmDishRowHtml(d2, md[0], dk); });
@@ -79321,6 +79469,7 @@ function _hmMenuCardHtml() {
         +     '<span style="flex-shrink:0;margin-left:auto;font-size:12px;color:#B45309;font-weight:700;">' + (_HM_MENU_OPEN ? '▲ 收起' : '▼ 展开') + '</span>'
         +   '</div>'
         +   (_HM_MENU_OPEN ? '<div style="font-size:11px;color:#9A3412;line-height:1.7;margin-top:4px;">营养师专属方案：以食方/药膳为主，按家庭标签与节气定制，区别于「食记 → 规划食谱」。可切换今日 / 3 天 / 7 天。</div>' : '')
+        +   (_HM_MENU_OPEN ? '<div style="margin-top:6px;font-size:11px;color:#9CA3AF;">🕒 就餐安排：' + _hmHomeMealSummary() + '　<span onclick="_hmOpenMealSchedule(event)" style="color:#C2410C;font-weight:800;cursor:pointer;">调整 ›</span></div>' : '')
         +   (_HM_MENU_OPEN && _primaryPlanLabel() ? '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:4px 8px;">🏅 家庭专属计划：<b style="color:#C2410C;">' + escapeHtml(_primaryPlanLabel()) + '</b><span style="color:#B45309;margin-left:auto;">本食谱按此配餐</span></div>' : '')
         +   (_HM_MENU_OPEN && !_primaryPlanLabel() ? '<div style="margin-top:6px;font-size:11px;color:#9CA3AF;">尚未设置家庭专属计划，当前按家庭成员标签配餐。</div>' : '')
         +   (_HM_MENU_OPEN ? (function () {
