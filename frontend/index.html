@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V521-20261112';
+        var APP_VER = 'V522-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -40982,7 +40982,15 @@ function renderFamily() {
             <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px 8px;gap:8px;">
                 <div style="display:flex;align-items:center;gap:6px;min-width:0;">
                     <span style="font-weight:600;color:#374151;font-size:13px;flex-shrink:0;">👪 小家 · ${xiaojiaMembers.length} 人</span>
-                    ${_memberTagHtml()}
+                    ${(function () {
+                        // V522: 未设置家庭专属计划时，这里显示「设置家庭专属计划」按钮（原「👑 食养会员」标识）
+                        var _hasPrimary = false;
+                        try { _hasPrimary = !!(typeof getPrimarySpecialPlan === 'function' && getPrimarySpecialPlan()); } catch (e) {}
+                        if (isFoodMember() && _hasPrimary) {
+                            return '<span style="display:inline-block;font-size:10px;font-weight:800;color:#92400E;background:linear-gradient(135deg,#FEF3C7,#FDE68A);border:1px solid #F59E0B;border-radius:999px;padding:1px 7px;white-space:nowrap;vertical-align:middle;">食养会员专属</span>';
+                        }
+                        return '<button type="button" onclick="event.stopPropagation();window._openPrimaryPlanPicker()" style="height:24px;padding:0 10px;background:#FFF7ED;border:1px solid #F97316;border-radius:12px;font-size:11px;font-weight:700;color:#EA580C;cursor:pointer;white-space:nowrap;">设置家庭专属计划</button>';
+                    })()}
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;min-width:0;">
                     <button type="button" onclick="openInviteFamilyModal()" style="flex:0 0 auto;height:26px;padding:0 10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:13px;font-size:12px;font-weight:600;color:#C2410C;cursor:pointer;white-space:nowrap;">邀请码</button>
@@ -78296,6 +78304,8 @@ function openSpecialPlanModal(memberId) {
                 }
                 overlay.__busy = false;
                 overlay.remove();
+                // V522: 建好后刷新「我家」页，标题行立刻变为「食养会员专属」
+                try { if (typeof renderFamily === 'function') renderFamily(); } catch (e) {}
                 // D6-06: 立即把计划当天三餐写入食记剩余餐次，并生成「成员特供」标记
                 var applied = {};
                 try { applied = applySpecialPlanToToday(created.plan); } catch (e) { applied = {}; }
@@ -78319,6 +78329,41 @@ function openSpecialPlanModal(memberId) {
     });
 }
 window.openSpecialPlanModal = openSpecialPlanModal;
+// V522: 小家标题行「设置家庭专属计划」——先选成员，再发起计划
+window._openPrimaryPlanPicker = function () {
+    if (typeof isFoodMember !== 'function' || !isFoodMember()) { _fhShowPaywall('🔒 家庭专属计划'); return; }
+    var list = (typeof familyData !== 'undefined' && Array.isArray(familyData)) ? familyData : [];
+    if (!list.length) { showToast('请先添加家庭成员'); return; }
+    if (list.length === 1) { openSpecialPlanModal(list[0].id); return; }
+    var old = document.getElementById('primaryPlanPickerOv');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'primaryPlanPickerOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10020;background:rgba(17,24,39,0.55);display:flex;align-items:flex-end;justify-content:center;';
+    ov.onclick = function (e) { if (e.target === ov) ov.remove(); };
+    var rows = list.map(function (m) {
+        var sub = [m.age ? (m.age + '岁') : '', m.constitution || ''].filter(Boolean).join(' · ') || '未填写档案';
+        return '<div onclick="window._pickPrimaryPlanMember(\'' + m.id + '\')" style="display:flex;align-items:center;gap:10px;padding:12px 4px;border-bottom:1px solid #F3F4F6;cursor:pointer;">'
+            + '<div style="flex:1;min-width:0;">'
+            +   '<div style="font-size:14px;font-weight:700;color:#1F2937;">' + escapeHtml(m.name || '家人') + '</div>'
+            +   '<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">' + escapeHtml(sub) + '</div>'
+            + '</div>'
+            + '<span style="font-size:12px;color:#C2410C;font-weight:700;white-space:nowrap;">选择 ›</span></div>';
+    }).join('');
+    ov.innerHTML = '<div style="width:100%;max-width:430px;background:#fff;border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));box-sizing:border-box;max-height:80vh;overflow-y:auto;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
+        +   '<div style="font-size:16px;font-weight:800;color:#1F2937;">设置家庭专属计划</div>'
+        +   '<button type="button" onclick="document.getElementById(\'primaryPlanPickerOv\').remove()" style="background:none;border:none;font-size:18px;color:#9CA3AF;cursor:pointer;line-height:1;">✕</button>'
+        + '</div>'
+        + '<div style="font-size:12px;color:#9CA3AF;line-height:1.6;margin-bottom:8px;">先选择要为哪位家人设置（全家庭只能有 1 个专属计划）</div>'
+        + rows + '</div>';
+    document.body.appendChild(ov);
+};
+window._pickPrimaryPlanMember = function (id) {
+    var ov = document.getElementById('primaryPlanPickerOv');
+    if (ov) ov.remove();
+    openSpecialPlanModal(id);
+};
 
 // ==================== V227: 食记页「专项健康饮食计划」看板 ====================
 function _spParseDate(str) {
