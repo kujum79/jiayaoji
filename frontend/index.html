@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V509-20261111';
+        var APP_VER = 'V510-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -41008,7 +41008,7 @@ function renderFamily() {
                         ${_sum ? '<div class="detail" style="font-size:12px;color:#9A3412;background:#FFF7ED;border-radius:6px;padding:3px 8px;margin-top:2px;">🍽️ ' + escapeHtml(_sum) + '</div>' : ''}
                     </div>
                     <div style="display:flex;flex-direction:row;gap:6px;align-items:center;flex:0 0 auto;">
-                        ${isFoodMember() ? '' : `<button type="button" onclick="event.stopPropagation();window.openSpecialPlanModal('${m.id}')" style="padding:2px 10px;line-height:1.2;border:1px solid #F97316;border-radius:12px;background:#FFF7ED;color:#EA580C;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">专属计划</button>`}
+                        ${isFoodMember() ? '' : `<button type="button" onclick="event.stopPropagation();window.openSpecialPlanModal('${m.id}')" style="padding:2px 10px;line-height:1.2;border:1px solid #F97316;border-radius:12px;background:#FFF7ED;color:#EA580C;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">设为家庭专属计划</button>`}
                         <button type="button" data-id="${m.id}" class="edit-member" onclick="event.stopPropagation();window.editMemberCard('${m.id}')" style="background:none;border:none;padding:0;line-height:1.2;color:#F97316;font-size:12px;cursor:pointer;white-space:nowrap;">✎ 编辑</button>
                     </div>
                 </div>`;
@@ -77514,6 +77514,44 @@ function saveSpecialPlans(list) {
     // 数组键走 lsSetJSON 不会自动触发云备份，这里显式调度一次
     try { if (typeof cloudBackupSchedule === 'function') cloudBackupSchedule(); } catch (e) {}
 }
+// V510: 家庭专属计划——全家庭只允许 1 个生效，作为营养食谱的唯一主规则
+// 与「专项调理计划」区分：专属计划是长期方向（孕期/增高/健身等），专项是短期周期任务
+function getPrimarySpecialPlan() {
+    var list = getSpecialPlans();
+    for (var i = 0; i < list.length; i++) {
+        var p = list[i];
+        if (p && p.status === 'active' && p.primary) return p;
+    }
+    return null;
+}
+// 设为家庭专属计划（强制单选：其余计划自动取消 primary）
+function setPrimarySpecialPlan(planId) {
+    var list = getSpecialPlans(), hit = null;
+    for (var i = 0; i < list.length; i++) {
+        var isHit = (list[i].planId === planId);
+        list[i].primary = isHit;
+        if (isHit) hit = list[i];
+    }
+    saveSpecialPlans(list);
+    return hit;
+}
+// 家庭专属计划的展示文案，如「孕妇 · 妈妈」
+function _primaryPlanLabel(plan) {
+    plan = plan || getPrimarySpecialPlan();
+    if (!plan) return '';
+    var lb = (typeof _specialPlanUiLabel === 'function') ? _specialPlanUiLabel(plan.planType) : '专项';
+    return lb + (plan.memberName ? ' · ' + plan.memberName : '');
+}
+window._spSetPrimary = function (planId) {
+    try {
+        setPrimarySpecialPlan(planId);
+        if (document.getElementById('specialPlanBoardOverlay')) { closeSpecialPlanBoard(); openSpecialPlanBoard(); }
+        // 营养食谱与建议都依赖主计划，重建一次避免仍显示旧方向
+        try { _HM_MULTI = { days: [], key: '' }; } catch (e) {}
+        try { _hmRenderMenuSection(); } catch (e) {}
+        try { var slot = document.getElementById('hmAdviceSlot'); if (slot) slot.innerHTML = _hmAdviceCardHtml(); } catch (e) {}
+    } catch (e) {}
+};
 function getSpecialPlanById(planId) {
     var list = getSpecialPlans();
     for (var i = 0; i < list.length; i++) {
@@ -77618,6 +77656,8 @@ function createSpecialPlan(options) {
         report: options.report || '',
         fangRefs: Array.isArray(options.fangRefs) ? options.fangRefs : []
     };
+    // V510: 家庭还没有主计划时，本次创建自动成为家庭专属计划（全家庭唯一）
+    try { if (!getPrimarySpecialPlan()) plan.primary = true; } catch (e) {}
     list.push(plan);
     saveSpecialPlans(list);
     return { ok: true, plan: plan, quota: getSpecialPlanQuota(planType) };
@@ -78681,12 +78721,15 @@ function _hmBuildMenuPrompt() {
     try { var term = getSolarTermForDate(new Date()); if (term && term.name) termName = term.name; } catch (e) {}
     var tags = _hmFamilyTags();
     var tagLabels = tags.length ? tags.map(function (t) { return t.label; }).join('、') : '全家';
+    // V510: 家庭专属计划是唯一主规则
+    var primaryLabel = '';
+    try { primaryLabel = _primaryPlanLabel(); } catch (e) {}
     var fangText = '';
     try { fangText = _fangRagToText(searchFoodTherapy((getHealthCoreTags() || '') + ' ' + tagLabels)); } catch (e) {}
     var servings = _mealPlanEffectiveServings();
     var p = '请为今天设计一套「主动式营养师调理三餐」，必须区别于普通家常规划食谱：\n'
         + '1. 以食方/药膳为主：早餐、午餐、晚餐至少各有 1 道传统食方（如当归生姜羊肉汤、山药排骨汤、红枣小米粥、菠菜猪肝汤等），并在 tag 中写明功效；\n'
-        + '2. 按家庭标签（' + tagLabels + '）与当前节气（' + termName + '）定制，优先调理该人群的核心需求；\n'
+        + '2. 按家庭标签（' + tagLabels + '）与当前节气（' + termName + '）定制，优先调理该人群的核心需求' + (primaryLabel ? '；本家庭专属计划为「' + primaryLabel + '」，必须以它为主轴，其他成员需求只作软约束（少盐、软烂、去辣）叠加' : '') + '；\n'
         + '3. 每餐 1 道主食 + 1 道食方汤/粥/羹 + 1 道菜，避免与近 3 天重复；\n'
         + '4. 同一餐最多只能有 1 道「粥/糊/羹/汤/面」类，不能同时出现两道（例如不能「黑豆核桃糊 + 菠菜蛋花羹」，也不能「羊肉汤 + 牛肉面」）；\n'
         + '5. 同一天不得重复同一道菜，也不得重复同一蔬菜主食材（例如早餐已有菠菜，午晚餐不得再出现菠菜）；\n'
@@ -78818,6 +78861,9 @@ function _hmBuildRangePrompt(days) {
     try { var term = getSolarTermForDate(new Date()); if (term && term.name) termName = term.name; } catch (e) {}
     var tags = _hmFamilyTags();
     var tagLabels = tags.length ? tags.map(function (t) { return t.label; }).join('、') : '全家';
+    // V510: 家庭专属计划是唯一主规则，家庭标签降为软约束
+    var primaryLabel = '';
+    try { primaryLabel = _primaryPlanLabel(); } catch (e) {}
     var fangText = '';
     try { fangText = _fangRagToText(searchFoodTherapy((getHealthCoreTags() || '') + ' ' + tagLabels)); } catch (e) {}
     var servings = _mealPlanEffectiveServings();
@@ -78827,7 +78873,7 @@ function _hmBuildRangePrompt(days) {
     var themeLine = dates.map(function (dk, i) { return (i === 0 ? '今天' : dk) + ' ' + (apThemes[i] || ''); }).join('；');
     var p = '请为今天起连续 ' + days + ' 天（' + dates[0] + ' 至 ' + dates[dates.length - 1] + '）设计「主动式营养师调理三餐」，必须区别于普通家常规划食谱：\n'
         + '1. 每天早、午、晚餐至少各有 1 道传统食方（如当归生姜羊肉汤、山药排骨汤、红枣小米粥、菠菜猪肝汤等），并在 tag 中写明功效；\n'
-        + '2. 按家庭标签（' + tagLabels + '）与当前节气（' + termName + '）定制，优先调理该人群的核心需求；\n'
+        + '2. 按家庭标签（' + tagLabels + '）与当前节气（' + termName + '）定制，优先调理该人群的核心需求' + (primaryLabel ? '；本家庭专属计划为「' + primaryLabel + '」，必须以它为主轴，其他成员需求只作软约束（少盐、软烂、去辣）叠加' : '') + '；\n'
         + '2.1 每天的主题重点依次为：' + themeLine + '。菜品应尽量呼应当天主题，但不必每餐都体现；\n'
         + '3. 每餐 1 道主食 + 1 道食方汤/粥/羹 + 1 道菜，' + days + ' 天内尽量不重复同一道菜；\n'
         + '4. 同一餐最多只能有 1 道「粥/糊/羹/汤/面」类，不能同时出现两道；\n'
@@ -79042,6 +79088,8 @@ function _hmMenuCardHtml() {
         +     '<span style="flex-shrink:0;margin-left:auto;font-size:12px;color:#B45309;font-weight:700;">' + (_HM_MENU_OPEN ? '▲ 收起' : '▼ 展开') + '</span>'
         +   '</div>'
         +   (_HM_MENU_OPEN ? '<div style="font-size:11px;color:#9A3412;line-height:1.7;margin-top:4px;">营养师专属方案：以食方/药膳为主，按家庭标签与节气定制，区别于「食记 → 规划食谱」。可切换今日 / 3 天 / 7 天。</div>' : '')
+        +   (_HM_MENU_OPEN && _primaryPlanLabel() ? '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:4px 8px;">🏅 家庭专属计划：<b style="color:#C2410C;">' + escapeHtml(_primaryPlanLabel()) + '</b><span style="color:#B45309;margin-left:auto;">本食谱按此配餐</span></div>' : '')
+        +   (_HM_MENU_OPEN && !_primaryPlanLabel() ? '<div style="margin-top:6px;font-size:11px;color:#9CA3AF;">尚未设置家庭专属计划，当前按家庭成员标签配餐。</div>' : '')
         +   rangeTabs + themeBar + expandedBody
         + '</div></div>';
 }
@@ -79060,6 +79108,22 @@ function _hmRenderMenuSection() {
 // V481: 今日建议改为「1 个具体动作 + 理由」，并且折叠为单行
 var _HM_ADVICE_OPEN = false;
 function _hmTodayAction() {
+    // V510: 有家庭专属计划时，建议只围绕计划给「行为动作」，不再推荐具体菜，避免与营养食谱抢管辖
+    try {
+        var _pp = getPrimarySpecialPlan();
+        if (_pp) {
+            var _plb = _specialPlanUiLabel(_pp.planType) || '专属计划';
+            var _map = {
+                pregnancy: '今天优先吃含铁食材（红肉/动物肝脏），配一份维C水果',
+                infant: '今天给宝宝安排一顿细腻辅食（南瓜泥/山药泥），不加盐',
+                growth: '今天保证 1 个鸡蛋 + 1 杯奶，睡前 1 小时不加餐',
+                athlete: '训练后 30 分钟内补蛋白 + 主食（鸡蛋/牛奶/米饭）',
+                fitness: '训练后 30 分钟内补 1 份蛋白，晚餐主食减半',
+                illness: '今天以清淡软食为主，少量多餐'
+            };
+            return { action: _map[_pp.planType] || ('按「' + _plb + '」安排今天的三餐'), why: '依据：家庭专属计划「' + _plb + (_pp.memberName ? ' · ' + _pp.memberName : '') + '」，营养食谱已按此配餐', source: 'plan' };
+        }
+    } catch (e) {}
     try {
         var items = lsGet('fridgeItems') || [];
         if (typeof items === 'string') items = JSON.parse(items);
@@ -79409,7 +79473,7 @@ function openSpecialPlanBoard() {
             + '<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
             +   '<div style="display:flex;align-items:flex-start;gap:8px;">'
             +     '<div style="flex:1;font-size:15px;font-weight:800;color:#C2410C;line-height:1.5;">' + title + '</div>'
-            +     (isOver ? '<span style="flex-shrink:0;font-size:11px;color:#6B7280;background:#F3F4F6;border-radius:10px;padding:2px 8px;">已结束</span>' : '<span style="flex-shrink:0;font-size:11px;color:#16A34A;background:#F0FDF4;border-radius:10px;padding:2px 8px;">调理中</span>')
+            +     (isOver ? '<span style="flex-shrink:0;font-size:11px;color:#6B7280;background:#F3F4F6;border-radius:10px;padding:2px 8px;">已结束</span>' : (plan.primary ? '<span style="flex-shrink:0;font-size:11px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:2px 8px;">🏅 家庭专属计划</span>' : '<span style="flex-shrink:0;font-size:11px;color:#16A34A;background:#F0FDF4;border-radius:10px;padding:2px 8px;">调理中</span>'))
             +   '</div>'
             +   '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;font-size:12px;color:#6B7280;">'
             +     '<span>第 ' + dayNo + ' 天 / 共 ' + totalDays + ' 天</span>'
@@ -79422,6 +79486,7 @@ function openSpecialPlanBoard() {
             +     '<span style="font-size:11px;color:#9CA3AF;">' + escapeHtml(plan.startDate || '') + ' 起 · ' + escapeHtml(plan.endDate || '') + ' 止</span>'
             +     todayStatusHtml
             +   '</div>'
+            +   (!isOver && !plan.primary ? '<button type="button" onclick="window._spSetPrimary(\'' + escapeHtml(String(plan.planId || '')) + '\')" style="width:100%;margin-top:8px;padding:8px;border:1px dashed #FDBA74;border-radius:10px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:700;cursor:pointer;">设为家庭专属计划（全家庭仅 1 个）</button>' : '')
             + '</div>'
             + _todayFoodBlock
             + '<div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
