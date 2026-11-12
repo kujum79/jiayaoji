@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V538-20261112';
+        var APP_VER = 'V539-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79696,29 +79696,29 @@ function _hmDeepReviewCardHtml() {
     var level = _reviewRiskLevel(st);
     var oilPct = Math.round(st.oilRatio * 100), saltPct = Math.round(st.saltRatio * 100);
     var levelText = level === 'red' ? '高风险' : (level === 'yellow' ? '需关注' : '较均衡');
-    var levelColor = level === 'red' ? '#FCA5A5' : (level === 'yellow' ? '#FCD34D' : '#6EE7B7');
+    var levelColor = level === 'red' ? '#DC2626' : (level === 'yellow' ? '#B45309' : '#15803D');
     var summary = (st.days && st.total)
         ? ('近 7 天 · ' + st.days + ' 天 · ' + st.total + ' 道菜')
         : '近 7 天暂无实际饮食记录';
     var metrics = (st.days && st.total)
         ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;">'
-            + '<span style="font-size:10px;color:#FDBA74;background:rgba(249,115,22,.16);border:1px solid rgba(249,115,22,.4);border-radius:8px;padding:2px 7px;">高油 ' + oilPct + '%</span>'
-            + '<span style="font-size:10px;color:#FDBA74;background:rgba(249,115,22,.16);border:1px solid rgba(249,115,22,.4);border-radius:8px;padding:2px 7px;">高盐 ' + saltPct + '%</span>'
-            + '<span style="font-size:10px;color:#86EFAC;background:rgba(22,163,74,.16);border:1px solid rgba(22,163,74,.4);border-radius:8px;padding:2px 7px;">蔬菜 ' + st.vegCount + ' 道</span>'
+            + '<span style="font-size:10px;color:#C2410C;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:2px 7px;">高油 ' + oilPct + '%</span>'
+            + '<span style="font-size:10px;color:#C2410C;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:2px 7px;">高盐 ' + saltPct + '%</span>'
+            + '<span style="font-size:10px;color:#15803D;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:2px 7px;">蔬菜 ' + st.vegCount + ' 道</span>'
             + '</div>'
         : '';
     return '<div style="padding:0 12px 6px;">'
-        + '<div style="background:linear-gradient(135deg,#1F2937,#111827);border-radius:14px;padding:14px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.18);">'
+        + '<div style="background:#fff;border:1px solid #FED7AA;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
         +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
-        +     '<div style="font-size:15px;font-weight:800;">👑 深度复盘</div>'
-        +     '<span style="font-size:10px;color:#FDBA74;background:rgba(249,115,22,.16);border:1px solid rgba(249,115,22,.4);border-radius:8px;padding:1px 6px;">会员专享</span>'
+        +     '<div style="font-size:15px;font-weight:800;color:#C2410C;">👑 深度复盘</div>'
+        +     '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
         +     '<span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;">'
         +       '<span style="font-size:11px;font-weight:800;color:' + levelColor + ';">' + levelText + '</span>'
         +       '<button type="button" onclick="openDeepReviewBoard()" style="padding:5px 9px;border:none;border-radius:8px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;">查看完整复盘</button>'
         +     '</span>'
         +   '</div>'
         +   '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;">'
-        +     '<div style="font-size:11px;color:#FCD34D;">' + summary + '</div>'
+        +     '<div style="font-size:11px;color:#92400E;">' + summary + '</div>'
         +     metrics
         +   '</div>'
         + '</div></div>';
@@ -80377,11 +80377,11 @@ window._wpCardHtml = function () {
     var isM = false;
     try { isM = (typeof isFoodMember === 'function' && isFoodMember()); } catch (e) {}
     var shell = function (sub, btn, onclick) {
-        return '<div onclick="' + onclick + '" style="margin:6px 12px 6px;background:linear-gradient(135deg,#78350F,#B45309);border-radius:14px;padding:12px 14px;cursor:pointer;box-shadow:0 4px 14px rgba(120,53,15,0.18);">'
+        return '<div onclick="' + onclick + '" style="margin:6px 12px 6px;background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FED7AA;border-radius:14px;padding:12px 14px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
             + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
-            + '<div style="min-width:0;"><div style="font-size:13px;font-weight:800;color:#FEF3C7;">👑 您的《家庭膳食健康白皮书》<span style="margin-left:5px;font-size:10px;font-weight:700;color:#FDE68A;background:rgba(253,230,138,.18);border:1px solid rgba(253,230,138,.5);border-radius:8px;padding:1px 5px;">会员专享</span></div>'
-            + '<div style="font-size:11px;color:#FDE68A;margin-top:3px;">' + sub + '</div></div>'
-            + '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#78350F;background:#FDE68A;border-radius:999px;padding:4px 9px;white-space:nowrap;">' + btn + '</span>'
+            + '<div style="min-width:0;"><div style="font-size:13px;font-weight:800;color:#C2410C;">👑 您的《家庭膳食健康白皮书》<span style="margin-left:5px;font-size:10px;font-weight:700;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 5px;">会员专享</span></div>'
+            + '<div style="font-size:11px;color:#92400E;margin-top:3px;">' + sub + '</div></div>'
+            + '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#fff;background:linear-gradient(135deg,#F97316,#EA580C);border-radius:999px;padding:4px 9px;white-space:nowrap;">' + btn + '</span>'
             + '</div></div>';
     };
     if (!isM) return shell('会员专享 · 升级后自动生成', '升级解锁 ›', '_fhShowPaywall()');
