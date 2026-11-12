@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V524-20261112';
+        var APP_VER = 'V525-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78955,17 +78955,82 @@ function _hmDishRowHtml(dish, mealType, dateKey) {
     var tag = String((dish && dish.tag) || '');
     var src = _hmFangSourceFor(name);
     var checked = _hmChecked(dateKey, mealType, name) ? ' checked' : '';
+    var _swapping = !!_HM_SWAP_BUSY[_hmCkKey(dateKey, mealType, name)];
     return '<label style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-top:1px dashed #FED7AA;cursor:pointer;">'
         + '<input type="checkbox" data-dk="' + escapeHtml(String(dateKey || '')) + '" data-mt="' + escapeHtml(String(mealType || '')) + '" data-name="' + escapeHtml(name) + '"' + checked + ' onchange="_hmToggleDish(this)" style="width:17px;height:17px;margin-top:2px;accent-color:#F97316;flex-shrink:0;">'
         + '<div style="flex:1;min-width:0;">'
         +   '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
         +     '<span style="font-size:13px;font-weight:600;color:#1F2937;">' + escapeHtml(name) + '</span>'
         +     (tag ? '<span style="font-size:10px;color:#9A3412;background:#FFF7ED;border:1px solid #FED7AA;border-radius:7px;padding:1px 5px;">' + escapeHtml(tag) + '</span>' : '')
+        +     '<button type="button" onclick="_hmSwapDish(\'' + escapeHtml(String(dateKey || '')) + '\',\'' + escapeHtml(String(mealType || '')) + '\',\'' + escapeHtml(name).replace(/'/g, '&#39;') + '\',event)"' + (_swapping ? ' disabled' : '') + ' style="margin-left:auto;flex-shrink:0;padding:1px 7px;border:1px solid #FDBA74;border-radius:9px;background:#FFF7ED;color:#C2410C;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;opacity:' + (_swapping ? '0.6' : '1') + ';">' + (_swapping ? '换菜中…' : '换一道') + '</button>'
         +   '</div>'
         +   (src ? '<div style="margin-top:2px;"><span style="font-size:10px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:7px;padding:1px 5px;">📖 引自《' + escapeHtml(src) + '》</span></div>' : '')
         + '</div>'
         + '</label>';
 }
+// V525: 单道换菜——只替换这一道，其余菜、口味与营养配比保持不变
+var _HM_SWAP_BUSY = {};
+window._hmSwapDish = function (dateKey, mealType, dishName, ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    var bkey = _hmCkKey(dateKey, mealType, dishName);
+    if (_HM_SWAP_BUSY[bkey]) return;
+    var menu = _hmMenuForDateKey(dateKey);
+    if (!menu) { showToast('食谱还在生成中，请稍后再换'); return; }
+    var dishes = menu[mealType] || [];
+    var otherNames = dishes.filter(function (d) { return String(d.name) !== String(dishName); }).map(function (d) { return d.name; });
+    var tags = _hmFamilyTags();
+    var tagLabels = tags.length ? tags.map(function (t) { return t.label; }).join('、') : '全家';
+    var primaryLabel = '';
+    try { primaryLabel = _primaryPlanLabel(); } catch (e) {}
+    var mealLabel = ({ breakfast: '早餐', lunch: '午餐', dinner: '晚餐' })[mealType] || '这一餐';
+    var p = '家庭标签：' + tagLabels + (primaryLabel ? '；家庭专属计划：' + primaryLabel : '') + '。\n'
+        + '当前' + mealLabel + '已有：' + (otherNames.length ? otherNames.join('、') : '（无其他菜）') + '。\n'
+        + '请把「' + dishName + '」替换成 1 道同类、同功效方向的新菜，要求：不与已有菜重复、不与原菜重复，符合当前节气与家庭口味，仍以食方/药膳为主。\n'
+        + '严格返回 JSON：{"name":"新菜名","tag":"功效标签"}，不要包含 markdown 代码块标记，不要多余文字。';
+    _HM_SWAP_BUSY[bkey] = true;
+    _hmRenderMenuSection();
+    fetch(API_BASE + '/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system_prompt: '你是家肴记的主动式AI营养师，请严格返回JSON格式，不要包含markdown代码块标记。', user_prompt: p, max_tokens: 300 })
+    }).then(function (res) { return res.ok ? res.json() : null; }).then(function (result) {
+        var reply = '';
+        if (result && result.response) reply = result.response;
+        else if (result && result.choices && result.choices[0] && result.choices[0].message) reply = result.choices[0].message.content;
+        if (!reply) { showToast('换菜失败，请稍后再试'); return; }
+        var obj = null;
+        try {
+            var mm = String(reply).match(/\{[\s\S]*\}/);
+            obj = mm ? JSON.parse(mm[0]) : null;
+        } catch (e) {}
+        if (!obj || !obj.name) { showToast('换菜失败，请稍后再试'); return; }
+        var newName = String(obj.name).trim();
+        if (!newName || newName === String(dishName)) return;
+        var target = _hmMenuForDateKey(dateKey);
+        if (!target) return;
+        var arr = target[mealType] || [];
+        for (var j = 0; j < arr.length; j++) {
+            if (String(arr[j].name) === String(dishName)) {
+                arr[j].name = newName;
+                if (obj.tag) arr[j].tag = String(obj.tag);
+                break;
+            }
+        }
+        // 勾选状态迁移到新菜名（默认保持勾选）
+        delete _HM_CHECK_OVERRIDE[_hmCkKey(dateKey, mealType, dishName)];
+        _HM_CHECK_OVERRIDE[_hmCkKey(dateKey, mealType, newName)] = true;
+        // 今日：同步缓存与已采纳快照，刷新后不回退
+        if (dateKey === _hmDateKey(new Date())) {
+            _HM_MENU_CACHE.menu = target;
+            if (_hmAdoptedToday()) { try { sessionStorage.setItem(_hmSnapshotKey(), JSON.stringify(target)); } catch (e) {} }
+        }
+        showToast('已替换为：' + newName);
+    }).catch(function () { showToast('换菜失败，请稍后再试'); }).then(function () {
+        _HM_SWAP_BUSY[bkey] = false;
+        _hmRenderMenuSection();
+    });
+};
 window._hmToggleDish = function (el) {
     if (!el) return;
     var dk = String(el.getAttribute('data-dk') || '') || _hmDateKey(new Date());
@@ -79254,6 +79319,14 @@ function _hmMenuCardHtml() {
         +   (_HM_MENU_OPEN ? '<div style="font-size:11px;color:#9A3412;line-height:1.7;margin-top:4px;">营养师专属方案：以食方/药膳为主，按家庭标签与节气定制，区别于「食记 → 规划食谱」。可切换今日 / 3 天 / 7 天。</div>' : '')
         +   (_HM_MENU_OPEN && _primaryPlanLabel() ? '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:4px 8px;">🏅 家庭专属计划：<b style="color:#C2410C;">' + escapeHtml(_primaryPlanLabel()) + '</b><span style="color:#B45309;margin-left:auto;">本食谱按此配餐</span></div>' : '')
         +   (_HM_MENU_OPEN && !_primaryPlanLabel() ? '<div style="margin-top:6px;font-size:11px;color:#9CA3AF;">尚未设置家庭专属计划，当前按家庭成员标签配餐。</div>' : '')
+        +   (_HM_MENU_OPEN ? (function () {
+                // V525: 标明「为谁定制 · 几人份」，避免用户误以为是全家专属
+                var _who = '';
+                try { var _pp = getPrimarySpecialPlan(); _who = (_pp && _pp.memberName) ? _pp.memberName : ''; } catch (e) {}
+                var _n = 0;
+                try { _n = _mealPlanEffectiveServings(); } catch (e) {}
+                return '<div style="font-size:11px;color:#6B7280;margin-top:4px;">👤 为 <b style="color:#C2410C;">' + escapeHtml(_who || '全家') + '</b> 定制' + (_n ? ' · 全家 ' + _n + ' 人份' : '') + '</div>';
+            })() : '')
         +   rangeTabs + themeBar + expandedBody
         + '</div></div>';
 }
