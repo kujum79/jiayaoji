@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V528-20261112';
+        var APP_VER = 'V529-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79459,8 +79459,8 @@ function _hmAdvicePlanBlockHtml(plan) {
         +   overBadge
         + '</div>'
         + '<div style="font-size:13px;font-weight:800;color:#7C2D12;margin-top:4px;">👑 ' + escapeHtml(plan.memberName || '家人') + '的' + escapeHtml(_spPlanDisplayName(plan)) + '</div>'
-        + '<div style="height:6px;border-radius:3px;background:#FFEDD5;overflow:hidden;margin-top:6px;">'
-        +   '<div style="height:100%;width:' + pct + '%;border-radius:3px;background:linear-gradient(90deg,#FB923C,#F97316);"></div>'
+        + '<div style="height:6px;border-radius:3px;background:#FDBA74;overflow:hidden;margin-top:6px;">'
+        +   '<div style="height:100%;width:' + pct + '%;border-radius:3px;background:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.9);"></div>'
         + '</div>'
         + '<div style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11px;color:#9CA3AF;flex-wrap:wrap;">'
         +   status
