@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V537-20261112';
+        var APP_VER = 'V538-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -77654,7 +77654,7 @@ function createSpecialPlan(options) {
     if (!quota) return { ok: false, code: 'INVALID_TYPE', message: '不支持的专项健康饮食计划类型' };
     var fid = getFamilyId();
     if (!fid) return { ok: false, code: 'NO_FAMILY', message: '请先登录并加入家庭后再发起专项健康饮食计划', quota: quota };
-    if (quota.reached) return { ok: false, code: 'QUOTA_REACHED', message: quota.message, quota: quota };
+    if (!options.skipQuota && quota.reached) return { ok: false, code: 'QUOTA_REACHED', message: quota.message, quota: quota };
 
     var list = getSpecialPlans();
     var cfg = SPECIAL_PLAN_TYPES[planType];
@@ -80049,7 +80049,7 @@ function openSpecialPlanBoard(focusPlanId) {
         +   (_hmMember ? bodyHtml : '')
         +   (_hmMember ? '<div id="hmAdviceSlot">' + _hmAdviceCardHtml() + '</div>' : _hmLockCardHtml('专属健康饮食方案', '家庭专属饮食计划、专项健康饮食报告与每天 1 条可执行建议'))
         +   (_hmMember ? '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' : _hmLockCardHtml('专属营养食谱', '按家庭专属计划生成今日 / 3 天 / 7 天食谱'))
-        +   (_hmMember ? _hmCareCardHtml() : _hmLockCardHtml('生病饮食调理', '按成员与症状生成 7 天调理食谱'))
+        +   (_hmMember ? _hmCareCardHtml() : _hmLockCardHtml('特殊时期调理', '生病 / 考前冲刺 / 术后恢复 / 生理期 / 熬夜，生成 7 天调理食谱'))
         +   (_hmMember ? _hmDeepReviewCardHtml() : _hmLockCardHtml('深度复盘', '近 7 天饮食风险预警、归因与改进建议'))
         +   freeToolsHtml + '</div>';
 
@@ -80070,6 +80070,26 @@ var _CARE_SYMPTOMS = [
     { k: '咽喉不适', d: '雪梨百合羹', a: '温热湿润的食物更友好，避免过烫、过咸和辛辣。' },
     { k: '其他', d: '山药排骨汤', a: '以清淡易消化为主，保证主食和蔬菜搭配。' }
 ];
+// V538: 特殊时期调理场景——「生病」占用每年 4 次配额，其余场景不占配额
+var _CARE_SCENES = [
+    { k: 'illness', label: '生病', emoji: '🤒', symptoms: _CARE_SYMPTOMS.map(function (s) { return s.k; }), focus: '按中医「一候」7 天：前 2 天清淡易消化、注意补液，中间 3 天健脾扶正，最后 2 天巩固恢复' },
+    { k: 'exam', label: '考前冲刺', emoji: '📚', symptoms: ['备考冲刺期', '模拟考期', '临考 1 周', '考试期间'], focus: '稳血糖主食（燕麦、杂粮饭）、优质蛋白与铁（牛肉、鸡蛋、深海鱼）、补脑脂肪（核桃、亚麻籽）、护眼（蓝莓、胡萝卜、菠菜）、助眠（小米、百合）；少油炸、少咖啡因、不空腹应试' },
+    { k: 'postop', label: '术后恢复', emoji: '🩹', symptoms: ['术后 1 周内', '术后 2-4 周', '伤口愈合期', '食欲不振'], focus: '优质蛋白与维C促愈合（鱼、蛋、瘦肉、深色蔬菜），少盐少油、软烂易消化，少量多餐，循序渐进' },
+    { k: 'period', label: '生理期', emoji: '🌸', symptoms: ['经期', '经前不适', '经后期'], focus: '补铁与温补（瘦牛肉、猪肝、红枣、黑芝麻），温热饮食、忌生冷，少咖啡因与高盐' },
+    { k: 'overnight', label: '熬夜加班', emoji: '🌙', symptoms: ['连续加班', '夜班轮班', '熬夜后恢复'], focus: '低GI主食稳定精力、优质蛋白与B族维生素，护眼补水，避免高糖高油夜宵与过量咖啡' }
+];
+var _CARE_SCENE = 'illness';
+function _careSceneByKey(k) {
+    for (var i = 0; i < _CARE_SCENES.length; i++) if (_CARE_SCENES[i].k === k) return _CARE_SCENES[i];
+    return _CARE_SCENES[0];
+}
+window._carePickScene = function (k, ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    _CARE_SCENE = k;
+    window.closeCareForm();
+    window.openCareForm();
+};
 function _careDisclaimerHtml() {
     return '<div style="background:#FEF3C7;border:1px solid #FCD34D;color:#92400E;border-radius:9px;padding:7px 10px;font-size:11px;line-height:1.6;margin:6px 0;">⚠️ 本内容仅为日常饮食参考，不构成医疗诊断。如患有疾病，请务必遵医嘱。</div>';
 }
@@ -80106,7 +80126,7 @@ function _hmCareCardHtml() {
     // V519: 生病调理统一由本卡生成 7 天计划；卡片展示今日三餐 + 加入今日餐单 + 查看 7 天
     var html = '<div id="hmCareCard" style="margin:6px 12px 6px;background:#fff;border:1px solid #FED7AA;border-radius:14px;padding:12px;">'
         + '<div style="display:flex;align-items:center;gap:8px;">'
-        + '<div style="font-size:14px;font-weight:800;color:#C2410C;">💊 生病饮食调理</div>'
+        + '<div style="font-size:14px;font-weight:800;color:#C2410C;">💊 特殊时期调理</div>'
         + '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
         + '<button type="button" onclick="openCareForm()" style="flex-shrink:0;margin-left:auto;padding:8px 12px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:12px;font-weight:800;cursor:pointer;">发起调理</button>'
         + '</div>';
@@ -80115,7 +80135,7 @@ function _hmCareCardHtml() {
         return html;
     }
     var info = _hmPlanDayInfo(plan);
-    var desc = String(plan.description || '').replace(/；.*$/, '').replace(/^症状\/特殊期：/, '').split(/[，,。；;]/)[0].slice(0, 14);
+    var desc = String(plan.description || '').replace(/^场景：/, '').replace(/^症状\/特殊期：/, '').split('；')[0].slice(0, 14);
     var head = '👨‍⚕️ ' + escapeHtml(plan.memberName || '家人') + (desc ? ' · ' + escapeHtml(desc) : '');
     var dayTag = '第 ' + info.dayNo + ' 天 / ' + info.totalDays + ' 天';
     if (_HM_CARE_FOLDED) {
@@ -80627,7 +80647,12 @@ window.openCareForm = function () {
         var n = m.memberName || m.name || ('家人' + (i + 1));
         return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>';
     }).join('');
-    var symOpts = _CARE_SYMPTOMS.map(function (s) { return '<option value="' + escapeHtml(s.k) + '">' + escapeHtml(s.k) + '</option>'; }).join('');
+    var _scene = _careSceneByKey(_CARE_SCENE);
+    var symOpts = _scene.symptoms.map(function (s) { return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>'; }).join('');
+    var sceneChips = _CARE_SCENES.map(function (sc) {
+        var on = sc.k === _scene.k;
+        return '<button type="button" onclick="_carePickScene(\'' + sc.k + '\',event)" style="padding:7px 10px;border-radius:999px;border:1px solid ' + (on ? '#F97316' : '#FED7AA') + ';background:' + (on ? 'linear-gradient(135deg,#F97316,#EA580C)' : '#fff') + ';color:' + (on ? '#fff' : '#C2410C') + ';font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;">' + sc.emoji + ' ' + sc.label + '</button>';
+    }).join('');
     var overlay = document.createElement('div');
     overlay.id = 'careFormOverlay';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:100020;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:center;';
@@ -80635,11 +80660,14 @@ window.openCareForm = function () {
         + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
         + '<div style="font-size:16px;font-weight:800;color:#C2410C;">💊 发起饮食调理</div>'
         + '<button type="button" onclick="closeCareForm()" style="border:none;background:#FFEDD5;color:#C2410C;width:30px;height:30px;border-radius:9px;font-size:16px;cursor:pointer;">×</button></div>'
-        + '<div style="font-size:11px;color:#92400E;line-height:1.6;margin:0 0 4px;">选家人 + 症状，生成 7 天调理食谱（中医「一候」7 天：清淡解表 → 健脾扶正 → 巩固恢复）。</div>'
+        + '<div style="font-size:11px;color:#92400E;line-height:1.6;margin:0 0 4px;">选家人 + 场景 + 症状，生成 7 天调理食谱。</div>'
         + _careDisclaimerHtml()
+        + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">选择调理场景</div>'
+        + '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + sceneChips + '</div>'
+        + '<div style="font-size:11px;color:#B45309;background:#FFFBEB;border:1px dashed #FDE68A;border-radius:9px;padding:6px 9px;margin-top:7px;line-height:1.7;">' + escapeHtml(_scene.focus) + (_scene.k === 'illness' ? '（占用每年 4 次调理配额）' : '（不占调理配额，可续排）') + '</div>'
         + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">选择家人</div>'
         + '<select id="careMemberSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + memberOpts + '</select>'
-        + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">选择症状 / 特殊期</div>'
+        + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">' + (_scene.k === 'illness' ? '选择症状' : '选择阶段') + '</div>'
         + '<select id="careSymptomSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + symOpts + '</select>'
         + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">补充描述（选填）</div>'
         + '<textarea id="careDescInput" rows="3" placeholder="例如：这两天有点低烧、没胃口，想吃清淡的" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:13px;resize:none;"></textarea>'
@@ -80662,9 +80690,12 @@ window.submitCareForm = function () {
     var symptom = symEl.value;
     var desc = descEl ? String(descEl.value || '').trim() : '';
     if (!memberName || !symptom) { showToast('请选择家人和症状'); return; }
-    // V519: 生病调理统一按 7 天计划生成，占用「生病：每年 4 次」配额
-    var quota = getSpecialPlanQuota('illness');
-    if (quota && quota.reached) { showToast(quota.message); return; }
+    var scene = _careSceneByKey(_CARE_SCENE);
+    // V538: 只有「生病」占用每年 4 次配额；考前 / 术后 / 生理期 / 熬夜不占配额，可续排
+    if (scene.k === 'illness') {
+        var quota = getSpecialPlanQuota('illness');
+        if (quota && quota.reached) { showToast(quota.message); return; }
+    }
     var member = null;
     try {
         var _mlist = getFamilyMembers();
@@ -80686,8 +80717,8 @@ window.submitCareForm = function () {
     try { var termObj = getSolarTermForDate(new Date()); solarTerm = (termObj && termObj.name) || ''; } catch (e) {}
     var fangRag = [];
     try { fangRag = searchFoodTherapy(getHealthCoreTags()); } catch (e) {}
-    var description = '症状/特殊期：' + symptom + (desc ? '；补充：' + desc : '')
-        + '；请按中医「一候」7 天安排：前 2 天清淡易消化、注意补液，中间 3 天健脾扶正，最后 2 天巩固恢复';
+    var description = '场景：' + scene.label + '；阶段/症状：' + symptom + (desc ? '；补充：' + desc : '')
+        + '；配餐重点：' + scene.focus;
     btn.disabled = true;
     btn.textContent = '生成 7 天食谱中…';
     btn.style.opacity = '0.75';
@@ -80716,7 +80747,8 @@ window.submitCareForm = function () {
             description: description,
             weeklyPlan: data.weeklyPlan || {},
             report: data.report || '',
-            fangRefs: data.fangRefsUsed || fangRag || []
+            fangRefs: data.fangRefsUsed || fangRag || [],
+            skipQuota: scene.k !== 'illness'
         });
         if (!created.ok) {
             btn.disabled = false; btn.textContent = '生成 7 天食谱'; btn.style.opacity = '1';
