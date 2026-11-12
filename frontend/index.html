@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V514-20261112';
+        var APP_VER = 'V515-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79559,7 +79559,7 @@ function openSpecialPlanBoard() {
         +   (_hmMember ? bodyHtml : '')
         +   (_hmMember ? '<div id="hmAdviceSlot">' + _hmAdviceCardHtml() + '</div>' : _hmLockCardHtml('今日专属健康建议', '每天 1 条针对家庭专属计划的可执行建议'))
         +   (_hmMember ? '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' : _hmLockCardHtml('营养食谱', '按家庭专属计划生成今日 / 3 天 / 7 天食谱'))
-        +   (_hmMember ? _hmCareCardHtml() : _hmLockCardHtml('特殊饮食调理', '按成员与症状生成当日家庭融合特供菜'))
+        +   (_hmMember ? _hmCareCardHtml() : _hmLockCardHtml('生病饮食调理', '按成员与症状生成当日家庭融合特供菜'))
         +   (_hmMember ? _hmDeepReviewCardHtml() : _hmLockCardHtml('深度复盘', '近 7 天饮食风险预警、归因与改进建议'))
         +   freeToolsHtml + '</div>';
 
@@ -79608,7 +79608,7 @@ function _hmCareCardHtml() {
     // V496: 加入食记后整个版块收起为一行摘要，可点「查看详情」展开
     var html = '<div id="hmCareCard" style="margin:6px 12px 6px;background:#fff;border:1px solid #FED7AA;border-radius:14px;padding:12px;">'
         + '<div style="display:flex;align-items:center;gap:8px;">'
-        + '<div style="font-size:14px;font-weight:800;color:#C2410C;">💊 特殊饮食调理</div>'
+        + '<div style="font-size:14px;font-weight:800;color:#C2410C;">💊 生病饮食调理</div>'
         + '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
         + '<button type="button" onclick="openCareForm()" style="flex-shrink:0;margin-left:auto;padding:8px 12px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:12px;font-weight:800;cursor:pointer;">发起调理</button>'
         + '</div>';
