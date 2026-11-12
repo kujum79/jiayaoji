@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V526-20261112';
+        var APP_VER = 'V527-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79414,16 +79414,87 @@ window._hmAdviceAct = function (ev) {
     var el = document.getElementById('hmMenuSlot');
     if (el && el.scrollIntoView) { try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {} }
 };
+var _HM_REPORT_OPEN = false;
+window._hmToggleReport = function (ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    _HM_REPORT_OPEN = !_HM_REPORT_OPEN;
+    var slot = document.getElementById('hmAdviceSlot');
+    if (slot) slot.innerHTML = _hmAdviceCardHtml();
+};
+window._hmViewPlanMenu = function (ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    _HM_MENU_OPEN = true;
+    _HM_RANGE = 7;
+    _hmRenderMenuSection();
+    setTimeout(function () {
+        var el = document.getElementById('hmMenuSlot');
+        if (el && el.scrollIntoView) {
+            try { el.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); }
+        }
+    }, 60);
+};
+function _hmPrimaryPlan() {
+    try { return (typeof getPrimarySpecialPlan === 'function') ? getPrimarySpecialPlan() : null; } catch (e) { return null; }
+}
+function _hmAdvicePlanBlockHtml(plan) {
+    if (!plan) return '';
+    var info = _hmPlanDayInfo(plan);
+    var pct = Math.round((info.dayNo / info.totalDays) * 100);
+    var _tk = dateToKey(new Date());
+    var _tTotal = 0, _tDone = 0;
+    ['breakfast', 'lunch', 'dinner'].forEach(function (mk) {
+        var st = (typeof getSpecialInterventionDoneCount === 'function') ? getSpecialInterventionDoneCount(_tk, mk) : { total: 0, done: 0 };
+        _tTotal += st.total; _tDone += st.done;
+    });
+    var status = _tTotal === 0
+        ? '<span style="color:#9CA3AF;">今日暂无专项特供</span>'
+        : (_tDone >= _tTotal ? '<span style="color:#16A34A;font-weight:700;">✅ 今日专项已完成</span>' : '<span style="color:#EA580C;font-weight:700;">今日专项待完成 ' + _tDone + '/' + _tTotal + '</span>');
+    var overBadge = (info.diff > info.totalDays - 1) ? '<span style="font-size:10px;color:#6B7280;background:#F3F4F6;border-radius:8px;padding:1px 6px;">已结束</span>' : '';
+    return '<div style="border-top:1px dashed #FDBA74;margin-top:10px;padding-top:10px;">'
+        + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+        +   '<div style="font-size:12px;font-weight:800;color:#C2410C;">家庭专属饮食计划</div>'
+        +   '<span style="margin-left:auto;font-size:11px;color:#6B7280;">第 ' + info.dayNo + ' 天 / 共 ' + info.totalDays + ' 天</span>'
+        +   overBadge
+        + '</div>'
+        + '<div style="font-size:13px;font-weight:800;color:#7C2D12;margin-top:4px;">👑 ' + escapeHtml(plan.memberName || '家人') + '的' + escapeHtml(_spPlanDisplayName(plan)) + '</div>'
+        + '<div style="height:6px;border-radius:3px;background:#FFEDD5;overflow:hidden;margin-top:6px;">'
+        +   '<div style="height:100%;width:' + pct + '%;border-radius:3px;background:linear-gradient(90deg,#FB923C,#F97316);"></div>'
+        + '</div>'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11px;color:#9CA3AF;flex-wrap:wrap;">'
+        +   status
+        +   '<button type="button" onclick="_hmViewPlanMenu(event)" style="margin-left:auto;padding:4px 9px;border:1px solid #FDBA74;border-radius:9px;background:#fff;color:#C2410C;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">查看 7 天食谱 ›</button>'
+        + '</div></div>';
+}
+function _hmAdviceReportBlockHtml(plan) {
+    if (!plan) return '';
+    var reportText = String(plan.report || '').trim().replace(/^【(?:专项饮食|专项健康饮食)报告】\s*/, '');
+    if (!reportText) return '';
+    var shortText = reportText.length > 72 ? (reportText.slice(0, 72) + '…') : reportText;
+    var bodyText = _HM_REPORT_OPEN ? reportText : shortText;
+    return '<div style="border-top:1px dashed #FDBA74;margin-top:10px;padding-top:10px;">'
+        + '<div style="display:flex;align-items:center;gap:6px;">'
+        +   '<div style="font-size:12px;font-weight:800;color:#C2410C;">专项健康饮食报告</div>'
+        +   '<button type="button" onclick="_hmToggleReport(event)" style="margin-left:auto;padding:3px 8px;border:1px solid #FDBA74;border-radius:9px;background:#fff;color:#C2410C;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">' + (_HM_REPORT_OPEN ? '收起' : '查看完整报告 ›') + '</button>'
+        + '</div>'
+        + '<div style="font-size:12px;color:#7C2D12;line-height:1.75;margin-top:4px;">' + escapeHtml(bodyText).replace(/\n/g, '<br>') + '</div>'
+        + '</div>';
+}
 function _hmAdviceCardHtml() {
     var a = _hmTodayAction();
-    var head = '🎯 今日专属健康建议';
+    var plan = _hmPrimaryPlan();
+    var head = '🎯 专属健康饮食方案';
     var box = 'background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FDBA74;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,0.05);';
     if (!_HM_ADVICE_OPEN) {
+        var subText = plan
+            ? ('家庭专属：' + escapeHtml(plan.memberName || '家人') + ' · 第 ' + _hmPlanDayInfo(plan).dayNo + ' 天')
+            : '今日 1 个动作';
         return '<div style="padding:0 12px 6px;"><div style="' + box + 'padding:12px 14px;">'
             + '<div onclick="_hmToggleAdvice(event)" style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow:hidden;cursor:pointer;">'
             +   '<div style="font-size:14px;font-weight:800;color:#C2410C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">' + head + '</div>'
             +   '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
-            +   '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">今日 1 个动作</span>'
+            +   '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + subText + '</span>'
             +   '<span style="flex-shrink:0;margin-left:auto;font-size:12px;color:#B45309;font-weight:700;">▼ 展开</span>'
             + '</div></div></div>';
     }
@@ -79433,10 +79504,15 @@ function _hmAdviceCardHtml() {
         +   '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
         +   '<span style="margin-left:auto;font-size:12px;color:#B45309;font-weight:700;">▲ 收起</span>'
         + '</div>'
-        + '<div style="font-size:14px;color:#7C2D12;line-height:1.75;margin-top:8px;font-weight:700;">' + escapeHtml(a.action) + '</div>'
-        + '<div style="font-size:12px;color:#9A3412;line-height:1.7;margin-top:6px;">' + escapeHtml(a.why) + '</div>'
-        + '<button type="button" onclick="_hmAdviceAct(event)" style="margin-top:10px;padding:8px 14px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:13px;font-weight:800;cursor:pointer;">就这么办 ›</button>'
-        + '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">来自家庭记录与节气，仅供日常饮食参考，不替代医疗建议。</div>'
+        + _hmAdvicePlanBlockHtml(plan)
+        + _hmAdviceReportBlockHtml(plan)
+        + '<div style="border-top:1px dashed #FDBA74;margin-top:10px;padding-top:10px;">'
+        +   '<div style="font-size:12px;font-weight:800;color:#C2410C;margin-bottom:4px;">今日建议</div>'
+        +   '<div style="font-size:14px;color:#7C2D12;line-height:1.75;font-weight:700;">' + escapeHtml(a.action) + '</div>'
+        +   '<div style="font-size:12px;color:#9A3412;line-height:1.7;margin-top:6px;">' + escapeHtml(a.why) + '</div>'
+        +   '<button type="button" onclick="_hmAdviceAct(event)" style="margin-top:10px;padding:8px 14px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:13px;font-weight:800;cursor:pointer;">就这么办 ›</button>'
+        +   '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">来自家庭记录与节气，仅供日常饮食参考，不替代医疗建议。</div>'
+        + '</div>'
         + '</div></div>';
 }
 // V458: 健康管家内的「深度复盘」会员卡片（数据与独立看板共用 _reviewWeekIntake）
@@ -79749,6 +79825,8 @@ function openSpecialPlanBoard(focusPlanId) {
             +   '<div style="font-size:11px;color:#9CA3AF;line-height:1.7;margin-top:10px;padding-top:8px;border-top:1px dashed #FDE68A;">📖 该方案引用了《传统食养库》中的智慧，仅供日常饮食参考，不替代医疗建议。</div>'
             + '</div>'
             + '</div>';
+        // V527: 家庭专属计划的进度与报告已并入「专属健康饮食方案」，此处不再重复展示
+        if (plan && plan.primary) bodyHtml = '';
     }
 
     // V374: 顺时养生建议（按当前节气展示）
@@ -79795,7 +79873,7 @@ function openSpecialPlanBoard(focusPlanId) {
         + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:10px;">'
         +   (_hmMember ? (window._wpCardHtml ? _wpCardHtml() : '') : _hmLockCardHtml('《家庭膳食健康白皮书》', '建档后生成专属健康档案与膳食建议'))
         +   (_hmMember ? bodyHtml : '')
-        +   (_hmMember ? '<div id="hmAdviceSlot">' + _hmAdviceCardHtml() + '</div>' : _hmLockCardHtml('今日专属健康建议', '每天 1 条针对家庭专属计划的可执行建议'))
+        +   (_hmMember ? '<div id="hmAdviceSlot">' + _hmAdviceCardHtml() + '</div>' : _hmLockCardHtml('专属健康饮食方案', '家庭专属饮食计划、专项健康饮食报告与每天 1 条可执行建议'))
         +   (_hmMember ? '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' : _hmLockCardHtml('专属营养食谱', '按家庭专属计划生成今日 / 3 天 / 7 天食谱'))
         +   (_hmMember ? _hmCareCardHtml() : _hmLockCardHtml('生病饮食调理', '按成员与症状生成 7 天调理食谱'))
         +   (_hmMember ? _hmDeepReviewCardHtml() : _hmLockCardHtml('深度复盘', '近 7 天饮食风险预警、归因与改进建议'))
@@ -80355,7 +80433,7 @@ window.renderHomeHealthButlerCard = function () {
             + '<div style="font-size:12px;font-weight:700;color:#92400E;">您的专属</div>'
             + '<div style="font-size:17px;font-weight:900;color:#7C2D12;">健康管家</div></div>'
             + '<div style="flex:1;min-width:0;">'
-            + '<div style="font-size:11px;color:#92400E;line-height:1.55;">查看健康管家：白皮书、今日建议、专属营养食谱、深度复盘（会员解锁）。</div></div>'
+            + '<div style="font-size:11px;color:#92400E;line-height:1.55;">查看健康管家：白皮书、专属健康饮食方案、专属营养食谱、深度复盘（会员解锁）。</div></div>'
             + '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#C2410C;background:#FFEDD5;border:1px solid #FDBA74;border-radius:999px;padding:4px 8px;">进入 ›</span>';
         return;
     }
