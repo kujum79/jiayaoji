@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V540-20261112';
+        var APP_VER = 'V541-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -43162,6 +43162,17 @@ function _dgCurrentUserName() {
     var all = _dgMembers();
     return all.length ? all[0].name : '我';
 }
+// 长辈识别：有年龄按年龄（≥60）；无年龄时按姓名/标签里的长辈称呼判断，避免误判年轻成员
+function _dgIsElder(m) {
+    var a = _dgAge(m);
+    if (a !== null) return a >= 60;
+    var tags = [];
+    if (Array.isArray(m && m.tags)) tags = m.tags.slice();
+    else if (m && m.tags) tags = String(m.tags).split(/[,，\s]+/);
+    if (m && m.tag) tags.push(String(m.tag));
+    var tx = String((m && m.name) || '') + ' ' + tags.join(' ');
+    return /外公|外婆|爷爷|奶奶|姥姥|姥爷|祖父|祖母|老人|长辈/.test(tx);
+}
 // 智能推荐：只从已录入成员中组合，绝不生成「儿子朋友」这类幽灵成员
 function _dgSmartGroups() {
     var members = _dgMembers();
@@ -43188,7 +43199,7 @@ function _dgSmartGroups() {
             members: _dgUniqNames([curName, nm])
         });
     });
-    var elders = members.filter(function (m) { var a = _dgAge(m); return a !== null && a >= 60; });
+    var elders = members.filter(function (m) { return _dgIsElder(m); });
     if (elders.length) {
         out.push({
             key: 'smart_elders', kind: 'smart', icon: '👴', name: '长辈专场',
