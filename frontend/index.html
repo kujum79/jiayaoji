@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V531-20261112';
+        var APP_VER = 'V532-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79938,7 +79938,6 @@ function _hmCareCardHtml() {
         + '<button type="button" onclick="openCareForm()" style="flex-shrink:0;margin-left:auto;padding:8px 12px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:12px;font-weight:800;cursor:pointer;">发起调理</button>'
         + '</div>';
     if (!plan) {
-        html += '<div style="font-size:11px;color:#9CA3AF;line-height:1.6;margin-top:8px;">选家人 + 症状，生成 7 天调理食谱（中医「一候」7 天：清淡解表 → 健脾扶正 → 巩固恢复）。</div>';
         html += '</div>';
         return html;
     }
@@ -80463,7 +80462,7 @@ window.openCareForm = function () {
         + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
         + '<div style="font-size:16px;font-weight:800;color:#C2410C;">💊 发起饮食调理</div>'
         + '<button type="button" onclick="closeCareForm()" style="border:none;background:#FFEDD5;color:#C2410C;width:30px;height:30px;border-radius:9px;font-size:16px;cursor:pointer;">×</button></div>'
-        + '<div style="font-size:11px;color:#92400E;line-height:1.6;margin:0 0 4px;">选家人 + 症状，生成 7 天调理食谱（中医「一候」7 天）</div>'
+        + '<div style="font-size:11px;color:#92400E;line-height:1.6;margin:0 0 4px;">选家人 + 症状，生成 7 天调理食谱（中医「一候」7 天：清淡解表 → 健脾扶正 → 巩固恢复）。</div>'
         + _careDisclaimerHtml()
         + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">选择家人</div>'
         + '<select id="careMemberSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + memberOpts + '</select>'
