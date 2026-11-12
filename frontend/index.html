@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V515-20261112';
+        var APP_VER = 'V516-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79048,7 +79048,7 @@ function _hmRangeBodyHtml() {
 function _hmMenuCardHtml() {
     var menu = _hmTodayMenu();
     var single = (typeof isSingleMealMode === 'function') && isSingleMealMode();
-    var title = single ? '🍱 一人食营养食谱' : '🍽️ 营养食谱';
+    var title = single ? '🍱 一人食专属营养食谱' : '🍽️ 专属营养食谱';
     var adopted = _hmAdoptedToday();
     var rangeTabs = '';
     if (_HM_MENU_OPEN) {
@@ -79121,7 +79121,7 @@ function _hmTodayAction() {
                 fitness: '训练后 30 分钟内补 1 份蛋白，晚餐主食减半',
                 illness: '今天以清淡软食为主，少量多餐'
             };
-            return { action: _map[_pp.planType] || ('按「' + _plb + '」安排今天的三餐'), why: '依据：家庭专属计划「' + _plb + (_pp.memberName ? ' · ' + _pp.memberName : '') + '」，营养食谱已按此配餐', source: 'plan' };
+            return { action: _map[_pp.planType] || ('按「' + _plb + '」安排今天的三餐'), why: '依据：家庭专属计划「' + _plb + (_pp.memberName ? ' · ' + _pp.memberName : '') + '」，专属营养食谱已按此配餐', source: 'plan' };
         }
     } catch (e) {}
     try {
@@ -79558,7 +79558,7 @@ function openSpecialPlanBoard() {
         +   (_hmMember ? (window._wpCardHtml ? _wpCardHtml() : '') : _hmLockCardHtml('《家庭膳食健康白皮书》', '建档后生成专属健康档案与膳食建议'))
         +   (_hmMember ? bodyHtml : '')
         +   (_hmMember ? '<div id="hmAdviceSlot">' + _hmAdviceCardHtml() + '</div>' : _hmLockCardHtml('今日专属健康建议', '每天 1 条针对家庭专属计划的可执行建议'))
-        +   (_hmMember ? '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' : _hmLockCardHtml('营养食谱', '按家庭专属计划生成今日 / 3 天 / 7 天食谱'))
+        +   (_hmMember ? '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' : _hmLockCardHtml('专属营养食谱', '按家庭专属计划生成今日 / 3 天 / 7 天食谱'))
         +   (_hmMember ? _hmCareCardHtml() : _hmLockCardHtml('生病饮食调理', '按成员与症状生成当日家庭融合特供菜'))
         +   (_hmMember ? _hmDeepReviewCardHtml() : _hmLockCardHtml('深度复盘', '近 7 天饮食风险预警、归因与改进建议'))
         +   freeToolsHtml + '</div>';
@@ -80095,7 +80095,7 @@ window.renderHomeHealthButlerCard = function () {
             + '<div style="font-size:12px;font-weight:700;color:#92400E;">您的专属</div>'
             + '<div style="font-size:17px;font-weight:900;color:#7C2D12;">健康管家</div></div>'
             + '<div style="flex:1;min-width:0;">'
-            + '<div style="font-size:11px;color:#92400E;line-height:1.55;">查看健康管家：白皮书、今日建议、营养食谱、深度复盘（会员解锁）。</div></div>'
+            + '<div style="font-size:11px;color:#92400E;line-height:1.55;">查看健康管家：白皮书、今日建议、专属营养食谱、深度复盘（会员解锁）。</div></div>'
             + '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#C2410C;background:#FFEDD5;border:1px solid #FDBA74;border-radius:999px;padding:4px 8px;">进入 ›</span>';
         return;
     }
