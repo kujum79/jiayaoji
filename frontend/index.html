@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V517-20261112';
+        var APP_VER = 'V518-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -13245,7 +13245,7 @@ function getSpecialInterventions(date, mealType) {
 }
 
 // V235: 卡片上的「特供」小标签 —— 菜品名后追加，如 [🤒 儿子特供]
-var _SP_TYPE_EMOJI = { illness: '🤒', fitness: '💪', growth: '📈', athlete: '🏅', pregnancy: '🤰', infant: '🍼' };
+var _SP_TYPE_EMOJI = { illness: '🤒', chronic: '🩺', fitness: '💪', growth: '📈', athlete: '🏅', pregnancy: '🤰', infant: '🍼' };
 
 function specialInterventionsForDish(list, dishName) {
     var name = String(dishName || '').trim();
@@ -58606,7 +58606,7 @@ async function generateAiMealRecommendation() {
             userMessage += `请在安排全家一日三餐时，优先满足这些特殊成员的需求。\n`;
             userMessage += `例如：如果儿子在感冒，全家菜单应尽量清淡，并专门为儿子提供易消化的流食/半流食。\n`;
             userMessage += `请在返回的 JSON 数据中，将专门为特殊成员准备的菜品，标注在 specialInterventions 字段中（每餐一个数组，没有专项干预的餐返回 []）。\n`;
-            userMessage += `specialInterventions 中 planType 只能取：illness/fitness/growth/athlete/pregnancy/infant。\n\n`;
+            userMessage += `specialInterventions 中 planType 只能取：illness/chronic/fitness/growth/athlete/pregnancy/infant。\n\n`;
         }
         userMessage += `\n【硬性规则·流质同餐互斥】粥/稀饭/汤/羹/豆浆/米糊/牛奶/酸奶/果汁/奶茶等流质与饮品，同一餐合计最多1道：早餐若已有粥，就不要再给酸奶/牛奶/豆浆/果汁；午餐/晚餐若已有汤，就不要再给粥/羹；粥/稀饭与面条/米线不得同餐（外食大餐除外）。早餐必须至少有1道固体主食（面包/馒头/包子/饼/蛋/饭团等），不能只给流食。\n`;
         userMessage += `\n请严格按照以下JSON格式返回推荐方案，不要添加任何其他文字。\n**每道菜必须含 ingredients 字段（全部食材及每人份用量），不可省略。**\n`;
@@ -59565,7 +59565,7 @@ function buildRecommendationPrompt(data, weekDatesStr) {
         prompt += `请在安排全家一日三餐时，优先满足这些特殊成员的需求。\n`;
         prompt += `例如：如果儿子在感冒，全家菜单应尽量清淡，并专门为儿子提供易消化的流食/半流食。\n`;
         prompt += `请在返回的 JSON 数据中，将专门为特殊成员准备的菜品，标注在 specialInterventions 字段中（每餐一个数组，没有专项干预的餐返回 []）。\n`;
-        prompt += `specialInterventions 中 planType 只能取：illness（生病）/fitness（健身）/growth（增高）/athlete（体育生）/pregnancy（孕期）/infant（婴儿）。\n\n`;
+        prompt += `specialInterventions 中 planType 只能取：illness（生病）/chronic（慢病）/fitness（健身）/growth（孩子成长）/athlete（体育生）/pregnancy（孕期）/infant（婴儿）。\n\n`;
     }
 
     prompt += `【第9优先级 AI综合推理】\n`;
@@ -77488,14 +77488,16 @@ var SPECIAL_PLANS_KEY = 'specialPlans';
 // 配额规则写死在代码里（不要改成可配置项）
 var QUOTA_RULES = {
     illness: 4,     // 生病：每年 4 次
+    chronic: 2,     // 慢病（控糖/控盐控脂/高尿酸/脂肪肝）：每年 2 个长周期（半年为周期）
     fitness: 3,     // 健身：每年 3 次
-    growth: 2,      // 增高：每年 2 个长周期（半年为周期）
+    growth: 2,      // 孩子成长：每年 2 个长周期（半年为周期）
     athlete: 2,     // 体育生：每年 2 个长周期
     pregnancy: 1,   // 孕妇：整个孕期 1 次建档
     infant: 1       // 婴儿：建档 1 次
 };
 var SPECIAL_PLAN_TYPES = {
     illness:   { label: '生病',   quotaPeriod: 'year' },
+    chronic:   { label: '慢病调理', quotaPeriod: 'year', longTerm: true, termDays: 180 },
     fitness:   { label: '健身',   quotaPeriod: 'year' },
     growth:    { label: '孩子成长', quotaPeriod: 'year', longTerm: true, termDays: 180 },
     athlete:   { label: '体育生', quotaPeriod: 'year', longTerm: true, termDays: 180 },
@@ -77650,6 +77652,7 @@ function createSpecialPlan(options) {
         planType: planType,
         description: options.description || '',
         growthFocus: options.growthFocus || '',
+        chronicFocus: Array.isArray(options.chronicFocus) ? options.chronicFocus : [],
         status: 'active',
         startDate: startDate,
         endDate: options.endDate || _specialPlanAddDays(startDate, cfg.termDays || 7),
@@ -77859,6 +77862,7 @@ function applySpecialPlanQuotaToButton(btn, planType) {
 // ==================== V226: 专项饮食计划——发起弹窗与 AI 生成 ====================
 var SPECIAL_PLAN_UI_TYPES = [
     { type: 'illness',   label: '生病调理' },
+    { type: 'chronic',   label: '慢病调理' },
     { type: 'growth',    label: '孩子成长' },
     { type: 'athlete',   label: '体育生备赛' },
     { type: 'fitness',   label: '健身减脂' },
@@ -78062,6 +78066,12 @@ function openSpecialPlanModal(memberId) {
             + '<input type="radio" name="spGrowthFocus" value="' + item.v + '"' + (item.v === 'both' ? ' checked' : '') + ' style="accent-color:#F97316;">'
             + item.t + '</label>';
     }).join('');
+    // V518: 慢病调理的方向多选（默认勾选控糖）
+    var chronicChecks = ['控糖', '控盐控脂', '高尿酸', '脂肪肝'].map(function (t, i) {
+        return '<label style="display:flex;align-items:center;gap:6px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:6px 9px;font-size:12px;color:#9A3412;cursor:pointer;">'
+            + '<input type="checkbox" name="spChronicFocus" value="' + t + '"' + (i === 0 ? ' checked' : '') + ' style="accent-color:#F97316;">'
+            + t + '</label>';
+    }).join('');
     panel.innerHTML = ''
         + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
         +   '<div style="font-size:16px;font-weight:700;color:#1F2937;">🎯 发起专项健康饮食计划</div>'
@@ -78074,6 +78084,11 @@ function openSpecialPlanModal(memberId) {
         +   '<div style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:9px 10px;line-height:1.65;">长高、护眼都是孩子成长过程需要的：长高侧重钙 + 蛋白 + 维D，护眼侧重维A / 叶黄素 + 深色蔬菜，一套食谱可同时覆盖。</div>'
         +   '<div style="font-size:13px;font-weight:600;color:#374151;margin:10px 0 6px;">成长侧重</div>'
         +   '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + focusRadios + '</div>'
+        + '</div>'
+        + '<div id="spChronicBox" style="display:none;margin-bottom:12px;">'
+        +   '<div style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:9px 10px;line-height:1.65;">慢病调理是长期配餐方向：以低GI主食、少油少盐、足量蔬菜与优质蛋白为主，不替代药物与医生方案。</div>'
+        +   '<div style="font-size:13px;font-weight:600;color:#374151;margin:10px 0 6px;">慢病方向（可多选）</div>'
+        +   '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + chronicChecks + '</div>'
         + '</div>'
         + '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">具体情况</div>'
         + '<textarea id="spDescInput" rows="4" placeholder="如：感冒发烧第三天，食欲差、想吃清淡易消化的；或：体育生备赛期，需要高蛋白高能量" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:13px;line-height:1.6;resize:vertical;outline:none;"></textarea>'
@@ -78096,6 +78111,9 @@ function openSpecialPlanModal(memberId) {
         // V517: 「孩子成长」显示成长侧重选择（长高 / 护眼 / 两者都要）
         var growBox = document.getElementById('spGrowthBox');
         if (growBox) growBox.style.display = (type === 'growth') ? 'block' : 'none';
+        // V518: 「慢病调理」显示慢病方向多选
+        var chronicBox = document.getElementById('spChronicBox');
+        if (chronicBox) chronicBox.style.display = (type === 'chronic') ? 'block' : 'none';
         var quota = applySpecialPlanQuotaToButton(btn, type) || getSpecialPlanQuota(type);
         if (!quota || !line) return;
         line.textContent = _specialPlanUiLabel(type) + '：' + (quota.quotaPeriod === 'lifetime'
@@ -78129,6 +78147,13 @@ function openSpecialPlanModal(memberId) {
         if (type === 'growth') {
             var fc = panel.querySelector('input[name="spGrowthFocus"]:checked');
             growthFocus = fc ? fc.value : 'both';
+        }
+        // V518: 慢病调理方向（可多选，至少 1 项）
+        var chronicFocus = [];
+        if (type === 'chronic') {
+            var ccs = panel.querySelectorAll('input[name="spChronicFocus"]:checked');
+            for (var ci = 0; ci < ccs.length; ci++) chronicFocus.push(ccs[ci].value);
+            if (!chronicFocus.length) { showToast('请选择慢病方向'); return; }
         }
 
         // 生成成功后写入 specialPlans（状态 active），失败则不占用配额
@@ -78168,6 +78193,10 @@ function openSpecialPlanModal(memberId) {
                     ? '护眼优先，重点维A / 叶黄素 + 深色蔬菜'
                     : '长高与护眼并重，钙 + 蛋白 + 维D 与 维A / 叶黄素 + 深色蔬菜兼顾')) + '）';
         }
+        // V518: 慢病方向带进提示词（低GI、少油少盐、足量蔬菜优质蛋白）
+        if (type === 'chronic' && chronicFocus.length) {
+            descForAI += '（慢病方向：' + chronicFocus.join('、') + '；以低GI主食、少油少盐、足量蔬菜与优质蛋白为主，不承诺疗效，不替代药物）';
+        }
         var payload = {
             memberBrief: memberBrief,
             planType: type,
@@ -78189,6 +78218,7 @@ function openSpecialPlanModal(memberId) {
                     planType: type,
                     description: desc,
                     growthFocus: growthFocus,
+                    chronicFocus: chronicFocus,
                     weeklyPlan: data.weeklyPlan || {},
                     report: data.report || '',
                     fangRefs: data.fangRefsUsed || payload.fangRag || payload.fangRefs || []
@@ -78458,7 +78488,8 @@ var _HM_ADVICE_MAP = {
     athlete: '需注意高蛋白与训练后恢复',
     fitness: '需注意优质蛋白、控油控糖',
     infant: '需注意细腻易消化、少盐无添加',
-    illness: '需注意清淡易消化、少量多餐'
+    illness: '需注意清淡易消化、少量多餐',
+    chronic: '需注意低GI主食、少油少盐、足量蔬菜'
 };
 var _HM_WEEK_THEMES = {
     elder: ['控温补肾', '软烂低盐', '健脾养胃', '润燥护肺', '补钙强骨', '清淡易嚼', '温补固本'],
@@ -78469,6 +78500,7 @@ var _HM_WEEK_THEMES = {
     fitness: ['高蛋白', '低GI主食', '增肌餐', '控油控糖', '膳食纤维', '轻断食日', '均衡巩固'],
     infant: ['细腻辅食', '补铁食材', '健脾易消化', '少盐无添加', '维生素蔬果', '软烂易嚼', '均衡过渡'],
     illness: ['清淡补液', '软烂易消化', '优质蛋白', '维生素C', '少油少盐', '温补脾胃', '恢复巩固'],
+    chronic: ['低GI主食', '少油少盐', '优质蛋白', '膳食纤维', '清淡控糖', '控脂搭配', '均衡巩固'],
     default: ['健脾养胃', '温补阳气', '优质蛋白', '时令蔬果', '低盐少油', '粗细搭配', '润燥收尾']
 };
 function _hmPad2(n) { return (n < 10 ? '0' : '') + n; }
@@ -78495,6 +78527,7 @@ function _hmFamilyTags() {
         else if (pt === 'athlete') add('体育生', 'athlete');
         else if (pt === 'fitness') add('健身人群', 'fitness');
         else if (pt === 'illness') add('生病调理', 'illness');
+        else if (pt === 'chronic') add('慢病调理', 'chronic');
         var age = parseInt(m.age, 10);
         if (!isNaN(age)) {
             if (age >= 60) add('老人', 'elder');
