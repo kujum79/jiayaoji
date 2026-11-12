@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V519-20261112';
+        var APP_VER = 'V520-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -13245,7 +13245,7 @@ function getSpecialInterventions(date, mealType) {
 }
 
 // V235: 卡片上的「特供」小标签 —— 菜品名后追加，如 [🤒 儿子特供]
-var _SP_TYPE_EMOJI = { illness: '🤒', chronic: '🩺', fitness: '💪', growth: '📈', athlete: '🏅', pregnancy: '🤰', infant: '🍼' };
+var _SP_TYPE_EMOJI = { illness: '🤒', chronic: '🩺', occupation: '💼', elder: '🧓', fitness: '💪', growth: '📈', athlete: '🏅', pregnancy: '🤰', infant: '🍼' };
 
 function specialInterventionsForDish(list, dishName) {
     var name = String(dishName || '').trim();
@@ -77489,6 +77489,8 @@ var SPECIAL_PLANS_KEY = 'specialPlans';
 var QUOTA_RULES = {
     illness: 4,     // 生病：每年 4 次
     chronic: 2,     // 慢病（控糖/控盐控脂/高尿酸/脂肪肝）：每年 2 个长周期（半年为周期）
+    occupation: 2,  // 职业人群（久坐/夜班/体力劳动）：每年 2 个长周期
+    elder: 2,       // 中老年养护：每年 2 个长周期
     fitness: 3,     // 健身：每年 3 次
     growth: 2,      // 孩子成长：每年 2 个长周期（半年为周期）
     athlete: 2,     // 体育生：每年 2 个长周期
@@ -77498,6 +77500,8 @@ var QUOTA_RULES = {
 var SPECIAL_PLAN_TYPES = {
     illness:   { label: '生病',   quotaPeriod: 'year' },
     chronic:   { label: '慢病调理', quotaPeriod: 'year', longTerm: true, termDays: 180 },
+    occupation:{ label: '职业人群', quotaPeriod: 'year', longTerm: true, termDays: 180 },
+    elder:     { label: '中老年', quotaPeriod: 'year', longTerm: true, termDays: 180 },
     fitness:   { label: '健身',   quotaPeriod: 'year' },
     growth:    { label: '孩子成长', quotaPeriod: 'year', longTerm: true, termDays: 180 },
     athlete:   { label: '体育生', quotaPeriod: 'year', longTerm: true, termDays: 180 },
@@ -77653,6 +77657,7 @@ function createSpecialPlan(options) {
         description: options.description || '',
         growthFocus: options.growthFocus || '',
         chronicFocus: Array.isArray(options.chronicFocus) ? options.chronicFocus : [],
+        focusTags: Array.isArray(options.focusTags) ? options.focusTags : [],
         status: 'active',
         startDate: startDate,
         endDate: options.endDate || _specialPlanAddDays(startDate, cfg.termDays || 7),
@@ -77865,6 +77870,8 @@ var SPECIAL_PLAN_UI_TYPES = [
     // V519: 生病调理不再从「发起专项」创建，统一由「生病饮食调理」卡生成 7 天计划；保留标签供历史计划展示
     { type: 'illness',   label: '生病调理', hidden: true },
     { type: 'chronic',   label: '慢病调理' },
+    { type: 'occupation',label: '职业人群' },
+    { type: 'elder',     label: '中老年养护' },
     { type: 'growth',    label: '孩子成长' },
     { type: 'athlete',   label: '体育生备赛' },
     { type: 'fitness',   label: '健身减脂' },
@@ -78074,6 +78081,16 @@ function openSpecialPlanModal(memberId) {
             + '<input type="checkbox" name="spChronicFocus" value="' + t + '"' + (i === 0 ? ' checked' : '') + ' style="accent-color:#F97316;">'
             + t + '</label>';
     }).join('');
+    // V520: 职业人群 / 中老年养护的侧重多选
+    var _spChecksHtml = function (name, list, defIdx) {
+        return list.map(function (t, i) {
+            return '<label style="display:flex;align-items:center;gap:6px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:6px 9px;font-size:12px;color:#9A3412;cursor:pointer;">'
+                + '<input type="checkbox" name="' + name + '" value="' + t + '"' + (i === defIdx ? ' checked' : '') + ' style="accent-color:#F97316;">'
+                + t + '</label>';
+        }).join('');
+    };
+    var occupationChecks = _spChecksHtml('spOccupationFocus', ['久坐办公', '夜班轮班', '体力劳动', '长期驾驶'], 0);
+    var elderChecks = _spChecksHtml('spElderFocus', ['骨骼关节', '脾胃消化', '肌肉力量', '睡眠安神'], 0);
     panel.innerHTML = ''
         + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
         +   '<div style="font-size:16px;font-weight:700;color:#1F2937;">🎯 发起专项健康饮食计划</div>'
@@ -78091,6 +78108,16 @@ function openSpecialPlanModal(memberId) {
         +   '<div style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:9px 10px;line-height:1.65;">慢病调理是长期配餐方向：以低GI主食、少油少盐、足量蔬菜与优质蛋白为主，不替代药物与医生方案。</div>'
         +   '<div style="font-size:13px;font-weight:600;color:#374151;margin:10px 0 6px;">慢病方向（可多选）</div>'
         +   '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + chronicChecks + '</div>'
+        + '</div>'
+        + '<div id="spOccupationBox" style="display:none;margin-bottom:12px;">'
+        +   '<div style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:9px 10px;line-height:1.65;">按工作作息调整三餐节奏：久坐少油控精制碳水，夜班温和进餐不空腹硬扛，体力劳动保证能量与蛋白。</div>'
+        +   '<div style="font-size:13px;font-weight:600;color:#374151;margin:10px 0 6px;">职业侧重（可多选）</div>'
+        +   '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + occupationChecks + '</div>'
+        + '</div>'
+        + '<div id="spElderBox" style="display:none;margin-bottom:12px;">'
+        +   '<div style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:9px 10px;line-height:1.65;">中老年以“吃得下、吸收好、肌肉不流失”为主：足量优质蛋白、钙与维D，少盐少油、软烂易嚼。</div>'
+        +   '<div style="font-size:13px;font-weight:600;color:#374151;margin:10px 0 6px;">养护侧重（可多选）</div>'
+        +   '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + elderChecks + '</div>'
         + '</div>'
         + '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">具体情况</div>'
         + '<textarea id="spDescInput" rows="4" placeholder="如：感冒发烧第三天，食欲差、想吃清淡易消化的；或：体育生备赛期，需要高蛋白高能量" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E5E7EB;border-radius:10px;font-size:13px;line-height:1.6;resize:vertical;outline:none;"></textarea>'
@@ -78116,6 +78143,11 @@ function openSpecialPlanModal(memberId) {
         // V518: 「慢病调理」显示慢病方向多选
         var chronicBox = document.getElementById('spChronicBox');
         if (chronicBox) chronicBox.style.display = (type === 'chronic') ? 'block' : 'none';
+        // V520: 「职业人群」「中老年养护」显示侧重多选
+        var occBox = document.getElementById('spOccupationBox');
+        if (occBox) occBox.style.display = (type === 'occupation') ? 'block' : 'none';
+        var elderBox = document.getElementById('spElderBox');
+        if (elderBox) elderBox.style.display = (type === 'elder') ? 'block' : 'none';
         var quota = applySpecialPlanQuotaToButton(btn, type) || getSpecialPlanQuota(type);
         if (!quota || !line) return;
         line.textContent = _specialPlanUiLabel(type) + '：' + (quota.quotaPeriod === 'lifetime'
@@ -78156,6 +78188,14 @@ function openSpecialPlanModal(memberId) {
             var ccs = panel.querySelectorAll('input[name="spChronicFocus"]:checked');
             for (var ci = 0; ci < ccs.length; ci++) chronicFocus.push(ccs[ci].value);
             if (!chronicFocus.length) { showToast('请选择慢病方向'); return; }
+        }
+        // V520: 职业 / 中老年侧重（可多选，至少 1 项）
+        var focusTags = [];
+        if (type === 'occupation' || type === 'elder') {
+            var _fname = type === 'occupation' ? 'spOccupationFocus' : 'spElderFocus';
+            var _fcs = panel.querySelectorAll('input[name="' + _fname + '"]:checked');
+            for (var _fi = 0; _fi < _fcs.length; _fi++) focusTags.push(_fcs[_fi].value);
+            if (!focusTags.length) { showToast('请选择配餐侧重'); return; }
         }
 
         // 生成成功后写入 specialPlans（状态 active），失败则不占用配额
@@ -78199,6 +78239,13 @@ function openSpecialPlanModal(memberId) {
         if (type === 'chronic' && chronicFocus.length) {
             descForAI += '（慢病方向：' + chronicFocus.join('、') + '；以低GI主食、少油少盐、足量蔬菜与优质蛋白为主，不承诺疗效，不替代药物）';
         }
+        // V520: 职业 / 中老年侧重带进提示词
+        if (type === 'occupation' && focusTags.length) {
+            descForAI += '（职业侧重：' + focusTags.join('、') + '；按作息安排三餐节奏，久坐控精制碳水与油，夜班温和进餐，体力劳动保证能量与优质蛋白）';
+        }
+        if (type === 'elder' && focusTags.length) {
+            descForAI += '（养护侧重：' + focusTags.join('、') + '；优质蛋白足量、钙与维D充足，少盐少油、食材软烂易嚼好吸收）';
+        }
         var payload = {
             memberBrief: memberBrief,
             planType: type,
@@ -78221,6 +78268,7 @@ function openSpecialPlanModal(memberId) {
                     description: desc,
                     growthFocus: growthFocus,
                     chronicFocus: chronicFocus,
+                    focusTags: focusTags,
                     weeklyPlan: data.weeklyPlan || {},
                     report: data.report || '',
                     fangRefs: data.fangRefsUsed || payload.fangRag || payload.fangRefs || []
@@ -78491,7 +78539,8 @@ var _HM_ADVICE_MAP = {
     fitness: '需注意优质蛋白、控油控糖',
     infant: '需注意细腻易消化、少盐无添加',
     illness: '需注意清淡易消化、少量多餐',
-    chronic: '需注意低GI主食、少油少盐、足量蔬菜'
+    chronic: '需注意低GI主食、少油少盐、足量蔬菜',
+    occupation: '需注意作息配餐、久坐少油、夜班温和进餐'
 };
 var _HM_WEEK_THEMES = {
     elder: ['控温补肾', '软烂低盐', '健脾养胃', '润燥护肺', '补钙强骨', '清淡易嚼', '温补固本'],
@@ -78503,6 +78552,7 @@ var _HM_WEEK_THEMES = {
     infant: ['细腻辅食', '补铁食材', '健脾易消化', '少盐无添加', '维生素蔬果', '软烂易嚼', '均衡过渡'],
     illness: ['清淡补液', '软烂易消化', '优质蛋白', '维生素C', '少油少盐', '温补脾胃', '恢复巩固'],
     chronic: ['低GI主食', '少油少盐', '优质蛋白', '膳食纤维', '清淡控糖', '控脂搭配', '均衡巩固'],
+    occupation: ['久坐轻食', '控精制碳水', '优质蛋白', '护眼蔬果', '少油少盐', '加餐安排', '均衡巩固'],
     default: ['健脾养胃', '温补阳气', '优质蛋白', '时令蔬果', '低盐少油', '粗细搭配', '润燥收尾']
 };
 function _hmPad2(n) { return (n < 10 ? '0' : '') + n; }
@@ -78530,6 +78580,8 @@ function _hmFamilyTags() {
         else if (pt === 'fitness') add('健身人群', 'fitness');
         else if (pt === 'illness') add('生病调理', 'illness');
         else if (pt === 'chronic') add('慢病调理', 'chronic');
+        else if (pt === 'occupation') add('职业人群', 'occupation');
+        else if (pt === 'elder') add('老人', 'elder');
         var age = parseInt(m.age, 10);
         if (!isNaN(age)) {
             if (age >= 60) add('老人', 'elder');
