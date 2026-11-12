@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V510-20261112';
+        var APP_VER = 'V511-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79363,13 +79363,25 @@ function _hmAddDayToDiaryCore(dateKey) {
     try { if (typeof renderHomeDiaryCard === 'function') renderHomeDiaryCard(); } catch (e) {}
 }
 
+// V511: 未解锁的会员模块统一用这张锁卡，点击唤起升级说明
+function _hmLockCardHtml(title, desc) {
+    return '<div style="padding:0 12px 10px;"><div onclick="_fhShowPaywall(\'🔒 ' + title + ' · 会员专享\')" style="background:#fff;border:1px dashed #FDBA74;border-radius:14px;padding:14px;display:flex;align-items:center;gap:10px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
+        + '<div style="font-size:18px;flex-shrink:0;">🔒</div>'
+        + '<div style="flex:1;min-width:0;">'
+        +   '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+        +     '<span style="font-size:14px;font-weight:800;color:#C2410C;">' + title + '</span>'
+        +     '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
+        +   '</div>'
+        +   '<div style="font-size:11px;color:#9CA3AF;margin-top:2px;line-height:1.6;">' + desc + '</div>'
+        + '</div>'
+        + '<div style="flex-shrink:0;font-size:12px;color:#C2410C;font-weight:700;">解锁 ›</div>'
+        + '</div></div>';
+}
 function openSpecialPlanBoard() {
     closeSpecialPlanBoard();
-    // V455: 健康管家升级为订阅会员专享的「主动式 AI 营养师」，未订阅用户提示升级
-    if (typeof isFoodMember !== 'function' || !isFoodMember()) {
-        _fhShowPaywall('🔒 健康管家 · 主动式 AI 营养师为食养会员专享');
-        return;
-    }
+    // V511: 健康管家园页对所有用户开放，只有「白皮书 / 今日建议 / 营养食谱 / 特殊饮食调理 / 深度复盘」需会员解锁
+    var _hmMember = false;
+    try { _hmMember = (typeof isFoodMember === 'function') && !!isFoodMember(); } catch (e) {}
     try { _repairSoupOnlyMealsToday(); } catch (e) {}
     var plan = _getActiveSpecialPlan();
     var overlay = document.createElement('div');
@@ -79542,7 +79554,14 @@ function openSpecialPlanBoard() {
         + '</div>'
         + (plan ? '<button type="button" id="spBoardEndBtn" style="margin-left:auto;padding:6px 10px;border:1px solid #FED7AA;border-radius:10px;background:#fff;color:#C2410C;font-size:12px;cursor:pointer;">结束计划</button>' : '')
         + '</div>'
-        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:10px;">' + (window._wpCardHtml ? _wpCardHtml() : '') + bodyHtml + '<div id="hmAdviceSlot">' + _hmAdviceCardHtml() + '</div>' + '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' + _hmCareCardHtml() + _hmDeepReviewCardHtml() + freeToolsHtml + '</div>';
+        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:10px;">'
+        +   (_hmMember ? (window._wpCardHtml ? _wpCardHtml() : '') : _hmLockCardHtml('《家庭膳食健康白皮书》', '建档后生成专属健康档案与膳食建议'))
+        +   (_hmMember ? bodyHtml : '')
+        +   (_hmMember ? '<div id="hmAdviceSlot">' + _hmAdviceCardHtml() + '</div>' : _hmLockCardHtml('今日专属健康建议', '每天 1 条针对家庭专属计划的可执行建议'))
+        +   (_hmMember ? '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' : _hmLockCardHtml('营养食谱', '按家庭专属计划生成今日 / 3 天 / 7 天食谱'))
+        +   (_hmMember ? _hmCareCardHtml() : _hmLockCardHtml('特殊饮食调理', '按成员与症状生成当日家庭融合特供菜'))
+        +   (_hmMember ? _hmDeepReviewCardHtml() : _hmLockCardHtml('深度复盘', '近 7 天饮食风险预警、归因与改进建议'))
+        +   freeToolsHtml + '</div>';
 
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
@@ -80076,8 +80095,8 @@ window.renderHomeHealthButlerCard = function () {
             + '<div style="font-size:12px;font-weight:700;color:#92400E;">您的专属</div>'
             + '<div style="font-size:17px;font-weight:900;color:#7C2D12;">健康管家</div></div>'
             + '<div style="flex:1;min-width:0;">'
-            + '<div style="font-size:11px;color:#92400E;line-height:1.55;">升级后按家人症状生成特供调理食谱，并与全家三餐融合。</div></div>'
-            + '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#C2410C;background:#FFEDD5;border:1px solid #FDBA74;border-radius:999px;padding:4px 8px;">升级解锁</span>';
+            + '<div style="font-size:11px;color:#92400E;line-height:1.55;">查看健康管家：白皮书、今日建议、营养食谱、深度复盘（会员解锁）。</div></div>'
+            + '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#C2410C;background:#FFEDD5;border:1px solid #FDBA74;border-radius:999px;padding:4px 8px;">进入 ›</span>';
         return;
     }
     el.innerHTML = '<div style="flex-shrink:0;text-align:left;line-height:1.25;">'
