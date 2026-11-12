@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V533-20261112';
+        var APP_VER = 'V534-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79515,7 +79515,7 @@ function _hmAdviceCardHtml() {
             +   subChip
             +   '<span style="flex-shrink:0;margin-left:auto;font-size:12px;color:#B45309;font-weight:700;">▼ 展开</span>'
             + '</div>'
-            + '</div></div></div>';
+            + '</div></div>';
     }
     return '<div style="padding:0 12px 6px;"><div style="' + box + 'padding:14px;">'
         + '<div onclick="_hmToggleAdvice(event)" style="display:flex;align-items:center;gap:8px;cursor:pointer;">'
