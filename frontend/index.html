@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V513-20261112';
+        var APP_VER = 'V514-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79606,7 +79606,7 @@ function _hmCareCardHtml() {
     var o = _careActive();
     // V494: 标题改名「特殊饮食调理」；取消折叠，标题与按钮常显；副标题移到「发起饮食调理」弹窗
     // V496: 加入食记后整个版块收起为一行摘要，可点「查看详情」展开
-    var html = '<div id="hmCareCard" style="margin:6px 12px 0;background:#fff;border:1px solid #FED7AA;border-radius:14px;padding:12px;">'
+    var html = '<div id="hmCareCard" style="margin:6px 12px 6px;background:#fff;border:1px solid #FED7AA;border-radius:14px;padding:12px;">'
         + '<div style="display:flex;align-items:center;gap:8px;">'
         + '<div style="font-size:14px;font-weight:800;color:#C2410C;">💊 特殊饮食调理</div>'
         + '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
