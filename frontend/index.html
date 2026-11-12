@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V525-20261112';
+        var APP_VER = 'V526-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78810,7 +78810,7 @@ function _hmApplyMenuRules(menu) {
                 if (fv) usedVeg[fv] = 1;
             }
         }
-        menu[mt] = out;
+        menu[mt] = out.slice(0, minDishes >= 3 ? 3 : 2);
     });
     return menu;
 }
@@ -79720,28 +79720,6 @@ function openSpecialPlanBoard(focusPlanId) {
                 ? '<span style="font-size:11px;font-weight:700;color:#16A34A;">✅ 今日专项已完成</span>'
                 : '<span style="font-size:11px;font-weight:700;color:#EA580C;">今日专项待完成 ' + _tDone + '/' + _tTotal + '</span>');
 
-        var _todayInfo = _hmPlanDayInfo(plan);
-        var _todayFoodHtml = '';
-        [['🌅 早餐', 0], ['☀️ 午餐', 1], ['🌙 晚餐', 2]].forEach(function (md) {
-            var names = _spSplitDishNames(_todayInfo.meals[md[1]] || '');
-            if (!names.length) return;
-            _todayFoodHtml += '<div style="margin-top:8px;"><div style="font-size:11px;font-weight:800;color:#C2410C;">' + md[0] + '</div>'
-                + names.map(function (n) {
-                    var src = _hmFangSourceFor(n);
-                    return '<div style="font-size:13px;color:#1F2937;line-height:1.75;">· ' + escapeHtml(n)
-                        + (src ? ' <span style="font-size:10px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:7px;padding:1px 5px;">📖 引自《' + escapeHtml(src) + '》</span>' : '')
-                        + '</div>';
-                }).join('')
-                + '</div>';
-        });
-        var _todayFoodBlock = '<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:6px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
-            + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
-            +   '<span style="font-size:13px;font-weight:700;color:#92400E;">🍲 今日专项食谱</span>'
-            +   '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">每日自动更新</span>'
-            + '</div>'
-            + (_todayFoodHtml || '<div style="font-size:12px;color:#9CA3AF;">今日专项食谱生成中，稍后自动更新。</div>')
-            + '<button type="button" id="hmAdoptPlanBtn" style="width:100%;margin-top:10px;padding:11px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:13px;font-weight:800;cursor:pointer;">✅ 一键采纳到餐单</button>'
-            + '</div>';
         bodyHtml = '<div style="padding:10px 12px 6px;">'
             + '<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:6px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
             +   '<div style="display:flex;align-items:flex-start;gap:8px;">'
@@ -79761,7 +79739,6 @@ function openSpecialPlanBoard(focusPlanId) {
             +   '</div>'
             +   (!isOver && !plan.primary ? '<button type="button" onclick="window._spSetPrimary(\'' + escapeHtml(String(plan.planId || '')) + '\')" style="width:100%;margin-top:8px;padding:8px;border:1px dashed #FDBA74;border-radius:10px;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:700;cursor:pointer;">设为家庭专属计划（全家庭仅 1 个）</button>' : '')
             + '</div>'
-            + _todayFoodBlock
             + '<div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
             +   '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">'
             +     '<span style="font-size:13px;font-weight:700;color:#92400E;">🍲 专项健康饮食报告</span>'
@@ -79829,8 +79806,6 @@ function openSpecialPlanBoard(focusPlanId) {
     updateGutRestBanner();  // V374: 打开健康管家里即刷新休息时钟
 
     document.getElementById('spBoardCloseBtn').onclick = closeSpecialPlanBoard;
-    var _hmAdoptPlanBtn = document.getElementById('hmAdoptPlanBtn');
-    if (_hmAdoptPlanBtn && plan) _hmAdoptPlanBtn.onclick = function () { _hmAdoptPlanToday(plan.planId); };
     var endBtn = document.getElementById('spBoardEndBtn');
     if (endBtn && plan) endBtn.onclick = function () { _confirmEndSpecialPlan(plan); };
 }
