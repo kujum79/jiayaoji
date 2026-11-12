@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V527-20261112';
+        var APP_VER = 'V528-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79491,11 +79491,13 @@ function _hmAdviceCardHtml() {
             ? ('家庭专属：' + escapeHtml(plan.memberName || '家人') + ' · 第 ' + _hmPlanDayInfo(plan).dayNo + ' 天')
             : '今日 1 个动作';
         return '<div style="padding:0 12px 6px;"><div style="' + box + 'padding:12px 14px;">'
-            + '<div onclick="_hmToggleAdvice(event)" style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow:hidden;cursor:pointer;">'
-            +   '<div style="font-size:14px;font-weight:800;color:#C2410C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">' + head + '</div>'
-            +   '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
-            +   '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + subText + '</span>'
-            +   '<span style="flex-shrink:0;margin-left:auto;font-size:12px;color:#B45309;font-weight:700;">▼ 展开</span>'
+            + '<div onclick="_hmToggleAdvice(event)" style="cursor:pointer;">'
+            +   '<div style="display:flex;align-items:center;gap:8px;">'
+            +     '<div style="font-size:14px;font-weight:800;color:#C2410C;">' + head + '</div>'
+            +     '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
+            +     '<span style="flex-shrink:0;margin-left:auto;font-size:12px;color:#B45309;font-weight:700;">▼ 展开</span>'
+            +   '</div>'
+            +   '<div style="font-size:11px;color:#9A3412;margin-top:4px;">' + subText + '</div>'
             + '</div></div></div>';
     }
     return '<div style="padding:0 12px 6px;"><div style="' + box + 'padding:14px;">'
