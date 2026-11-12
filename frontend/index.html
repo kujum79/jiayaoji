@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V539-20261112';
+        var APP_VER = 'V540-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -75,7 +75,7 @@
     /* V195: 家庭备份键清单必须在所有启动期迁移之前初始化——migrateStripPlainRice / migrateFamilyRoles 等
        在脚本更早位置就会调用 lsSet，若此处尚未赋值，_isBackupKey 全部返回 false，
        演示模式只读拦截与游客态写键拦截都会被绕过（实测演示日历被改写为 24590 字节）。 */
-    var _FAMILY_BACKUP_KEYS = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
+    var _FAMILY_BACKUP_KEYS = ['dietCalendar','familyData','contactsData','diningGroups','customDiningGroups','familyHomeAddress',
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
@@ -9079,7 +9079,7 @@ function familyKey(key) {
     var fid = getFamilyId();
     if (!fid) return key;
     // 家庭相关数据加前缀，全局数据不加
-    var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
+    var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','customDiningGroups','familyHomeAddress',
         'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
@@ -12917,7 +12917,7 @@ function claimGlobalDataForFamily() {
     var fid = getFamilyId();
     if (!fid) return;
     var claimFlag = 'dataClaimed_' + fid;
-    var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
+    var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','customDiningGroups','familyHomeAddress',
         'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
@@ -12959,7 +12959,7 @@ function exportFamilyData() {
     var fid = getFamilyId();
     if (!fid) { showToast('请先创建或加入家庭'); return; }
     var familyName = localStorage.getItem('familyName_' + fid) || '未命名家庭';
-    var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','familyHomeAddress',
+    var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','customDiningGroups','familyHomeAddress',
         'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
@@ -40855,25 +40855,23 @@ function renderFamily() {
     // ============ V78 顶部条块平铺（切换当前就餐组卡；膳食日记卡移到小家成员之后） ============
     (function() {
         var topCardStyle = 'background:white;border:1px solid #F3F4F6;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04);margin-bottom:12px;';
-        // 1) 切换当前就餐组（V135: 下拉移回「当前就餐组」右侧）
+        // 1) 当前就餐组（V540: 固定组 + 智能推荐 + 自定义组，点击打开三层选择面板）
+        _dgSyncDynamic();
         var curGroup = getDefaultDiningGroup();
-        var dgOptions = diningGroups
-            .filter(g => (g.groupType !== 'social' && !g.isContainer) || g.groupType === 'social')
-            .map(g => `<option value="${escapeHtml(g.name)}" ${g.name === curGroup.name ? 'selected' : ''}>${escapeHtml(g.name)}${g.members.length > 0 ? ' ' + g.members.length + '人' : ''}</option>`)
-            .join('');
+        var curCount = (curGroup && Array.isArray(curGroup.members)) ? curGroup.members.length : 0;
         familyList.insertAdjacentHTML('beforeend', `
             <div style="${topCardStyle}display:flex;align-items:center;gap:8px;padding:10px 16px;">
                 <span style="font-size:14px;color:#374151;font-weight:500;white-space:nowrap;flex:0 0 auto;">当前就餐组</span>
-                <select id="diningGroupInlineSelect" style="padding:4px 8px;border:1px solid #FED7AA;border-radius:6px;background:#FFFBEB;font-size:13px;color:#C2410C;cursor:pointer;outline:none;max-width:120px;">${dgOptions}</select>
-                ${familyData.length === 1 ? `<button id="singleMealBtn" style="margin-left:auto;height:24px;padding:0 12px;border:1px solid #F97316;border-radius:10px;background:${_singleMealBannerOpen ? '#FFEDD5' : 'white'};color:#F97316;font-size:12px;cursor:pointer;white-space:nowrap;flex:0 0 auto;">一人餐</button>` : ''}
-                <button id="addDiningGroupBtn" style="margin-left:${familyData.length === 1 ? '6px' : 'auto'};height:24px;padding:0 12px;border:1px solid #F97316;border-radius:10px;background:white;color:#F97316;font-size:12px;cursor:pointer;white-space:nowrap;flex:0 0 auto;">新建就餐组</button>
+                <button id="diningGroupPickerBtn" type="button" style="flex:1 1 auto;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 10px;border:1px solid #FED7AA;border-radius:8px;background:#FFFBEB;font-size:13px;color:#C2410C;cursor:pointer;text-align:left;">
+                    <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(curGroup.name)}${curCount ? ' · ' + curCount + '人' : ''}</span>
+                    <span style="flex:0 0 auto;font-size:11px;color:#F97316;">切换 ▼</span>
+                </button>
+                ${familyData.length === 1 ? `<button id="singleMealBtn" style="margin-left:0;height:24px;padding:0 12px;border:1px solid #F97316;border-radius:10px;background:${_singleMealBannerOpen ? '#FFEDD5' : 'white'};color:#F97316;font-size:12px;cursor:pointer;white-space:nowrap;flex:0 0 auto;">一人餐</button>` : ''}
             </div>
         `);
-        // 下拉切换（setCurrentDiningGroup 内部 renderFamily 重建）；「新建就餐组」→ 子组弹窗（确认后自动切换+刷新）
-        var dgSel = document.getElementById('diningGroupInlineSelect');
-        if (dgSel) dgSel.addEventListener('change', function(e) { setCurrentDiningGroup(e.target.value); });
-        var dgAddBtn = document.getElementById('addDiningGroupBtn');
-        if (dgAddBtn) dgAddBtn.addEventListener('click', function() { _openAddSubGroupModal(); });
+        // 点「当前就餐组」→ 三层就餐组面板（固定组 / 智能推荐 / 自定义组）
+        var dgPickBtn = document.getElementById('diningGroupPickerBtn');
+        if (dgPickBtn) dgPickBtn.addEventListener('click', function() { _openDiningGroupSwitcher(); });
         var smBtn = document.getElementById('singleMealBtn');
         if (smBtn) smBtn.addEventListener('click', function() { toggleSingleMealBanner(); });
     })();
@@ -42991,7 +42989,7 @@ function openFamilyQuickAdd() {
     ov.addEventListener('click', function(e) { if (e.target === this) this.remove(); });
     var items = [
         ['👥', '添加就餐人', '新增一位就餐人并设置口味', "_quickAddMember()"],
-        ['🍽', '新建就餐组', '创建新的就餐分组', "_openAddSubGroupModal()"],
+        ['🍽', '新建就餐组', '创建自定义就餐组（如：男方家族）', "_openCustomDiningGroupModal()"],
         ['📝', '写一篇日记', '随时感记，一句话 + 图片', "openMomentDiaryModal(false)"],
         ['📷', '快速拍照记录', '拍下此刻，一键保存', "openMomentDiaryModal(true)"],
         ['🍲', '发布一个作品', '分享你的私房创作', "_openWorkAddModal()"]
@@ -43117,66 +43115,294 @@ function _scrollToFamilyMembers() {
     el.style.boxShadow = '0 0 0 2px #FDBA74';
     setTimeout(function() { el.style.boxShadow = 'none'; }, 1200);
 }
-// V68: 点「当前就餐组」→ 打开就餐组切换弹层（原内嵌下拉改为弹层页）
+// V540: 就餐组重构——固定基础组 + 智能动态推荐 + 自定义创建
+var _DG_CUSTOM_KEY = 'customDiningGroups';
+function _dgGetCustomGroups() {
+    try {
+        var arr = JSON.parse(lsGet(_DG_CUSTOM_KEY) || '[]');
+        return Array.isArray(arr) ? arr.filter(function (g) { return g && g.name; }) : [];
+    } catch (e) { return []; }
+}
+function _dgSaveCustomGroups(arr) {
+    try { lsSet(_DG_CUSTOM_KEY, JSON.stringify(Array.isArray(arr) ? arr : [])); } catch (e) {}
+}
+function _dgMembers() {
+    var arr = [];
+    try { arr = getFamilyMembers(); } catch (e) { arr = []; }
+    if ((!arr || !arr.length) && typeof familyData !== 'undefined' && Array.isArray(familyData)) arr = familyData;
+    return Array.isArray(arr) ? arr : [];
+}
+function _dgAge(m) { var a = parseInt(m && m.age, 10); return isNaN(a) ? null : a; }
+// 性别识别：优先 gender 字段，其次姓名 / tags / relationship 里的「儿子/女儿/男孩/女孩」
+function _dgGender(m) {
+    var g = String((m && m.gender) || '');
+    if (g.indexOf('女') >= 0) return 'female';
+    if (g.indexOf('男') >= 0) return 'male';
+    var nm = String((m && m.name) || '');
+    var tags = [];
+    if (Array.isArray(m && m.tags)) tags = m.tags.slice();
+    else if (m && m.tags) tags = String(m.tags).split(/[,，\s]+/);
+    if (m && m.tag) tags.push(String(m.tag));
+    if (m && m.relationship) tags.push(String(m.relationship));
+    var tx = nm + ' ' + tags.join(' ') + ' ' + String((m && m.note) || '');
+    if (/女儿|闺女|女孩|女娃/.test(tx)) return 'female';
+    if (/儿子|男孩|男娃/.test(tx)) return 'male';
+    return '';
+}
+function _dgUniqNames(arr) {
+    var out = [];
+    (arr || []).forEach(function (n) { n = String(n || '').trim(); if (n && out.indexOf(n) < 0) out.push(n); });
+    return out;
+}
+function _dgCurrentUserName() {
+    try {
+        var m = (typeof getCurrentMember === 'function') ? getCurrentMember() : null;
+        if (m && m.name) return m.name;
+    } catch (e) {}
+    var all = _dgMembers();
+    return all.length ? all[0].name : '我';
+}
+// 智能推荐：只从已录入成员中组合，绝不生成「儿子朋友」这类幽灵成员
+function _dgSmartGroups() {
+    var members = _dgMembers();
+    var curName = _dgCurrentUserName();
+    var out = [];
+    var kids = members.filter(function (m) { var a = _dgAge(m); return a !== null && a < 12; });
+    if (kids.length) {
+        out.push({
+            key: 'smart_kids', kind: 'smart', icon: '👶', name: '亲子带娃',
+            members: _dgUniqNames(kids.map(function (m) { return m.name; }).concat([curName]))
+        });
+    }
+    members.forEach(function (m) {
+        var a = _dgAge(m);
+        if (a === null || a < 13 || a > 18) return;
+        var g = _dgGender(m);
+        if (!g) return;
+        var nm = String(m.name || '');
+        var isGeneric = (g === 'female') ? /女儿|闺女/.test(nm) : /儿子/.test(nm);
+        var label = isGeneric ? ((g === 'female' ? '女儿' : '儿子') + '专场') : (nm + '专场');
+        out.push({
+            key: 'smart_teen_' + (m.id || nm), kind: 'smart',
+            icon: (g === 'female' ? '👧' : '👦'), name: label,
+            members: _dgUniqNames([curName, nm])
+        });
+    });
+    var elders = members.filter(function (m) { var a = _dgAge(m); return a !== null && a >= 60; });
+    if (elders.length) {
+        out.push({
+            key: 'smart_elders', kind: 'smart', icon: '👴', name: '长辈专场',
+            members: _dgUniqNames(elders.map(function (m) { return m.name; }))
+        });
+    }
+    return out;
+}
+// 全部就餐组：固定组 + 智能推荐 + 自定义组
+function _dgAllGroups() {
+    var members = _dgMembers();
+    var curName = _dgCurrentUserName();
+    var allNames = _dgUniqNames(members.map(function (m) { return m.name; }));
+    var list = [
+        { key: 'fixed_all', kind: 'fixed', icon: '⭐', name: '全家', members: allNames },
+        { key: 'fixed_me', kind: 'fixed', icon: '⭐', name: '我自己', members: curName ? [curName] : [] }
+    ];
+    list = list.concat(_dgSmartGroups());
+    _dgGetCustomGroups().forEach(function (g) {
+        var ids = Array.isArray(g.memberIds) ? g.memberIds.map(String) : [];
+        var names = members.filter(function (m) { return ids.indexOf(String(m.id)) >= 0; }).map(function (m) { return m.name; });
+        if (!names.length && Array.isArray(g.members)) names = g.members.slice();
+        list.push({ key: 'custom_' + g.id, kind: 'custom', id: g.id, icon: '➕', name: g.name, members: _dgUniqNames(names) });
+    });
+    return list;
+}
+function _dgFindRecord(group) {
+    var gs = (typeof diningGroups !== 'undefined' && Array.isArray(diningGroups)) ? diningGroups : [];
+    if (group.kind === 'custom') return gs.find(function (x) { return String(x.id) === String(group.id); }) || null;
+    return gs.find(function (x) { return x && x.autoKey === group.key; }) || null;
+}
+// 选中某组：落成 diningGroups 记录（下游份量/采购按 members.length 计算）并切换
+function _dgApplyGroup(group) {
+    if (!group) return;
+    if (!group.members || !group.members.length) { showToast('该就餐组暂无成员'); return; }
+    var gs = (typeof diningGroups !== 'undefined' && Array.isArray(diningGroups)) ? diningGroups.slice() : [];
+    var rec = _dgFindRecord(group);
+    if (!rec) {
+        rec = { id: (group.kind === 'custom' ? group.id : ('dg_' + group.key)), name: group.name, members: [], icon: group.icon, groupType: 'virtual', autoKey: (group.kind === 'custom' ? '' : group.key), isDefault: false, createdAt: Date.now() };
+        gs.push(rec);
+    }
+    rec.name = group.name;
+    rec.members = group.members.slice();
+    rec.icon = group.icon || '🍽';
+    diningGroups = gs;
+    lsSet('diningGroups', JSON.stringify(gs));
+    setCurrentDiningGroup(rec.name);
+}
+// 当前组是动态组时，成员随家庭档案实时刷新（孩子长大 / 新增老人 / 改名等）
+function _dgSyncDynamic() {
+    try {
+        var curName = lsGet('currentDiningGroup');
+        if (!curName) return;
+        var gs = (typeof diningGroups !== 'undefined' && Array.isArray(diningGroups)) ? diningGroups : [];
+        var rec = null;
+        for (var i = 0; i < gs.length; i++) { if (gs[i] && gs[i].autoKey && gs[i].name === curName) { rec = gs[i]; break; } }
+        if (!rec) return;
+        var defs = _dgAllGroups();
+        var def = null;
+        for (var j = 0; j < defs.length; j++) { if (defs[j].key === rec.autoKey) { def = defs[j]; break; } }
+        if (!def) { for (var k = 0; k < defs.length; k++) { if (defs[k].key === 'fixed_all') { def = defs[k]; break; } } }
+        if (!def || !def.members.length) return;
+        if (rec.name === def.name && JSON.stringify(rec.members) === JSON.stringify(def.members)) return;
+        rec.name = def.name;
+        rec.members = def.members.slice();
+        rec.autoKey = def.key;
+        diningGroups = gs;
+        lsSet('diningGroups', JSON.stringify(gs));
+        if (curName !== def.name) lsSet('currentDiningGroup', def.name);
+    } catch (e) {}
+}
+// V540: 点「当前就餐组」→ 三层选择面板（固定组 / 智能推荐 / 自定义组）
 function _openDiningGroupSwitcher() {
     var old = document.getElementById('diningGroupSwitcherOverlay');
     if (old) old.remove();
-    const currentGroup = getDefaultDiningGroup();
-    const mainGroups = diningGroups.filter(g => g.groupType !== 'social');
-    const socialSubGroups = diningGroups.filter(g => g.groupType === 'social');
-    const overlay = document.createElement('div');
-    overlay.id = 'diningGroupSwitcherOverlay';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(31,41,55,0.6);display:flex;align-items:flex-end;justify-content:center;';
-    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
-    const optionHtml = mainGroups.map(group => {
-        if (group.isContainer) {
-            const subGroupTags = socialSubGroups.map(sg => `
-                <button class="social-sub-tag" data-name="${sg.name}" style="display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;font-size:13px;cursor:pointer;border:1px solid ${sg.name === currentGroup.name ? '#F97316' : '#E5E7EB'};background:${sg.name === currentGroup.name ? '#FFF7ED' : '#F9FAFB'};color:${sg.name === currentGroup.name ? '#C2410C' : '#6B7280'};white-space:nowrap;">
-                    ${sg.name}${sg.members.length > 0 ? ' ' + sg.members.length + '人' : ''}
-                </button>
-            `).join(' ');
-            return `
-                <div style="padding:8px 16px 4px;font-weight:600;color:#9A3412;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
-                    <span>${group.name}</span>
-                    <span style="display:inline-flex;flex-wrap:wrap;gap:6px;flex:1;">${subGroupTags}</span>
-                </div>
-                <button class="add-social-sub-btn" style="display:block;width:calc(100% - 32px);margin:4px 16px;padding:9px;font-size:13px;border:1px dashed #FED7AA;color:#F97316;background:#FFFBEB;border-radius:10px;cursor:pointer;">
-                    ＋ 新建社交子组
-                </button>
-            `;
+    _dgSyncDynamic();
+    var groups = _dgAllGroups();
+    var cur = getDefaultDiningGroup();
+    function isActive(g) {
+        if (!cur) return false;
+        if (g.kind === 'custom') return String(cur.id) === String(g.id);
+        if (cur.autoKey === g.key) return true;
+        // 兼容旧版「小家 / 女方家族」硬编码组：成员集合一致时也标记为当前选中
+        if (g.kind === 'fixed' && Array.isArray(cur.members) && cur.members.length) {
+            var a = g.members.slice().sort().join('|');
+            var b = cur.members.slice().sort().join('|');
+            return a === b;
         }
-        return `
-            <button class="dg-option" data-name="${group.name}" style="display:flex;align-items:center;gap:8px;width:calc(100% - 32px);margin:0 16px;padding:11px 8px;border:none;border-bottom:1px solid #F9FAFB;background:white;cursor:pointer;text-align:left;">
-                <span style="flex:1;min-width:0;font-size:14px;color:${group.name === currentGroup.name ? '#C2410C' : '#374151'};font-weight:${group.name === currentGroup.name ? '700' : '400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${group.name} <span style="font-size:12px;color:#9CA3AF;font-weight:400;">· ${group.members.length > 0 ? group.members.join('、') : '暂无成员'}</span></span>
-                <span style="flex:0 0 auto;">${group.name === currentGroup.name ? '✅' : ''}</span>
-            </button>
-        `;
-    }).join('');
-    overlay.innerHTML = `
-        <div style="background:white;border-radius:20px 20px 0 0;width:430px;max-width:100%;max-height:75vh;overflow-y:auto;padding:0 0 20px;">
-            <div style="position:sticky;top:0;background:white;display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;border-bottom:1px solid #F3F4F6;">
-                <span style="font-size:15px;font-weight:700;color:#374151;">👫 选择就餐组</span>
-                <button onclick="document.getElementById('diningGroupSwitcherOverlay').remove()" style="background:#F3F4F6;border:none;border-radius:50%;width:26px;height:26px;font-size:14px;color:#6B7280;cursor:pointer;line-height:1;">✕</button>
-            </div>
-            <div style="padding-top:6px;">${optionHtml}</div>
-        </div>
-    `;
+        return false;
+    }
+    function rowHtml(g) {
+        var active = isActive(g);
+        var memTxt = (g.members && g.members.length) ? g.members.join('、') : '暂无成员';
+        var del = (g.kind === 'custom')
+            ? '<button type="button" class="dg-del" data-id="' + escapeHtml(String(g.id)) + '" style="flex:0 0 auto;border:none;background:none;color:#DC2626;font-size:12px;padding:4px 6px;cursor:pointer;">删除</button>'
+            : '';
+        return '<div class="dg-row" data-key="' + escapeHtml(g.key) + '" style="display:flex;align-items:center;gap:8px;padding:9px 16px;border-bottom:1px solid #F9FAFB;cursor:pointer;">'
+            + '<span style="flex:0 0 auto;font-size:15px;line-height:1;">' + g.icon + '</span>'
+            + '<span style="flex:1 1 auto;min-width:0;">'
+            +   '<div style="font-size:14px;font-weight:' + (active ? '800' : '500') + ';color:' + (active ? '#C2410C' : '#374151') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(g.name) + (g.members.length ? ' <span style="font-size:12px;color:#9CA3AF;font-weight:400;">(' + g.members.length + '人)</span>' : '') + '</div>'
+            +   '<div style="font-size:11px;color:#9CA3AF;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(memTxt) + '</div>'
+            + '</span>' + del + '<span style="flex:0 0 auto;font-size:13px;">' + (active ? '✅' : '') + '</span></div>';
+    }
+    function sectionHtml(title, list) {
+        if (!list.length) return '';
+        return '<div style="padding:10px 16px 2px;font-size:12px;font-weight:800;color:#9A3412;">' + title + '</div>' + list.map(rowHtml).join('');
+    }
+    var fixedList = groups.filter(function (g) { return g.kind === 'fixed'; });
+    var smartList = groups.filter(function (g) { return g.kind === 'smart'; });
+    var customList = groups.filter(function (g) { return g.kind === 'custom'; });
+    var overlay = document.createElement('div');
+    overlay.id = 'diningGroupSwitcherOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100030;background:rgba(31,41,55,0.6);display:flex;align-items:flex-end;justify-content:center;';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    overlay.innerHTML = '<div style="background:#fff;border-radius:20px 20px 0 0;width:430px;max-width:100%;max-height:78vh;overflow-y:auto;padding-bottom:calc(14px + env(safe-area-inset-bottom));">'
+        + '<div style="position:sticky;top:0;z-index:2;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;border-bottom:1px solid #F3F4F6;">'
+        + '<span style="font-size:15px;font-weight:800;color:#1F2937;">🍽 选择就餐组</span>'
+        + '<button id="dgSwitcherClose" type="button" style="background:#F3F4F6;border:none;border-radius:50%;width:26px;height:26px;font-size:14px;color:#6B7280;cursor:pointer;line-height:1;">✕</button></div>'
+        + sectionHtml('⭐ 固定组', fixedList)
+        + sectionHtml('✨ 智能推荐', smartList)
+        + '<div style="padding:10px 16px 2px;font-size:12px;font-weight:800;color:#9A3412;">➕ 自定义组</div>'
+        + (customList.length ? customList.map(rowHtml).join('') : '<div style="padding:4px 16px 6px;font-size:12px;color:#9CA3AF;">还没有自定义组，可用下方按钮创建「男方家族」「同事聚会」等</div>')
+        + '<div style="padding:8px 16px 4px;"><button id="dgNewCustomBtn" type="button" style="width:100%;padding:10px;border:1px dashed #FDBA74;border-radius:10px;background:#FFF7ED;color:#C2410C;font-size:13px;font-weight:700;cursor:pointer;">＋ 新建自定义就餐组</button></div>'
+        + '</div>';
     document.body.appendChild(overlay);
-    // 组切换：关弹层 → setCurrentDiningGroup（内部 renderFamily 重建页面）
-    overlay.querySelectorAll('.dg-option[data-name], .social-sub-tag[data-name]').forEach(btn => {
-        btn.addEventListener('click', function() {
+    var map = {};
+    groups.forEach(function (g) { map[g.key] = g; });
+    overlay.querySelector('#dgSwitcherClose').addEventListener('click', function () { overlay.remove(); });
+    overlay.querySelectorAll('.dg-row[data-key]').forEach(function (row) {
+        row.addEventListener('click', function () {
+            var g = map[row.getAttribute('data-key')];
             overlay.remove();
-            setCurrentDiningGroup(btn.dataset.name);
+            _dgApplyGroup(g);
         });
     });
-    // 新建社交子组（复用原有 modal 逻辑）
-    const addSubBtn = overlay.querySelector('.add-social-sub-btn');
-    if (addSubBtn) {
-        addSubBtn.addEventListener('click', function(e) {
+    overlay.querySelectorAll('.dg-del[data-id]').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
             e.stopPropagation();
-            _openAddSubGroupModal();
+            var gid = btn.getAttribute('data-id');
+            var g = _dgGetCustomGroups().filter(function (x) { return String(x.id) === String(gid); })[0];
+            if (!g) return;
+            showConfirmDialogTwice('确定删除就餐组「' + g.name + '」吗？', '再次确认：删除后不可恢复', function () {
+                _dgSaveCustomGroups(_dgGetCustomGroups().filter(function (x) { return String(x.id) !== String(gid); }));
+                try {
+                    diningGroups = (diningGroups || []).filter(function (x) { return String(x.id) !== String(gid); });
+                    lsSet('diningGroups', JSON.stringify(diningGroups));
+                    if (lsGet('currentDiningGroup') === g.name) {
+                        var allDef = _dgAllGroups().filter(function (x) { return x.key === 'fixed_all'; })[0];
+                        if (allDef) _dgApplyGroup(allDef);
+                    }
+                } catch (e2) {}
+                overlay.remove();
+                renderFamily();
+                showToast('已删除就餐组「' + g.name + '」');
+            });
         });
-    }
+    });
+    overlay.querySelector('#dgNewCustomBtn').addEventListener('click', function () {
+        overlay.remove();
+        _openCustomDiningGroupModal();
+    });
+}
+// V540: 新建自定义就餐组（组名 + 勾选已录入的家庭成员）
+function _openCustomDiningGroupModal() {
+    var old = document.getElementById('customDiningGroupModal');
+    if (old) old.remove();
+    var members = _dgMembers();
+    var checks = members.map(function (m) {
+        var meta = [];
+        if (m.age) meta.push(m.age + '岁');
+        if (m.relationship && m.relationship !== '家人') meta.push(m.relationship);
+        return '<label style="display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid #F3F4F6;border-radius:10px;margin-bottom:6px;background:#fff;cursor:pointer;">'
+            + '<input type="checkbox" class="dg-member-check" value="' + escapeHtml(String(m.id)) + '" checked style="width:16px;height:16px;accent-color:#F97316;flex:0 0 auto;">'
+            + '<span style="flex:1;min-width:0;font-size:14px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(m.name)
+            + (meta.length ? '<span style="font-size:11px;color:#9CA3AF;margin-left:6px;">' + escapeHtml(meta.join(' · ')) + '</span>' : '')
+            + '</span></label>';
+    }).join('');
+    var modal = document.createElement('div');
+    modal.id = 'customDiningGroupModal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:100040;background:rgba(31,41,55,0.6);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    modal.addEventListener('click', function (e) { if (e.target === modal) modal.remove(); });
+    modal.innerHTML = '<div style="background:#fff;width:100%;max-width:400px;max-height:82vh;border-radius:16px;display:flex;flex-direction:column;overflow:hidden;">'
+        + '<div style="padding:14px 16px 10px;border-bottom:1px solid #F3F4F6;display:flex;align-items:center;justify-content:space-between;">'
+        + '<div style="font-size:15px;font-weight:800;color:#1F2937;">➕ 新建自定义就餐组</div>'
+        + '<button id="dgCustomClose" type="button" style="background:#F3F4F6;border:none;border-radius:50%;width:26px;height:26px;font-size:14px;color:#6B7280;cursor:pointer;line-height:1;">✕</button></div>'
+        + '<div style="padding:12px 16px;overflow-y:auto;flex:1 1 auto;">'
+        + '<input id="dgCustomName" type="text" maxlength="12" placeholder="组名，如：男方家族、同事聚会" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #FED7AA;border-radius:10px;font-size:14px;outline:none;margin-bottom:8px;">'
+        + '<div style="font-size:12px;color:#9CA3AF;margin:4px 0 8px;">勾选这一组要吃饭的人（只从已录入的成员中选择）</div>'
+        + (checks || '<div style="font-size:13px;color:#9CA3AF;padding:10px 0;">暂无家庭成员，请先添加成员</div>')
+        + '</div>'
+        + '<div style="padding:10px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid #F3F4F6;display:flex;gap:8px;">'
+        + '<button id="dgCustomCancel" type="button" style="flex:1;padding:10px;border:1px solid #E5E7EB;border-radius:10px;background:#fff;color:#6B7280;font-size:14px;cursor:pointer;">取消</button>'
+        + '<button id="dgCustomSave" type="button" style="flex:2;padding:10px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">保存并切换</button>'
+        + '</div></div>';
+    document.body.appendChild(modal);
+    modal.querySelector('#dgCustomClose').addEventListener('click', function () { modal.remove(); });
+    modal.querySelector('#dgCustomCancel').addEventListener('click', function () { modal.remove(); });
+    modal.querySelector('#dgCustomSave').addEventListener('click', function () {
+        var nameEl = modal.querySelector('#dgCustomName');
+        var name = String((nameEl && nameEl.value) || '').trim();
+        if (!name) { showToast('请输入组名'); return; }
+        if (['全家', '我自己', '亲子带娃', '长辈专场'].indexOf(name) >= 0) { showToast('该名称与系统推荐组重复'); return; }
+        var dup = _dgGetCustomGroups().some(function (g) { return g.name === name; })
+            || (Array.isArray(diningGroups) ? diningGroups : []).some(function (g) { return g && g.name === name; });
+        if (dup) { showToast('该组名已存在'); return; }
+        var picked = [];
+        modal.querySelectorAll('.dg-member-check:checked').forEach(function (cb) { picked.push(String(cb.value)); });
+        if (!picked.length) { showToast('请至少勾选 1 位成员'); return; }
+        var names = members.filter(function (m) { return picked.indexOf(String(m.id)) >= 0; }).map(function (m) { return m.name; });
+        var g = { id: 'group_' + Date.now(), name: name, memberIds: picked, members: names, createdAt: Date.now() };
+        var all = _dgGetCustomGroups(); all.push(g); _dgSaveCustomGroups(all);
+        modal.remove();
+        _dgApplyGroup({ key: 'custom_' + g.id, kind: 'custom', id: g.id, icon: '➕', name: g.name, members: names });
+    });
 }
 function renderCurrentDiningGroupSelector() {
     // 就餐组选择器：始终渲染（单人模式显示当前组"小家"）
