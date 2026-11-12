@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V536-20261112';
+        var APP_VER = 'V537-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -78882,6 +78882,12 @@ window._hmOpenMealSchedule = function (ev) {
         + '</div>';
     document.body.appendChild(box);
 };
+function _hmInvalidateMenu() {
+    _HM_MENU_CACHE.menu = null;
+    _HM_MULTI.days = null;
+    _HM_MULTI.key = '';
+    _HM_MULTI.loading = false;
+}
 window._hmToggleHomeMeal = function (d, mk, ev) {
     if (ev && ev.preventDefault) ev.preventDefault();
     if (ev && ev.stopPropagation) ev.stopPropagation();
@@ -78889,6 +78895,8 @@ window._hmToggleHomeMeal = function (d, mk, ev) {
     st[d][mk] = !(st[d][mk] !== false);
     _hmSaveHomeMealSetting(st);
     _HM_MEAL_TEMP = {};
+    _hmInvalidateMenu();
+    _hmRenderMenuSection();
     window._hmOpenMealSchedule();
 };
 window._hmCloseMealSchedule = function (ev) {
@@ -78896,16 +78904,14 @@ window._hmCloseMealSchedule = function (ev) {
     if (ev && ev.stopPropagation) ev.stopPropagation();
     var box = document.getElementById('hmScheduleModal');
     if (box && box.parentNode) box.parentNode.removeChild(box);
-    _HM_MULTI = { key: '', range: 1, days: null, loading: false };
-    _HM_MENU_CACHE.menu = null;
+    _hmInvalidateMenu();
     _hmRenderMenuSection();
 };
 window._hmForceHomeMeal = function (dk, mk, ev) {
     if (ev && ev.preventDefault) ev.preventDefault();
     if (ev && ev.stopPropagation) ev.stopPropagation();
     _HM_MEAL_TEMP[dk + '_' + mk] = 1;
-    _HM_MULTI = { key: '', range: 1, days: null, loading: false };
-    _HM_MENU_CACHE.menu = null;
+    _hmInvalidateMenu();
     _hmRenderMenuSection();
 };
 function _hmApplyMenuRules(menu) {
