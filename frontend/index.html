@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V518-20261112';
+        var APP_VER = 'V519-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -77661,7 +77661,8 @@ function createSpecialPlan(options) {
         fangRefs: Array.isArray(options.fangRefs) ? options.fangRefs : []
     };
     // V510: 家庭还没有主计划时，本次创建自动成为家庭专属计划（全家庭唯一）
-    try { if (!getPrimarySpecialPlan()) plan.primary = true; } catch (e) {}
+    // V519: 生病调理是 7 天短期计划，不自动成为家庭专属计划
+    try { if (planType !== 'illness' && !getPrimarySpecialPlan()) plan.primary = true; } catch (e) {}
     list.push(plan);
     saveSpecialPlans(list);
     return { ok: true, plan: plan, quota: getSpecialPlanQuota(planType) };
@@ -77861,7 +77862,8 @@ function applySpecialPlanQuotaToButton(btn, planType) {
 
 // ==================== V226: 专项饮食计划——发起弹窗与 AI 生成 ====================
 var SPECIAL_PLAN_UI_TYPES = [
-    { type: 'illness',   label: '生病调理' },
+    // V519: 生病调理不再从「发起专项」创建，统一由「生病饮食调理」卡生成 7 天计划；保留标签供历史计划展示
+    { type: 'illness',   label: '生病调理', hidden: true },
     { type: 'chronic',   label: '慢病调理' },
     { type: 'growth',    label: '孩子成长' },
     { type: 'athlete',   label: '体育生备赛' },
@@ -78052,7 +78054,7 @@ function openSpecialPlanModal(memberId) {
     overlay.style.cssText = 'position:fixed;inset:0;z-index:10010;background:rgba(17,24,39,0.55);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
     var panel = document.createElement('div');
     panel.style.cssText = 'background:#fff;border-radius:16px;width:100%;max-width:380px;max-height:88vh;overflow-y:auto;padding:16px;box-sizing:border-box;box-shadow:0 12px 32px rgba(0,0,0,0.18);';
-    var radios = SPECIAL_PLAN_UI_TYPES.map(function(item, idx) {
+    var radios = SPECIAL_PLAN_UI_TYPES.filter(function (item) { return !item.hidden; }).map(function(item, idx) {
         return '<label style="display:flex;align-items:center;gap:6px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:7px 9px;font-size:13px;color:#9A3412;cursor:pointer;">'
             + '<input type="radio" name="spPlanType" value="' + item.type + '"' + (idx === 0 ? ' checked' : '') + ' style="accent-color:#F97316;">'
             + item.label + '</label>';
@@ -78102,7 +78104,7 @@ function openSpecialPlanModal(memberId) {
 
     function selectedType() {
         var checked = panel.querySelector('input[name="spPlanType"]:checked');
-        return checked ? checked.value : 'illness';
+        return checked ? checked.value : 'chronic';
     }
     function refreshQuota() {
         var type = selectedType();
@@ -78269,7 +78271,7 @@ function _spPlanDisplayName(plan) {
     var type = (plan && plan.planType) || '';
     var base = (typeof _specialPlanUiLabel === 'function') ? _specialPlanUiLabel(type) : '专项';
     if (type === 'illness') {
-        var d = String((plan && plan.description) || '').split(/[，,。；;、\s]/)[0] || '';
+        var d = String((plan && plan.description) || '').replace(/^症状\/特殊期：/, '').split(/[，,。；;、\s]/)[0] || '';
         d = d.replace(/第[一二三四五六七八九十0-9]+天/g, '').replace(/(最近|今天|昨天|孩子|宝宝)/g, '').trim();
         if (d && d.length <= 12) return d + '调理计划';
         return '生病调理计划';
@@ -79321,8 +79323,15 @@ function _hmPlanDayInfo(plan) {
     return { dayNo: dayNo, totalDays: totalDays, diff: diff, meals: Array.isArray(meals) ? meals : [] };
 }
 // 一键采纳今日专项食谱到餐单
-function _hmAdoptPlanToday() {
-    var plan = _getActiveSpecialPlan();
+function _hmAdoptPlanToday(planId) {
+    var plan = null;
+    if (planId) {
+        var _plist = getSpecialPlans();
+        for (var _i = 0; _i < _plist.length; _i++) {
+            if (_plist[_i] && String(_plist[_i].planId) === String(planId)) { plan = _plist[_i]; break; }
+        }
+    }
+    if (!plan) plan = _getActiveSpecialPlan();
     if (!plan) { showToast('暂无进行中的专项计划'); return; }
     var applied = {};
     try { applied = applySpecialPlanToToday(plan); } catch (e) { applied = {}; }
@@ -79444,13 +79453,30 @@ function _hmLockCardHtml(title, desc) {
         + '<div style="flex-shrink:0;font-size:12px;color:#C2410C;font-weight:700;">解锁 ›</div>'
         + '</div></div>';
 }
-function openSpecialPlanBoard() {
+function openSpecialPlanBoard(focusPlanId) {
     closeSpecialPlanBoard();
     // V511: 健康管家园页对所有用户开放，只有「白皮书 / 今日建议 / 营养食谱 / 特殊饮食调理 / 深度复盘」需会员解锁
     var _hmMember = false;
     try { _hmMember = (typeof isFoodMember === 'function') && !!isFoodMember(); } catch (e) {}
     try { _repairSoupOnlyMealsToday(); } catch (e) {}
-    var plan = _getActiveSpecialPlan();
+    // V519: 生病调理由「生病饮食调理」卡承载，健康管家的计划卡默认不重复展示；
+    // 从调理卡点「查看 7 天」时传 focusPlanId 强制展示该计划
+    var plan = null;
+    if (focusPlanId) {
+        var _allP = getSpecialPlans();
+        for (var _pi = 0; _pi < _allP.length; _pi++) {
+            if (_allP[_pi] && String(_allP[_pi].planId) === String(focusPlanId)) { plan = _allP[_pi]; break; }
+        }
+    }
+    if (!plan) {
+        var _listP = getSpecialPlans().filter(function (p) { return p && p.status === 'active' && p.planType !== 'illness'; });
+        _listP.sort(function (a, b) {
+            var sa = String(a.startDate || ''), sb = String(b.startDate || '');
+            if (sa !== sb) return sa < sb ? 1 : -1;
+            return String(b.planId || '') < String(a.planId || '') ? -1 : 1;
+        });
+        plan = _listP[0] || null;
+    }
     var overlay = document.createElement('div');
     overlay.id = 'specialPlanBoardOverlay';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:10008;background:#f0f0f0;display:flex;justify-content:center;';
@@ -79626,7 +79652,7 @@ function openSpecialPlanBoard() {
         +   (_hmMember ? bodyHtml : '')
         +   (_hmMember ? '<div id="hmAdviceSlot">' + _hmAdviceCardHtml() + '</div>' : _hmLockCardHtml('今日专属健康建议', '每天 1 条针对家庭专属计划的可执行建议'))
         +   (_hmMember ? '<div id="hmMenuSlot">' + _hmMenuCardHtml() + '</div>' : _hmLockCardHtml('专属营养食谱', '按家庭专属计划生成今日 / 3 天 / 7 天食谱'))
-        +   (_hmMember ? _hmCareCardHtml() : _hmLockCardHtml('生病饮食调理', '按成员与症状生成当日家庭融合特供菜'))
+        +   (_hmMember ? _hmCareCardHtml() : _hmLockCardHtml('生病饮食调理', '按成员与症状生成 7 天调理食谱'))
         +   (_hmMember ? _hmDeepReviewCardHtml() : _hmLockCardHtml('深度复盘', '近 7 天饮食风险预警、归因与改进建议'))
         +   freeToolsHtml + '</div>';
 
@@ -79636,7 +79662,7 @@ function openSpecialPlanBoard() {
 
     document.getElementById('spBoardCloseBtn').onclick = closeSpecialPlanBoard;
     var _hmAdoptPlanBtn = document.getElementById('hmAdoptPlanBtn');
-    if (_hmAdoptPlanBtn && plan) _hmAdoptPlanBtn.onclick = _hmAdoptPlanToday;
+    if (_hmAdoptPlanBtn && plan) _hmAdoptPlanBtn.onclick = function () { _hmAdoptPlanToday(plan.planId); };
     var endBtn = document.getElementById('spBoardEndBtn');
     if (endBtn && plan) endBtn.onclick = function () { _confirmEndSpecialPlan(plan); };
 }
@@ -79651,59 +79677,82 @@ var _CARE_SYMPTOMS = [
     { k: '咽喉不适', d: '雪梨百合羹', a: '温热湿润的食物更友好，避免过烫、过咸和辛辣。' },
     { k: '其他', d: '山药排骨汤', a: '以清淡易消化为主，保证主食和蔬菜搭配。' }
 ];
-var _CARE_MED_WORDS = /治疗|治愈|根治|药方|处方|用药|疗效|痊愈|药到病除|专治|主治/g;
-function _careSafeText(t) {
-    var map = { '治疗': '调理', '治愈': '改善', '根治': '长期调理', '药方': '饮食建议', '处方': '饮食方案', '用药': '饮食', '疗效': '效果', '痊愈': '恢复', '药到病除': '逐步改善', '专治': '适合', '主治': '适合' };
-    return String(t || '').replace(_CARE_MED_WORDS, function (w) { return map[w] || '调理'; });
-}
 function _careDisclaimerHtml() {
     return '<div style="background:#FEF3C7;border:1px solid #FCD34D;color:#92400E;border-radius:9px;padding:7px 10px;font-size:11px;line-height:1.6;margin:6px 0;">⚠️ 本内容仅为日常饮食参考，不构成医疗诊断。如患有疾病，请务必遵医嘱。</div>';
 }
 var _HM_CARE_FOLDED = true; // V501: 进入健康管家默认只显示标题行；生成新方案或点「查看详情」时展开
-function _careLoad() {
-    try { var o = JSON.parse(lsGet('healthButlerCare') || 'null'); return (o && o.date) ? o : null; } catch (e) { return null; }
+// V519: 生病饮食调理唯一数据源——进行中的「生病调理」7 天计划
+function _careIllnessPlan() {
+    try {
+        var arr = getSpecialPlans().filter(function (p) {
+            if (!p || p.status !== 'active' || p.planType !== 'illness') return false;
+            return !(p.endDate && String(p.endDate) < dateToKey(new Date()));
+        });
+        arr.sort(function (a, b) { return String(b.startDate || '').localeCompare(String(a.startDate || '')); });
+        return arr[0] || null;
+    } catch (e) { return null; }
 }
-function _careSave(o) { try { lsSet('healthButlerCare', JSON.stringify(o)); } catch (e) {} }
-function _careActive() {
-    var o = _careLoad();
-    if (!o) return null;
-    return o.date === dateToKey(new Date()) ? o : null;
+// V519: 今日餐单里是否已包含该计划的菜
+function _careTodayAdded(plan) {
+    try {
+        var info = _hmPlanDayInfo(plan);
+        var names = [];
+        (info.meals || []).forEach(function (t) { names = names.concat(_spSplitDishNames(t)); });
+        if (!names.length) return false;
+        var day = getDietCalendar()[dateToKey(new Date())] || {};
+        var have = [];
+        ['breakfast', 'lunch', 'dinner'].forEach(function (mt) {
+            var p = day[mt] && day[mt].plan;
+            if (p && Array.isArray(p.dishes)) p.dishes.forEach(function (d) { have.push(typeof d === 'string' ? d : String((d && d.name) || '')); });
+        });
+        return names.some(function (n) { return have.indexOf(n) >= 0; });
+    } catch (e) { return false; }
 }
 function _hmCareCardHtml() {
-    var o = _careActive();
-    // V494: 标题改名「特殊饮食调理」；取消折叠，标题与按钮常显；副标题移到「发起饮食调理」弹窗
-    // V496: 加入食记后整个版块收起为一行摘要，可点「查看详情」展开
+    var plan = _careIllnessPlan();
+    // V519: 生病调理统一由本卡生成 7 天计划；卡片展示今日三餐 + 加入今日餐单 + 查看 7 天
     var html = '<div id="hmCareCard" style="margin:6px 12px 6px;background:#fff;border:1px solid #FED7AA;border-radius:14px;padding:12px;">'
         + '<div style="display:flex;align-items:center;gap:8px;">'
         + '<div style="font-size:14px;font-weight:800;color:#C2410C;">💊 生病饮食调理</div>'
         + '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
         + '<button type="button" onclick="openCareForm()" style="flex-shrink:0;margin-left:auto;padding:8px 12px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:12px;font-weight:800;cursor:pointer;">发起调理</button>'
         + '</div>';
-    if (o && _HM_CARE_FOLDED) {
-        html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:' + (o.addedDate ? '#166534' : '#92400E') + ';">'
-            + '<span>' + (o.addedDate ? '✅ 已加入' + escapeHtml(o.addedMeal || '食记') + '：' : '💡 待加入：') + escapeHtml(o.memberName) + '特供 · ' + escapeHtml((o.dish && o.dish.name) || '') + '</span>'
+    if (!plan) {
+        html += '<div style="font-size:11px;color:#9CA3AF;line-height:1.6;margin-top:8px;">选家人 + 症状，生成 7 天调理食谱（中医「一候」7 天：清淡解表 → 健脾扶正 → 巩固恢复）。</div>';
+        html += '</div>';
+        return html;
+    }
+    var info = _hmPlanDayInfo(plan);
+    var desc = String(plan.description || '').replace(/；.*$/, '').replace(/^症状\/特殊期：/, '').split(/[，,。；;]/)[0].slice(0, 14);
+    var head = '👨‍⚕️ ' + escapeHtml(plan.memberName || '家人') + (desc ? ' · ' + escapeHtml(desc) : '');
+    var dayTag = '第 ' + info.dayNo + ' 天 / ' + info.totalDays + ' 天';
+    if (_HM_CARE_FOLDED) {
+        html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:#92400E;">'
+            + '<span>' + head + ' · ' + dayTag + '</span>'
             + '<span onclick="_careExpand()" style="margin-left:auto;color:#C2410C;font-weight:800;cursor:pointer;">查看详情 ›</span>'
             + '<span onclick="_careDismiss()" style="color:#9CA3AF;font-weight:700;cursor:pointer;padding:0 2px;">✕</span>'
             + '</div>';
-    } else if (o) {
-        var dishName = (o.dish && o.dish.name) || '';
+    } else {
+        var todayHtml = '';
+        [['🌅 早餐', 0], ['☀️ 午餐', 1], ['🌙 晚餐', 2]].forEach(function (md) {
+            var names = _spSplitDishNames(info.meals[md[1]] || '');
+            if (!names.length) return;
+            todayHtml += '<div style="margin-top:6px;"><span style="font-size:11px;font-weight:800;color:#C2410C;">' + md[0] + '</span>'
+                + '<span style="font-size:12px;color:#1F2937;line-height:1.7;"> · ' + names.map(escapeHtml).join(' · ') + '</span></div>';
+        });
         html += '<div style="margin-top:10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:11px;padding:10px;">'
             + '<div style="display:flex;align-items:flex-start;gap:8px;">'
-            +   '<div style="flex:1;min-width:0;font-size:13px;font-weight:800;color:#7C2D12;">👨‍⚕️ ' + escapeHtml(o.memberName) + '特供：' + escapeHtml(dishName) + '</div>'
-            +   '<span onclick="_careDismiss()" title="关闭" style="flex-shrink:0;color:#9CA3AF;font-size:14px;font-weight:700;cursor:pointer;line-height:1;">✕</span>'
+            +   '<div style="flex:1;min-width:0;font-size:13px;font-weight:800;color:#7C2D12;">' + head + '</div>'
+            +   '<span style="flex-shrink:0;font-size:11px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">' + dayTag + '</span>'
+            +   '<span onclick="_careDismiss()" title="收起" style="flex-shrink:0;color:#9CA3AF;font-size:14px;font-weight:700;cursor:pointer;line-height:1;">✕</span>'
             + '</div>'
-            + '<div style="font-size:11px;color:#92400E;margin-top:3px;">症状：' + escapeHtml(o.symptom) + (o.desc ? ' · ' + escapeHtml(o.desc) : '') + '</div>'
-            + (o.advice ? '<div style="font-size:12px;color:#78350F;line-height:1.65;margin-top:6px;">' + escapeHtml(o.advice) + '</div>' : '')
-            + '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">主菜仍是全家菜，这道特供只额外加给 ' + escapeHtml(o.memberName) + '。</div>'
-            + '<div style="display:flex;gap:6px;margin-top:8px;">'
-            + '<select id="hmCareDaySel" style="flex:1;min-width:0;padding:7px 6px;border:1px solid #FDBA74;border-radius:9px;background:#fff;font-size:12px;color:#7C2D12;">'
-            + '<option value="0">今天</option><option value="1">明天</option><option value="2">后天</option></select>'
-            + '<select id="hmCareMealSel" style="flex:1;min-width:0;padding:7px 6px;border:1px solid #FDBA74;border-radius:9px;background:#fff;font-size:12px;color:#7C2D12;">'
-            + '<option value="breakfast">早餐</option><option value="lunch" selected>午餐</option><option value="dinner">晚餐</option></select>'
+            + (todayHtml || '<div style="font-size:12px;color:#9CA3AF;margin-top:6px;">今日食谱生成中，请稍后。</div>')
+            + '<div style="display:flex;gap:6px;margin-top:9px;">'
+            + '<button type="button" onclick="openSpecialPlanBoard(\'' + escapeHtml(String(plan.planId || '')) + '\')" style="flex:1;padding:9px;border:1px solid #FDBA74;border-radius:9px;background:#fff;color:#C2410C;font-size:12px;font-weight:800;cursor:pointer;">查看 7 天</button>'
+            + '<button type="button" onclick="_careAdoptToday(this)" style="flex:1.4;padding:9px;border:none;border-radius:9px;background:#F97316;color:#fff;font-size:12px;font-weight:800;cursor:pointer;">' + (_careTodayAdded(plan) ? '✅ 已在今日餐单' : '➕ 加入今日餐单') + '</button>'
             + '</div>'
-            + '<button type="button" onclick="_careAddToDiary(this)" style="width:100%;margin-top:8px;padding:9px;border:none;border-radius:9px;background:#F97316;color:#fff;font-size:12px;font-weight:800;cursor:pointer;">➕ 加入所选餐次</button>'
             + _careDisclaimerHtml()
-            + (o.addedDate ? '<div onclick="_careCollapse()" style="text-align:right;font-size:11px;color:#C2410C;font-weight:800;cursor:pointer;margin-top:6px;">收起 ›</div>' : '')
+            + '<div onclick="_careCollapse()" style="text-align:right;font-size:11px;color:#C2410C;font-weight:800;cursor:pointer;margin-top:6px;">收起 ›</div>'
             + '</div>';
     }
     html += '</div>';
@@ -80156,7 +80205,8 @@ window.renderHomeHealthButlerCard = function () {
     try { tip = _hmTodayAdviceText(); } catch (e) { tip = '立冬时节，注意保暖，饮食宜温润。'; }
     // V466: 首页仅展示两行，节气文案统一为「立冬节气，…」
     tip = String(tip || '').replace(/^今日([^，,]+)[，,]/, '$1节气，');
-    var care = member ? _careActive() : null;
+    var carePlan = member ? _careIllnessPlan() : null;
+    var careInfo = carePlan ? _hmPlanDayInfo(carePlan) : null;
     if (!member) {
         el.innerHTML = '<div style="flex-shrink:0;text-align:left;line-height:1.25;">'
             + '<div style="font-size:12px;font-weight:700;color:#92400E;">您的专属</div>'
@@ -80170,7 +80220,7 @@ window.renderHomeHealthButlerCard = function () {
         + '<div style="font-size:12px;font-weight:700;color:#92400E;">您的专属</div>'
         + '<div style="font-size:17px;font-weight:900;color:#7C2D12;">健康管家</div></div>'
         + '<div style="flex:1;min-width:0;"><div style="font-size:11px;color:#92400E;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(tip) + '</div>'
-        + (care ? '<div style="font-size:11px;color:#C2410C;font-weight:700;margin-top:4px;">今日特供：' + escapeHtml((care.dish && care.dish.name) || '') + '（' + escapeHtml(care.memberName) + '）</div>' : '')
+        + (careInfo ? '<div style="font-size:11px;color:#C2410C;font-weight:700;margin-top:4px;">生病调理：' + escapeHtml(carePlan.memberName || '家人') + ' · 第 ' + careInfo.dayNo + ' 天 / ' + careInfo.totalDays + ' 天</div>' : '')
         + '</div><span style="flex-shrink:0;font-size:12px;font-weight:800;color:#C2410C;">进入 ›</span>';
 };
 window.openCareForm = function () {
@@ -80193,7 +80243,7 @@ window.openCareForm = function () {
         + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
         + '<div style="font-size:16px;font-weight:800;color:#C2410C;">💊 发起饮食调理</div>'
         + '<button type="button" onclick="closeCareForm()" style="border:none;background:#FFEDD5;color:#C2410C;width:30px;height:30px;border-radius:9px;font-size:16px;cursor:pointer;">×</button></div>'
-        + '<div style="font-size:11px;color:#92400E;line-height:1.6;margin:0 0 4px;">选家人 + 症状，生成当日家庭融合特供菜</div>'
+        + '<div style="font-size:11px;color:#92400E;line-height:1.6;margin:0 0 4px;">选家人 + 症状，生成 7 天调理食谱（中医「一候」7 天）</div>'
         + _careDisclaimerHtml()
         + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">选择家人</div>'
         + '<select id="careMemberSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + memberOpts + '</select>'
@@ -80201,7 +80251,7 @@ window.openCareForm = function () {
         + '<select id="careSymptomSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + symOpts + '</select>'
         + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">补充描述（选填）</div>'
         + '<textarea id="careDescInput" rows="3" placeholder="例如：这两天有点低烧、没胃口，想吃清淡的" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:13px;resize:none;"></textarea>'
-        + '<button type="button" id="careSubmitBtn" onclick="submitCareForm()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:11px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">生成专属特供食谱</button>'
+        + '<button type="button" id="careSubmitBtn" onclick="submitCareForm()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:11px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">生成 7 天调理食谱</button>'
         + '</div>';
     document.body.appendChild(overlay);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) closeCareForm(); });
@@ -80220,108 +80270,87 @@ window.submitCareForm = function () {
     var symptom = symEl.value;
     var desc = descEl ? String(descEl.value || '').trim() : '';
     if (!memberName || !symptom) { showToast('请选择家人和症状'); return; }
+    // V519: 生病调理统一按 7 天计划生成，占用「生病：每年 4 次」配额
+    var quota = getSpecialPlanQuota('illness');
+    if (quota && quota.reached) { showToast(quota.message); return; }
+    var member = null;
+    try {
+        var _mlist = getFamilyMembers();
+        for (var _mi = 0; _mi < _mlist.length; _mi++) {
+            if (String(_mlist[_mi].memberName || _mlist[_mi].name || '') === String(memberName)) { member = _mlist[_mi]; break; }
+        }
+    } catch (e) {}
+    var memberBrief = [
+        memberName,
+        (member && member.age) ? (member.age + '岁') : '',
+        (member && member.gender) || '',
+        (member && member.constitution) || '',
+        (member && Array.isArray(member.tags) && member.tags.length) ? ('标签：' + member.tags.join('/')) : '',
+        (member && (member.healthNote || member.dietaryPreference || member.taste)) || ''
+    ].filter(Boolean).join('，');
+    var familyBrief = '';
+    try { familyBrief = (typeof _buildFamilyBrief === 'function') ? _buildFamilyBrief() : ''; } catch (e) {}
+    var solarTerm = '';
+    try { var termObj = getSolarTermForDate(new Date()); solarTerm = (termObj && termObj.name) || ''; } catch (e) {}
+    var fangRag = [];
+    try { fangRag = searchFoodTherapy(getHealthCoreTags()); } catch (e) {}
+    var description = '症状/特殊期：' + symptom + (desc ? '；补充：' + desc : '')
+        + '；请按中医「一候」7 天安排：前 2 天清淡易消化、注意补液，中间 3 天健脾扶正，最后 2 天巩固恢复';
     btn.disabled = true;
-    btn.textContent = 'AI 生成中…';
+    btn.textContent = '生成 7 天食谱中…';
     btn.style.opacity = '0.75';
-    var fallback = _CARE_SYMPTOMS.filter(function (s) { return s.k === symptom; })[0] || _CARE_SYMPTOMS[_CARE_SYMPTOMS.length - 1];
-    var tags = '';
-    try { tags = _hmFamilyTags().map(function (t) { return t.label; }).join('、'); } catch (e) {}
-    var systemPrompt = '你是家肴记的家庭营养师。只给日常饮食调理建议，不做医疗诊断，不开药方。严格返回JSON，不要markdown代码块。禁止出现“治疗、治愈、根治、药方、处方、用药、疗效”等词。';
-    var userPrompt = '请为家庭成员「' + memberName + '」设计一道今日特供调理菜，并给出饮食调理建议。\n'
-        + '症状/特殊期：' + symptom + '\n'
-        + (desc ? '补充描述：' + desc + '\n' : '')
-        + (tags ? '家庭其他标签：' + tags + '\n' : '')
-        + '要求：\n'
-        + '1. 只输出 1 道适合该成员的菜，清淡易消化，食材家常易买；\n'
-        + '2. 必须是饮食调理建议，不是药方，不得出现药物名称、剂量或医疗承诺；\n'
-        + '3. 避开家庭过敏原与禁忌；\n'
-        + '4. 这道菜是额外加给该成员的，不能替代全家主菜。\n\n'
-        + '严格按 JSON 返回：{"dish":{"name":"菜名","tag":"一句话说明"},"advice":"80字以内饮食调理建议"}';
-    var finish = function (dishName, advice) {
-        var o = {
-            date: dateToKey(new Date()), memberName: memberName, symptom: symptom, desc: desc,
-            dish: { name: _careSafeText(dishName), tag: symptom + '特供' },
-            advice: _careSafeText(advice), addedDate: '', createdAt: Date.now()
-        };
-        _HM_CARE_FOLDED = false; // V496: 新生成的调理方案默认展开
-        _careSave(o);
-        closeCareForm();
-        showToast('已生成 ' + memberName + ' 的特供食谱');
-        try { if (document.getElementById('specialPlanBoardOverlay')) { closeSpecialPlanBoard(); openSpecialPlanBoard(); } } catch (e) {}
-        try { renderHomeHealthButlerCard(); } catch (e) {}
-    };
-    var controller = new AbortController();
-    var timer = setTimeout(function () { controller.abort(); }, 45000);
-    fetch(API_BASE + '/plan', {
+    fetch(API_BASE + '/api/special-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ system_prompt: systemPrompt, user_prompt: userPrompt, max_tokens: 800, json_mode: true, task_type: 'care_plan', meal_scene: 'lunch' }),
-        signal: controller.signal
-    }).then(function (res) { return res.ok ? res.json() : null; }).then(function (result) {
-        var reply = '';
-        if (result && result.response) reply = result.response;
-        else if (result && result.choices && result.choices[0] && result.choices[0].message) reply = result.choices[0].message.content;
-        var parsed = _parseJsonAny(reply);
-        var dish = parsed && parsed.dish;
-        var dishName = String((dish && dish.name) || '').trim();
-        var advice = String((parsed && parsed.advice) || '').trim();
-        if (!dishName) throw new Error('AI 未返回菜名');
-        finish(dishName, advice || fallback.a);
-    }).catch(function (err) {
-        if (String((err && err.message) || '').indexOf('未返回') >= 0) {
-            finish(fallback.d, fallback.a);
-            showToast('AI 暂未返回，已使用营养师内置方案');
-        } else {
-            finish(fallback.d, fallback.a);
-            showToast('AI 暂不可用，已使用营养师内置调理方案');
+        body: JSON.stringify({
+            memberBrief: memberBrief,
+            planType: 'illness',
+            description: description,
+            familyBrief: familyBrief,
+            solarTerm: solarTerm,
+            fangRefs: (typeof _fangRagToText === 'function') ? _fangRagToText(fangRag) : '',
+            fangRag: fangRag,
+            allergens: (typeof _familyAllergens === 'function') ? _familyAllergens() : []
+        })
+    }).then(function (res) { return res.json(); }).then(function (data) {
+        if (!data || !data.ok) {
+            btn.disabled = false; btn.textContent = '生成 7 天食谱'; btn.style.opacity = '1';
+            showToast((data && data.error) || 'AI 生成失败，请稍后重试');
+            return;
         }
-    }).then(function () { clearTimeout(timer); });
-};
-window._careAddToDiary = function (btn) {
-    var o = _careLoad();
-    if (!o || !o.dish || !o.dish.name) return;
-    // V471: 让用户自选日期与餐次
-    var dayEl = document.getElementById('hmCareDaySel');
-    var mealEl = document.getElementById('hmCareMealSel');
-    var dayOff = dayEl ? (parseInt(dayEl.value, 10) || 0) : 0;
-    var mealType = (mealEl && mealEl.value) ? mealEl.value : 'lunch';
-    var _d = new Date(); _d.setDate(_d.getDate() + dayOff);
-    var dk = dateToKey(_d);
-    var MEAL_CN = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
-    var mealCn = MEAL_CN[mealType] || '午餐';
-    var dayCn = dayOff === 0 ? '今日' : (dayOff === 1 ? '明日' : '后日');
-    var day = {};
-    try { day = getDietCalendar()[dk] || {}; } catch (e) {}
-    var opts = {};
-    if (day[mealType] && day[mealType].plan) Object.keys(day[mealType].plan).forEach(function (k) { opts[k] = day[mealType].plan[k]; });
-    var dishes = Array.isArray(opts.dishes) ? opts.dishes.slice() : [];
-    var exists = dishes.some(function (d) {
-        var n = typeof d === 'string' ? d : String((d && d.name) || '');
-        return n === o.dish.name;
-    });
-    if (!exists) dishes.push({ name: o.dish.name, tag: (o.memberName || '') + '特供' });
-    // 该餐原本没有菜时，补主食和蔬菜，避免一餐只有一碗粥
-    if (dishes.length < 2) {
-        var _fill = mealType === 'breakfast' ? ['水煮蛋', '全麦面包'] : ['杂粮饭', '清炒时蔬'];
-        _fill.forEach(function (n) {
-            if (!dishes.some(function (d) { var x = typeof d === 'string' ? d : String((d && d.name) || ''); return x === n; })) {
-                dishes.push({ name: n, tag: '搭配均衡' });
-            }
+        var created = createSpecialPlan({
+            memberName: memberName,
+            planType: 'illness',
+            description: description,
+            weeklyPlan: data.weeklyPlan || {},
+            report: data.report || '',
+            fangRefs: data.fangRefsUsed || fangRag || []
         });
-    }
-    opts.dishes = dishes;
-    opts.note = String(opts.note || '') + ' · ' + o.memberName + '特供';
-    opts.state = 'pending';
-    delete opts.confirmed;
-    updateMealPlan(dk, mealType, opts);
-    o.addedDate = dk;
-    o.addedMeal = mealCn;
-    _careSave(o);
-    if (btn) {
-        btn.textContent = '✅ 已加入' + dayCn + mealCn;
-    }
-    showToast(o.memberName + '的特供菜已加入' + dayCn + mealCn + '，全家主菜不变');
-    // V496: 加入成功后「特殊饮食调理」版块收起为一行摘要
+        if (!created.ok) {
+            btn.disabled = false; btn.textContent = '生成 7 天食谱'; btn.style.opacity = '1';
+            showToast(created.message);
+            return;
+        }
+        _HM_CARE_FOLDED = false; // V519: 新生成的 7 天计划默认展开
+        closeCareForm();
+        showToast('已生成 ' + memberName + ' 的 7 天调理食谱');
+        var _cardEl = document.getElementById('hmCareCard');
+        if (_cardEl) _cardEl.outerHTML = _hmCareCardHtml();
+        try { renderHomeHealthButlerCard(); } catch (e) {}
+    }).catch(function () {
+        btn.disabled = false; btn.textContent = '生成 7 天食谱'; btn.style.opacity = '1';
+        showToast('网络异常，7 天调理食谱生成失败，请稍后重试');
+    });
+};
+// V519: 把生病调理计划的今日三餐加入今日餐单
+window._careAdoptToday = function (btn) {
+    var plan = _careIllnessPlan();
+    if (!plan) { showToast('暂无进行中的生病调理计划'); return; }
+    var applied = {};
+    try { applied = applySpecialPlanToToday(plan); } catch (e) { applied = {}; }
+    try { _confirmAdoptedMeals(dateToKey(new Date()), ['breakfast', 'lunch', 'dinner']); } catch (e) {}
+    if (btn) btn.textContent = '✅ 已加入今日餐单';
+    showToast((applied && applied.dishes > 0) ? ('✅ 已加入今日餐单，新增 ' + applied.dishes + ' 道') : '✅ 今日调理食谱已在餐单中');
     _HM_CARE_FOLDED = true;
     var _careCardEl = document.getElementById('hmCareCard');
     if (_careCardEl) _careCardEl.outerHTML = _hmCareCardHtml();
@@ -80341,9 +80370,8 @@ window._careCollapse = function () {
     var el = document.getElementById('hmCareCard');
     if (el) el.outerHTML = _hmCareCardHtml();
 };
-// V501: 关闭当前调理卡片（不删除已加入食记的菜）
+// V519: 点 ✕ 收起卡片（7 天计划本身保留，不删除）
 window._careDismiss = function () {
-    try { lsSet('healthButlerCare', ''); } catch (e) {}
     _HM_CARE_FOLDED = true;
     var el = document.getElementById('hmCareCard');
     if (el) el.outerHTML = _hmCareCardHtml();
