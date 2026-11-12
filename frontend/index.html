@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V511-20261112';
+        var APP_VER = 'V513-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79080,7 +79080,7 @@ function _hmMenuCardHtml() {
         themeBar += '</div><div style="font-size:10px;color:#9CA3AF;margin-top:4px;">点任一天可直接查看该日食谱；想调整主题请到「我家 → 家庭成员」修改标签。</div></div>';
     }
     var expandedBody = _HM_MENU_OPEN ? ((_HM_RANGE === 1) ? _hmTodayBodyHtml(menu, adopted) : _hmRangeBodyHtml()) : '';
-    return '<div style="padding:0 12px 10px;">'
+    return '<div style="padding:0 12px 6px;">'
         + '<div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.05);">'
         +   '<div onclick="_hmToggleMenu(event)" style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow:hidden;cursor:pointer;">'
         +     '<div style="font-size:' + (_HM_MENU_OPEN ? 15 : 14) + 'px;font-weight:800;color:#C2410C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">' + title + '</div>'
@@ -79182,7 +79182,7 @@ function _hmAdviceCardHtml() {
     var head = '🎯 今日专属健康建议';
     var box = 'background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FDBA74;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,0.05);';
     if (!_HM_ADVICE_OPEN) {
-        return '<div style="padding:0 12px 10px;"><div style="' + box + 'padding:12px 14px;">'
+        return '<div style="padding:0 12px 6px;"><div style="' + box + 'padding:12px 14px;">'
             + '<div onclick="_hmToggleAdvice(event)" style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow:hidden;cursor:pointer;">'
             +   '<div style="font-size:14px;font-weight:800;color:#C2410C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">' + head + '</div>'
             +   '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
@@ -79190,7 +79190,7 @@ function _hmAdviceCardHtml() {
             +   '<span style="flex-shrink:0;margin-left:auto;font-size:12px;color:#B45309;font-weight:700;">▼ 展开</span>'
             + '</div></div></div>';
     }
-    return '<div style="padding:0 12px 10px;"><div style="' + box + 'padding:14px;">'
+    return '<div style="padding:0 12px 6px;"><div style="' + box + 'padding:14px;">'
         + '<div onclick="_hmToggleAdvice(event)" style="display:flex;align-items:center;gap:8px;cursor:pointer;">'
         +   '<div style="font-size:15px;font-weight:800;color:#C2410C;">' + head + '</div>'
         +   '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#fff;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
@@ -79219,7 +79219,7 @@ function _hmDeepReviewCardHtml() {
             + '<span style="font-size:10px;color:#86EFAC;background:rgba(22,163,74,.16);border:1px solid rgba(22,163,74,.4);border-radius:8px;padding:2px 7px;">蔬菜 ' + st.vegCount + ' 道</span>'
             + '</div>'
         : '';
-    return '<div style="padding:0 12px 10px;">'
+    return '<div style="padding:0 12px 6px;">'
         + '<div style="background:linear-gradient(135deg,#1F2937,#111827);border-radius:14px;padding:14px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.18);">'
         +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
         +     '<div style="font-size:15px;font-weight:800;">👑 深度复盘</div>'
@@ -79365,7 +79365,7 @@ function _hmAddDayToDiaryCore(dateKey) {
 
 // V511: 未解锁的会员模块统一用这张锁卡，点击唤起升级说明
 function _hmLockCardHtml(title, desc) {
-    return '<div style="padding:0 12px 10px;"><div onclick="_fhShowPaywall(\'🔒 ' + title + ' · 会员专享\')" style="background:#fff;border:1px dashed #FDBA74;border-radius:14px;padding:14px;display:flex;align-items:center;gap:10px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
+    return '<div style="padding:0 12px 6px;"><div onclick="_fhShowPaywall(\'🔒 ' + title + ' · 会员专享\')" style="background:#fff;border:1px dashed #FDBA74;border-radius:14px;padding:14px;display:flex;align-items:center;gap:10px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
         + '<div style="font-size:18px;flex-shrink:0;">🔒</div>'
         + '<div style="flex:1;min-width:0;">'
         +   '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
@@ -79473,7 +79473,7 @@ function openSpecialPlanBoard() {
                 }).join('')
                 + '</div>';
         });
-        var _todayFoodBlock = '<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
+        var _todayFoodBlock = '<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:6px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
             + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
             +   '<span style="font-size:13px;font-weight:700;color:#92400E;">🍲 今日专项食谱</span>'
             +   '<span style="font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">每日自动更新</span>'
@@ -79481,8 +79481,8 @@ function openSpecialPlanBoard() {
             + (_todayFoodHtml || '<div style="font-size:12px;color:#9CA3AF;">今日专项食谱生成中，稍后自动更新。</div>')
             + '<button type="button" id="hmAdoptPlanBtn" style="width:100%;margin-top:10px;padding:11px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:13px;font-weight:800;cursor:pointer;">✅ 一键采纳到餐单</button>'
             + '</div>';
-        bodyHtml = '<div style="padding:10px 12px 10px;">'
-            + '<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
+        bodyHtml = '<div style="padding:10px 12px 6px;">'
+            + '<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:6px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
             +   '<div style="display:flex;align-items:flex-start;gap:8px;">'
             +     '<div style="flex:1;font-size:15px;font-weight:800;color:#C2410C;line-height:1.5;">' + title + '</div>'
             +     (isOver ? '<span style="flex-shrink:0;font-size:11px;color:#6B7280;background:#F3F4F6;border-radius:10px;padding:2px 8px;">已结束</span>' : (plan.primary ? '<span style="flex-shrink:0;font-size:11px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:2px 8px;">🏅 家庭专属计划</span>' : '<span style="flex-shrink:0;font-size:11px;color:#16A34A;background:#F0FDF4;border-radius:10px;padding:2px 8px;">调理中</span>'))
@@ -79516,7 +79516,7 @@ function openSpecialPlanBoard() {
     // V374: 顺时养生建议（按当前节气展示）
     var _term = getSolarTermForDate(new Date());
     var _termFoods = getSolarTermFoods(_term).slice(0, 5).join('、');
-    var seasonCardHtml = '<div style="padding:0 12px 10px;">'
+    var seasonCardHtml = '<div style="padding:0 12px 6px;">'
         + '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
         +   '<div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;margin-bottom:6px;">'
         +     '<div style="font-size:15px;font-weight:800;color:#166534;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🌿 顺时养生 · ' + escapeHtml(_term.name || '当季') + '</div>'
@@ -79534,7 +79534,7 @@ function openSpecialPlanBoard() {
         var _gst = _gutRestStatus(new Date());
         if (_gst.inRest) gutRestHeldText = '（已坚持 ' + _gutRestHoursText(_gst.mins) + '）';
     } catch (e) {}
-    var gutCardHtml = '<div style="padding:0 12px 10px;">'
+    var gutCardHtml = '<div style="padding:0 12px 6px;">'
         + '<div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
         +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
         +     '<div style="font-size:15px;font-weight:800;color:#C2410C;">🕒 肠道休息时钟</div>'
@@ -79606,7 +79606,7 @@ function _hmCareCardHtml() {
     var o = _careActive();
     // V494: 标题改名「特殊饮食调理」；取消折叠，标题与按钮常显；副标题移到「发起饮食调理」弹窗
     // V496: 加入食记后整个版块收起为一行摘要，可点「查看详情」展开
-    var html = '<div id="hmCareCard" style="margin:10px 12px 0;background:#fff;border:1px solid #FED7AA;border-radius:14px;padding:12px;">'
+    var html = '<div id="hmCareCard" style="margin:6px 12px 0;background:#fff;border:1px solid #FED7AA;border-radius:14px;padding:12px;">'
         + '<div style="display:flex;align-items:center;gap:8px;">'
         + '<div style="font-size:14px;font-weight:800;color:#C2410C;">💊 特殊饮食调理</div>'
         + '<span style="flex-shrink:0;font-size:10px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">会员专享</span>'
@@ -79849,7 +79849,7 @@ window._wpCardHtml = function () {
     var isM = false;
     try { isM = (typeof isFoodMember === 'function' && isFoodMember()); } catch (e) {}
     var shell = function (sub, btn, onclick) {
-        return '<div onclick="' + onclick + '" style="margin:10px 12px 0;background:linear-gradient(135deg,#78350F,#B45309);border-radius:14px;padding:12px 14px;cursor:pointer;box-shadow:0 4px 14px rgba(120,53,15,0.18);">'
+        return '<div onclick="' + onclick + '" style="margin:6px 12px 6px;background:linear-gradient(135deg,#78350F,#B45309);border-radius:14px;padding:12px 14px;cursor:pointer;box-shadow:0 4px 14px rgba(120,53,15,0.18);">'
             + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
             + '<div style="min-width:0;"><div style="font-size:13px;font-weight:800;color:#FEF3C7;">👑 您的《家庭膳食健康白皮书》<span style="margin-left:5px;font-size:10px;font-weight:700;color:#FDE68A;background:rgba(253,230,138,.18);border:1px solid rgba(253,230,138,.5);border-radius:8px;padding:1px 5px;">会员专享</span></div>'
             + '<div style="font-size:11px;color:#FDE68A;margin-top:3px;">' + sub + '</div></div>'
