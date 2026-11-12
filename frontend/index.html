@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V532-20261112';
+        var APP_VER = 'V533-20261112';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -134,6 +134,10 @@
             flex-direction: column;
             position: relative;
         }
+
+        /* 健康管家内容区：隐藏滚动条（仍可滚动），避免与页面滚动条叠加 */
+        #hmBoardBody { scrollbar-width: none; -ms-overflow-style: none; }
+        #hmBoardBody::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
         /* ====== 首页 ====== */
         .page-home {
@@ -79435,8 +79439,21 @@ window._hmViewPlanMenu = function (ev) {
         }
     }, 60);
 };
+window._hmEndCurrentPlan = function (ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    var p = _hmPrimaryPlan();
+    if (!p) { showToast('暂无进行中的专项计划'); return; }
+    _confirmEndSpecialPlan(p);
+};
 function _hmPrimaryPlan() {
-    try { return (typeof getPrimarySpecialPlan === 'function') ? getPrimarySpecialPlan() : null; } catch (e) { return null; }
+    try {
+        var p = (typeof getPrimarySpecialPlan === 'function') ? getPrimarySpecialPlan() : null;
+        if (p) return p;
+        // 未设为家庭专属时，仍展示当前进行中的专项计划，避免卡片里空着（生病调理有自己的卡片，排除）
+        var a = (typeof _getActiveSpecialPlan === 'function') ? _getActiveSpecialPlan() : null;
+        return (a && a.planType !== 'illness') ? a : null;
+    } catch (e) { return null; }
 }
 function _hmAdvicePlanBlockHtml(plan) {
     if (!plan) return '';
@@ -79464,7 +79481,10 @@ function _hmAdvicePlanBlockHtml(plan) {
         + '</div>'
         + '<div style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11px;color:#9CA3AF;flex-wrap:wrap;">'
         +   status
-        +   '<button type="button" onclick="_hmViewPlanMenu(event)" style="margin-left:auto;padding:4px 9px;border:1px solid #FDBA74;border-radius:9px;background:#fff;color:#C2410C;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">查看 7 天食谱 ›</button>'
+        +   '<span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;">'
+        +     '<span onclick="_hmEndCurrentPlan(event)" style="color:#9CA3AF;font-weight:700;cursor:pointer;padding:2px 4px;">结束计划</span>'
+        +     '<button type="button" onclick="_hmViewPlanMenu(event)" style="padding:4px 9px;border:1px solid #FDBA74;border-radius:9px;background:#fff;color:#C2410C;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">查看 7 天食谱 ›</button>'
+        +   '</span>'
         + '</div></div>';
 }
 function _hmAdviceReportBlockHtml(plan) {
@@ -79824,8 +79844,8 @@ function openSpecialPlanBoard(focusPlanId) {
             +   '<div style="font-size:11px;color:#9CA3AF;line-height:1.7;margin-top:10px;padding-top:8px;border-top:1px dashed #FDE68A;">📖 该方案引用了《传统食养库》中的智慧，仅供日常饮食参考，不替代医疗建议。</div>'
             + '</div>'
             + '</div>';
-        // V527: 家庭专属计划的进度与报告已并入「专属健康饮食方案」，此处不再重复展示
-        if (plan && plan.primary) bodyHtml = '';
+        // V533: 计划的进度与报告统一在「专属健康饮食方案」内展示，这里不再重复
+        if (plan) bodyHtml = '';
     }
 
     // V374: 顺时养生建议（按当前节气展示）
@@ -79867,9 +79887,8 @@ function openSpecialPlanBoard(focusPlanId) {
         +   '<div style="font-size:17px;font-weight:700;color:#C2410C;white-space:nowrap;">健康管家</div>'
         +   '<div style="font-size:11px;color:#B45309;white-space:nowrap;">您的家庭营养师</div>'
         + '</div>'
-        + (plan ? '<button type="button" id="spBoardEndBtn" style="margin-left:auto;padding:6px 10px;border:1px solid #FED7AA;border-radius:10px;background:#fff;color:#C2410C;font-size:12px;cursor:pointer;">结束计划</button>' : '')
         + '</div>'
-        + '<div style="flex:1;overflow-y:auto;min-height:0;padding-bottom:10px;">'
+        + '<div id="hmBoardBody" style="flex:1;overflow-y:auto;min-height:0;padding-bottom:10px;">'
         +   (_hmMember ? (window._wpCardHtml ? _wpCardHtml() : '') : _hmLockCardHtml('《家庭膳食健康白皮书》', '建档后生成专属健康档案与膳食建议'))
         +   (_hmMember ? bodyHtml : '')
         +   (_hmMember ? '<div id="hmAdviceSlot">' + _hmAdviceCardHtml() + '</div>' : _hmLockCardHtml('专属健康饮食方案', '家庭专属饮食计划、专项健康饮食报告与每天 1 条可执行建议'))
@@ -79883,8 +79902,6 @@ function openSpecialPlanBoard(focusPlanId) {
     updateGutRestBanner();  // V374: 打开健康管家里即刷新休息时钟
 
     document.getElementById('spBoardCloseBtn').onclick = closeSpecialPlanBoard;
-    var endBtn = document.getElementById('spBoardEndBtn');
-    if (endBtn && plan) endBtn.onclick = function () { _confirmEndSpecialPlan(plan); };
 }
 window.openSpecialPlanBoard = openSpecialPlanBoard;
 
