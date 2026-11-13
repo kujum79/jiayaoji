@@ -192,6 +192,32 @@ create trigger trg_profiles_touch
     for each row execute function public.touch_updated_at();
 
 -- ============================================================
+-- RPC：取当前账号的家庭（SECURITY DEFINER；RLS 查不到时的兜底）
+-- 归属优先级：自己创建的家庭 → 已加入的家庭，取 created_at 最早的一条
+-- ============================================================
+create or replace function public.my_family()
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+    select to_jsonb(t) from (
+        select f.id, f.family_name, f.family_code, f.created_at
+          from public.families f
+         where f.owner_id = auth.uid()
+            or exists (
+                 select 1 from public.family_members m
+                  where m.family_id = f.id and m.user_id = auth.uid()
+               )
+         order by f.created_at asc
+         limit 1
+    ) t;
+$$;
+
+revoke all on function public.my_family() from public;
+grant execute on function public.my_family() to authenticated;
+
+-- ============================================================
 -- RPC：以当前登录用户身份创建家庭（SECURITY DEFINER，绕开 RLS 差异）
 -- 前端手机号注册优先调用它；老项目 policies 不完整时也能稳定落库
 -- ============================================================

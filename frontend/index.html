@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V547-20261113';
+        var APP_VER = 'V548-20261113';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -13039,9 +13039,12 @@ function _sbPruneUuidCache() {
 // 当前家庭缓存失效（Supabase 里该家庭已被删除）
 function _sbDropFamilyUuidCache() {
     try { localStorage.removeItem(_sbUuidCacheKey(_sbFamCode())); } catch (e) {}
+    // V548: 会话里带的 uuid 同样不可信，本次页面生命周期内不再采用
+    window.__sbSessionUuidBad = true;
 }
 // 登录会话里已带 Supabase families.id（仅当它是 uuid 才采用，手机号本地家庭是短码）
 function _sbUuidFromSession() {
+    if (window.__sbSessionUuidBad) return '';
     try {
         var f = (typeof getLoginFamily === 'function') ? getLoginFamily() : null;
         if (f && f.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(f.id))) {
@@ -13062,15 +13065,49 @@ async function _sbResolveFamilyUuid() {
     if (sessionUuid) { _sbCacheFamilyUuid(code, sessionUuid); return sessionUuid; }
     if (!sb) return '';
     try {
-        var r = await withTimeout(sb.from('families').select('id').eq('family_code', code).limit(1), 15000, '家庭查询');
+        var r = await withTimeout(sb.from('families').select('id,family_code,created_at').eq('family_code', code).limit(1), 15000, '家庭查询');
         if (r && r.error) {
             console.warn('[云端数据] 查询家庭 UUID 失败：' + r.error.message + '（请检查 families 表的 RLS 是否允许家庭成员 select）');
             return '';
         }
         var rows = (r && r.data) || [];
-        if (!rows.length) { console.warn('未查找到家庭UUID，请检查RLS或数据'); return ''; }
-        _sbCacheFamilyUuid(code, rows[0].id);
-        return rows[0].id;
+        if (rows.length) {
+            _sbCacheFamilyUuid(rows[0].family_code || code, rows[0].id);
+            return rows[0].id;
+        }
+        // V548: 家庭码查不到（无痕/换设备/本地码过期）→ 先走 RPC，再按 owner_id 兜底
+        var ures = await sb.auth.getUser();
+        var uid = ures && ures.data && ures.data.user && ures.data.user.id;
+        if (uid) {
+            var viaRpc = null;
+            try {
+                var rr = await withTimeout(sb.rpc('my_family'), 15000, '家庭查询(RPC)');
+                if (!rr.error && rr.data && rr.data.id) viaRpc = rr.data;
+                else if (rr.error && !/function|schema cache|PGRST202|does not exist|找不到/i.test(String(rr.error.message || ''))) {
+                    console.warn('[云端数据] my_family RPC 失败：' + rr.error.message);
+                }
+            } catch (eR) {}
+            if (!viaRpc) {
+                var r2 = await withTimeout(sb.from('families').select('id,family_code,created_at')
+                    .eq('owner_id', uid).order('created_at', { ascending: true }).limit(1), 15000, '家庭查询(owner)');
+                if (r2 && r2.error) {
+                    console.warn('[云端数据] 按 owner_id 查询家庭失败：' + r2.error.message);
+                } else if (r2 && r2.data && r2.data.length) {
+                    viaRpc = r2.data[0];
+                }
+            }
+            if (viaRpc) {
+                var cloudCode = viaRpc.family_code || code;
+                if (cloudCode !== code) {
+                    console.warn('[云端数据] 本地家庭码 ' + code + ' 已过期，改用云端家庭码 ' + cloudCode);
+                    try { setFamilyId(cloudCode); } catch (e) {}
+                }
+                _sbCacheFamilyUuid(cloudCode, viaRpc.id);
+                return viaRpc.id;
+            }
+        }
+        console.warn('当前账号在云端没有任何家庭记录，请重新创建家庭');
+        return '';
     } catch (e) {
         console.warn('[云端数据] 家庭 UUID 查询异常：' + ((e && e.message) || e));
     }
