@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V545-20261113';
+        var APP_VER = 'V546-20261113';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -6192,6 +6192,20 @@ async function _sbEnsurePhoneFamily(sbUser, phone, familyName, preferredCode) {
     // 老本地账号沿用原 familyId 作为家庭码，保证本地数据命名空间不丢
     var code = preferredCode || ('F' + String(Date.now()).slice(-8));
     var name = familyName || '我家';
+    // V546: 优先走 RPC（security definer，避免老项目 policies 不完整导致 RLS 报错）
+    var rpcErr = '';
+    try {
+        var rpc = await sb.rpc('create_family_for_me', { p_name: name, p_code: code, p_owner_email: _phoneVirtualEmail(phone) });
+        if (!rpc.error && rpc.data && rpc.data.id) {
+            _sbCacheFamilyUuid(rpc.data.family_code || code, rpc.data.id);
+            return rpc.data;
+        }
+        rpcErr = String((rpc.error && rpc.error.message) || '');
+    } catch (eRpc) { rpcErr = String((eRpc && eRpc.message) || eRpc); }
+    if (rpcErr && !/function|schema cache|PGRST202|does not exist|找不到/i.test(rpcErr)) {
+        throw new Error(rpcErr);
+    }
+    if (rpcErr) console.warn('[云端数据] create_family_for_me 不可用，改用直接插入（请执行最新 schema.sql）');
     for (var i = 0; i < 4; i++) {
         var ins = await sb.from('families').insert({
             family_name: name,
@@ -6210,6 +6224,7 @@ async function _sbEnsurePhoneFamily(sbUser, phone, familyName, preferredCode) {
         }
         var em = String((ins.error && ins.error.message) || '');
         if (/duplicate|23505|already exists/i.test(em + String((ins.error && ins.error.code) || ''))) { code = code + Math.floor(Math.random() * 9); continue; }
+        if (/row-level security|RLS/i.test(em)) throw new Error('云端家庭写入被 RLS 拒绝：请在 Supabase SQL Editor 执行最新 supabase/schema.sql 后重试');
         throw new Error('创建云端家庭失败：' + (em || '未知错误'));
     }
     throw new Error('创建云端家庭失败：家庭码重复');
@@ -6474,7 +6489,7 @@ async function submitRegisterFamily() {
 
     // 2) 云端 families 必须落库（family_code 沿用本地 familyId，避免命名空间变化丢数据）
     try { await _sbEnsurePhoneFamily(sbUser, phone, name, account.familyId); }
-    catch (e2) { showErr('云端家庭创建失败：' + ((e2 && e2.message) || e2)); return; }
+    catch (e2) { showErr((e2 && e2.message) || '云端家庭创建失败，请检查 Supabase 的 RLS 配置'); return; }
 
     // 3) 本地账号表（手机号唯一）
     var list = getRegisteredUsers().filter(function(u) { return !u || String(u.phone) !== phone; });
@@ -6871,27 +6886,37 @@ async function doCombinedRegister() {
             showErr('注册成功，请到邮箱点击确认链接后再登录');
             return;
         }
-        // 3) 创建 families 记录
+        // 3) 创建 families 记录（V546: 优先 RPC，兼容老项目 RLS 不完整）
         var code = generateFamilyCode();
-        var famData = {
-            family_name: fName,
-            owner_id: u.id,
-            family_code: code,
-            owner_email: email,        // 关键：存 owner 邮箱，供后续家庭名称登录用
-            created_at: new Date().toISOString()
-        };
-        // 防重名：同名已存在则加后缀
-        var insertData = { ...famData };
-        var r = await sb.from('families').insert(insertData).select().single();
-        if (r && r.error) {
-            // 重名 → 自动加 "(2)" 后缀再试
-            if (r.error.code === '23505' || (r.error.message || '').indexOf('duplicate') > -1) {
-                insertData.family_name = fName + '(2)';
-                r = await sb.from('families').insert(insertData).select().single();
-                if (r && r.error) throw r.error;
-                fName = insertData.family_name;
-            } else {
-                throw r.error;
+        var r = null;
+        var rpcTry = await sb.rpc('create_family_for_me', { p_name: fName, p_code: code, p_owner_email: email });
+        if (!rpcTry.error && rpcTry.data && rpcTry.data.id) {
+            r = { data: rpcTry.data, error: null };
+            code = rpcTry.data.family_code || code;
+        } else {
+            var _rm = String((rpcTry.error && rpcTry.error.message) || '');
+            if (_rm && !/function|schema cache|PGRST202|does not exist|找不到/i.test(_rm)) throw new Error(_rm);
+            if (_rm) console.warn('[云端数据] create_family_for_me 不可用，改用直接插入');
+            var famData = {
+                family_name: fName,
+                owner_id: u.id,
+                family_code: code,
+                owner_email: email,        // 关键：存 owner 邮箱，供后续家庭名称登录用
+                created_at: new Date().toISOString()
+            };
+            // 防重名：同名已存在则加后缀
+            var insertData = { ...famData };
+            r = await sb.from('families').insert(insertData).select().single();
+            if (r && r.error) {
+                // 重名 → 自动加 "(2)" 后缀再试
+                if (r.error.code === '23505' || (r.error.message || '').indexOf('duplicate') > -1) {
+                    insertData.family_name = fName + '(2)';
+                    r = await sb.from('families').insert(insertData).select().single();
+                    if (r && r.error) throw r.error;
+                    fName = insertData.family_name;
+                } else {
+                    throw r.error;
+                }
             }
         }
         if (r && r.data) {

@@ -192,6 +192,65 @@ create trigger trg_profiles_touch
     for each row execute function public.touch_updated_at();
 
 -- ============================================================
+-- RPC：以当前登录用户身份创建家庭（SECURITY DEFINER，绕开 RLS 差异）
+-- 前端手机号注册优先调用它；老项目 policies 不完整时也能稳定落库
+-- ============================================================
+create or replace function public.create_family_for_me(
+    p_name text,
+    p_code text default null,
+    p_owner_email text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_uid  uuid := auth.uid();
+    v_code text;
+    v_row  public.families;
+    i      int := 0;
+begin
+    if v_uid is null then
+        raise exception '请先登录';
+    end if;
+
+    v_code := coalesce(nullif(trim(p_code), ''), 'F' || to_char(now(), 'YYMMDDHH24MISS'));
+
+    loop
+        begin
+            insert into public.families (family_name, family_code, owner_id, owner_email)
+            values (
+                coalesce(nullif(trim(p_name), ''), '我家'),
+                v_code,
+                v_uid,
+                coalesce(p_owner_email, (select email from auth.users where id = v_uid))
+            )
+            returning * into v_row;
+            exit;
+        exception when unique_violation then
+            i := i + 1;
+            if i > 5 then raise; end if;
+            v_code := v_code || (floor(random() * 9))::int;
+        end;
+    end loop;
+
+    insert into public.family_members (family_id, user_id, role)
+    values (v_row.id, v_uid, 'owner')
+    on conflict (family_id, user_id) do update set role = 'owner';
+
+    return jsonb_build_object(
+        'id', v_row.id,
+        'family_name', v_row.family_name,
+        'family_code', v_row.family_code
+    );
+end;
+$$;
+
+revoke all on function public.create_family_for_me(text, text, text) from public;
+grant execute on function public.create_family_for_me(text, text, text) to authenticated;
+
+-- ============================================================
 -- RPC：家人用「家庭码」加入家庭（绕过 families 的 select 限制）
 -- ============================================================
 create or replace function public.join_family_by_code(p_code text)
