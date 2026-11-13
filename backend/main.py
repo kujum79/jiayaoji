@@ -23,6 +23,7 @@ import json
 import os
 import random
 import re
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -32,7 +33,7 @@ from urllib.parse import quote, unquote, urljoin
 import httpx
 import requests
 from bs4 import BeautifulSoup
-from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -79,6 +80,65 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ==================== V363: AI 接口限流与配额防刷 ====================
+# 轻量实现：进程内字典 + 日期重置（单机部署足够；多实例需换 Redis）
+_ai_usage_records: Dict[str, Dict[str, Any]] = {}
+_usage_lock = threading.Lock()
+# 免费/会员当前统一 50 次/天，可用环境变量覆盖
+AI_DAILY_QUOTA = int(os.getenv("AI_DAILY_QUOTA", "50") or 50)
+
+# 这些路径会消耗大模型算力，统一挂 check_ai_quota（见各路由 dependencies）
+AI_QUOTA_EXEMPT_IPS = {"127.0.0.1", "::1"}
+
+
+def _quota_identity(request: Request) -> str:
+    """提取限流标识：Bearer JWT 里的用户/家庭 ID → 家庭请求头 → 客户端 IP。"""
+    try:
+        auth = request.headers.get("authorization") or ""
+        if auth.lower().startswith("bearer "):
+            token = auth.split(" ", 1)[1].strip()
+            parts = token.split(".")
+            if len(parts) >= 2 and parts[1]:
+                pad = "=" * (-len(parts[1]) % 4)
+                payload = json.loads(base64.urlsafe_b64decode(parts[1] + pad).decode("utf-8", "ignore"))
+                for k in ("family_id", "familyId", "sub", "user_id"):
+                    v = payload.get(k)
+                    if v:
+                        return "user:%s" % v
+    except Exception:
+        pass
+    fam = (request.headers.get("x-family-id") or "").strip()
+    if fam:
+        return "family:%s" % fam
+    fwd = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    ip = fwd or (request.client.host if request.client else "unknown")
+    return "ip:%s" % ip
+
+
+def check_ai_quota(request: Request) -> str:
+    """FastAPI 依赖：按标识累计当日 AI 调用次数，超限返回 429。"""
+    ident = _quota_identity(request)
+    today = time.strftime("%Y-%m-%d")
+    with _usage_lock:
+        rec = _ai_usage_records.get(ident)
+        if not rec or rec.get("date") != today:
+            rec = {"date": today, "count": 0}
+            _ai_usage_records[ident] = rec
+        if rec["count"] >= AI_DAILY_QUOTA:
+            raise HTTPException(status_code=429, detail="今日 AI 额度已用完，请明天再来或开通会员")
+        rec["count"] += 1
+        # 防内存膨胀：记录过多时清掉非今日条目
+        if len(_ai_usage_records) > 5000:
+            for k in [k for k, v in list(_ai_usage_records.items()) if v.get("date") != today]:
+                _ai_usage_records.pop(k, None)
+        snapshot = {"ident": ident, "count": rec["count"], "limit": AI_DAILY_QUOTA, "date": today}
+    try:
+        request.state.ai_quota = snapshot
+    except Exception:
+        pass
+    return ident
 
 
 class FamilyMember(BaseModel):
@@ -209,7 +269,7 @@ def health() -> Dict[str, str]:
 
 
 # ========== 语音指令解析接口 ==========
-@app.post("/parse_voice")
+@app.post("/parse_voice", dependencies=[Depends(check_ai_quota)])
 async def parse_voice(req: ParseVoiceRequest) -> Dict[str, Any]:
     """
     统一处理食材和食记的语音意图解析。
@@ -424,7 +484,7 @@ class VisionRequest(BaseModel):
     task_type: Optional[str] = None  # V131: 功能标识（flyer_ocr…），写入用量统计
 
 
-@app.post("/ai/vision", response_model=ChatResponse)
+@app.post("/ai/vision", response_model=ChatResponse, dependencies=[Depends(check_ai_quota)])
 async def ai_vision(req: VisionRequest) -> ChatResponse:
     """V131: 视觉理解（图片输入）统一入口——Agnes 免费视觉模型优先，qwen-vl-plus 兜底。
 
@@ -507,7 +567,7 @@ def _normalize_menu_parse(parsed: Dict[str, Any], req_name: str, req_cuisine: st
     return {"restaurant": restaurant, "dishes": dishes}
 
 
-@app.post("/parse-menu-image")
+@app.post("/parse-menu-image", dependencies=[Depends(check_ai_quota)])
 async def parse_menu_image(req: ParseMenuImageRequest) -> Dict[str, Any]:
     """V135: 菜单截图识别——多模态模型提取餐厅信息与菜品（名称/价格/分类/置信度）。"""
     image = req.image.strip()
@@ -561,7 +621,7 @@ class ParseMenuUrlRequest(BaseModel):
     cuisine: str = ""
 
 
-@app.post("/parse-menu-url")
+@app.post("/parse-menu-url", dependencies=[Depends(check_ai_quota)])
 async def parse_menu_url(req: ParseMenuUrlRequest) -> Dict[str, Any]:
     """V135: 粘贴美团链接解析菜单——抓取页面文本交给文本模型提取菜品。
 
@@ -653,7 +713,7 @@ def normalize_parse_result(raw: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/chat", response_model=ChatResponse, dependencies=[Depends(check_ai_quota)])
 async def chat(req: ChatRequest) -> Dict[str, str]:
     # 根据推荐模式（seasonal/diet/fridge/preference/nutrition）切换 System Prompt 模板
     system_prompt = get_system_prompt(req.mode, req.family)
@@ -668,7 +728,7 @@ async def chat(req: ChatRequest) -> Dict[str, str]:
     return {"response": content}
 
 
-@app.post("/plan")
+@app.post("/plan", dependencies=[Depends(check_ai_quota)])
 async def plan(req: PlanRequest) -> Dict[str, str]:
     """食谱计划生成接口（前端同源调用，避免 CORS）"""
     # V119: 功能标识白名单（只允许小写字母/下划线，防日志污染），缺省 plan
@@ -722,7 +782,7 @@ async def plan(req: PlanRequest) -> Dict[str, str]:
     return {"response": content}
 
 
-@app.post("/recommend-restaurants")
+@app.post("/recommend-restaurants", dependencies=[Depends(check_ai_quota)])
 async def recommend_restaurants(req: RecommendRestaurantsRequest) -> Dict[str, Any]:
     """V132: 外出就餐·选餐厅推荐，返回1-3家（名称/理由/人均/推荐菜）。
 
@@ -952,7 +1012,7 @@ def _fc_saved_amount(existing: List[str]) -> int:
     return int(round(total))
 
 
-@app.post("/api/fridge-cleanup")
+@app.post("/api/fridge-cleanup", dependencies=[Depends(check_ai_quota)])
 async def fridge_cleanup(req: FridgeCleanupRequest) -> Dict[str, Any]:
     """V409: 冰箱残局消消乐——按用户勾选/补充的食材生成清理方案。"""
     selected = _fc_str_list(req.selectedIngredients, 20)
@@ -1091,7 +1151,7 @@ def _praise_clean(text: str) -> str:
     return s.strip(" \"'“”「」")
 
 
-@app.post("/api/generate-praise")
+@app.post("/api/generate-praise", dependencies=[Depends(check_ai_quota)])
 async def generate_praise(req: PraiseRequest) -> Dict[str, Any]:
     """V415/V416: 为做饭记录生成 AI 夸夸语（单菜契约优先，兼容整餐契约）。"""
     # ---------- 单菜模式（V416 契约）----------
@@ -2953,7 +3013,7 @@ def _pref_has_banned(result: Dict[str, Any]) -> bool:
     return False
 
 
-@app.post("/api/extract-preference")
+@app.post("/api/extract-preference", dependencies=[Depends(check_ai_quota)])
 async def extract_preference(req: ExtractPreferenceRequest) -> Dict[str, Any]:
     """V147: 从用户评论+行为统计+家庭档案中 AI 语义提炼饮食偏好（7 天缓存由前端控制）。
 
@@ -3067,7 +3127,7 @@ def _dish_kind(name: str, category: str) -> str:
     return "hot"
 
 
-@app.post("/recommend-dishes")
+@app.post("/recommend-dishes", dependencies=[Depends(check_ai_quota)])
 async def recommend_dishes(req: RecommendDishesRequest) -> Dict[str, Any]:
     """V133: AI 点菜引擎——按人数/预算/口味/忌口推荐菜品组合。
 
@@ -3244,7 +3304,7 @@ async def recommend_dishes(req: RecommendDishesRequest) -> Dict[str, Any]:
     return {"recommendedDishes": result, "combination": combination, "tips": tips, "filteredOut": removed}
 
 
-@app.post("/parse", response_model=ParseResponse)
+@app.post("/parse", response_model=ParseResponse, dependencies=[Depends(check_ai_quota)])
 async def parse_recipe(req: ParseRequest) -> Dict[str, Any]:
     system_prompt = """
 请从用户提供的菜谱文本中提取菜名、主料、步骤，并打上标签。
@@ -3271,7 +3331,7 @@ JSON 格式必须严格符合：
     return normalize_parse_result(parsed)
 
 
-@app.post("/parse_link", response_model=ParseLinkResponse)
+@app.post("/parse_link", response_model=ParseLinkResponse, dependencies=[Depends(check_ai_quota)])
 async def parse_link(req: ParseLinkRequest):
     """
     接收一个网文链接，抓取页面正文，用AI提取结构化饮食知识。
@@ -3457,7 +3517,7 @@ _INGREDIENT_VL_PROMPT = (
 )
 
 
-@app.post("/recognize_ingredients")
+@app.post("/recognize_ingredients", dependencies=[Depends(check_ai_quota)])
 async def recognize_ingredients(file: UploadFile = File(...)):
     """接收食材照片，调用通义千问 VL 识别，返回结构化食材列表。"""
     image_data = await file.read()
@@ -3606,7 +3666,7 @@ def _find_medical_words(value: Any, found: set) -> None:
 
 
 # ========== 食材探索（食记「认识这道菜」） ==========
-@app.post("/explore-ingredient")
+@app.post("/explore-ingredient", dependencies=[Depends(check_ai_quota)])
 async def explore_ingredient(req: ExploreIngredientRequest) -> Dict[str, Any]:
     name = req.name.strip()
     age_range = f"{req.ageStart}-{req.ageEnd}"
@@ -3697,7 +3757,7 @@ async def explore_ingredient(req: ExploreIngredientRequest) -> Dict[str, Any]:
     }
 
 
-@app.post("/generate-ingredient")
+@app.post("/generate-ingredient", dependencies=[Depends(check_ai_quota)])
 async def generate_ingredient(req: GenerateIngredientRequest) -> Dict[str, Any]:
     """
     食材知识 AI 生成：特征 / 营养特点 / 主产地 / 营养成分表（100g）/ 1-8 道搭配方案 / 配图。
@@ -4348,7 +4408,7 @@ async def verify_sms(req: VerifySmsRequest) -> Dict[str, Any]:
     return {"success": True, "token": token, "phone": phone}
 
 
-@app.post("/api/daily-tip")
+@app.post("/api/daily-tip", dependencies=[Depends(check_ai_quota)])
 async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
     """食养堂每日一课：按 节气>天气>当季食材 优先级生成，同家庭同日仅生成一次。"""
     date_str = (req.date or "").strip()
@@ -4558,7 +4618,7 @@ _DEEP_PLAN_SYSTEM = """你是一位高级营养专家兼家庭饮食规划顾问
 """
 
 
-@app.post("/api/deep-plan")
+@app.post("/api/deep-plan", dependencies=[Depends(check_ai_quota)])
 async def deep_plan(req: DeepPlanRequest) -> Dict[str, Any]:
     """V202.1: 订阅专属——未来 N 天饮食沙盘推演。
 
@@ -4759,7 +4819,7 @@ def _portion_guide_fallback(members: List["PortionGuideMember"], dish_name: str)
     return guide
 
 
-@app.post("/api/portion-guide")
+@app.post("/api/portion-guide", dependencies=[Depends(check_ai_quota)])
 async def portion_guide(req: PortionGuideRequest) -> Dict[str, Any]:
     """V202.2: 订阅专属——一人一案分餐指导。"""
     dish_name = (req.dishName or "").strip()
@@ -5430,7 +5490,7 @@ _SUGGEST_COURSES_SYSTEM = """你是一位专业的饮食教育专家。请分析
 baseCourseId 可选值：course_nutrition_01（基础营养学）、course_sleep_01（睡眠饮食）、course_child_01（儿童饮食）、course_elder_01（老人饮食）、course_history_01（中国饮食史）。"""
 
 
-@app.post("/api/suggest-courses")
+@app.post("/api/suggest-courses", dependencies=[Depends(check_ai_quota)])
 async def suggest_courses(req: SuggestCoursesRequest) -> Dict[str, Any]:
     """V207: 基于家庭档案的 AI 课程建议。返回 2-3 条课程建议列表。"""
     members = req.familyMembers or []
@@ -5487,7 +5547,7 @@ def _chef_image_prompt(raw: str) -> str:
     )
 
 
-@app.post("/api/chef-image")
+@app.post("/api/chef-image", dependencies=[Depends(check_ai_quota)])
 async def chef_image(req: ChefImageRequest) -> Dict[str, Any]:
     """我的创作：按菜名/食材生成一张作品配图，返回万相临时图片 URL。"""
     size = req.size if req.size in ("1024*1024", "720*1280", "1280*720") else "1024*1024"
@@ -5839,7 +5899,7 @@ def _clean_review_risk(parsed: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-@app.post("/api/review-risk")
+@app.post("/api/review-risk", dependencies=[Depends(check_ai_quota)])
 async def review_risk(req: ReviewRiskRequest) -> Dict[str, Any]:
     """V224: 依本周饮食统计做风险归因，返回预防医学口径的 JSON。"""
     date_str = (req.date or "").strip()
@@ -5964,7 +6024,7 @@ def _expert_neutralize_disease(text: str) -> str:
     return out
 
 
-@app.post("/api/expert-assess")
+@app.post("/api/expert-assess", dependencies=[Depends(check_ai_quota)])
 async def expert_assess(req: ExpertAssessRequest) -> Dict[str, Any]:
     """V225: 体检单 + 问题描述 → AI 专家营养师膳食评估（带合规免责声明）。"""
     prompt = (req.userPrompt or "").strip()[:600]
@@ -6074,7 +6134,7 @@ _SPECIAL_PLAN_PROMPT = """你是一位专业的家庭营养师。请为家庭中
 只输出 JSON，不要输出 Markdown 代码块或额外说明。"""
 
 
-@app.post("/api/special-plan")
+@app.post("/api/special-plan", dependencies=[Depends(check_ai_quota)])
 async def special_plan(req: SpecialPlanRequest) -> Dict[str, Any]:
     """V226: 生成 7 天专项食谱（day1~day7 三餐）与专项健康饮食报告。"""
     plan_type = (req.planType or "").strip()
@@ -6862,6 +6922,28 @@ def _count_active_paid() -> int:
     return count
 
 
+@app.get("/api/admin/usage")
+@app.post("/api/admin/usage")
+def admin_ai_usage() -> Dict[str, Any]:
+    """V363: 今日 AI 配额使用快照（超管系统监控用）。"""
+    today = time.strftime("%Y-%m-%d")
+    with _usage_lock:
+        rows = [
+            {"identity": k, "count": int(v.get("count") or 0), "date": v.get("date", "")}
+            for k, v in _ai_usage_records.items() if v.get("date") == today
+        ]
+        records_in_memory = len(_ai_usage_records)
+    rows.sort(key=lambda r: -r["count"])
+    return {
+        "date": today,
+        "quota": AI_DAILY_QUOTA,
+        "active_identities": len(rows),
+        "total_calls": sum(r["count"] for r in rows),
+        "records_in_memory": records_in_memory,
+        "top": rows[:50],
+    }
+
+
 @app.post("/api/admin/monitor")
 async def admin_monitor() -> Dict[str, Any]:
     """V227: 返回今日报错总数、活跃付费客户数、未处理报警列表。"""
@@ -7641,7 +7723,7 @@ class DailyLessonReq(BaseModel):
     date: str = Field(default="", max_length=10)
 
 
-@app.post("/api/daily-lesson")
+@app.post("/api/daily-lesson", dependencies=[Depends(check_ai_quota)])
 async def daily_lesson(req: DailyLessonReq) -> Dict[str, Any]:
     """前端只读接口：返回该家庭今天的微课；没有专属版则回落到全国通用版。"""
     day = (req.date or "").strip() or _dt_cls.now().strftime("%Y-%m-%d")

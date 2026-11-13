@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V549-20261113';
+        var APP_VER = 'V550-20261113';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -12956,7 +12956,22 @@ function _errClassify(url) {
             }
             return window.__nativeFetch(input, opts).then(function (res) {
                 try {
-                    if (!noLog && res && res.status >= 400) {
+                    // V550: 429 配额用尽 → 统一友好提示，不暴露技术细节
+                    if (res && res.status === 429) {
+                        var _now429 = Date.now();
+                        if (!window.__quotaToastAt || _now429 - window.__quotaToastAt > 3000) {
+                            window.__quotaToastAt = _now429;
+                            res.clone().json().then(function (j) {
+                                var msg = (j && typeof j.detail === 'string' && j.detail) || (j && typeof j.message === 'string' && j.message) || '今日 AI 额度已用完，请明天再来或开通会员';
+                                try { showToast(msg); } catch (e) {}
+                            }).catch(function () {
+                                try { showToast('今日 AI 额度已用完，请明天再来或开通会员'); } catch (e) {}
+                            });
+                        }
+                    }
+                } catch (e) {}
+                try {
+                    if (!noLog && res && res.status >= 400 && res.status !== 429) {
                         logError(_errClassify(url), 'HTTP ' + res.status + ' ' + url, {
                             url: url, status: res.status, detail: 'status=' + res.status + ' elapsed=' + (Date.now() - started) + 'ms'
                         });
