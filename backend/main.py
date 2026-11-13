@@ -86,8 +86,8 @@ app.add_middleware(
 # 轻量实现：进程内字典 + 日期重置（单机部署足够；多实例需换 Redis）
 _ai_usage_records: Dict[str, Dict[str, Any]] = {}
 _usage_lock = threading.Lock()
-# 免费/会员当前统一 50 次/天，可用环境变量覆盖
-AI_DAILY_QUOTA = int(os.getenv("AI_DAILY_QUOTA", "50") or 50)
+# 免费/会员当前统一 150 次/天，可用环境变量覆盖
+AI_DAILY_QUOTA = int(os.getenv("AI_DAILY_QUOTA", "150") or 150)
 
 # 这些路径会消耗大模型算力，统一挂 check_ai_quota（见各路由 dependencies）
 AI_QUOTA_EXEMPT_IPS = {"127.0.0.1", "::1"}
