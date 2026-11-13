@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V546-20261113';
+        var APP_VER = 'V547-20261113';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -6480,6 +6480,7 @@ async function submitRegisterFamily() {
     catch (e1) { showErr((e1 && e1.message) || 'Supabase 注册失败'); return; }
 
     var account = findRegisteredUser(phone);
+    var _isNewAccount = !account;
     if (!account) {
         account = { phone: phone, password: '', familyId: _genUniqueFamilyId(), familyName: name, createdAt: Date.now() };
     } else if (!account.familyName) {
@@ -6499,6 +6500,8 @@ async function submitRegisterFamily() {
     _pendingSbUserId = '';
     closeRegisterFamilyModal();
     _applyAccountSession(account);
+    // V547: 全新注册家庭 → 清掉本机全局遗留业务键，确保「家中食材」等从空开始
+    if (_isNewAccount) { try { _purgeGlobalBackupKeys(); } catch (e) {} }
     updateHomeAuthBtn();
     showAppRoot();
     showToast('注册成功，欢迎加入家肴记！');
@@ -6968,6 +6971,8 @@ function showAppRoot() {
     updateHomeAuthBtn();
     // 登录/创建家庭后, 强制回到首页(用户应从首页开始浏览, 而非停留在登录前的任意Tab)
     try { switchTab('home'); } catch(e) {}
+    // V547: 清掉与当前家庭无关的 UUID 缓存（删家庭/换家庭后残留）
+    try { if (typeof _sbPruneUuidCache === 'function') _sbPruneUuidCache(); } catch (e) {}
     // V543: 登录成功立即预热家庭 UUID（本地无缓存时去 Supabase 查询并写入 _sbFamilyUuid_<家庭码>）
     setTimeout(function () { try { if (typeof _sbResolveFamilyUuid === 'function') _sbResolveFamilyUuid(); } catch (e) {} }, 200);
     // V542: 登录成功后从 Supabase 补齐本机缺失的业务键（不覆盖已有本地数据）
@@ -12100,6 +12105,18 @@ function lsSetJSON(key, val) {
     }
     localStorage.setItem(familyKey(key), JSON.stringify(val));
 }
+// V547: 全新注册家庭时清掉本机"全局遗留业务键"
+// lsGet 在家庭前缀键缺失时会回退读全局键（历史迁移用），会把旧设备/旧测试的示例食材带进新家庭
+function _purgeGlobalBackupKeys() {
+    try {
+        var n = 0;
+        for (var i = 0; i < _FAMILY_BACKUP_KEYS.length; i++) {
+            var k = _FAMILY_BACKUP_KEYS[i];
+            if (localStorage.getItem(k) !== null) { localStorage.removeItem(k); n++; }
+        }
+        if (n) console.log('[新家庭初始化] 已清理全局遗留业务键 ' + n + ' 个，新家庭从空数据开始');
+    } catch (e) {}
+}
 
 // ====== V227: 超管「系统监控」（报错总览 + 活跃付费客户 + 报警列表） ======
 var _MONITOR_CACHE = null;
@@ -13006,6 +13023,23 @@ function _sbCacheFamilyUuid(code, uuid) {
     if (!code || !uuid) return;
     try { localStorage.setItem(_sbUuidCacheKey(code), String(uuid)); } catch (e) {}
 }
+// V547: 清掉与当前家庭无关的 UUID 缓存（删家庭/换家庭后残留的孤儿缓存）
+function _sbPruneUuidCache() {
+    try {
+        var keep = _sbUuidCacheKey(_sbFamCode());
+        var del = [];
+        for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf('_sbFamilyUuid_') === 0 && k !== keep) del.push(k);
+        }
+        for (var j = 0; j < del.length; j++) localStorage.removeItem(del[j]);
+        if (del.length) console.log('[云端数据] 已清理 ' + del.length + ' 个过期家庭UUID缓存：' + del.join(', '));
+    } catch (e) {}
+}
+// 当前家庭缓存失效（Supabase 里该家庭已被删除）
+function _sbDropFamilyUuidCache() {
+    try { localStorage.removeItem(_sbUuidCacheKey(_sbFamCode())); } catch (e) {}
+}
 // 登录会话里已带 Supabase families.id（仅当它是 uuid 才采用，手机号本地家庭是短码）
 function _sbUuidFromSession() {
     try {
@@ -13071,8 +13105,15 @@ async function cloudBackupPush() {
             }
             if (rows.length) {
                 var r = await sb.from('family_data').upsert(rows, { onConflict: 'family_id,key' });
-                if (r.error) console.warn('[云端数据] upsert 失败：' + r.error.message);
-                else dirty.forEach(function (k) { delete _sbDirtyKeys[k]; });
+                if (r.error) {
+                    // V547: 家庭行已被删除（外键失败）→ 丢弃本地 uuid 缓存，下次重新解析
+                    if (r.error.code === '23503' || /foreign key|violates foreign/i.test(String(r.error.message || ''))) {
+                        _sbDropFamilyUuidCache();
+                        console.warn('[云端数据] 家庭UUID已失效（云端家庭可能被删除），已清除缓存');
+                    } else {
+                        console.warn('[云端数据] upsert 失败：' + r.error.message);
+                    }
+                } else dirty.forEach(function (k) { delete _sbDirtyKeys[k]; });
             } else {
                 dirty.forEach(function (k) { delete _sbDirtyKeys[k]; });
             }
