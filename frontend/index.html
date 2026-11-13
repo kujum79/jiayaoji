@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V542-20261113';
+        var APP_VER = 'V543-20261113';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -6795,6 +6795,14 @@ async function doCombinedRegister() {
             setLoginUser({ id: u.id, email: email, aud: u.aud, familySession: true });
             setLoginFamily({ id: r.data.id, name: fName, owner_id: u.id, ownerEmail: email });
             setFamilyId(code);
+            // V543: 注册/建家庭成功 → 立即把 families.id 缓存为 _sbFamilyUuid_<家庭码>，避免后续查询受 RLS 影响
+            _sbCacheFamilyUuid(code, r.data.id);
+            // V543: 兜底写入 family_members(owner)。schema 触发器已做，这里防"未执行 SQL"导致成员行缺失
+            try {
+                sb.from('family_members')
+                  .insert({ family_id: r.data.id, user_id: u.id, role: 'owner' })
+                  .then(function (fr) { if (fr && fr.error && String(fr.error.code) !== '23505') console.warn('[云端数据] family_members 写入失败：' + fr.error.message); });
+            } catch (e) {}
             try { localStorage.setItem('familyName_' + code, fName); } catch(e) {}
             closeCombinedRegisterModal();
             showToast('注册成功，欢迎加入家肴记！');
@@ -6831,6 +6839,8 @@ function showAppRoot() {
     updateHomeAuthBtn();
     // 登录/创建家庭后, 强制回到首页(用户应从首页开始浏览, 而非停留在登录前的任意Tab)
     try { switchTab('home'); } catch(e) {}
+    // V543: 登录成功立即预热家庭 UUID（本地无缓存时去 Supabase 查询并写入 _sbFamilyUuid_<家庭码>）
+    setTimeout(function () { try { if (typeof _sbResolveFamilyUuid === 'function') _sbResolveFamilyUuid(); } catch (e) {} }, 200);
     // V542: 登录成功后从 Supabase 补齐本机缺失的业务键（不覆盖已有本地数据）
     setTimeout(function () { try { if (typeof _sbPullMissing === 'function') _sbPullMissing(); } catch (e) {} }, 1200);
 }
@@ -12863,22 +12873,44 @@ function _sbMarkDeleted(key) {
 }
 function _sbFamCode() { try { return (typeof getFamilyId === 'function' && getFamilyId()) || ''; } catch (e) { return ''; } }
 function _sbUuidCacheKey(code) { return '_sbFamilyUuid_' + code; }
-// 家庭码 → Supabase families.id（缓存，避免每次写盘都查库）
+function _sbCacheFamilyUuid(code, uuid) {
+    if (!code || !uuid) return;
+    try { localStorage.setItem(_sbUuidCacheKey(code), String(uuid)); } catch (e) {}
+}
+// 登录会话里已带 Supabase families.id（仅当它是 uuid 才采用，手机号本地家庭是短码）
+function _sbUuidFromSession() {
+    try {
+        var f = (typeof getLoginFamily === 'function') ? getLoginFamily() : null;
+        if (f && f.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(f.id))) {
+            return String(f.id);
+        }
+    } catch (e) {}
+    return '';
+}
+// 家庭码 → Supabase families.id（本地缓存 → 登录会话 → 查库，查不到明确告警）
 async function _sbResolveFamilyUuid() {
     var code = _sbFamCode();
-    if (!code) return '';
+    if (!code) { console.warn('[云端数据] 未取到家庭码，已跳过云端同步'); return ''; }
     try {
         var cached = localStorage.getItem(_sbUuidCacheKey(code));
         if (cached) return cached;
     } catch (e) {}
+    var sessionUuid = _sbUuidFromSession();
+    if (sessionUuid) { _sbCacheFamilyUuid(code, sessionUuid); return sessionUuid; }
     if (!sb) return '';
     try {
-        var r = await withTimeout(sb.from('families').select('id').eq('family_code', code).maybeSingle(), 15000, '家庭查询');
-        if (r && r.data && r.data.id) {
-            try { localStorage.setItem(_sbUuidCacheKey(code), r.data.id); } catch (e) {}
-            return r.data.id;
+        var r = await withTimeout(sb.from('families').select('id').eq('family_code', code).limit(1), 15000, '家庭查询');
+        if (r && r.error) {
+            console.warn('[云端数据] 查询家庭 UUID 失败：' + r.error.message + '（请检查 families 表的 RLS 是否允许家庭成员 select）');
+            return '';
         }
-    } catch (e) {}
+        var rows = (r && r.data) || [];
+        if (!rows.length) { console.warn('未查找到家庭UUID，请检查RLS或数据'); return ''; }
+        _sbCacheFamilyUuid(code, rows[0].id);
+        return rows[0].id;
+    } catch (e) {
+        console.warn('[云端数据] 家庭 UUID 查询异常：' + ((e && e.message) || e));
+    }
     return '';
 }
 function cloudBackupSchedule(key) {
