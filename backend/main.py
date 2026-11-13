@@ -3993,6 +3993,9 @@ if FRONTEND_DIR.exists():
         }
         if path in api_paths:
             raise HTTPException(status_code=404, detail="Not Found")
+        # API 前缀一律不落 SPA：未命中具体路由时返回 404，避免前端拿到 HTML 当 JSON 解析
+        if path.startswith("api/") or path.startswith("ai/"):
+            raise HTTPException(status_code=404, detail="Not Found")
         # 尝试找前端目录下的文件
         file_path = FRONTEND_DIR / path
         if file_path.exists() and file_path.is_file():
@@ -6922,7 +6925,6 @@ def _count_active_paid() -> int:
     return count
 
 
-@app.get("/api/admin/usage")
 @app.post("/api/admin/usage")
 def admin_ai_usage() -> Dict[str, Any]:
     """V363: 今日 AI 配额使用快照（超管系统监控用）。"""
