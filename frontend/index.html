@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V544-20261113';
+        var APP_VER = 'V545-20261113';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -5956,6 +5956,7 @@ function showCreateFamilyPage() { return; }
 // ====== V295: 手机号 + 短信验证码 双轨制登录（验证码由后端 /api/auth/* 下发） ======
 var _loginCodeTimer = null;         // 「获取验证码」倒计时定时器
 var _pendingRegisterPhone = '';     // 待创建家庭的新用户手机号
+var _pendingSbUserId = '';          // V545: 已验证的 Supabase 用户 id
 var _lastSmsMockCode = '';          // 最近一次后端返回的测试验证码（仅 mock 模式）
 // 测试环境判定：本地调试时把验证码弹窗展示出来，生产环境只提示"已发送"
 var IS_SMS_TEST_ENV = (function () {
@@ -6155,6 +6156,64 @@ function _startLoginCodeCountdown() {
     _loginCodeTimer = setTimeout(tick, 1000);
 }
 // 登录/注册：调后端 /api/auth/verify-sms 校验 → 已注册则登录，未注册则弹「创建家庭」
+// ====== V545: 手机号 → 虚拟邮箱，走真实 Supabase Auth（不再只是本地假登录） ======
+var PHONE_EMAIL_DOMAIN = '@jiayaoji.com';
+function _phoneVirtualEmail(phone) { return String(phone || '').replace(/\D/g, '') + PHONE_EMAIL_DOMAIN; }
+function _phoneVirtualPwd(phone) { return 'jyj@' + String(phone || '').replace(/\D/g, '') + '#2026'; }
+// 登录或注册 Supabase 账号（虚拟邮箱 + 固定密码；首次自动 signUp）
+async function _sbPhoneAuth(phone) {
+    if (!sb) throw new Error('Supabase 未初始化');
+    var email = _phoneVirtualEmail(phone), pwd = _phoneVirtualPwd(phone);
+    var r = await sb.auth.signInWithPassword({ email: email, password: pwd });
+    if (!r.error && r.data && r.data.user) return r.data.user;
+    var su = await sb.auth.signUp({ email: email, password: pwd, options: { data: { phone: String(phone), display_name: '家人' + String(phone).slice(-4) } } });
+    if (su.error) {
+        var m = String(su.error.message || '');
+        if (/already registered|already exists/i.test(m)) throw new Error('该手机号已有云端账号但密码不匹配，请改用邮箱登录或联系管理员');
+        throw new Error('Supabase 注册失败：' + m);
+    }
+    if (su.data && su.data.session) return su.data.user;
+    // 未返回 session：多半是项目开启了「Confirm email」→ 用刚设的密码再登录一次
+    var again = await sb.auth.signInWithPassword({ email: email, password: pwd });
+    if (!again.error && again.data && again.data.user) return again.data.user;
+    throw new Error('注册成功但未取得登录会话：请在 Supabase 关闭 Confirm email 后重试');
+}
+// 确保该 Supabase 用户有 families 记录；返回家庭行，并把 uuid 缓存到 _sbFamilyUuid_<家庭码>
+async function _sbEnsurePhoneFamily(sbUser, phone, familyName, preferredCode) {
+    if (!sbUser || !sbUser.id) throw new Error('缺少 Supabase 用户');
+    var q = await sb.from('families').select('id,family_name,family_code')
+        .eq('owner_id', sbUser.id).order('created_at', { ascending: true }).limit(1);
+    if (q.error) throw new Error('查询家庭失败：' + q.error.message + '（请检查 families 的 RLS）');
+    if (q.data && q.data.length) {
+        var f0 = q.data[0];
+        _sbCacheFamilyUuid(f0.family_code, f0.id);
+        return f0;
+    }
+    // 老本地账号沿用原 familyId 作为家庭码，保证本地数据命名空间不丢
+    var code = preferredCode || ('F' + String(Date.now()).slice(-8));
+    var name = familyName || '我家';
+    for (var i = 0; i < 4; i++) {
+        var ins = await sb.from('families').insert({
+            family_name: name,
+            family_code: code,
+            owner_id: sbUser.id,
+            owner_email: _phoneVirtualEmail(phone)
+        }).select('id,family_name,family_code').single();
+        if (!ins.error && ins.data) {
+            _sbCacheFamilyUuid(code, ins.data.id);
+            try {
+                sb.from('family_members')
+                  .insert({ family_id: ins.data.id, user_id: sbUser.id, role: 'owner' })
+                  .then(function (fr) { if (fr && fr.error && String(fr.error.code) !== '23505') console.warn('[云端数据] family_members 写入失败：' + fr.error.message); });
+            } catch (e) {}
+            return ins.data;
+        }
+        var em = String((ins.error && ins.error.message) || '');
+        if (/duplicate|23505|already exists/i.test(em + String((ins.error && ins.error.code) || ''))) { code = code + Math.floor(Math.random() * 9); continue; }
+        throw new Error('创建云端家庭失败：' + (em || '未知错误'));
+    }
+    throw new Error('创建云端家庭失败：家庭码重复');
+}
 async function doPhoneLogin() {
     _loginPhoneClearErr();
     var phone = String(((document.getElementById('loginPhone') || {}).value) || '').replace(/\D/g, '');
@@ -6181,9 +6240,32 @@ async function doPhoneLogin() {
         return;
     }
     try { localStorage.setItem('smsToken', String(data.token || '')); } catch (e) {}
+    // V545: 先拿真实 Supabase 会话（虚拟邮箱），再做本地登录
+    var sbUser = null;
+    try {
+        sbUser = await _sbPhoneAuth(phone);
+    } catch (e2) {
+        var em2 = (e2 && e2.message) || 'Supabase 登录失败';
+        showToast(em2);
+        _loginPhoneErr(em2);
+        return;
+    }
     var user = findRegisteredUser(phone);
-    if (user) { _loginByAccount(user); return; }
+    if (user) {
+        // 老本地账号可能从未在云端建过家庭 → 这里补建并缓存 uuid
+        try { await _sbEnsurePhoneFamily(sbUser, phone, user.familyName, user.familyId); }
+        catch (e3) { console.warn('[Supabase] 家庭补建失败：' + ((e3 && e3.message) || e3)); }
+        try {
+            user.sbUserId = sbUser.id;
+            var _ul = getRegisteredUsers().filter(function (u) { return !u || String(u.phone) !== phone; });
+            _ul.push(user);
+            saveRegisteredUsers(_ul);
+        } catch (e) {}
+        _loginByAccount(user);
+        return;
+    }
     _pendingRegisterPhone = phone;
+    _pendingSbUserId = sbUser.id;
     openRegisterFamilyModal();
 }
 // 写入登录态（沿用 familySession 快捷登录链路：启动时不再校验 Supabase 会话）
@@ -6367,8 +6449,8 @@ function _genUniqueFamilyId() {
     }
     return 'family_' + Date.now();
 }
-// 新用户提交：写入 registeredUsers（手机号唯一）→ 登录进首页
-function submitRegisterFamily() {
+// 新用户提交：Supabase 建账号 → 建云端家庭 → 写本地 registeredUsers → 进首页
+async function submitRegisterFamily() {
     var phone = _pendingRegisterPhone;
     var eb = document.getElementById('regFamilyNameErr');
     function showErr(msg) { showToast(msg); if (eb) { eb.textContent = msg; eb.style.display = 'block'; } }
@@ -6376,15 +6458,30 @@ function submitRegisterFamily() {
     var inp = document.getElementById('regFamilyNameOnly');
     var name = String((inp && inp.value) || '').trim();
     if (!name) { showErr('请输入家庭名称'); return; }
-    // 手机号唯一：已存在则直接登录，不重复写入
+
+    // 1) 真实 Supabase Auth（虚拟邮箱），首次自动注册
+    var sbUser = null;
+    try { sbUser = await _sbPhoneAuth(phone); }
+    catch (e1) { showErr((e1 && e1.message) || 'Supabase 注册失败'); return; }
+
     var account = findRegisteredUser(phone);
     if (!account) {
         account = { phone: phone, password: '', familyId: _genUniqueFamilyId(), familyName: name, createdAt: Date.now() };
-        var list = getRegisteredUsers().filter(function(u) { return !u || String(u.phone) !== phone; });
-        list.push(account);
-        saveRegisteredUsers(list);
+    } else if (!account.familyName) {
+        account.familyName = name;
     }
+    account.sbUserId = sbUser.id;
+
+    // 2) 云端 families 必须落库（family_code 沿用本地 familyId，避免命名空间变化丢数据）
+    try { await _sbEnsurePhoneFamily(sbUser, phone, name, account.familyId); }
+    catch (e2) { showErr('云端家庭创建失败：' + ((e2 && e2.message) || e2)); return; }
+
+    // 3) 本地账号表（手机号唯一）
+    var list = getRegisteredUsers().filter(function(u) { return !u || String(u.phone) !== phone; });
+    list.push(account);
+    saveRegisteredUsers(list);
     _pendingRegisterPhone = '';
+    _pendingSbUserId = '';
     closeRegisterFamilyModal();
     _applyAccountSession(account);
     updateHomeAuthBtn();
@@ -6505,7 +6602,7 @@ function regenerateInviteFamilyCode() {
     showToast('已重新生成邀请码');
 }
 // 注册弹窗里「输入邀请码加入已有家庭」
-function submitJoinFamily() {
+async function submitJoinFamily() {
     var phone = _pendingRegisterPhone;
     var eb = document.getElementById('regFamilyNameErr');
     function showErr(msg) { showToast(msg); if (eb) { eb.textContent = msg; eb.style.display = 'block'; } }
@@ -6516,6 +6613,13 @@ function submitJoinFamily() {
     var invites = getFamilyInvites();
     var inv = invites[code];
     if (!inv || !inv.familyId) { showErr('邀请码无效或已失效，请向家人确认'); return; }
+    // V545: 先建立真实 Supabase 会话，再通过 RPC 入组（family_members）
+    try { await _sbPhoneAuth(phone); } catch (e0) { showErr((e0 && e0.message) || 'Supabase 登录失败'); return; }
+    try {
+        var jr = await sb.rpc('join_family_by_code', { p_code: String(inv.familyId) });
+        if (jr && jr.data && jr.data.family_id) _sbCacheFamilyUuid(jr.data.family_code || inv.familyId, jr.data.family_id);
+        else if (jr && jr.error) console.warn('[Supabase] 入组失败：' + jr.error.message);
+    } catch (e1) { console.warn('[Supabase] 入组异常', e1); }
     // 同一手机号已有账号则改绑到目标家庭；否则新建并直接绑定（手机号唯一）
     var account = findRegisteredUser(phone);
     var list = getRegisteredUsers().filter(function(u) { return !u || String(u.phone) !== phone; });
