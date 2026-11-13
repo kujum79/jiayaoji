@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V548-20261113';
+        var APP_VER = 'V549-20261113';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -13053,6 +13053,31 @@ function _sbUuidFromSession() {
     } catch (e) {}
     return '';
 }
+// V549: 切换家庭码前，把旧命名空间 oldCode_* 的业务键复制到 newCode_*
+// 仅当目标键不存在时写入，绝不覆盖新命名空间已有数据；返回迁移条数
+function _sbMigrateFamilyKeys(oldCode, newCode) {
+    if (!oldCode || !newCode || String(oldCode) === String(newCode)) return 0;
+    var moved = 0;
+    try {
+        var src = String(oldCode) + '_', dst = String(newCode) + '_';
+        var keys = [];
+        for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf(src) === 0) keys.push(k);
+        }
+        for (var j = 0; j < keys.length; j++) {
+            var nk = dst + keys[j].slice(src.length);
+            if (localStorage.getItem(nk) === null) {
+                localStorage.setItem(nk, localStorage.getItem(keys[j]));
+                moved++;
+            }
+        }
+        if (moved) console.log('[云端数据] 已迁移 ' + moved + ' 个本地键：' + oldCode + '_* → ' + newCode + '_*');
+    } catch (e) {
+        console.warn('[云端数据] 家庭键迁移失败：' + ((e && e.message) || e));
+    }
+    return moved;
+}
 // 家庭码 → Supabase families.id（本地缓存 → 登录会话 → 查库，查不到明确告警）
 async function _sbResolveFamilyUuid() {
     var code = _sbFamCode();
@@ -13100,7 +13125,17 @@ async function _sbResolveFamilyUuid() {
                 var cloudCode = viaRpc.family_code || code;
                 if (cloudCode !== code) {
                     console.warn('[云端数据] 本地家庭码 ' + code + ' 已过期，改用云端家庭码 ' + cloudCode);
+                    // V549: 先迁移旧命名空间数据，再切换家庭码，避免本地数据"消失"
+                    var _moved = _sbMigrateFamilyKeys(code, cloudCode);
                     try { setFamilyId(cloudCode); } catch (e) {}
+                    // 命名空间已变：重载一次让页面用新前缀重新读取（仅一次，防循环）
+                    try {
+                        var _flag = '_sbSwitched_' + cloudCode;
+                        if (!sessionStorage.getItem(_flag)) {
+                            sessionStorage.setItem(_flag, '1');
+                            setTimeout(function () { try { location.reload(); } catch (e) {} }, _moved ? 1200 : 500);
+                        }
+                    } catch (e) {}
                 }
                 _sbCacheFamilyUuid(cloudCode, viaRpc.id);
                 return viaRpc.id;
