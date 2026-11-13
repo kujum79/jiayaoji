@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V541-20261112';
+        var APP_VER = 'V542-20261113';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4026,7 +4026,8 @@ body.demo-mode .phone-frame { height: 100%; }
             <div id="loginPhoneErr" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;line-height:1.6;"></div>
             <div style="font-size:12px;color:#9CA3AF;margin-top:10px;">登录即表示同意家肴记服务条款</div>
             <div style="margin-top:12px;padding-top:12px;border-top:1px solid #F3F4F6;">
-                <button type="button" onclick="toggleFamilyLoginPanel(1)" style="width:100%;padding:10px;font-size:13px;font-weight:600;color:#9A3412;background:#fff;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;">🏠 用家庭名称 + 家庭密码登录</button>
+                <button type="button" onclick="openEmailAccountModal()" style="width:100%;padding:11px;font-size:14px;font-weight:700;color:#fff;background:linear-gradient(135deg,#F97316,#EA580C);border:none;border-radius:10px;cursor:pointer;">📧 邮箱 + 密码登录（Supabase 鉴权）</button>
+                <button type="button" onclick="toggleFamilyLoginPanel(1)" style="width:100%;margin-top:8px;padding:8px;font-size:12px;font-weight:500;color:#9CA3AF;background:#fff;border:1px solid #E5E7EB;border-radius:10px;cursor:pointer;">旧版：家庭名称 + 家庭密码登录（过渡期）</button>
             </div>
         </div>
         <!-- V294: 家庭成员用「家庭名称 + 家庭密码」登录（无需手机号） -->
@@ -6830,6 +6831,8 @@ function showAppRoot() {
     updateHomeAuthBtn();
     // 登录/创建家庭后, 强制回到首页(用户应从首页开始浏览, 而非停留在登录前的任意Tab)
     try { switchTab('home'); } catch(e) {}
+    // V542: 登录成功后从 Supabase 补齐本机缺失的业务键（不覆盖已有本地数据）
+    setTimeout(function () { try { if (typeof _sbPullMissing === 'function') _sbPullMissing(); } catch (e) {} }, 1200);
 }
 
 // ==================== 首页优先 + 未登录浏览模式 ====================
@@ -11937,8 +11940,8 @@ function lsSet(key, val) {
             }
         } catch(e) {}
     }
-    localStorage.setItem(familyKey(key), val); try { if (_isBackupKey(key)) cloudBackupSchedule(); } catch(e) {} }
-function lsRemove(key) { localStorage.removeItem(familyKey(key)); }
+    localStorage.setItem(familyKey(key), val); try { if (_isBackupKey(key)) cloudBackupSchedule(key); } catch(e) {} }
+function lsRemove(key) { localStorage.removeItem(familyKey(key)); try { if (_isBackupKey(key)) _sbMarkDeleted(key); } catch(e) {} }
 function lsGetJSON(key, defaultVal) {
     try { var v = lsGet(key); return v ? JSON.parse(v) : (defaultVal || null); }
     catch(e) { return defaultVal || null; }
@@ -12823,11 +12826,11 @@ function _errClassify(url) {
     }
 })();
 
-// ========== V187: 家庭数据云端自动备份（防 localStorage 丢失） ==========
-// 推送：lsSet 写入家庭键时触发，8s 防抖后把全量快照 POST 到 /api/family-backup（服务器按家庭码存一份最新快照）
-// 恢复：启动时本地无 familyData（__hadLocalFamilyData===false）且已登录 → 拉云端快照写入本地前缀键并重载一次
+// ========== V542: 家庭数据云端同步（Supabase family_data） ==========
+// 推送：lsSet 写家庭键 → 标脏 → 2.5s 防抖后 upsert 到 Supabase（RLS 按家庭成员隔离）
+// 补齐：登录后拉取云端键，本机缺失的写入本地（不覆盖已有本地数据）
+// 恢复：启动时本地无 familyData（__hadLocalFamilyData===false）→ 整份恢复并重载一次
 // V192: 备份键清单上移（必须在 lsSet 之前完成初始化），否则启动早期迁移写键会绕过游客态拦截
-var _cloudBackupTimer = null;
 // V367: 推送门闩——启动/恢复判断完成前不推送，避免默认数据覆盖云端真实快照
 window.__cloudBackupReady = false;
 window.__pendingBackup = false;
@@ -12846,39 +12849,83 @@ function _isBackupKey(key) {
     }
     return false;
 }
-function cloudBackupSchedule() {
+// V542: 云端数据层切换到 Supabase（family_data 表，RLS 按家庭成员隔离）
+// localStorage 保留为同步缓存：lsSet 立即写本地 → 标脏 → 2.5s 防抖后 upsert 到 Supabase
+var _sbDirtyKeys = {};
+var _sbDeletedKeys = {};
+var _sbPushTimer = null;
+var _sbPushing = false;
+function _sbMarkDeleted(key) {
+    if (window.__demoMode || !key || !_isBackupKey(key)) return;
+    delete _sbDirtyKeys[key];
+    _sbDeletedKeys[key] = true;
+    cloudBackupSchedule(key);
+}
+function _sbFamCode() { try { return (typeof getFamilyId === 'function' && getFamilyId()) || ''; } catch (e) { return ''; } }
+function _sbUuidCacheKey(code) { return '_sbFamilyUuid_' + code; }
+// 家庭码 → Supabase families.id（缓存，避免每次写盘都查库）
+async function _sbResolveFamilyUuid() {
+    var code = _sbFamCode();
+    if (!code) return '';
+    try {
+        var cached = localStorage.getItem(_sbUuidCacheKey(code));
+        if (cached) return cached;
+    } catch (e) {}
+    if (!sb) return '';
+    try {
+        var r = await withTimeout(sb.from('families').select('id').eq('family_code', code).maybeSingle(), 15000, '家庭查询');
+        if (r && r.data && r.data.id) {
+            try { localStorage.setItem(_sbUuidCacheKey(code), r.data.id); } catch (e) {}
+            return r.data.id;
+        }
+    } catch (e) {}
+    return '';
+}
+function cloudBackupSchedule(key) {
     if (window.__demoMode) return; // V195: 演示模式绝不推送云端
+    if (key && _isBackupKey(key) && !_sbDeletedKeys[key]) _sbDirtyKeys[key] = true;
     if (typeof getFamilyId !== 'function' || !getFamilyId()) return;
     if (!window.__cloudBackupReady) { window.__pendingBackup = true; return; } // V367: 等恢复判断完成
-    if (_cloudBackupTimer) clearTimeout(_cloudBackupTimer);
-    _cloudBackupTimer = setTimeout(cloudBackupPush, 8000);
+    if (_sbPushTimer) clearTimeout(_sbPushTimer);
+    _sbPushTimer = setTimeout(cloudBackupPush, 2500);
 }
-function cloudBackupPush() {
-    if (window.__demoMode) return; // V195: 演示模式绝不推送云端
-    if (!window.__cloudBackupReady) { window.__pendingBackup = true; return; } // V367: 未就绪不推送
-    var fid = getFamilyId();
-    if (!fid) return;
-    var data = {};
-    for (var i = 0; i < _FAMILY_BACKUP_KEYS.length; i++) {
-        var v = lsGet(_FAMILY_BACKUP_KEYS[i]);
-        if (v !== null && typeof v !== 'undefined') data[_FAMILY_BACKUP_KEYS[i]] = v;
-    }
-    if (!Object.keys(data).length) return;
-    var force = !!window.__allowShrinkOnce; // V367: 用户主动删成员等合法缩减
+async function cloudBackupPush() {
+    if (window.__demoMode) return;
+    if (_sbPushing) { _sbPushTimer = setTimeout(cloudBackupPush, 1500); return; } // 上一轮未完成：稍后重试，避免丢脏键
+    if (!window.__cloudBackupReady) { window.__pendingBackup = true; return; }
+    if (!sb) return;
+    var dirty = Object.keys(_sbDirtyKeys);
+    var gone = Object.keys(_sbDeletedKeys);
+    if (!dirty.length && !gone.length) return;
+    var uuid = await _sbResolveFamilyUuid();
+    if (!uuid) return; // 表未建 / 家庭码未同步：静默跳过，本地数据不受影响
+    _sbPushing = true;
     try {
-        var body = JSON.stringify({ familyId: fid, data: data, force: force });
-        if (body.length > 2500000) return; // 超大体量不推送（服务器上限 3MB）
-        fetch('/api/family-backup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
-            .then(function (r) { return r.json(); })
-            .then(function (j) {
-                if (j && j.ok) { window.__allowShrinkOnce = false; window.__cloudBackupBlocked = false; return; }
-                if (j && j.code === 'SHRINK_REJECTED') {
-                    window.__cloudBackupBlocked = true;
-                    console.warn('[云端备份] 已拒绝降级覆盖：' + (j.error || ''));
-                }
-            })
-            .catch(function () { /* 网络失败：保留 force 标记，下次变更再推 */ });
-    } catch (e) {}
+        if (dirty.length) {
+            var rows = [];
+            for (var i = 0; i < dirty.length; i++) {
+                var v = lsGet(dirty[i]);
+                if (v === null || typeof v === 'undefined') continue;
+                rows.push({ family_id: uuid, key: dirty[i], value: v, updated_at: new Date().toISOString() });
+            }
+            if (rows.length) {
+                var r = await sb.from('family_data').upsert(rows, { onConflict: 'family_id,key' });
+                if (r.error) console.warn('[云端数据] upsert 失败：' + r.error.message);
+                else dirty.forEach(function (k) { delete _sbDirtyKeys[k]; });
+            } else {
+                dirty.forEach(function (k) { delete _sbDirtyKeys[k]; });
+            }
+        }
+        if (gone.length) {
+            var d = await sb.from('family_data').delete().eq('family_id', uuid).in('key', gone);
+            if (!d.error) gone.forEach(function (k) { delete _sbDeletedKeys[k]; });
+        }
+        window.__allowShrinkOnce = false;
+        window.__cloudBackupBlocked = false;
+    } catch (e) {
+        console.warn('[云端数据] 推送异常（本地数据不受影响）', e);
+    }
+    _sbPushing = false;
 }
 async function cloudBackupRestoreIfNeeded() {
     try {
@@ -12887,27 +12934,56 @@ async function cloudBackupRestoreIfNeeded() {
         if (!fid) return false;
         if (window.__hadLocalFamilyData !== false) { _cloudMarkReady(); return false; } // 仅"启动时本地无数据"才恢复，绝不覆盖现有数据
         if (sessionStorage.getItem('_cloudRestored') === fid) { _cloudMarkReady(); return false; } // 防恢复后重载死循环
-        var r = await fetch('/api/family-backup/get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ familyId: fid }) });
-        var j = await r.json();
-        if (!j || !j.ok || !j.data || !Object.keys(j.data).length) {
-            // V367: 新家庭（云端确实无备份）允许推送；其余异常不放开推送，避免默认数据覆盖云端
-            if (!j || /无云端备份/.test(String(j.error || ''))) { _cloudMarkReady(); }
-            else { console.warn('[云端备份] 恢复失败，本次已阻止默认数据上传：' + (j && j.error ? j.error : '未知错误')); }
-            return false;
-        }
+        var uuid = await _sbResolveFamilyUuid();
+        if (!uuid || !sb) { _cloudMarkReady(); return false; }
+        var r = await withTimeout(sb.from('family_data').select('key,value').eq('family_id', uuid), 20000, '云端数据恢复');
+        if (r.error || !r.data || !r.data.length) { _cloudMarkReady(); return false; }
         sessionStorage.setItem('_cloudRestored', fid);
-        Object.keys(j.data).forEach(function (k) {
-            if (_isBackupKey(k) && typeof j.data[k] === 'string') {
-                try { localStorage.setItem(fid + '_' + k, j.data[k]); } catch (e) {}
-            }
+        var n = 0;
+        r.data.forEach(function (row) {
+            if (!row || typeof row.value !== 'string' || !_isBackupKey(row.key)) return;
+            try { localStorage.setItem(fid + '_' + row.key, row.value); n++; } catch (e) {}
         });
-        console.log('[云端备份] 已恢复家庭数据（备份于 ' + new Date((j.updatedAt || 0) * 1000).toLocaleString() + '），即将刷新页面');
+        if (!n) { _cloudMarkReady(); return false; }
+        console.log('[云端数据] 已从 Supabase 恢复 ' + n + ' 个业务键，即将刷新页面');
         location.reload();
         return true;
     } catch (e) {
-        console.warn('[云端备份] 恢复请求异常，本次已阻止默认数据上传');
+        console.warn('[云端数据] 恢复异常（本地数据不受影响）', e);
+        _cloudMarkReady();
         return false;
     }
+}
+
+// V542: 登录后从 Supabase 补齐本机缺失键（只补缺，不覆盖本机已有数据，避免多端互相踩踏）
+async function _sbPullMissing() {
+    if (window.__demoMode || !sb) return false;
+    var fid = _sbFamCode();
+    if (!fid) return false;
+    var uuid = await _sbResolveFamilyUuid();
+    if (!uuid) return false;
+    try {
+        var r = await sb.from('family_data').select('key,value').eq('family_id', uuid);
+        if (r.error || !r.data || !r.data.length) return false;
+        var filled = 0;
+        r.data.forEach(function (row) {
+            if (!row || typeof row.value !== 'string' || !_isBackupKey(row.key)) return;
+            var localKey = fid + '_' + row.key;
+            var cur = null;
+            try { cur = localStorage.getItem(localKey); } catch (e) {}
+            if (cur === null) {
+                try { localStorage.setItem(localKey, row.value); filled++; } catch (e) {}
+            }
+        });
+        if (filled) {
+            console.log('[云端数据] 已补齐本机缺失的 ' + filled + ' 个业务键');
+            if (sessionStorage.getItem('_sbPulled_' + fid) !== uuid) {
+                sessionStorage.setItem('_sbPulled_' + fid, uuid);
+                location.reload();
+            }
+        }
+        return filled > 0;
+    } catch (e) { return false; }
 }
 
 // 将全局数据认领到当前家庭前缀下（仅在首次创建/加入家庭时执行）
