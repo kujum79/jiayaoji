@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V543-20261113';
+        var APP_VER = 'V544-20261113';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -16616,8 +16616,8 @@ const FOOD_PRESERVATION_KNOWLEDGE = {
     '苹果': { storage: '冷藏', tips: '冷藏保存，可存放较久。', shelfLife: '2-4周' }
 };
 
-// 预置示例数据（仅当 localStorage 中没有 fridgeItems 时）
-if (!lsGet('fridgeItems')) {
+// V544: 预置示例食材只在演示模式生效；真实用户（含新注册）保持空冰箱，由语音/手动录入
+if (window.__demoMode && !lsGet('fridgeItems')) {
     const today = new Date();
     const fmt = d => d.toISOString().slice(0, 10);
     const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
@@ -27116,7 +27116,7 @@ function renderFridgeCategoryView() {
     fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
     let hasAny = fridgeItems.length > 0;
     if (!hasAny) {
-        body.innerHTML = `<div class="fridge-cat-empty">暂无食材<br><span style="font-size:13px;color:#D1D5DB;">点击右上角+添加</span></div>`;
+        body.innerHTML = `<div class="fridge-cat-empty">暂无食材<br><span style="font-size:13px;color:#D1D5DB;">点击右上角 ＋ 手动添加，或用语音录入</span></div>`;
         return;
     }
     let html = '';
