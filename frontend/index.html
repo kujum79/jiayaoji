@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V553-20261115';
+        var APP_VER = 'V554-20261115';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -11117,7 +11117,7 @@ function _lessonFamilyMatched(item) {
     try {
         var brief = String((item && item.familyBrief) || '').trim();
         if (!brief) return true;
-        var fam = (typeof getCurrentFamily === 'function') ? (getCurrentFamily() || []) : [];
+        var fam = (typeof getFamilyMembers === 'function') ? (getFamilyMembers() || []) : [];
         var names = fam.map(function (m) { return m && m.name ? String(m.name).trim() : ''; }).filter(Boolean);
         if (!names.length) return true;
         for (var i = 0; i < names.length; i++) {
@@ -17159,6 +17159,13 @@ function _fridgeQtyNum(it) {
     var m = String(it.quantity || '').match(/(\d+(?:\.\d+)?)/);
     return m ? Number(m[1]) : 0;
 }
+function _fridgeLoadV553() {
+    var arr = [];
+    try { arr = JSON.parse(lsGet('fridgeItems')) || []; } catch (e) { arr = []; }
+    if (!Array.isArray(arr)) arr = [];
+    try { return _normalizeFridgeItemsV553(arr); } catch (e) { return arr; }
+}
+
 function _normalizeFridgeItemsV553(list) {
     if (!Array.isArray(list)) return [];
     if (!list.length) return list;
@@ -19774,7 +19781,7 @@ const WEEKDAYS = ['周日','周一','周二','周三','周四','周五','周六'
 // 根据家中食材和食谱库，为7天生成三餐推荐（食材优先逻辑）
 function generateWeekRecommendation() {
     if (!requireLogin('生成周推荐')) return;
-    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
+    fridgeItems = _fridgeLoadV553();
     const calendar = getDietCalendar(); // 从 dietCalendar 读取已确认计划
     const fridgeNames = buildFridgeNamesDict(fridgeItems);
 
@@ -21420,7 +21427,7 @@ function renderFridgeRecView() {
     const prep = window._prep;
     if (!prep.overrides) prep.overrides = {};
     if (!prep.deleted) prep.deleted = {};
-    fridgeItems = JSON.parse(lsGet('fridgeItems') || '[]');
+    fridgeItems = _fridgeLoadV553();
 
     // 1) 现有食材标签（蔬菜/肉蛋奶/方便食品）—— 去图标、去分号
     const overviewCats = ['蔬菜', '肉蛋奶', '方便食品'];
@@ -27764,7 +27771,7 @@ const _origCloseFoodDetail = typeof closeFoodDetail === 'function' ? closeFoodDe
 function renderFridgeCategoryView() {
     const body = document.getElementById('fridgeCategoryBody');
     if (!body) return;
-    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
+    fridgeItems = _fridgeLoadV553();
     let hasAny = fridgeItems.length > 0;
     if (!hasAny) {
         body.innerHTML = `<div class="fridge-cat-empty">暂无食材<br><span style="font-size:13px;color:#D1D5DB;">点击右上角 ＋ 手动添加，或用语音录入</span></div>`;
@@ -27797,7 +27804,7 @@ function renderFridgeCategoryView() {
 
 // 渲染冰箱页面
 function renderFridge() {
-    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
+    fridgeItems = _fridgeLoadV553();
     // 兼容旧分类名（使用全局迁移映射）
     let migrated = false;
     fridgeItems.forEach(item => {
@@ -29046,7 +29053,7 @@ function chineseToNumber(text) {
 // 模糊匹配食材名称
 function findFridgeItemByName(name) {
     if (!name) return null;
-    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
+    fridgeItems = _fridgeLoadV553();
     // 精确匹配
     let match = fridgeItems.find(item => item.name === name);
     if (match) return match;
@@ -29319,7 +29326,7 @@ function executeFridgeVoiceCommand(command) {
         return;
     }
 
-    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
+    fridgeItems = _fridgeLoadV553();
 
     switch (command.action) {
         case 'increase': {
@@ -30707,7 +30714,7 @@ function generateFridgeMealPlan() {
     if (!requireLogin('生成食材餐计划')) return;
     // 先从内存 fridgeItems 中提取勾选的食材（localStorage 重新读取会丢失 _checked）
     var checkedNames = (fridgeItems || []).filter(function(it) { return it._checked; }).map(function(it) { return it.name; });
-    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
+    fridgeItems = _fridgeLoadV553();
     var defaultServings = (window._prep && window._prep.servings) ? Number(window._prep.servings) : 2;
     if (!window._existingIngSrc) window._existingIngSrc = 'auto';
     if (!Array.isArray(window._manualIngTags)) window._manualIngTags = [];
@@ -33883,7 +33890,7 @@ function fridgeCountingStock(name, items) {
 function generateShoppingPlan(opts) {
     opts = opts || {};
     if (!requireLogin('生成采购计划')) return;
-    fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
+    fridgeItems = _fridgeLoadV553();
     const calendar = getDietCalendar();
 
     // 获取当前就餐人信息
