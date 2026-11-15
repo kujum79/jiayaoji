@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V552-20261115';
+        var APP_VER = 'V553-20261115';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -10825,15 +10825,22 @@ function _myClassroomCustomCard(c) {
     var tags = (Array.isArray(c.targetAudience) ? c.targetAudience : (Array.isArray(m.healthTags) ? m.healthTags : []))
         .filter(function (t) { return t && t !== 'all'; }).slice(0, 3);
     _CLASSROOM_CACHE[c.id] = { course: c, kind: 'custom' };
+    // V553: 会员专享内容在列表层就标注，未订阅不提供阅读入口
+    var _isPrem = !!c.isPremium;
+    var _isMember = false;
+    try { _isMember = (typeof isFoodMember === 'function') && isFoodMember(); } catch (e) {}
+    var _btn = (_isPrem && !_isMember)
+        ? '<button type="button" onclick="_openSubscribeGuide()" style="width:100%;padding:9px;border:1px solid #FDBA74;border-radius:10px;background:#FFF7ED;color:#C2410C;font-size:13px;font-weight:700;cursor:pointer;">会员专享 · 去订阅</button>'
+        : '<button type="button" onclick="_openClassroomCourse(\'' + escapeAttr(c.id) + '\',\'custom\')" style="width:100%;padding:9px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">开始阅读</button>';
     return '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
         '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;line-height:1.4;">🎯 ' + escapeHtml(c.title || '专属定制课') + '</div>' +
-        '<span style="flex-shrink:0;font-size:11px;background:#FEF3C7;color:#B45309;border-radius:999px;padding:3px 10px;">专属定制</span>' +
+        '<span style="flex-shrink:0;font-size:11px;background:' + (_isPrem ? '#FEF3C7' : '#F3F4F6') + ';color:' + (_isPrem ? '#B45309' : '#6B7280') + ';border-radius:999px;padding:3px 10px;">' + (_isPrem ? '会员专享' : '专属定制') + '</span>' +
         '</div>' +
         '<div style="font-size:12px;color:#EA580C;line-height:1.7;margin-bottom:4px;">为「' + escapeHtml(who) + '」定制</div>' +
         '<div style="font-size:12px;color:#9CA3AF;line-height:1.7;margin-bottom:8px;">⏱ ' + (Number(c.duration) || 3) + ' 分钟' +
         (tags.length ? '　·　🏷 ' + escapeHtml(tags.join(' / ')) : '') + '</div>' +
-        '<button type="button" onclick="_openClassroomCourse(\'' + escapeAttr(c.id) + '\',\'custom\')" style="width:100%;padding:9px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">开始阅读</button>' +
+        _btn +
         '</div>';
 }
 
@@ -11022,6 +11029,7 @@ function _myClassroomOpenArticle(folderId, articleId) {
             try { credits = Math.max(0, Math.floor(Number(lsGet('pointCourseCredits') || 0))); } catch (e) {}
             if (credits > 0) {
                 lsSet('pointCourseCredits', String(credits - 1));
+                window.__clsUnlock = articleId;   // V553: 积分解锁本次阅读
                 showToast('已使用 1 次课程解锁额度，剩余 ' + (credits - 1) + ' 次');
             } else {
                 _openSubscribeGuide();
@@ -11066,14 +11074,29 @@ function _lessonStripCity(s) {
     return t.replace(/\s{2,}/g, ' ').trim();
 }
 
+// V553: 一次性清除历史全局 dailyLessons（跨家庭串号源头），此后只读当前家庭命名空间
+try {
+    if (localStorage.getItem('dailyLessons') !== null) {
+        localStorage.removeItem('dailyLessons');
+        console.warn('[数据修复] 已清除全局 dailyLessons（历史跨家庭串号数据）');
+    }
+} catch (e) {}
+
 function _getDailyLessons() {
     try {
         var raw = lsGet('dailyLessons');
         var obj = raw ? JSON.parse(raw) : null;
         var items = (obj && Array.isArray(obj.items)) ? obj.items : (Array.isArray(obj) ? obj : []);
         var floor = Date.now() - _DAILY_LESSON_TTL;
-        return items
+        var dropped = 0;
+        var kept = items
             .filter(function (x) { return x && x.date && (Number(x.createdAt) || 0) >= floor; })
+            .filter(function (x) {
+                // V553: 画像与当前家庭不符的微课直接丢弃（下次进入会重新生成）
+                if (_lessonFamilyMatched(x)) return true;
+                dropped++;
+                return false;
+            })
             .map(function (x) {
                 return Object.assign({}, x, {
                     title: _lessonStripCity(x.title),
@@ -11081,7 +11104,27 @@ function _getDailyLessons() {
                     weather: _lessonStripCity(x.weather)
                 });
             });
+        if (dropped) {
+            console.warn('[数据修复] 已剔除 ' + dropped + ' 条家庭画像不匹配的微课');
+            _saveDailyLessons(kept);
+        }
+        return kept;
     } catch (e) { return []; }
+}
+
+// 微课的 familyBrief 必须覆盖当前家庭全部成员姓名；无画像的老数据放行
+function _lessonFamilyMatched(item) {
+    try {
+        var brief = String((item && item.familyBrief) || '').trim();
+        if (!brief) return true;
+        var fam = (typeof getCurrentFamily === 'function') ? (getCurrentFamily() || []) : [];
+        var names = fam.map(function (m) { return m && m.name ? String(m.name).trim() : ''; }).filter(Boolean);
+        if (!names.length) return true;
+        for (var i = 0; i < names.length; i++) {
+            if (brief.indexOf(names[i]) < 0) return false;
+        }
+        return true;
+    } catch (e) { return true; }
 }
 
 function _saveDailyLessons(items) {
@@ -11426,6 +11469,25 @@ function _openClassroomCourse(id, kind) {
     var c = hit && hit.course;
     if (!c) c = (kind === 'classic') ? getEduCourse(id) : null;
     if (!c) { showToast('课程不存在'); return; }
+    // V553: 收费内容统一闸门——未订阅只能看标题/摘要，正文不渲染
+    if (c.isPremium) {
+        var _allowed = false;
+        try { _allowed = (typeof isFoodMember === 'function') && isFoodMember(); } catch (e) {}
+        if (!_allowed && window.__clsUnlock === id) { window.__clsUnlock = ''; _allowed = true; }
+        if (!_allowed) {
+            try {
+                var _purchases = JSON.parse(lsGet('courseLibraryPurchases') || '[]');
+                _allowed = Array.isArray(_purchases) && _purchases.some(function (x) {
+                    return x && (x.articleId === id || x.courseId === id || x.id === id);
+                });
+            } catch (e) {}
+        }
+        if (!_allowed) {
+            showToast('会员专享内容，订阅后可阅读全文');
+            try { _openSubscribeGuide(); } catch (e) {}
+            return;
+        }
+    }
     _closeClassroomCourse();
     setCourseProgress(id, 'learning', 20);
     var content = String(c.content || '');
@@ -12310,7 +12372,8 @@ function lsGet(key) {
     // 导致多个家庭首页"家中食材/食记"内容完全一样（家庭数据串号）。
     // V336: mealRecords 历史为全局键，多家庭三餐记录混存同一键且无归属信息，禁止回退读取全局键
     // （否则每个家庭都会读到其他家庭的记录＝串号）；历史全局 mealRecords 不做迁移，保持原样不读取
-    if (prefixedKey !== key && key !== 'mealRecords') {
+    // V553: dailyLessons 同样禁止回退全局键——微课带家庭画像，跨家庭读取会造成「familyBrief 与档案不符」
+    if (prefixedKey !== key && key !== 'mealRecords' && key !== 'dailyLessons') {
         var gval = localStorage.getItem(key);
         if (gval !== null) return gval;
     }
@@ -13321,6 +13384,15 @@ function _sbUuidFromSession() {
 function _sbMigrateFamilyKeys(oldCode, newCode) {
     if (!oldCode || !newCode || String(oldCode) === String(newCode)) return 0;
     var moved = 0;
+    // V553: 画像类/AI 缓存禁止跨命名空间复制（会造成微课画像与家庭档案不符）
+    var SKIP_KEYS = { dailyLessons: 1 };
+    var curUid = '', oldOwner = '';
+    try { curUid = localStorage.getItem('__sbUid') || ''; } catch (e) {}
+    try { oldOwner = localStorage.getItem('__sbNsOwner_' + oldCode) || ''; } catch (e) {}
+    if (oldOwner && curUid && oldOwner !== curUid) {
+        console.warn('[数据修复] 旧命名空间属于其他账号，已跳过迁移：' + oldCode);
+        return 0;
+    }
     try {
         var src = String(oldCode) + '_', dst = String(newCode) + '_';
         var keys = [];
@@ -13329,12 +13401,15 @@ function _sbMigrateFamilyKeys(oldCode, newCode) {
             if (k && k.indexOf(src) === 0) keys.push(k);
         }
         for (var j = 0; j < keys.length; j++) {
-            var nk = dst + keys[j].slice(src.length);
+            var shortKey = keys[j].slice(src.length);
+            if (SKIP_KEYS[shortKey]) continue;
+            var nk = dst + shortKey;
             if (localStorage.getItem(nk) === null) {
                 localStorage.setItem(nk, localStorage.getItem(keys[j]));
                 moved++;
             }
         }
+        if (curUid) { try { localStorage.setItem('__sbNsOwner_' + newCode, curUid); } catch (e2) {} }
         if (moved) console.log('[云端数据] 已迁移 ' + moved + ' 个本地键：' + oldCode + '_* → ' + newCode + '_*');
     } catch (e) {
         console.warn('[云端数据] 家庭键迁移失败：' + ((e && e.message) || e));
@@ -13360,6 +13435,7 @@ async function _sbResolveFamilyUuid() {
         }
         var rows = (r && r.data) || [];
         if (rows.length) {
+            try { localStorage.setItem('__sbNsOwner_' + (rows[0].family_code || code), localStorage.getItem('__sbUid') || ''); } catch (eN) {}
             _sbCacheFamilyUuid(rows[0].family_code || code, rows[0].id);
             return rows[0].id;
         }
@@ -13367,6 +13443,8 @@ async function _sbResolveFamilyUuid() {
         var ures = await sb.auth.getUser();
         var uid = ures && ures.data && ures.data.user && ures.data.user.id;
         if (uid) {
+            // V553: 记录当前登录用户，供命名空间迁移做归属校验（禁止跨账号复制数据）
+            try { localStorage.setItem('__sbUid', uid); } catch (eU) {}
             var viaRpc = null;
             try {
                 var rr = await withTimeout(sb.rpc('my_family'), 15000, '家庭查询(RPC)');
@@ -13506,6 +13584,11 @@ async function _sbPullMissing() {
         r.data.forEach(function (row) {
             if (!row || typeof row.value !== 'string' || !_isBackupKey(row.key)) return;
             var localKey = fid + '_' + row.key;
+            // V553: dailyLessons 带家庭画像，以云端为准覆盖本地旧值（不再"只补缺失"导致旧画像残留）
+            if (row.key === 'dailyLessons') {
+                try { localStorage.setItem(localKey, row.value); } catch (e) {}
+                return;
+            }
             var cur = null;
             try { cur = localStorage.getItem(localKey); } catch (e) {}
             if (cur === null) {
@@ -17059,8 +17142,71 @@ function formatAIResponse(text) {
 // ============================================================
 // 冰箱食材管理模块
 // ============================================================
+// V553: 冰箱食材数据归一
+// 1) usedUp:true → quantityValue 归零、quantity 显示为 0
+// 2) 同名 + 同存储 + 同单位 合并数量，保留最早 id（保质期取更早的一条）
+// 3) 每日首次打开：expiryDate 已过 → status = 'expired'
+function _fridgeIdNum(id) {
+    var n = Number(id);
+    if (!isNaN(n) && n > 0) return n;
+    var m = String(id || '').match(/(\d{6,})/);
+    return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;
+}
+function _fridgeQtyNum(it) {
+    if (!it) return 0;
+    var v = Number(it.quantityValue);
+    if (!isNaN(v) && v > 0) return v;
+    var m = String(it.quantity || '').match(/(\d+(?:\.\d+)?)/);
+    return m ? Number(m[1]) : 0;
+}
+function _normalizeFridgeItemsV553(list) {
+    if (!Array.isArray(list)) return [];
+    if (!list.length) return list;
+    var changed = false;
+    var d0 = new Date();
+    var todayStr = d0.getFullYear() + '-' + String(d0.getMonth() + 1).padStart(2, '0') + '-' + String(d0.getDate()).padStart(2, '0');
+    // 1) 已用完 → 数量归零
+    list.forEach(function (it) {
+        if (!it || !it.usedUp) return;
+        if (Number(it.quantityValue) !== 0) { it.quantityValue = 0; changed = true; }
+        if (String(it.quantity) !== '0') { it.quantity = '0'; changed = true; }
+        if (Number(it.reserved)) { it.reserved = 0; changed = true; }
+    });
+    // 2) 同名合并
+    var merged = [], map = {};
+    list.forEach(function (it) {
+        if (!it || !it.name) { merged.push(it); return; }
+        var key = [String(it.name).trim(), String(it.storage || ''), String(it.quantityUnit || '')].join('|');
+        var first = map[key];
+        if (!first) { map[key] = it; merged.push(it); return; }
+        var keep = first, other = it;
+        if (_fridgeIdNum(other.id) < _fridgeIdNum(keep.id)) { keep = it; other = first; map[key] = it; }
+        keep.quantityValue = Math.round((_fridgeQtyNum(keep) + _fridgeQtyNum(other)) * 100) / 100;
+        if (keep.quantityUnit) keep.quantity = String(keep.quantityValue) + keep.quantityUnit;
+        if (other.expiryDate && (!keep.expiryDate || String(other.expiryDate) < String(keep.expiryDate))) {
+            keep.expiryDate = other.expiryDate;
+        }
+        if (keep.usedUp && keep.quantityValue > 0) keep.usedUp = false;
+        var idx = merged.indexOf(other);
+        if (idx >= 0) merged.splice(idx, 1);
+        changed = true;
+    });
+    // 3) 过期标记
+    merged.forEach(function (it) {
+        if (!it || !it.expiryDate || it.usedUp) return;
+        if (it.status === 'expired') return;
+        if (String(it.expiryDate).slice(0, 10) < todayStr) { it.status = 'expired'; changed = true; }
+    });
+    if (changed) {
+        try { lsSet('fridgeItems', JSON.stringify(merged)); } catch (e) {}
+        console.log('[数据修复] 冰箱食材已归一，共 ' + merged.length + ' 条');
+    }
+    return merged;
+}
 
 let fridgeItems = JSON.parse(lsGet('fridgeItems')) || [];
+// V553: 冰箱数据归一（用完清零 / 同名合并 / 过期标记），每天首次打开执行一次
+try { fridgeItems = _normalizeFridgeItemsV553(fridgeItems); } catch (e) {}
 let pendingFoodStorage = null;
 let pendingPurchaseAlert = null;
 let currentFridgeView = 'expiring'; // expiring / storage / category
@@ -37383,10 +37529,26 @@ async function _fhEnsureDailyDrafts(force) {
                 w = { textDay: d0.textDay || '', tempMax: d0.tempMax, tempMin: d0.tempMin };
             }
         } catch (e) {}
-        var resp = await fetch('/api/food-hall/generate-drafts', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ date: today, city: _getWeatherCity(), solarTerm: term, weather: w }) // contentType 留空：饮食 3 篇 + 食谱 3 篇
-        });
+        // V553: 60 秒超时 + 进度提示（后端已改为多轨并发）
+        try { showToast('AI 正在生成今日候选内容，请稍候…'); } catch (e) {}
+        var _ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        var _timer = _ctrl ? setTimeout(function () { try { _ctrl.abort(); } catch (e) {} }, 60000) : null;
+        var resp;
+        try {
+            resp = await fetch('/api/food-hall/generate-drafts', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: today, city: _getWeatherCity(), solarTerm: term, weather: w }), // contentType 留空：饮食 3 篇 + 食谱 3 篇
+                signal: _ctrl ? _ctrl.signal : undefined
+            });
+        } catch (eNet) {
+            if (eNet && eNet.name === 'AbortError') {
+                try { showToast('生成超时（60 秒），请稍后重试'); } catch (e) {}
+                return 0;
+            }
+            throw eNet;
+        } finally {
+            if (_timer) clearTimeout(_timer);
+        }
         var out = await resp.json();
         if (!out || !out.ok || !Array.isArray(out.drafts)) throw new Error((out && out.detail) || '生成失败');
         var ids = [];
@@ -43627,7 +43789,7 @@ async function _acctExportData() {
         familyName: '',
         data: {}
     };
-    try { payload.familyName = lsGet('familyName') || ''; } catch (e) {}
+    try { payload.familyName = _acctGuessFamilyName(code); } catch (e) {}
     // 1) 本地缓存（家庭前缀键）
     try {
         var prefix = code ? (code + '_') : '';
@@ -43641,6 +43803,13 @@ async function _acctExportData() {
     try {
         var uuid = await _sbResolveFamilyUuid();
         if (uuid && sb) {
+            // V553: 家庭名优先取云端 families.family_name
+            try {
+                var rf = await sb.from('families').select('family_name').eq('id', uuid).limit(1);
+                if (rf && !rf.error && rf.data && rf.data.length && rf.data[0].family_name) {
+                    payload.familyName = rf.data[0].family_name;
+                }
+            } catch (eF) {}
             var r = await sb.from('family_data').select('key,value').eq('family_id', uuid);
             if (r && !r.error && r.data && r.data.length) {
                 r.data.forEach(function (row) { payload.data[row.key] = row.value; });
@@ -43664,6 +43833,18 @@ async function _acctExportData() {
     } catch (e) {
         showToast('导出失败：' + ((e && e.message) || e));
     }
+}
+
+// V553: 导出时推断家庭名（不再依赖不存在的 lsGet('familyName')）
+function _acctGuessFamilyName(code) {
+    var name = '';
+    try {
+        if (code) name = localStorage.getItem('familyName_' + code) || '';
+        if (!name) { var ca = JSON.parse(localStorage.getItem('currentAccount') || 'null'); name = (ca && ca.familyName) || ''; }
+        if (!name) { var lf = JSON.parse(localStorage.getItem('jj_login_family') || 'null'); name = (lf && (lf.familyName || lf.name)) || ''; }
+        if (!name) { var fd = JSON.parse(lsGet('familyData') || 'null'); name = (fd && (fd.familyName || fd.name)) || ''; }
+    } catch (e) {}
+    return String(name || '');
 }
 
 // 注销：先确认身份（owner / member），再二次输入「注销」

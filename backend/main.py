@@ -1284,16 +1284,27 @@ async def food_hall_generate_drafts(req: FoodHallDraftRequest) -> Dict[str, Any]
     drafts: List[Dict[str, Any]] = []
     violations: List[Dict[str, Any]] = []
     regenerated = False
-    for ct in types:
-        d, v, r = await _foodhall_generate_core(
-            date, req.city, req.solarTerm, weather, ct
-        )
+    # V553: 多轨并发生成（原为串行，两轨各一次大模型调用叠加大 20s+ 易触发前端超时）
+    results = await asyncio.gather(
+        *[_foodhall_generate_core(date, req.city, req.solarTerm, weather, ct) for ct in types],
+        return_exceptions=True,
+    )
+    failed: List[Dict[str, str]] = []
+    for ct, res in zip(types, results):
+        if isinstance(res, Exception):
+            detail = getattr(res, "detail", None) or str(res)
+            failed.append({"contentType": ct, "error": str(detail)})
+            continue
+        d, v, r = res
         for item in v:
             violations.append({**item, "contentType": ct, "index": len(drafts) + item.get("index", 0)})
         drafts.extend(d)
         regenerated = regenerated or r
+    if not drafts and failed:
+        raise HTTPException(status_code=502, detail=f"AI 生成失败：{failed[0]['error']}")
     return {"ok": True, "date": date, "contentType": req.contentType or "both",
-            "regenerated": regenerated, "violations": violations, "drafts": drafts}
+            "regenerated": regenerated, "violations": violations,
+            "failed": failed, "drafts": drafts}
 
 
 async def _foodhall_generate_core(
