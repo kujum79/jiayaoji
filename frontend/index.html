@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V550-20261113';
+        var APP_VER = 'V551-20261115';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4022,9 +4022,13 @@ body.demo-mode .phone-frame { height: 100%; }
                 <input id="loginCode" type="tel" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6 位验证码" oninput="onLoginCodeInput(this)" onkeydown="if(event.key==='Enter')doPhoneLogin()" style="flex:1;min-width:0;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;letter-spacing:2px;box-sizing:border-box;" />
                 <button id="loginCodeBtn" type="button" onclick="sendLoginCode()" style="width:108px;flex:0 0 108px;padding:12px 4px;font-size:13px;font-weight:600;color:#9A3412;background:#fff;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;white-space:nowrap;">获取验证码</button>
             </div>
-            <button id="loginPhoneBtn" onclick="doPhoneLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录 / 注册</button>
+            <label style="display:flex;align-items:flex-start;gap:8px;text-align:left;margin:0 0 12px;font-size:12px;color:#6B7280;line-height:1.6;">
+                <input type="checkbox" id="legalConsentPhone" onchange="_legalToggleConsent(this)" style="margin-top:2px;width:16px;height:16px;flex:0 0 auto;accent-color:#EA580C;" />
+                <span>我已阅读并同意<a onclick="openLegalDoc('terms')" style="color:#EA580C;text-decoration:underline;cursor:pointer;">《用户协议》</a>和<a onclick="openLegalDoc('privacy')" style="color:#EA580C;text-decoration:underline;cursor:pointer;">《隐私政策》</a></span>
+            </label>
+            <button id="loginPhoneBtn" onclick="doPhoneLogin()" disabled style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:not-allowed;opacity:0.5;">登录 / 注册</button>
             <div id="loginPhoneErr" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;line-height:1.6;"></div>
-            <div style="font-size:12px;color:#9CA3AF;margin-top:10px;">登录即表示同意家肴记服务条款</div>
+            <div style="font-size:12px;color:#9CA3AF;margin-top:10px;display:none;">登录即表示同意家肴记服务条款</div>
             <div style="margin-top:12px;padding-top:12px;border-top:1px solid #F3F4F6;">
                 <button type="button" onclick="openEmailAccountModal()" style="width:100%;padding:11px;font-size:14px;font-weight:700;color:#fff;background:linear-gradient(135deg,#F97316,#EA580C);border:none;border-radius:10px;cursor:pointer;">📧 邮箱 + 密码登录（Supabase 鉴权）</button>
                 <button type="button" onclick="toggleFamilyLoginPanel(1)" style="width:100%;margin-top:8px;padding:8px;font-size:12px;font-weight:500;color:#9CA3AF;background:#fff;border:1px solid #E5E7EB;border-radius:10px;cursor:pointer;">旧版：家庭名称 + 家庭密码登录（过渡期）</button>
@@ -4035,7 +4039,11 @@ body.demo-mode .phone-frame { height: 100%; }
             <div style="font-size:13px;color:#9CA3AF;margin-bottom:14px;line-height:1.6;">家人无需手机号，输入家庭名称与家庭密码即可进入</div>
             <input id="loginFamName" type="text" maxlength="20" placeholder="家庭名称" onkeydown="if(event.key==='Enter'){var p=document.getElementById('loginFamPass');if(p)p.focus();}" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;box-sizing:border-box;" />
             <input id="loginFamPass" type="password" maxlength="40" placeholder="家庭密码" onkeydown="if(event.key==='Enter')doFamilyPassLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;box-sizing:border-box;" />
-            <button onclick="doFamilyPassLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录</button>
+            <label style="display:flex;align-items:flex-start;gap:8px;text-align:left;margin:0 0 12px;font-size:12px;color:#6B7280;line-height:1.6;">
+                <input type="checkbox" id="legalConsentFamily" onchange="_legalToggleConsent(this)" style="margin-top:2px;width:16px;height:16px;flex:0 0 auto;accent-color:#EA580C;" />
+                <span>我已阅读并同意<a onclick="openLegalDoc('terms')" style="color:#EA580C;text-decoration:underline;cursor:pointer;">《用户协议》</a>和<a onclick="openLegalDoc('privacy')" style="color:#EA580C;text-decoration:underline;cursor:pointer;">《隐私政策》</a></span>
+            </label>
+            <button id="loginFamBtn" onclick="doFamilyPassLogin()" disabled style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:not-allowed;opacity:0.5;">登录</button>
             <div id="loginFamErr" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;line-height:1.6;"></div>
             <div onclick="toggleFamilyLoginPanel(0)" style="font-size:13px;color:#9CA3AF;margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline;">← 返回手机号登录</div>
             <div style="font-size:12px;color:#B45309;margin-top:8px;text-align:center;line-height:1.6;">忘记家庭密码？请用手机号登录后，在「我家 → 修改家庭名称」中重设</div>
@@ -4132,7 +4140,11 @@ body.demo-mode .phone-frame { height: 100%; }
         <div id="emailModalSub" style="font-size:13px;color:#9CA3AF;margin-bottom:16px;">换设备后恢复账号（备用）</div>
         <input id="loginEmail" type="email" maxlength="60" placeholder="请输入邮箱" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;" />
         <input id="loginPassword" type="password" maxlength="40" placeholder="请输入密码" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
-        <button id="loginBtn" onclick="doLogin()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">登录</button>
+        <label style="display:flex;align-items:flex-start;gap:8px;text-align:left;margin:0 0 12px;font-size:12px;color:#6B7280;line-height:1.6;">
+            <input type="checkbox" id="legalConsentEmail" onchange="_legalToggleConsent(this)" style="margin-top:2px;width:16px;height:16px;flex:0 0 auto;accent-color:#EA580C;" />
+            <span>我已阅读并同意<a onclick="openLegalDoc('terms')" style="color:#EA580C;text-decoration:underline;cursor:pointer;">《用户协议》</a>和<a onclick="openLegalDoc('privacy')" style="color:#EA580C;text-decoration:underline;cursor:pointer;">《隐私政策》</a></span>
+        </label>
+        <button id="loginBtn" onclick="doLogin()" disabled style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:not-allowed;opacity:0.5;">登录</button>
         <div id="loginErrBox" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;line-height:1.5;"></div>
         <div style="text-align:center;margin-top:14px;">
             <div id="switchToRegister" onclick="switchLoginRegister()" style="font-size:14px;color:#EA580C;cursor:pointer;text-decoration:underline;display:inline-block;">还没有账号？点此注册</div>
@@ -4144,7 +4156,7 @@ body.demo-mode .phone-frame { height: 100%; }
             <button id="forgotSendBtn" onclick="sendResetEmail()" style="width:100%;padding:10px;font-size:14px;font-weight:700;color:#fff;background:#D97706;border:none;border-radius:9px;cursor:pointer;">发送重置邮件</button>
             <div id="forgotMsg" style="display:none;font-size:12px;margin-top:8px;line-height:1.5;"></div>
         </div>
-        <div style="font-size:12px;color:#9CA3AF;margin-top:10px;">登录即表示同意家肴记服务条款</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-top:10px;display:none;">登录即表示同意家肴记服务条款</div>
         <div onclick="closeEmailAccountModal()" style="font-size:13px;color:#9CA3AF;margin-top:12px;cursor:pointer;text-decoration:underline;">返回</div>
     </div>
 </div>
@@ -4477,6 +4489,8 @@ async function _submitFeedback() {
                 <button class="attach-item" data-type="file"><span class="icon">📄</span>文件</button>
             </div>
         </div>
+        <!-- V364: 页脚备案号 -->
+        <div style="text-align:center;font-size:11px;color:#9CA3AF;padding:4px 0 6px;flex:0 0 auto;"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" style="color:#9CA3AF;text-decoration:none;">鄂ICP备2026046980号-1</a></div>
         <!-- 首页底部导航：食知/食材/食记/我家（V37，56px 固定底部） -->
         <div class="home-tabbar">
             <button class="home-tab-item" onclick="document.getElementById('pageHome').classList.add('slide-up');document.querySelector('.main-app').style.display='flex';switchTab('knowledge')"><span class="ht-icon">📚</span>食知</button>
@@ -4977,6 +4991,8 @@ async function _submitFeedback() {
                             <button id="cancelMemberBtn" style="flex:1; background:#e5e7eb; color:#4B5563; border:none; border-radius:16px; padding:6px 0; font-size:14px; cursor:pointer;">取消</button>
                         </div>
                     </div>
+                    <!-- V364: 页脚备案号 -->
+                    <div style="text-align:center;font-size:11px;color:#9CA3AF;padding:6px 0 2px;"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" style="color:#9CA3AF;text-decoration:none;">鄂ICP备2026046980号-1</a></div>
                 </div>
             </div>
         </div>
@@ -5938,6 +5954,230 @@ function clearLogin() { if (window.__demoMode) return; localStorage.removeItem('
 // 隐藏启动闪屏（页面就绪、目标界面已确定时调用）
 function hideBootSplash() { var bs = document.getElementById('bootSplash'); if (bs) bs.style.display = 'none'; }
 
+// ==================== V364 合规闭环：协议页面 / 登录前同意 / ICP 备案 ====================
+var LEGAL_VERSION = '1.0';
+var LEGAL_UPDATED_AT = '2026-11-13';
+var ICP_BEIAN = '鄂ICP备2026046980号-1';
+var ICP_LINK = 'https://beian.miit.gov.cn/';
+
+var LEGAL_DOCS_DEFAULT = {
+    terms: {
+        version: LEGAL_VERSION,
+        updatedAt: LEGAL_UPDATED_AT,
+        content: [
+            '家肴记用户协议',
+            '欢迎使用家肴记。你开始使用本服务，即表示已阅读并同意本协议全部内容。',
+            '一、服务内容',
+            '- 家肴记提供家庭膳食计划、食谱推荐、食材管理、饮食记录等工具类服务。',
+            '- 部分功能由 AI 生成，内容可能存在不准确或不完整的情况。',
+            '二、AI 生成内容免责声明',
+            '- 菜谱、营养分析与健康建议由 AI 或算法生成，仅供参考，不构成医疗、营养或诊疗建议。',
+            '- 如有疾病、过敏、孕期、婴幼儿喂养等情况，请遵医嘱，并自行判断食材与用量。',
+            '- 因依据生成内容作出的决定所产生的后果，由使用者自行承担。',
+            '三、用户行为规范',
+            '- 不得利用本服务发布违法、侵权、虚假或危害他人的内容。',
+            '- 不得对本服务进行爬虫抓取、批量请求、逆向破解或其他干扰正常运行的行为。',
+            '- 不得冒用他人身份，或未经授权录入他人（含未成年人）的信息。',
+            '四、知识产权',
+            '- 本服务的软件、界面、文案与商标归运营方所有。',
+            '- 你上传的内容归你所有；你授权我们在提供服务所必需的范围内使用与存储。',
+            '五、服务变更与终止',
+            '- 我们可能调整、暂停或终止部分功能，并尽可能提前告知。',
+            '- 你违反本协议时，我们有权限制或终止向你提供服务。',
+            '六、其他',
+            '- 本协议适用中华人民共和国法律。',
+            '- 如对协议有疑问，可联系 support@jiayaoji.cn。'
+        ].join('\n')
+    },
+    privacy: {
+        version: LEGAL_VERSION,
+        updatedAt: LEGAL_UPDATED_AT,
+        content: [
+            '家肴记隐私政策',
+            '本政策说明我们如何收集、使用、保存与共享你的个人信息。请在使用前仔细阅读。',
+            '一、我们收集的信息',
+            '- 手机号：用于登录、账号识别与安全验证。',
+            '- 家庭住址：仅在你主动填写时收集，用于食材采购与配送相关功能。',
+            '- 饮食与健康记录：家庭成员年龄、体质、过敏与忌口、三餐计划与用餐记录，用于生成个性化食谱。',
+            '- 图片与语音：你主动拍摄或上传的食材、菜品、菜单图片，以及语音录入内容，用于识别与记录。',
+            '二、信息用途',
+            '- 提供食谱推荐、营养分析、家庭膳食计划等核心功能。',
+            '- 账号安全验证、异常登录提醒与客服支持。',
+            '- 在不识别个人身份的前提下进行产品改进与统计分析。',
+            '三、存储位置与安全',
+            '- 业务数据存储于 Supabase 云端数据库，传输采用 HTTPS 加密。',
+            '- 本地浏览器同时保留一份缓存，便于离线与快速打开。',
+            '- 我们采取访问控制、行级权限策略等措施，但无法承诺绝对安全。',
+            '四、保存期限',
+            '- 账号存续期间保留；你注销账号后，我们将在 30 日内删除或匿名化处理相关数据。',
+            '- 法律法规另有要求的，按法定期限保留。',
+            '五、第三方共享',
+            '- AI 模型服务商：为实现食谱生成与问答，我们会将必要的提示信息（不含手机号）发送给大模型服务商处理。',
+            '- 基础设施服务商：Supabase（数据库与鉴权）。',
+            '- 除上述情形及法律要求外，我们不会向第三方出售或共享你的个人信息。',
+            '六、你的权利',
+            '- 查询与更正：在「我家」中查看和修改家庭与成员信息。',
+            '- 导出：可联系我们导出你的家庭数据。',
+            '- 删除与注销：可在「我家」中申请注销账号，或联系客服处理。',
+            '- 撤回同意：停止使用并注销账号即视为撤回授权。',
+            '七、儿童与未成年人信息',
+            '- 14 岁以下儿童的个人信息，须由监护人同意后方可录入与使用。',
+            '- 我们不面向 14 岁以下儿童单独提供注册，相关档案由监护人代为管理。',
+            '- 监护人可随时要求查询、更正或删除儿童信息。',
+            '八、联系方式',
+            '- 邮箱：support@jiayaoji.cn',
+            '- 我们将在收到请求后 15 个工作日内答复。',
+            '九、政策更新',
+            '- 本政策更新后会在应用内提示；重大变更将再次征得你的同意。'
+        ].join('\n')
+    }
+};
+
+// 读取协议文档：缺字段按默认补齐；版本号变化时让用户重新同意
+function _legalDocs() {
+    var docs = null;
+    try { docs = JSON.parse(localStorage.getItem('legalDocs') || 'null'); } catch (e) { docs = null; }
+    if (!docs || !docs.terms || !docs.privacy || !docs.terms.content || !docs.privacy.content) {
+        docs = JSON.parse(JSON.stringify(LEGAL_DOCS_DEFAULT));
+        try { localStorage.setItem('legalDocs', JSON.stringify(docs)); } catch (e) {}
+    }
+    return docs;
+}
+function _legalCurrentVersion() {
+    var d = _legalDocs();
+    return String((d.terms && d.terms.version) || LEGAL_VERSION);
+}
+// 已同意且版本一致才算数；版本变化 → 清除同意记录
+function _legalAgreed() {
+    var raw = null;
+    try { raw = JSON.parse(localStorage.getItem('legalConsent') || 'null'); } catch (e) { raw = null; }
+    var cur = _legalCurrentVersion();
+    if (!raw || String(raw.version) !== cur) {
+        if (raw) { try { localStorage.removeItem('legalConsent'); } catch (e) {} }
+        return false;
+    }
+    return true;
+}
+function _legalSyncConsentUI() {
+    var agreed = _legalAgreed();
+    ['legalConsentPhone', 'legalConsentFamily', 'legalConsentEmail'].forEach(function (id) {
+        var cb = document.getElementById(id);
+        if (cb) cb.checked = agreed;
+    });
+    ['loginPhoneBtn', 'loginFamBtn', 'loginBtn', 'regCombinedBtn', 'regFamilySubmitBtn'].forEach(function (id) {
+        var b = document.getElementById(id);
+        if (!b) return;
+        if (agreed) {
+            b.disabled = false;
+            b.style.opacity = '1';
+            b.style.cursor = 'pointer';
+        } else {
+            b.disabled = true;
+            b.style.opacity = '0.5';
+            b.style.cursor = 'not-allowed';
+        }
+    });
+}
+window._legalToggleConsent = function (cb) {
+    try {
+        if (cb && cb.checked) {
+            localStorage.setItem('legalConsent', JSON.stringify({ version: _legalCurrentVersion(), agreedAt: Date.now() }));
+        } else {
+            localStorage.removeItem('legalConsent');
+        }
+    } catch (e) {}
+    _legalSyncConsentUI();
+};
+// 登录/注册前统一校验
+function _legalRequireConsent() {
+    if (_legalAgreed()) return true;
+    _legalSyncConsentUI();
+    try { showToast('请先阅读并勾选同意《用户协议》和《隐私政策》'); } catch (e) {}
+    return false;
+}
+
+// 协议页面（#/privacy、#/terms）
+function _legalOverlay() {
+    var el = document.getElementById('legalPage');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'legalPage';
+        el.style.cssText = 'position:fixed;inset:0;z-index:100060;background:#FFF7ED;display:none;flex-direction:column;';
+        el.innerHTML = '<div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px;background:#fff;border-bottom:1px solid #FED7AA;">'
+            + '<button onclick="closeLegalDoc()" style="border:none;background:#FFF7ED;color:#9A3412;font-size:14px;font-weight:700;padding:8px 12px;border-radius:10px;cursor:pointer;">‹ 返回</button>'
+            + '<div id="legalPageTitle" style="flex:1;text-align:center;font-size:16px;font-weight:800;color:#9A3412;margin-right:52px;">协议</div></div>'
+            + '<div id="legalPageBody" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 18px calc(28px + env(safe-area-inset-bottom,0px));font-size:14px;line-height:1.85;color:#374151;background:#fff;max-width:430px;width:100%;margin:0 auto;box-sizing:border-box;"></div>';
+        document.body.appendChild(el);
+    }
+    return el;
+}
+function _legalRender(kind) {
+    var docs = _legalDocs();
+    var doc = docs[kind];
+    if (!doc) return;
+    var overlay = _legalOverlay();
+    var titleEl = document.getElementById('legalPageTitle');
+    var bodyEl = document.getElementById('legalPageBody');
+    if (titleEl) titleEl.textContent = kind === 'privacy' ? '隐私政策' : '用户协议';
+    var lines = String(doc.content || '').split('\n');
+    var html = '';
+    for (var i = 0; i < lines.length; i++) {
+        var ln = lines[i].trim();
+        if (!ln) continue;
+        if (i === 0) {
+            html += '<div style="font-size:18px;font-weight:800;color:#9A3412;text-align:center;margin:2px 0 16px;">' + _legalEsc(ln) + '</div>';
+        } else if (/^([一二三四五六七八九十]+、)/.test(ln)) {
+            html += '<div style="font-size:15px;font-weight:800;color:#C2410C;margin:16px 0 6px;">' + _legalEsc(ln) + '</div>';
+        } else if (ln.charAt(0) === '-') {
+            html += '<div style="display:flex;gap:6px;margin:4px 0;color:#4B5563;"><span style="flex:0 0 auto;color:#F97316;">·</span><span>' + _legalEsc(ln.slice(1).trim()) + '</span></div>';
+        } else {
+            html += '<div style="margin:6px 0;color:#4B5563;">' + _legalEsc(ln) + '</div>';
+        }
+    }
+    html += '<div style="margin-top:22px;padding-top:14px;border-top:1px solid #F3F4F6;font-size:12px;color:#9CA3AF;text-align:center;">版本 v' + _legalEsc(doc.version) + ' · 更新日期 ' + _legalEsc(doc.updatedAt) + '</div>';
+    if (bodyEl) { bodyEl.innerHTML = html; bodyEl.scrollTop = 0; }
+    overlay.style.display = 'flex';
+}
+function _legalEsc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+window.openLegalDoc = function (kind) {
+    if (kind !== 'privacy' && kind !== 'terms') return;
+    if (location.hash === '#/' + kind) { _legalRender(kind); return; }
+    location.hash = '#/' + kind;
+};
+window.closeLegalDoc = function () {
+    var el = document.getElementById('legalPage');
+    if (el) el.style.display = 'none';
+    try { location.hash = '#/'; } catch (e) {}
+};
+function _legalRoute() {
+    var h = String(location.hash || '');
+    var el = document.getElementById('legalPage');
+    if (h === '#/privacy' || h === '#/terms') {
+        _legalRender(h === '#/privacy' ? 'privacy' : 'terms');
+    } else if (el) {
+        el.style.display = 'none';
+    }
+}
+// 页脚备案号
+function _icpFooterHtml(marginTop) {
+    return '<div style="text-align:center;font-size:11px;color:#9CA3AF;padding:8px 0 10px;margin-top:' + (marginTop || 0) + 'px;">'
+        + '<a href="' + ICP_LINK + '" target="_blank" rel="noopener noreferrer" style="color:#9CA3AF;text-decoration:none;">' + ICP_BEIAN + '</a></div>';
+}
+
+(function () {
+    function boot() {
+        try { _legalDocs(); } catch (e) {}
+        try { _legalAgreed(); } catch (e) {}   // 版本变化时清掉旧同意
+        try { _legalRoute(); } catch (e) {}
+        try { _legalSyncConsentUI(); } catch (e) {}
+        window.addEventListener('hashchange', function () { try { _legalRoute(); } catch (e) {} });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+    else boot();
+})();
+
 // 显示登录页（隐藏APP主界面）；V287: 改为手机号 + 模拟验证码登录
 function showLoginPage() {
     hideBootSplash();
@@ -5945,6 +6185,7 @@ function showLoginPage() {
     var app = document.getElementById('appRoot');
     if (lp) lp.style.display = 'flex';
     if (app) app.style.display = 'none';
+    _legalSyncConsentUI();
     _loginPhoneClearErr();
     var ci = document.getElementById('loginCode');
     if (ci) ci.value = '';
@@ -6230,6 +6471,7 @@ async function _sbEnsurePhoneFamily(sbUser, phone, familyName, preferredCode) {
     throw new Error('创建云端家庭失败：家庭码重复');
 }
 async function doPhoneLogin() {
+    if (!_legalRequireConsent()) return;
     _loginPhoneClearErr();
     var phone = String(((document.getElementById('loginPhone') || {}).value) || '').replace(/\D/g, '');
     var code = String(((document.getElementById('loginCode') || {}).value) || '').replace(/\D/g, '');
@@ -6383,6 +6625,7 @@ function _loginFamErr(msg) {
     if (e) { e.textContent = msg; e.style.display = 'block'; }
 }
 function doFamilyPassLogin() {
+    if (!_legalRequireConsent()) return;
     var e0 = document.getElementById('loginFamErr');
     if (e0) { e0.textContent = ''; e0.style.display = 'none'; }
     var name = String(((document.getElementById('loginFamName') || {}).value) || '').trim();
@@ -6466,6 +6709,7 @@ function _genUniqueFamilyId() {
 }
 // 新用户提交：Supabase 建账号 → 建云端家庭 → 写本地 registeredUsers → 进首页
 async function submitRegisterFamily() {
+    if (!_legalRequireConsent()) return;
     var phone = _pendingRegisterPhone;
     var eb = document.getElementById('regFamilyNameErr');
     function showErr(msg) { showToast(msg); if (eb) { eb.textContent = msg; eb.style.display = 'block'; } }
@@ -6621,6 +6865,7 @@ function regenerateInviteFamilyCode() {
 }
 // 注册弹窗里「输入邀请码加入已有家庭」
 async function submitJoinFamily() {
+    if (!_legalRequireConsent()) return;
     var phone = _pendingRegisterPhone;
     var eb = document.getElementById('regFamilyNameErr');
     function showErr(msg) { showToast(msg); if (eb) { eb.textContent = msg; eb.style.display = 'block'; } }
@@ -6857,6 +7102,7 @@ function closeCombinedRegisterModal() {
 }
 // 合并注册主函数：signUp + insert families → 进入首页
 async function doCombinedRegister() {
+    if (!_legalRequireConsent()) return;
     if (!sb) { showToast('服务未就绪，请刷新重试'); return; }
     var email = ((document.getElementById('regEmail') || {}).value || '').trim().toLowerCase();
     var ePass = ((document.getElementById('regEmailPass') || {}).value || '').trim();
@@ -7130,6 +7376,7 @@ async function doRegister() {
 
 // 登录（邮箱+密码）
 async function doLogin() {
+    if (!_legalRequireConsent()) return;
     if (!sb) { showToast('登录服务未就绪，请刷新重试'); return; }
     var emailInput = document.getElementById('loginEmail');
     var pwdInput = document.getElementById('loginPassword');
@@ -7389,6 +7636,7 @@ function openEmailAccountModal(mode) {
     var m = document.getElementById('emailAccountModal');
     if (!m) return;
     m.style.display = 'flex';
+    _legalSyncConsentUI();
     var isReg = (mode === 'create');
     setEmailPanelMode(isReg);
     var t = document.getElementById('emailModalTitle');
@@ -43341,7 +43589,10 @@ function _acctAbout() {
 }
 // V96: 隐私政策
 function _acctPrivacy() {
-    showToast('🛡️ 数据仅存于本机与你的家庭空间，不对外共享');
+    // V364: 打开完整的隐私政策页（原为一句 toast）
+    var _m = document.getElementById('familySubModal');
+    if (_m) _m.remove();
+    try { openLegalDoc('privacy'); } catch (e) {}
 }
 
 // V96: 我家 ➕ 快速添加底部面板（5 项）
