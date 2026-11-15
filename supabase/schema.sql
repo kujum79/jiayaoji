@@ -410,6 +410,62 @@ create policy family_data_delete_member on public.family_data
     using (public.is_family_member(family_id));
 
 -- ============================================================
+-- V364: 账号注销 + 身份查询（供前端「我家 → 账号与安全」调用）
+-- ============================================================
+create or replace function public.delete_my_account()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+    v_uid uuid := auth.uid();
+    v_owned int := 0;
+    v_joined int := 0;
+begin
+    if v_uid is null then raise exception '请先登录'; end if;
+
+    -- 1) 作为创建者：删除自己的家庭（family_data / family_members 级联删除）
+    select count(*) into v_owned from public.families where owner_id = v_uid;
+    delete from public.families where owner_id = v_uid;
+
+    -- 2) 作为成员：只退出，不删家庭数据
+    select count(*) into v_joined from public.family_members where user_id = v_uid;
+    delete from public.family_members where user_id = v_uid;
+
+    -- 3) 档案与账号本体
+    delete from public.profiles where id = v_uid;
+    delete from auth.users where id = v_uid;
+
+    return jsonb_build_object('deleted', true, 'owned_families', v_owned, 'left_families', v_joined);
+end;
+$$;
+
+grant execute on function public.delete_my_account() to authenticated;
+
+-- 查询当前账号的家庭与身份（owner / member），无家庭时返回 {}
+create or replace function public.my_family_role()
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    (select jsonb_build_object(
+        'family_id', f.id, 'family_name', f.family_name,
+        'role', case when f.owner_id = auth.uid() then 'owner' else 'member' end)
+       from public.families f
+      where f.owner_id = auth.uid()
+         or exists (select 1 from public.family_members m
+                     where m.family_id = f.id and m.user_id = auth.uid())
+      order by (f.owner_id = auth.uid()) desc, f.created_at asc
+      limit 1),
+    '{}'::jsonb);
+$$;
+
+grant execute on function public.my_family_role() to authenticated;
+
+-- ============================================================
 -- 验收 SQL（执行后应返回 4 张表 + 各自的 policy 数）
 -- ============================================================
 -- select relname, relrowsecurity from pg_class

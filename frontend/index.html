@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V551-20261115';
+        var APP_VER = 'V552-20261115';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -41988,6 +41988,26 @@ window.editMemberCard = function(id) {
                 </div>
                 </div>
             </div>
+            <!-- V364: 账号与安全（数据导出 / 注销账号） -->
+            <div style="background:white;border:1px solid #F3F4F6;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04);margin-bottom:12px;overflow:hidden;">
+                <div onclick="_toggleFamilyGroup(this)" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 6px;font-size:15px;font-weight:700;color:#1F2937;cursor:pointer;">
+                    <span>🔐 账号与安全</span>
+                    <span class="fgroup-arrow" style="font-size:13px;color:#9CA3AF;font-weight:400;">▸</span>
+                </div>
+                <div class="fgroup-body" style="display:none;">
+                    <div onclick="_acctExportData()" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
+                        <span style="font-size:18px;flex:0 0 auto;line-height:1;">📤</span>
+                        <span style="font-size:14px;color:#4B5563;font-weight:500;flex:1;">导出我的数据</span>
+                        <span style="font-size:12px;color:#9CA3AF;flex:0 0 auto;">JSON 备份</span>
+                        <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
+                    </div>
+                    <div onclick="_acctDeleteAccount()" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
+                        <span style="font-size:18px;flex:0 0 auto;line-height:1;">🗑️</span>
+                        <span style="font-size:14px;color:#DC2626;font-weight:500;flex:1;">注销账号</span>
+                        <span style="color:#D1D5DB;font-size:16px;flex:0 0 auto;line-height:1;">›</span>
+                    </div>
+                </div>
+            </div>
         `);
     })();
 
@@ -43593,6 +43613,141 @@ function _acctPrivacy() {
     var _m = document.getElementById('familySubModal');
     if (_m) _m.remove();
     try { openLegalDoc('privacy'); } catch (e) {}
+}
+
+// ==================== V364: 账号与安全（数据导出 / 注销账号） ====================
+// 导出：本地命名空间全部键 + 云端 family_data，组装成可解析的 JSON 下载
+async function _acctExportData() {
+    if (!window.confirm('将包含家庭成员档案、食谱计划、饮食记录等全部本地业务数据，确认导出？')) return;
+    var code = '';
+    try { code = getFamilyId() || ''; } catch (e) {}
+    var payload = {
+        exportedAt: new Date().toISOString(),
+        familyId: code,
+        familyName: '',
+        data: {}
+    };
+    try { payload.familyName = lsGet('familyName') || ''; } catch (e) {}
+    // 1) 本地缓存（家庭前缀键）
+    try {
+        var prefix = code ? (code + '_') : '';
+        for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (!k) continue;
+            if (prefix && k.indexOf(prefix) === 0) payload.data[k.slice(prefix.length)] = localStorage.getItem(k);
+        }
+    } catch (e) {}
+    // 2) 云端 family_data 覆盖/补充（云端为准）
+    try {
+        var uuid = await _sbResolveFamilyUuid();
+        if (uuid && sb) {
+            var r = await sb.from('family_data').select('key,value').eq('family_id', uuid);
+            if (r && !r.error && r.data && r.data.length) {
+                r.data.forEach(function (row) { payload.data[row.key] = row.value; });
+            }
+        }
+    } catch (e) {}
+    var count = Object.keys(payload.data).length;
+    if (!count) { showToast('暂无可导出的数据'); return; }
+    try {
+        var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        var d = new Date();
+        var stamp = '' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = '家肴记数据备份_' + stamp + '.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { try { URL.revokeObjectURL(a.href); } catch (e) {} }, 3000);
+        showToast('✅ 已导出 ' + count + ' 项数据');
+    } catch (e) {
+        showToast('导出失败：' + ((e && e.message) || e));
+    }
+}
+
+// 注销：先确认身份（owner / member），再二次输入「注销」
+function _acctDeleteAccount() {
+    if (!sb) { showToast('服务未就绪，请刷新重试'); return; }
+    showToast('正在确认账号身份…');
+    sb.rpc('my_family_role').then(function (rr) {
+        if (rr && rr.error) {
+            showToast('无法确认身份：' + (rr.error.message || '请检查网络或数据库函数'));
+            return;
+        }
+        var role = (rr && rr.data && rr.data.role) ? rr.data.role : '';
+        _acctShowDeleteModal(role);
+    }).catch(function (e) {
+        showToast('无法确认身份：' + ((e && e.message) || e));
+    });
+}
+
+function _acctShowDeleteModal(role) {
+    var desc;
+    if (role === 'owner') {
+        desc = '您是家庭创建者。注销将永久删除该家庭的全部数据，其他已加入的家庭成员将无法再访问，且不可恢复。';
+    } else if (role === 'member') {
+        desc = '注销将退出当前家庭并删除您的账号，家庭数据不受影响，且不可恢复。';
+    } else {
+        desc = '注销将删除您的账号及账号下的全部数据，且不可恢复。';
+    }
+    var old = document.getElementById('acctDeleteMask');
+    if (old) old.remove();
+    var m = document.createElement('div');
+    m.id = 'acctDeleteMask';
+    m.style.cssText = 'position:fixed;inset:0;z-index:100070;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px;';
+    m.innerHTML = '<div style="width:100%;max-width:360px;background:#fff;border-radius:18px;padding:20px 18px;box-shadow:0 18px 50px rgba(0,0,0,.2);">'
+        + '<div style="font-size:17px;font-weight:800;color:#B91C1C;margin-bottom:8px;">⚠️ 注销账号</div>'
+        + '<div style="font-size:13px;line-height:1.75;color:#4B5563;margin-bottom:12px;">' + _legalEsc(desc) + '</div>'
+        + '<div style="font-size:12px;color:#6B7280;margin-bottom:6px;">请输入「注销」两个字以确认：</div>'
+        + '<input id="acctDeleteInput" type="text" placeholder="注销" autocomplete="off" style="width:100%;padding:10px 12px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;" />'
+        + '<div id="acctDeleteErr" style="display:none;font-size:12px;color:#DC2626;margin-top:8px;line-height:1.6;"></div>'
+        + '<div style="display:flex;gap:10px;margin-top:16px;">'
+        + '<button onclick="_acctCloseDeleteModal()" style="flex:1;padding:11px;border:none;border-radius:12px;background:#F3F4F6;color:#4B5563;font-size:14px;font-weight:600;cursor:pointer;">取消</button>'
+        + '<button id="acctDeleteConfirm" onclick="_acctDoDelete()" disabled style="flex:1;padding:11px;border:none;border-radius:12px;background:#DC2626;color:#fff;font-size:14px;font-weight:700;cursor:not-allowed;opacity:.45;">确认注销</button>'
+        + '</div></div>';
+    document.body.appendChild(m);
+    var inp = document.getElementById('acctDeleteInput');
+    if (inp) {
+        inp.addEventListener('input', function () {
+            var ok = inp.value.trim() === '注销';
+            var b = document.getElementById('acctDeleteConfirm');
+            if (!b) return;
+            b.disabled = !ok;
+            b.style.opacity = ok ? '1' : '.45';
+            b.style.cursor = ok ? 'pointer' : 'not-allowed';
+        });
+        setTimeout(function () { try { inp.focus(); } catch (e) {} }, 120);
+    }
+}
+
+function _acctCloseDeleteModal() {
+    var m = document.getElementById('acctDeleteMask');
+    if (m) m.remove();
+}
+
+async function _acctDoDelete() {
+    var inp = document.getElementById('acctDeleteInput');
+    if (!inp || inp.value.trim() !== '注销') return;
+    var btn = document.getElementById('acctDeleteConfirm');
+    var errEl = document.getElementById('acctDeleteErr');
+    if (btn) { btn.disabled = true; btn.textContent = '注销中…'; btn.style.opacity = '.7'; btn.style.cursor = 'wait'; }
+    try {
+        var r = await sb.rpc('delete_my_account');
+        if (r && r.error) throw new Error(r.error.message || '注销失败');
+        try { await sb.auth.signOut(); } catch (e) {}
+        try { localStorage.clear(); } catch (e) {}
+        try { sessionStorage.clear(); } catch (e) {}
+        _acctCloseDeleteModal();
+        showToast('账号已注销');
+        setTimeout(function () {
+            try { location.replace(location.pathname); } catch (e) { location.reload(); }
+        }, 700);
+    } catch (e) {
+        var msg = (e && e.message) || String(e);
+        if (errEl) { errEl.style.display = 'block'; errEl.textContent = '注销失败：' + msg; }
+        if (btn) { btn.disabled = false; btn.textContent = '确认注销'; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
+    }
 }
 
 // V96: 我家 ➕ 快速添加底部面板（5 项）
