@@ -28,7 +28,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import quote, unquote, urljoin
+from urllib.parse import quote, unquote, urljoin, urlparse
 
 import httpx
 import requests
@@ -88,6 +88,9 @@ _ai_usage_records: Dict[str, Dict[str, Any]] = {}
 _usage_lock = threading.Lock()
 # 免费/会员当前统一 150 次/天，可用环境变量覆盖
 AI_DAILY_QUOTA = int(os.getenv("AI_DAILY_QUOTA", "150") or 150)
+# V565: 全局异常告警——群机器人 Webhook（飞书/钉钉/企业微信），在 /etc/jiayaoji/api-keys.env 配置；
+# 留空则整个告警链路静默跳过，不影响任何业务
+ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL", "").strip()
 
 # 这些路径会消耗大模型算力，统一挂 check_ai_quota（见各路由 dependencies）
 AI_QUOTA_EXEMPT_IPS = {"127.0.0.1", "::1"}
@@ -6794,9 +6797,52 @@ async def report_system_error(req: SystemErrorReport, request: Request) -> Dict[
     return {"ok": True, "errorId": payload["errorId"]}
 
 
+# ===== V565: 全局异常告警推送 =====
+# 发送走独立 asyncio task（fire-and-forget），网络/超时/格式任何失败都被吞掉，
+# 绝不影响原本的 HTTP 500 响应；任务引用存入集合防 GC。
+_alert_tasks: set = set()
+
+
+def _alert_body_for(url: str, text: str) -> Dict[str, Any]:
+    """按 Webhook 域名区分机器人消息格式：钉钉/企业微信用 msgtype.text.content，其余按飞书。"""
+    host = (urlparse(url).hostname or "").lower()
+    if "dingtalk" in host or "weixin.qq" in host:
+        return {"msgtype": "text", "text": {"content": text}}
+    return {"msg_type": "text", "content": {"text": text}}
+
+
+async def _alert_post(text: str) -> None:
+    try:
+        async with httpx.AsyncClient(timeout=6) as client:
+            resp = await client.post(ALERT_WEBHOOK_URL, json=_alert_body_for(ALERT_WEBHOOK_URL, text))
+            if resp.status_code >= 400:
+                _err_write_line({
+                    "source": "backend", "type": "api_timeout",
+                    "message": f"alert webhook HTTP {resp.status_code}: {resp.text[:200]}",
+                    "path": "/alert-webhook", "method": "POST",
+                })
+    except Exception:
+        pass  # 告警通道自身故障不再告警，静默放弃
+
+
+def _fire_alert(payload: Dict[str, Any]) -> None:
+    if not ALERT_WEBHOOK_URL:
+        return
+    text = (
+        "🚨 家肴记异常\n"
+        f"时间：{time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"接口：{payload.get('method', '')} {payload.get('path', '')}\n"
+        f"错误：{payload.get('message', '')}\n"
+        f"errorId：{payload.get('errorId', '')}"
+    )
+    task = asyncio.create_task(_alert_post(text))
+    _alert_tasks.add(task)
+    task.add_done_callback(_alert_tasks.discard)
+
+
 @app.exception_handler(Exception)
 async def _unhandled_exception_handler(request: Request, exc: Exception):
-    """V226: 未捕获异常统一拦截——记录 traceback，返回带 errorId 的 500。"""
+    """V226: 未捕获异常统一拦截——记录 traceback，返回带 errorId 的 500。V565: 同步推送群机器人告警。"""
     payload = {
         "source": "backend",
         "type": "api_timeout" if isinstance(exc, (TimeoutError,)) else "ai_error" if "ai" in request.url.path else "frontend_crash",
@@ -6807,6 +6853,10 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
         **_err_family_of(request),
     }
     _err_write_line(payload)
+    try:
+        _fire_alert(payload)  # V565: 推送群机器人；失败也不影响 500 响应
+    except Exception:
+        pass
     return JSONResponse(
         status_code=500,
         content={"ok": False, "error": "服务异常，请稍后重试", "errorId": payload["errorId"]},
@@ -6934,6 +6984,19 @@ def _count_active_paid() -> int:
             continue
         count += 1
     return count
+
+
+_last_alert_test_ts = {"ts": 0.0}
+
+
+@app.post("/api/admin/alert-test")
+def admin_alert_test() -> Dict[str, Any]:
+    """V565: 告警链路自检——故意抛未处理异常，验证群机器人能否收到（限频 60 秒 1 次）。"""
+    now = time.time()
+    if now - _last_alert_test_ts["ts"] < 60:
+        return {"ok": False, "error": "测试过于频繁，请 60 秒后再试"}
+    _last_alert_test_ts["ts"] = now
+    raise RuntimeError("V565 告警链路自检（admin_alert_test 故意抛出）")
 
 
 @app.post("/api/admin/usage")
