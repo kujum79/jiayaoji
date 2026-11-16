@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V560-20261116';
+        var APP_VER = 'V561-20261116';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -36488,8 +36488,10 @@ function _openSubscribeModal(preferTier) {
             var _expD = new Date(_expAt * 1000);
             _expText = _expD.getFullYear() + '年' + (_expD.getMonth() + 1) + '月' + _expD.getDate() + '日';
         }
-        foodBtnHtml = '<div style="width:100%;padding:10px;border-radius:12px;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:13px;font-weight:700;text-align:center;line-height:1.5;">✅ 食养会员已开通'
-            + (_expText ? '<span style="display:block;font-size:12px;font-weight:600;color:#9A3412;margin-top:2px;">有效期至 ' + _expText + '</span>' : '')
+        // V561: 已开通状态可点击续费——续费按 max(现有到期日, 现在)+1年 顺延，
+        // 历史遗留的短有效期（旧版7天发放）可由此纠正为按年计费
+        foodBtnHtml = '<div type="button" onclick="_subscribePayKind(\'food\')" style="width:100%;padding:10px;border-radius:12px;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:13px;font-weight:700;text-align:center;line-height:1.5;cursor:pointer;">✅ 食养会员已开通'
+            + (_expText ? '<span style="display:block;font-size:12px;font-weight:600;color:#9A3412;margin-top:2px;">有效期至 ' + _expText + '（点击续费 199元/年）</span>' : '')
             + '</div>';
     } else {
         foodBtnHtml = '<button type="button" onclick="_subscribePayKind(\'food\')" style="width:100%;height:42px;border-radius:12px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(249,115,22,.28);">立即开通（199元/年）</button>';
