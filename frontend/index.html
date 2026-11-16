@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V554-20261115';
+        var APP_VER = 'V555-20261116';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -10835,6 +10835,7 @@ function _myClassroomCustomCard(c) {
     return '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
         '<div style="flex:1;font-size:15px;font-weight:700;color:#1F2937;line-height:1.4;">🎯 ' + escapeHtml(c.title || '专属定制课') + '</div>' +
+        _aiBadgeHtml({ isAIGenerated: true }) +
         '<span style="flex-shrink:0;font-size:11px;background:' + (_isPrem ? '#FEF3C7' : '#F3F4F6') + ';color:' + (_isPrem ? '#B45309' : '#6B7280') + ';border-radius:999px;padding:3px 10px;">' + (_isPrem ? '会员专享' : '专属定制') + '</span>' +
         '</div>' +
         '<div style="font-size:12px;color:#EA580C;line-height:1.7;margin-bottom:4px;">为「' + escapeHtml(who) + '」定制</div>' +
@@ -11504,10 +11505,11 @@ function _openClassroomCourse(id, kind) {
         '<div style="flex:0 0 auto;background:#fff;border-bottom:1px solid #EDE9E3;display:flex;align-items:center;padding:10px 14px;gap:8px;">' +
         '<button type="button" onclick="_closeClassroomCourse()" style="border:none;background:none;font-size:15px;color:#6B7280;cursor:pointer;padding:4px 6px;">← 返回</button>' +
         '<div style="flex:1;min-width:0;font-size:15px;font-weight:700;color:#1F2937;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + escapeHtml(c.title || '') + '</div>' +
+        ((kind === 'custom' || _aiIsGenerated(c)) ? _aiBadgeHtml({ isAIGenerated: true }) : '') +
         (canSpeak ? '<button type="button" id="classroomSpeakBtn" onclick="_classroomSpeak()" style="flex:0 0 auto;border:none;background:none;font-size:16px;color:#F97316;cursor:pointer;padding:4px 6px;" title="边看边听">🔊</button>' : '') +
         '</div>' +
         '<div style="flex:1;overflow-y:auto;">' +
-        '<div id="article-body" class="md-body" style="padding:16px 18px 110px;">' + _renderMarkdown(content) + _dietContraNoteHtml(c.title, content) + '</div>' +
+        '<div id="article-body" class="md-body" style="padding:16px 18px 110px;">' + _renderMarkdown(content) + _dietContraNoteHtml(c.title, content) + ((kind === 'custom' || _aiIsGenerated(c)) ? _aiDisclaimerLineHtml({ isAIGenerated: true }) : '') + '</div>' +
         '</div>' +
         '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #EDE9E3;padding:10px 14px;display:flex;gap:8px;">' +
         (quiz ? '<button type="button" onclick="_openClassroomQuiz(\'' + escapeAttr(id) + '\')" style="flex:1;padding:11px;border:1px solid #FDBA74;background:#FFF7ED;border-radius:12px;font-size:13px;font-weight:600;color:#C2410C;cursor:pointer;">课后小测</button>' : '') +
@@ -35202,6 +35204,7 @@ function _dtRenderCard(tip) {
         dietCard = '<div onclick="_fhOpenCardDiet()" style="cursor:pointer;border-radius:14px;padding:11px 12px;background:linear-gradient(135deg,#FFFBF3,#FFF2DF);border:1px solid #FDE7C8;">'
             + '<div style="display:flex;align-items:flex-start;gap:8px;">'
             + '<div style="flex:1;min-width:0;font-size:15px;font-weight:800;color:#3F2A14;line-height:1.5;">' + escapeHtml(diet.title) + '</div>'
+            + _aiBadgeHtml(diet)
             + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" style="flex:0 0 auto;border:none;background:none;font-size:14px;color:#C08457;cursor:pointer;padding:0 2px;" title="往期回顾">📅</button>'
             + '</div>'
             + '<div style="font-size:12px;color:#9A7B5A;line-height:1.65;margin-top:4px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(diet.summary || '') + '</div>'
@@ -36909,7 +36912,9 @@ function _openDailyTipFull(tip) {
             ? '<button type="button" onclick="_replicateArticleDish()" style="width:100%;height:40px;border-radius:12px;border:none;background:#F97316;color:white;font-size:14px;font-weight:700;cursor:pointer;">🍳 一键复刻这道菜</button>'
               + '<div style="text-align:center;font-size:11px;color:#9CA3AF;margin:6px 0 8px;">加入今天午餐 · 缺的食材自动进采购清单</div>'
             : '')
-        + '<div style="text-align:center;font-size:11px;color:#9CA3AF;margin-bottom:8px;">以上内容仅供参考，不构成医疗建议。</div>'
+        + (_aiIsGenerated(tip)
+            ? _aiDisclaimerLineHtml(tip)
+            : '<div style="text-align:center;font-size:11px;color:#9CA3AF;margin-bottom:8px;">以上内容仅供参考，不构成医疗建议。</div>')
         + '<div style="text-align:center;margin-bottom:8px;"><button type="button" onclick="_fhOpenCorrection(\'article\')" style="border:none;background:none;color:#9CA3AF;font-size:11px;cursor:pointer;text-decoration:underline;padding:2px 6px;">⚠️ 内容有误？反馈给主编</button></div>'
         + '<div style="display:flex;gap:10px;">'
         + '<button type="button" onclick="_closeDtFull()" style="flex:1;height:38px;border-radius:12px;border:none;background:#F3F4F6;color:#4B5563;font-size:14px;cursor:pointer;">关闭</button>'
@@ -37131,6 +37136,25 @@ function _fhWrite(list) {
     try { list = _fhPruneArchive(list); } catch (e) {}
     lsSet('foodHallArticles', JSON.stringify(list));
 }
+// ===== V555: AI 生成内容标识 =====
+// 判定：显式 isAIGenerated 优先；无该字段时回退到来源标记（source/_source === 'ai'）
+function _aiIsGenerated(obj) {
+    if (!obj) return false;
+    if (obj.isAIGenerated === true) return true;
+    if (obj.isAIGenerated === false) return false;
+    return String(obj.source || '') === 'ai' || String(obj._source || '') === 'ai';
+}
+// 卡片右上角角标：12px / #F3F4F6 底 / #6B7280 字 / 圆角 4px / padding 2px 6px
+function _aiBadgeHtml(obj) {
+    if (!_aiIsGenerated(obj)) return '';
+    return '<span style="flex:0 0 auto;font-size:12px;background:#F3F4F6;color:#6B7280;border-radius:4px;padding:2px 6px;line-height:1.4;">AI 生成</span>';
+}
+// 详情页底部固定说明
+function _aiDisclaimerLineHtml(obj) {
+    if (!_aiIsGenerated(obj)) return '';
+    return '<div style="text-align:center;font-size:12px;color:#9CA3AF;line-height:1.7;padding:8px 0 2px;">本内容由人工智能生成，仅供参考，不构成医疗建议。</div>';
+}
+
 function _fhMake(fields) {
     var now = Date.now();
     var base = {
@@ -37142,6 +37166,8 @@ function _fhMake(fields) {
     };
     var f = fields || {};
     Object.keys(f).forEach(function (k) { base[k] = f[k]; });
+    // V555: AI 来源文章打标，供前端「AI 生成」角标与免责声明判定
+    if (String(base.source || '') === 'ai') base.isAIGenerated = true;
     return base;
 }
 function _fhAdd(fields) { var a = _fhMake(fields); var list = _fhRead(); list.unshift(a); _fhWrite(list); return a; }
@@ -41980,6 +42006,11 @@ window.editMemberCard = function(id) {
                 // V288: 成员绑定手机号（仅数字，11 位）
                 member.phone = String((document.getElementById('editPhone_' + id) || {}).value || '').replace(/\D/g, '').slice(0, 11);
                 member.age = parseInt(document.getElementById('editAge_' + id).value) || 0;
+                // V555: 14 岁以下未成年人需监护人确认
+                if (member.age > 0 && member.age < 14 && !member.childConsentAt) {
+                    if (!confirm('您正在为未成年人建立饮食档案。请确认您是监护人，信息仅用于食谱推荐与食育内容，不会用于广告推送。')) return;
+                    member.childConsentAt = Date.now();
+                }
                 // V151: 婴儿阶段
                 var _editInfantStage = document.getElementById('editInfantStage_' + id).value;
                 if (_editInfantStage) { member.isInfant = true; member.infantStage = _editInfantStage; }
@@ -50116,12 +50147,13 @@ function _mrShowPraise(record, praise) {
     ov.innerHTML = '<div style="background:#fff;border-radius:20px;padding:16px;width:100%;max-width:330px;box-shadow:0 16px 44px rgba(0,0,0,.24);">'
         + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">'
         + '<span style="font-size:16px;font-weight:800;color:#C2410C;">🎉 今日夸夸</span>'
-        + '<span style="font-size:11px;color:#9CA3AF;">AI 为你写</span>'
+        + _aiBadgeHtml({ isAIGenerated: true })
         + '</div>'
         + img
         + photoBtn
         + (dishText ? '<div style="font-size:12px;color:#B08968;margin-bottom:8px;">🍽️ ' + escapeHtml(dishText) + '</div>' : '')
         + '<div style="font-size:14px;color:#374151;line-height:1.9;white-space:pre-wrap;">' + escapeHtml(praise) + '</div>'
+        + _aiDisclaimerLineHtml({ isAIGenerated: true })
         + '<button type="button" onclick="_mrSendToWorks(window._mrPraiseRecord)" style="margin-top:14px;width:100%;padding:11px 0;border:1px solid #C7D2FE;border-radius:12px;background:#EEF2FF;color:#4338CA;font-size:14px;font-weight:700;cursor:pointer;">🚀 发到我的创作</button>'
         + '<div style="display:flex;gap:8px;margin-top:8px;">'
         + '<button type="button" onclick="_mrGeneratePoster(window._mrPraiseRecord)" style="flex:1;padding:11px 0;border:1px solid #FDBA74;border-radius:12px;background:#FFF7ED;color:#C2410C;font-size:14px;font-weight:700;cursor:pointer;">📸 生成海报</button>'
@@ -70305,7 +70337,7 @@ function _renderMealPlanBody() {
         return;
     }
     var html = '';
-    html += '<div class="mp-section-row"><span class="mp-section-title">当日规划</span><div class="mp-cards">';
+    html += '<div class="mp-section-row"><span class="mp-section-title">当日规划</span>' + _aiBadgeHtml({ isAIGenerated: true }) + '<div class="mp-cards">';
     for (var i=0; i<_mealPlanState.styles.length; i++) {
         var s = _mealPlanState.styles[i];
         var active = (i===_mealPlanState.currentStyle)?' active':'';
@@ -77571,6 +77603,12 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
         document.querySelectorAll('#famSpecialTags .fam-special-tag-cb:checked'),
         function (cb) { return cb.value; }
     );
+    // V555: 14 岁以下未成年人需监护人确认
+    let _childConsentAt;
+    if (age > 0 && age < 14) {
+        if (!confirm('您正在为未成年人建立饮食档案。请确认您是监护人，信息仅用于食谱推荐与食育内容，不会用于广告推送。')) return;
+        _childConsentAt = Date.now();
+    }
     familyData.push({
         id: Date.now(), name, age, place, currentCity: city, occupation, workSchedule, taste, dietaryPreference,
         relationship, isFamily, constitution: constitution || '', constitutionDetail: '',
@@ -77579,7 +77617,8 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
         healthStartDate, healthEndDate, healthNote, preference,
         isInfant: !!infantStage, infantStage: infantStage || undefined,
         nationality: nationality || undefined,
-        tags: _famTagVals
+        tags: _famTagVals,
+        childConsentAt: _childConsentAt || undefined
     });
     lsSet('familyData', JSON.stringify(familyData));
     // V149: 新成员偏好写入后同步合成偏好画像
