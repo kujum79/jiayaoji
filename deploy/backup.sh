@@ -32,4 +32,7 @@ find "$BACKUP_DIR" -name 'jiayaoji_backup_*.tar.gz' -mtime +7 -print -delete | w
     log "已删除旧备份: $f"
 done
 
+# V567: 把归档作为附件发送到邮箱（脚本内部吞掉一切异常并恒返回 0，不影响备份结果）
+python3 /var/www/jiayaoji/deploy/send_backup_email.py "$ARCHIVE" || log "邮件发送步骤异常（不影响备份）"
+
 log "本次备份完成"
