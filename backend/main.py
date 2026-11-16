@@ -7669,6 +7669,15 @@ async def _dl_generate_all(day: str) -> Dict[str, Any]:
     else:
         jobs.append(("*", ""))
     for fid in _dl_family_ids():
+        # V559: 快照过期（V542 迁移 Supabase 后不再更新）则跳过——
+        # 家庭版一律改由前端带实时画像按需生成，杜绝旧姓名
+        try:
+            _age_s = time.time() - _family_backup_path(fid).stat().st_mtime
+        except OSError:
+            _age_s = 0
+        if _age_s > 172800:
+            print(f"[daily-lesson] skip {fid}: 备份快照已过期（{int(_age_s/86400)}天前），改由前端实时画像按需生成", flush=True)
+            continue
         brief = _dl_family_brief(fid)
         if not brief:
             print(f"[daily-lesson] skip {fid}: 家庭数据为空（备份快照缺失或无成员）", flush=True)
