@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V555-20261116';
+        var APP_VER = 'V556-20261116';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -10829,8 +10829,11 @@ function _myClassroomCustomCard(c) {
     var _isPrem = !!c.isPremium;
     var _isMember = false;
     try { _isMember = (typeof isFoodMember === 'function') && isFoodMember(); } catch (e) {}
-    var _btn = (_isPrem && !_isMember)
-        ? '<button type="button" onclick="_openSubscribeGuide()" style="width:100%;padding:9px;border:1px solid #FDBA74;border-radius:10px;background:#FFF7ED;color:#C2410C;font-size:13px;font-weight:700;cursor:pointer;">会员专享 · 去订阅</button>'
+    // V556: 已用积分/购买解锁的会员课仍显示「开始阅读」
+    var _unlocked = false;
+    try { _unlocked = _coursePurchased(c.id) || window.__clsUnlock === c.id; } catch (e) {}
+    var _btn = (_isPrem && !_isMember && !_unlocked)
+        ? '<button type="button" onclick="_openSubscribeGuide()" style="width:100%;padding:9px;border:1px solid #FDBA74;border-radius:10px;background:#FFF7ED;color:#C2410C;font-size:13px;font-weight:700;cursor:pointer;">👑 会员专享 · 去订阅</button>'
         : '<button type="button" onclick="_openClassroomCourse(\'' + escapeAttr(c.id) + '\',\'custom\')" style="width:100%;padding:9px;border:none;border-radius:10px;background:#F97316;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">开始阅读</button>';
     return '<div style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:14px;margin-bottom:12px;">' +
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
@@ -11121,10 +11124,13 @@ function _lessonFamilyMatched(item) {
         var fam = (typeof getFamilyMembers === 'function') ? (getFamilyMembers() || []) : [];
         var names = fam.map(function (m) { return m && m.name ? String(m.name).trim() : ''; }).filter(Boolean);
         if (!names.length) return true;
+        var matched = true;
         for (var i = 0; i < names.length; i++) {
-            if (brief.indexOf(names[i]) < 0) return false;
+            if (brief.indexOf(names[i]) < 0) { matched = false; break; }
         }
-        return true;
+        // V556: 排查日志——姓名交集为空即判不符，该条微课直接丢弃
+        console.log('[微课校验] 当前成员=' + names.join('、') + ' 微课画像=' + brief + ' 结果=' + matched);
+        return matched;
     } catch (e) { return true; }
 }
 
@@ -11176,6 +11182,8 @@ async function _syncDailyLessonFromServer(force) {
             createdAt: L.createdAt || Date.now()
         };
         if (!rec.title || !rec.content) throw new Error('服务端内容不完整');
+        // V556: 保险层——服务端返回的画像与当前家庭不符时直接丢弃，不入库不展示
+        if (!_lessonFamilyMatched(rec)) throw new Error('微课画像与当前家庭不符，已丢弃');
         var list = _getDailyLessons().filter(function (x) { return x && x.date !== rec.date; });
         list.unshift(rec);
         _saveDailyLessons(list);
@@ -11479,9 +11487,10 @@ function _openClassroomCourse(id, kind) {
             try {
                 var _purchases = JSON.parse(lsGet('courseLibraryPurchases') || '[]');
                 _allowed = Array.isArray(_purchases) && _purchases.some(function (x) {
-                    return x && (x.articleId === id || x.courseId === id || x.id === id);
+                    return x === id || (x && (x.articleId === id || x.courseId === id || x.id === id));
                 });
             } catch (e) {}
+            try { if (!_allowed) _allowed = _coursePurchased(id); } catch (e) {}
         }
         if (!_allowed) {
             showToast('会员专享内容，订阅后可阅读全文');
