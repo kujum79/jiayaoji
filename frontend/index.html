@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V556-20261116';
+        var APP_VER = 'V557-20261116';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -11154,7 +11154,7 @@ async function _generateDailyLesson(force) {
 
 async function _syncDailyLessonFromServer(force) {
     if (_dailyLessonBusy) return null;
-    if (_subTier() !== 'premium') return null;
+    // V557: 今日微课对所有用户开放（订阅转化钩子），不再限 premium
     var today = dateToKey(new Date());
     var exist = _todayLesson();
     if (exist && !force) return exist;
@@ -11163,10 +11163,23 @@ async function _syncDailyLessonFromServer(force) {
     try {
         var fid = '';
         try { fid = (typeof getFamilyId === 'function' ? getFamilyId() : '') || ''; } catch (e) {}
+        // V557: 画像必须来自当前家庭实时数据（含全部成员姓名），随请求传服务端；
+        // 服务端库内旧快照画像与传入不符时会用新画像重新生成
+        var _fam = (typeof getFamilyMembers === 'function') ? (getFamilyMembers() || []) : [];
+        var _names = _fam.map(function (m) { return m && m.name ? String(m.name).trim() : ''; }).filter(Boolean);
+        var _brief = _fam.map(function (m) {
+            if (!m || !m.name) return '';
+            var bits = [];
+            var _age = Number(m.age) || 0;
+            if (_age > 0) bits.push(_age + '岁');
+            if (m.constitution) bits.push(String(m.constitution));
+            if (Array.isArray(m.tags)) bits = bits.concat(m.tags.filter(Boolean).slice(0, 2).map(String));
+            return String(m.name).trim() + (bits.length ? '（' + bits.join('、') + '）' : '');
+        }).filter(Boolean).join('，').slice(0, 600);
         var resp = await fetch(API_BASE + '/api/daily-lesson', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ familyId: fid, date: today })
+            body: JSON.stringify({ familyId: fid, date: today, familyBrief: _brief, memberNames: _names })
         });
         var j = await resp.json().catch(function () { return null; });
         if (!j || !j.ok || !j.lesson) throw new Error((j && j.error) || '服务端暂未生成今日微课');
@@ -11200,7 +11213,7 @@ async function _syncDailyLessonFromServer(force) {
 function _renderDailyLessonCard() {
     var box = document.getElementById('dailyLessonBox');
     if (!box) return;
-    if (_subTier() !== 'premium') { box.innerHTML = ''; return; }
+    // V557: 非订阅用户同样展示今日微课（订阅转化钩子）
     var lesson = _todayLesson();
     if (lesson) {
         _CLASSROOM_CACHE[lesson.id] = {
@@ -11235,7 +11248,7 @@ function _renderDailyLessonCard() {
 
 async function _maybeGenerateDailyLesson() {
     try {
-        if (_subTier() !== 'premium') return;
+        // V557: 对所有用户自动拉取今日微课（转化钩子），不再限 premium
         if (_todayLesson() || _dailyLessonBusy) return;
         await _generateDailyLesson(false);
     } catch (e) {}

@@ -7660,17 +7660,26 @@ def _dl_family_ids() -> List[str]:
 
 
 async def _dl_generate_all(day: str) -> Dict[str, Any]:
-    """先生成全国通用版（兜底），再为每个有家庭档案的家庭生成专属版。"""
-    jobs: List[Tuple[str, str]] = [("*", "")]
+    """先生成全国通用版（兜底），再为每个有家庭档案快照的家庭生成专属版。
+    V557: 家庭版主要靠前端按需生成（实时画像）；此处按备份快照兜底，
+    跳过时打印明确原因。不检查订阅——非订阅用户同样要有微课可看。"""
+    jobs: List[Tuple[str, str]] = []
+    if _dl_get("*", day):
+        print(f"[daily-lesson] skip *: 今日已生成", flush=True)
+    else:
+        jobs.append(("*", ""))
     for fid in _dl_family_ids():
         brief = _dl_family_brief(fid)
-        if brief:
-            jobs.append((fid, brief))
+        if not brief:
+            print(f"[daily-lesson] skip {fid}: 家庭数据为空（备份快照缺失或无成员）", flush=True)
+            continue
+        if _dl_get(fid, day):
+            print(f"[daily-lesson] skip {fid}: 今日已生成", flush=True)
+            continue
+        jobs.append((fid, brief))
     errors: List[str] = []
     made = 0
     for fid, brief in jobs:
-        if _dl_get(fid, day):
-            continue
         try:
             await _dl_generate(fid, day, brief)
             made += 1
@@ -7734,17 +7743,36 @@ async def _dl_startup() -> None:
 class DailyLessonReq(BaseModel):
     familyId: str = Field(default="", max_length=32)
     date: str = Field(default="", max_length=10)
+    familyBrief: str = Field(default="", max_length=600)
+    memberNames: List[str] = Field(default_factory=list)
 
 
 @app.post("/api/daily-lesson", dependencies=[Depends(check_ai_quota)])
 async def daily_lesson(req: DailyLessonReq) -> Dict[str, Any]:
-    """前端只读接口：返回该家庭今天的微课；没有专属版则回落到全国通用版。"""
+    """前端只读接口：返回该家庭今天的微课；没有专属版则回落到全国通用版。
+    V557: 对所有用户开放（非订阅用户的今日微课是订阅转化钩子）；
+    familyBrief 以前端实时传入为准——库内家庭版画像与传入不符（旧备份快照
+    生成的过期数据）时，用新画像重新生成，杜绝姓名串号/过期画像。"""
     day = (req.date or "").strip() or _dt_cls.now().strftime("%Y-%m-%d")
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", day):
         return {"ok": False, "error": "日期格式不正确"}
     fid = re.sub(r"[^A-Z0-9_-]", "", (req.familyId or "").strip().upper())[:32]
+    brief = re.sub(r"\s+", " ", (req.familyBrief or "").strip())[:600]
+    print(f"[daily-lesson] familyId={fid or '*'}, members={req.memberNames[:12]}, brief={brief or '(未传，回落库内/通用版)'}", flush=True)
     lesson = _dl_get(fid, day) if fid else None
     source = "family" if lesson else ""
+    if fid and brief and (not lesson or (lesson.get("familyBrief") or "") != brief):
+        # 画像与当前家庭实时数据不符（或还没有家庭版）→ 按实时画像重新生成
+        async with _DL_LOCK:
+            cur = _dl_get(fid, day)
+            if (not cur) or (cur.get("familyBrief") or "") != brief:
+                try:
+                    await _dl_generate(fid, day, brief)
+                    print(f"[daily-lesson] 已按实时画像生成家庭版 {fid} {day}", flush=True)
+                except Exception as exc:
+                    print(f"[daily-lesson] 家庭版生成失败 {fid}: {exc}", flush=True)
+            lesson = _dl_get(fid, day)
+            source = "family" if lesson else ""
     if not lesson:
         lesson = _dl_get("*", day)
         source = "global" if lesson else ""
