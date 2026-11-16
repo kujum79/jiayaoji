@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V557-20261116';
+        var APP_VER = 'V558-20261116';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -37177,6 +37177,26 @@ function _aiDisclaimerLineHtml(obj) {
     return '<div style="text-align:center;font-size:12px;color:#9CA3AF;line-height:1.7;padding:8px 0 2px;">本内容由人工智能生成，仅供参考，不构成医疗建议。</div>';
 }
 
+// V558: 儿童档案监护人确认弹窗（自定义样式，替代原生 confirm）
+function _childConsentDialog(onOk) {
+    var old = document.getElementById('childConsentOv');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'childConsentOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100020;display:flex;align-items:center;justify-content:center;padding:24px;';
+    ov.innerHTML =
+        '<div style="width:100%;max-width:320px;background:#fff;border-radius:16px;padding:20px 18px;box-shadow:0 12px 40px rgba(0,0,0,0.2);">' +
+        '<div style="font-size:16px;font-weight:800;color:#1F2937;text-align:center;margin-bottom:10px;">儿童档案确认</div>' +
+        '<div style="font-size:13px;color:#4B5563;line-height:1.7;text-align:center;margin-bottom:16px;">为 14 岁以下成员建档，需要确认您是监护人。信息仅用于食谱推荐与食育内容，不会用于广告推送。</div>' +
+        '<div style="display:flex;gap:10px;">' +
+        '<button type="button" id="childConsentNo" style="flex:1;padding:10px;border:1px solid #E5E7EB;background:#fff;border-radius:10px;font-size:13px;font-weight:600;color:#6B7280;cursor:pointer;">取消</button>' +
+        '<button type="button" id="childConsentYes" style="flex:1.2;padding:10px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">确认我是监护人</button>' +
+        '</div></div>';
+    document.body.appendChild(ov);
+    document.getElementById('childConsentNo').onclick = function () { ov.remove(); };
+    document.getElementById('childConsentYes').onclick = function () { ov.remove(); setTimeout(onOk, 0); };
+}
+
 function _fhMake(fields) {
     var now = Date.now();
     var base = {
@@ -42028,10 +42048,19 @@ window.editMemberCard = function(id) {
                 // V288: 成员绑定手机号（仅数字，11 位）
                 member.phone = String((document.getElementById('editPhone_' + id) || {}).value || '').replace(/\D/g, '').slice(0, 11);
                 member.age = parseInt(document.getElementById('editAge_' + id).value) || 0;
-                // V555: 14 岁以下未成年人需监护人确认
+                // V555/V558: 14 岁以下未成年人需监护人确认（自定义弹窗）
                 if (member.age > 0 && member.age < 14 && !member.childConsentAt) {
-                    if (!confirm('您正在为未成年人建立饮食档案。请确认您是监护人，信息仅用于食谱推荐与食育内容，不会用于广告推送。')) return;
-                    member.childConsentAt = Date.now();
+                    if (window.__childConsentPass === 'edit_' + id) {
+                        window.__childConsentPass = '';
+                        member.childConsentAt = Date.now();
+                    } else {
+                        _childConsentDialog(function () {
+                            window.__childConsentPass = 'edit_' + id;
+                            var btn = document.getElementById('saveEdit_' + id);
+                            if (btn) btn.click();
+                        });
+                        return;
+                    }
                 }
                 // V151: 婴儿阶段
                 var _editInfantStage = document.getElementById('editInfantStage_' + id).value;
@@ -77625,11 +77654,20 @@ document.getElementById('saveMemberBtn').addEventListener('click', function() {
         document.querySelectorAll('#famSpecialTags .fam-special-tag-cb:checked'),
         function (cb) { return cb.value; }
     );
-    // V555: 14 岁以下未成年人需监护人确认
+    // V555/V558: 14 岁以下未成年人需监护人确认（自定义弹窗）
     let _childConsentAt;
     if (age > 0 && age < 14) {
-        if (!confirm('您正在为未成年人建立饮食档案。请确认您是监护人，信息仅用于食谱推荐与食育内容，不会用于广告推送。')) return;
-        _childConsentAt = Date.now();
+        if (window.__childConsentPass === 'add') {
+            window.__childConsentPass = '';
+            _childConsentAt = Date.now();
+        } else {
+            _childConsentDialog(function () {
+                window.__childConsentPass = 'add';
+                var btn = document.getElementById('saveMemberBtn');
+                if (btn) btn.click();
+            });
+            return;
+        }
     }
     familyData.push({
         id: Date.now(), name, age, place, currentCity: city, occupation, workSchedule, taste, dietaryPreference,
