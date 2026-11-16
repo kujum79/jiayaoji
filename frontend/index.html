@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V561-20261116';
+        var APP_VER = 'V562-20261116';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -43917,7 +43917,7 @@ function _acctShowDeleteModal(role) {
         + '<div style="font-size:13px;line-height:1.75;color:#4B5563;margin-bottom:12px;">' + _legalEsc(desc) + '</div>'
         + '<div style="font-size:12px;color:#6B7280;margin-bottom:6px;">请输入「注销」两个字以确认：</div>'
         + '<input id="acctDeleteInput" type="text" placeholder="注销" autocomplete="off" style="width:100%;padding:10px 12px;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;" />'
-        + '<div id="acctDeleteErr" style="display:none;font-size:12px;color:#DC2626;margin-top:8px;line-height:1.6;"></div>'
+        + '<div id="acctDeleteErr" style="display:none;font-size:12px;color:#DC2626;margin-top:8px;line-height:1.6;word-break:break-all;"></div>'
         + '<div style="display:flex;gap:10px;margin-top:16px;">'
         + '<button onclick="_acctCloseDeleteModal()" style="flex:1;padding:11px;border:none;border-radius:12px;background:#F3F4F6;color:#4B5563;font-size:14px;font-weight:600;cursor:pointer;">取消</button>'
         + '<button id="acctDeleteConfirm" onclick="_acctDoDelete()" disabled style="flex:1;padding:11px;border:none;border-radius:12px;background:#DC2626;color:#fff;font-size:14px;font-weight:700;cursor:not-allowed;opacity:.45;">确认注销</button>'
