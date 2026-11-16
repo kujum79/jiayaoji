@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V558-20261116';
+        var APP_VER = 'V560-20261116';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -10863,82 +10863,13 @@ function _myClassroomArticleRow(folder, a, subscribed) {
         '</div>';
 }
 
-// V357(P1-7)：未订阅锁屏只露 1 个系列名 + 1 篇标题（不含正文/摘要），作为订阅转化钩子
-function _myClassroomLockTeaser() {
-    function fromGroup(g) {
-        if (!g || !g.folder) return null;
-        var arts = (g.articles || []).filter(function (a) { return a && a.title; });
-        if (!arts.length) return null;
-        return {
-            folder: String(g.folder.folderName || '未命名系列'),
-            count: (g.articles || []).length,
-            title: String(arts[0].title),
-            minutes: Number(arts[0].duration) || 5
-        };
-    }
-    try {
-        var r = getRecommendedCourses(getFamilyMembers()) || {};
-        var list = r.list || [];
-        for (var i = 0; i < list.length; i++) {
-            var t = fromGroup(list[i]);
-            if (t) return t;
-        }
-    } catch (e) {}
-    // 家庭标签未命中时，兜底露课程库第一个有文章的系列（仍只给系列名 + 标题）
-    try {
-        var folders = getCourseFolders() || [];
-        var allArts = getCourseArticles() || [];
-        for (var j = 0; j < folders.length; j++) {
-            var f = folders[j];
-            if (!f || !f.folderName) continue;
-            var arts2 = allArts.filter(function (a) { return a && a.folderId === f.folderId; });
-            var a2 = arts2.filter(function (a) { return a && a.title; })[0];
-            if (!a2) continue;
-            return { folder: String(f.folderName), count: arts2.length, title: String(a2.title), minutes: Number(a2.duration) || 5 };
-        }
-    } catch (e) {}
-    return null;
-}
-
 function _renderMyClassroom() {
     var body = document.getElementById('classroomBody');
     if (!body) return;
     var _clsSubscribed = (typeof isSubscribed === 'function') ? !!isSubscribed() : false;
-    // V222: 未订阅 → 整页降级为订阅引导，不展示任何系列/文章内容
-    if (!_clsSubscribed) {
-        var _subEl0 = document.getElementById('myClassroomSub');
-        if (_subEl0) _subEl0.textContent = '当前家庭：' + _currentFamilyName();
-        var _backEl0 = document.getElementById('myClassroomBackBtn');
-        if (_backEl0) _backEl0.textContent = '← 返回';
-        var _cnt0 = 0;
-        try { _cnt0 = Number((getRecommendedCourses(getFamilyMembers()) || {}).folderCount) || 0; } catch (e) { _cnt0 = 0; }
-        // V357(P1-7)：锁屏露出 1 个系列名 + 1 篇标题（只做钩子，不展示正文/摘要）
-        var _teaser0 = null;
-        try { _teaser0 = _myClassroomLockTeaser(); } catch (e) { _teaser0 = null; }
-        var _teaserHtml0 = '';
-        if (_teaser0) {
-            _teaserHtml0 =
-                '<div style="text-align:left;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:12px 14px;margin:18px 0 2px;">' +
-                '<div style="font-size:11px;color:#B45309;margin-bottom:6px;letter-spacing:.3px;">先看一集 · 订阅后解锁全部</div>' +
-                '<div style="font-size:14px;font-weight:700;color:#7C2D12;line-height:1.5;">📁 ' + escapeHtml(_teaser0.folder) +
-                (_teaser0.count ? '<span style="font-size:11px;color:#B45309;font-weight:400;">　共 ' + _teaser0.count + ' 篇</span>' : '') + '</div>' +
-                (_teaser0.title
-                    ? '<div style="font-size:13px;color:#92400E;line-height:1.6;margin-top:4px;">《' + escapeHtml(_teaser0.title) + '》</div>' +
-                      '<div style="font-size:11px;color:#A16207;margin-top:2px;">⏱ ' + _teaser0.minutes + ' 分钟 · 🔒 订阅可读</div>'
-                    : '') +
-                '</div>';
-        }
-        body.innerHTML =
-            '<div style="margin-top:24px;background:#fff;border-radius:16px;padding:26px 20px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,0.05);">' +
-            '<div style="font-size:40px;line-height:1;margin-bottom:12px;">🔒</div>' +
-            '<div style="font-size:16px;font-weight:700;color:#1F2937;margin-bottom:8px;">我的专属课堂为食养会员专享</div>' +
-            '<div style="font-size:13px;color:#6B7280;line-height:1.8;">订阅后可解锁全部系列课程，按家庭成员的体质与标签智能匹配' + (_cnt0 ? '（共 ' + _cnt0 + ' 个系列）' : '') + '。</div>' +
-            _teaserHtml0 +
-            '<button type="button" onclick="_closeMyClassroom();_openSubscribeGuide();" style="width:100%;margin-top:18px;height:46px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:700;cursor:pointer;">立即订阅</button>' +
-            '<div style="font-size:11px;color:#9CA3AF;margin-top:12px;line-height:1.7;">课程内容为日常饮食参考，不替代医疗建议。</div>' +
-            '</div>';
-        return;
-    }
+    // V560: 分层锁定——今日微课对所有用户免费露出（订阅钩子），
+    // 系列课程/定制课区域内部显示锁定提示，不再整页大锁遮罩
+    if (_MY_CLASSROOM_VIEW.folderId && !_clsSubscribed) _MY_CLASSROOM_VIEW.folderId = null;
     if (_MY_CLASSROOM_RECO === null) {
         _MY_CLASSROOM_RECO = getRecommendedCourses(getFamilyMembers()) || { list: [], folderCount: 0 };
     }
@@ -10978,6 +10909,17 @@ function _renderMyClassroom() {
         }
     } else {
         html += '<div id="dailyLessonBox"></div>';
+        if (!_clsSubscribed) {
+            // V560: 非订阅——锁定提示只挡住课程列表区，今日微课照常可看
+            html += '<div style="background:#fff;border:1px solid #FED7AA;border-radius:16px;padding:20px 16px;text-align:center;margin-bottom:14px;">' +
+                '<div style="font-size:14px;font-weight:700;color:#7C2D12;line-height:1.6;margin-bottom:12px;">🔒 订阅食养会员，解锁全部系列课程与定制课</div>' +
+                '<button type="button" onclick="_openSubscribeGuide()" style="width:100%;height:44px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">立即订阅</button>' +
+                '<div style="font-size:11px;color:#9CA3AF;margin-top:10px;line-height:1.7;">今日微课每日免费，更多系列课程请订阅食养会员。</div>' +
+                '</div>';
+            body.innerHTML = html;
+            try { _renderDailyLessonCard(); } catch (e) {}
+            return;
+        }
         html += '<div style="display:flex;align-items:baseline;gap:8px;margin:2px 2px 10px;">' +
             '<span style="font-size:15px;font-weight:700;color:#1F2937;">推荐课程</span>' +
             '<span style="font-size:12px;color:#9CA3AF;">按家庭标签匹配</span></div>';
@@ -11231,8 +11173,9 @@ function _renderDailyLessonCard() {
             '</div>' +
             '<div style="font-size:15px;font-weight:700;color:#7C2D12;line-height:1.5;margin-bottom:6px;">' + escapeHtml(lesson.title) + '</div>' +
             (meta.length ? '<div style="font-size:11px;color:#B45309;margin-bottom:8px;">' + escapeHtml(meta.join('　')) + '</div>' : '') +
-            '<div style="font-size:12px;color:#9A3412;line-height:1.7;margin-bottom:10px;">' + escapeHtml(String(lesson.content || '').slice(0, 60)) + '…</div>' +
-            '<button type="button" onclick="_openClassroomCourse(\'' + escapeAttr(lesson.id) + '\',\'daily\')" style="width:100%;padding:9px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">阅读今日微课</button>' +
+            '<div style="font-size:12px;color:#9A3412;line-height:1.7;margin-bottom:10px;">' + escapeHtml(String(lesson.content || '').slice(0, 150)) + '…</div>' +
+            '<button type="button" onclick="_openClassroomCourse(\'' + escapeAttr(lesson.id) + '\',\'daily\')" style="width:100%;padding:9px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">阅读全文</button>' +
+            (typeof isSubscribed === 'function' && !isSubscribed() ? '<div style="font-size:11px;color:#B45309;text-align:center;margin-top:8px;">今日微课每日免费，更多系列课程请订阅食养会员</div>' : '') +
             '</div>';
         return;
     }
@@ -11492,7 +11435,8 @@ function _openClassroomCourse(id, kind) {
     if (!c) c = (kind === 'classic') ? getEduCourse(id) : null;
     if (!c) { showToast('课程不存在'); return; }
     // V553: 收费内容统一闸门——未订阅只能看标题/摘要，正文不渲染
-    if (c.isPremium) {
+    // V560: 今日微课全文免费，不受会员闸门限制
+    if (kind !== 'daily' && c.isPremium) {
         var _allowed = false;
         try { _allowed = (typeof isFoodMember === 'function') && isFoodMember(); } catch (e) {}
         if (!_allowed && window.__clsUnlock === id) { window.__clsUnlock = ''; _allowed = true; }
