@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V563-20261116';
+        var APP_VER = 'V564-20261116';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -12450,6 +12450,8 @@ function _monitorNoiseReason(r) {
     if (/HTTP\s*(502|503)/i.test(msg)) return '服务重启/网关瞬时抖动';
     if (/refresh_token/i.test(msg) && /HTTP\s*400/i.test(msg)) return '会话刷新瞬时失败（重登自愈）';
     if (/HTTP\s*40[12]/i.test(msg) && /(family_data|on_conflict)/i.test(msg)) return '过期会话写云端被拦（重登自愈）';
+    if (/HTTP\s*401/i.test(msg) && /\/api\/(family-backup|daily-lesson|food-hall|health-whitepaper)/i.test(msg)) return '会话过期/鉴权闸门拦截（重登自愈）';
+    if (/HTTP\s*400/i.test(msg) && /\/api\/(daily-lesson|food-hall)/i.test(msg)) return '无家庭标识的调用被拒（登录态缺失）';
     return '';
 }
 function _monitorRowDate(r) {
@@ -12459,10 +12461,12 @@ function _monitorRowDate(r) {
 }
 function _monitorSig(r) {
     var msg = String((r && r.message) || '');
+    // V564 修复：旧实现把所有路径段与数字一律归一为 #，导致不同端点的 401/400/502
+    // 共享同一签名，今日 502 部署噪音即可把历史报错批量顶进红榜/触发噪音升级。
+    // 现在只去 query、长数字 ID 与请求动词，保留状态码和端点路径，签名按端点区分。
     msg = msg.replace(/\b(GET|POST|PUT|DELETE|PATCH)\b/gi, ' ')
-        .replace(/https?:\/\/[^\s]+/g, '/#')
-        .replace(/\/\S*/g, '/#')
-        .replace(/[0-9]+/g, '#')
+        .replace(/https?:\/\/[^\s?]+\?[^\s]+/g, function (u) { return u.split('?')[0]; })
+        .replace(/[0-9]{4,}/g, '#')
         .replace(/\s+/g, ' ').trim();
     // 同一次故障常被同时记成「AI 异常」和「接口异常」，签名不看 type，只按错误内容归一，避免漏判
     return msg;
