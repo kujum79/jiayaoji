@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V562-20261116';
+        var APP_VER = 'V563-20261116';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -12441,6 +12441,17 @@ function _monitorTypeMeta(t) {
 // 或消息里命中了用户可感知的现象（卡住/白屏/生成失败等）；其余偶发报错折叠起来
 var _MONITOR_REPEAT_MIN = 3;
 var _MONITOR_USER_HINT = /卡住|白屏|黑屏|闪退|崩溃|无响应|打不开|生成失败|加载失败|保存失败|登录失败|付款失败/;
+// V563: 状态码级系统噪音识别——这些报错是部署重启/限流设计/会话瞬断的必然产物，
+// 默认折叠且不给修复按钮；同一签名今日出现 ≥ _MONITOR_NOISE_ESCALATE 次则升级红榜（服务真挂了）
+var _MONITOR_NOISE_ESCALATE = 10;
+function _monitorNoiseReason(r) {
+    var msg = String((r && r.message) || '');
+    if (/HTTP\s*429/i.test(msg)) return '配额触顶（限流设计行为）';
+    if (/HTTP\s*(502|503)/i.test(msg)) return '服务重启/网关瞬时抖动';
+    if (/refresh_token/i.test(msg) && /HTTP\s*400/i.test(msg)) return '会话刷新瞬时失败（重登自愈）';
+    if (/HTTP\s*40[12]/i.test(msg) && /(family_data|on_conflict)/i.test(msg)) return '过期会话写云端被拦（重登自愈）';
+    return '';
+}
 function _monitorRowDate(r) {
     var ms = Number((r && r.createdAt) || 0);
     if (ms > 0) { try { return dateToKey(new Date(ms)); } catch (e) {} }
@@ -12473,6 +12484,10 @@ function _monitorSplit(list) {
         var repeat = (counts[_monitorSig(r)] || 0) >= _MONITOR_REPEAT_MIN;
         // V374: 网络波动（Failed to fetch / 后端重启）只在折叠区展示，不再进「需要动手」红榜
         if (String(r.type || '') === 'api_network' && !hitUser) { fold.push(r); return; }
+        // V563: 状态码级噪音——折叠并灰显「无需处理」；今日同签名 ≥10 次升级为可操作报警（保留修复按钮）
+        var noise = _monitorNoiseReason(r);
+        if (noise && !hitUser && (counts[_monitorSig(r)] || 0) < _MONITOR_NOISE_ESCALATE) { r._noise = noise; fold.push(r); return; }
+        r._noise = '';
         if (hitUser || repeat) need.push(r); else fold.push(r);
     });
     return { need: need, fold: fold };
@@ -12504,7 +12519,9 @@ function _monitorRowHtml(r) {
         '<span style="font-size:11px;color:#6B7280;">👪 ' + escapeHtml(fam) + '</span>' +
         (done
             ? '<span style="margin-left:auto;border:1px solid #BBF7D0;background:#F0FDF4;color:#16A34A;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;">✅ 已修复</span>'
-            : '<button type="button" onclick="_openMonitorFix(\'' + escapeHtml(r.id || '') + '\')" style="margin-left:auto;border:1px solid #FDBA74;background:#FFF7ED;color:#9A3412;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;">🛠 修复</button>') +
+            : (r._noise
+                ? '<span style="margin-left:auto;border:1px solid #E5E7EB;background:#F9FAFB;color:#9CA3AF;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;">🔇 ' + escapeHtml(r._noise) + ' · 无需处理</span>'
+                : '<button type="button" onclick="_openMonitorFix(\'' + escapeHtml(r.id || '') + '\')" style="margin-left:auto;border:1px solid #FDBA74;background:#FFF7ED;color:#9A3412;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;">🛠 修复</button>')) +
         '</div></div>';
 }
 
@@ -12553,12 +12570,12 @@ function _monitorBodyHtml(d) {
             }).join('') + '</div>' : '') +
         '<div style="display:flex;align-items:center;margin-bottom:8px;">' +
         '<div style="font-size:13px;font-weight:700;color:#1F2937;">🚨 需要动手</div>' +
-        '<span style="margin-left:8px;font-size:11px;color:#9CA3AF;">未处理累计 ' + needPending + ' 条 · 今日 ' + needPendingToday + ' 条 · 今日已修复 ' + ((d && d.resolvedTodayCount) || 0) + ' 条</span>' +
+        '<span style="margin-left:8px;font-size:11px;color:#9CA3AF;">未处理累计 ' + needPending + ' 条 · 今日 ' + needPendingToday + ' 条 · 今日已修复 ' + ((d && d.resolvedTodayCount) || 0) + ' 条 · 修复操作仅对红榜条目开放</span>' +
         '</div>' +
         (need.length ? need.map(_monitorRowHtml).join('') :
             '<div style="background:#fff;border-radius:12px;padding:20px;text-align:center;font-size:12px;color:#6B7280;">✅ 暂无需要动手的报警</div>') +
         (fold.length ? ('<div style="margin-top:8px;display:flex;align-items:center;gap:8px;background:#F9FAFB;border:1px dashed #E5E7EB;border-radius:10px;padding:10px 12px;">' +
-            '<span style="font-size:11px;color:#6B7280;">🙈 已折叠 ' + fold.length + ' 条偶发报错（单次出现、不影响使用）</span>' +
+            '<span style="font-size:11px;color:#6B7280;">🙈 已折叠 ' + fold.length + ' 条偶发/系统噪音报错（瞬时抖动、设计内限流，无需处理）</span>' +
             '<button type="button" onclick="var b=document.getElementById(\'monitorFoldBox\');b.style.display=(b.style.display===\'block\'?\'none\':\'block\');" style="margin-left:auto;border:1px solid #E5E7EB;background:#fff;color:#6B7280;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;">展开</button>' +
             '</div>' +
             '<div id="monitorFoldBox" style="display:none;margin-top:8px;">' + fold.map(_monitorRowHtml).join('') + '</div>') : '') +
