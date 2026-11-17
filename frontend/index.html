@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V565-20261116';
+        var APP_VER = 'V569-20261117';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -79,7 +79,7 @@
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
         'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
-        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode','commissionRecords','expertConsultations','fridgeCleanupRecords','healthButlerCare','savedMoneyLedger','healthWhitePaper','homeMealSetting'];
+        'diningOutPlans','courseProgress','customCourses','subscriptionStatus','subscriptionIntent','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode','commissionRecords','expertConsultations','fridgeCleanupRecords','healthButlerCare','savedMoneyLedger','healthWhitePaper','homeMealSetting'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
     (function () {
         function lockFont() {
@@ -9481,7 +9481,7 @@ function familyKey(key) {
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
         'diningOutPlans',
         'courseProgress',
-        'customCourses','subscriptionStatus','customCourseOrders',
+        'customCourses','subscriptionStatus','subscriptionIntent','customCourseOrders',
         'courseLibraryPurchases',
         'dailyLessons',
         'customCaseOrders',
@@ -35838,7 +35838,7 @@ function _fhShowPaywall(msg) {
         + '<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:9px;"><span style="flex:0 0 auto;color:#16A34A;font-weight:700;">✅</span><span style="font-size:13px;color:#374151;line-height:1.65;">畅学全站食养教育体系课程</span></div>'
         + '<div style="display:flex;gap:8px;align-items:flex-start;"><span style="flex:0 0 auto;color:#16A34A;font-weight:700;">✅</span><span style="font-size:13px;color:#374151;line-height:1.65;">享受 AI 专属全家健康深度复盘</span></div>'
         + '</div>'
-        + '<button type="button" onclick="_fhPayGo()" style="width:100%;height:44px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-top:16px;box-shadow:0 4px 12px rgba(249,115,22,.28);">立即开通食养会员</button>'
+        + '<button type="button" onclick="_fhPayGo()" style="width:100%;height:44px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-top:16px;box-shadow:0 4px 12px rgba(249,115,22,.28);">🎟️ 预约首年99元优惠</button>'
         + '<button type="button" onclick="_fhClosePaywall()" style="width:100%;height:40px;border:none;border-radius:12px;background:#F3F4F6;color:#6B7280;font-size:14px;font-weight:600;cursor:pointer;margin-top:9px;">暂不需要</button>'
         + '</div>';
     ov.addEventListener('click', function (e) { if (e.target === ov) _fhClosePaywall(); });
@@ -35850,7 +35850,9 @@ function _fhClosePaywall() {
 }
 function _fhPayGo() {
     _fhClosePaywall();
-    if (typeof _subscribePayKind === 'function') _subscribePayKind('food');
+    // V569: 付费墙入口统一走预约流程（已订阅用户自动转续费）
+    if (typeof _reserveFirstYearOffer === 'function') _reserveFirstYearOffer();
+    else if (typeof _subscribePayKind === 'function') _subscribePayKind('food');
 }
 var _fhEduFolderId = null;
 function _fhOpenEdu() {
@@ -36515,7 +36517,13 @@ function _openSubscribeModal(preferTier) {
             + (_expText ? '<span style="display:block;font-size:12px;font-weight:600;color:#9A3412;margin-top:2px;">有效期至 ' + _expText + '（点击续费 199元/年）</span>' : '')
             + '</div>';
     } else {
-        foodBtnHtml = '<button type="button" onclick="_subscribePayKind(\'food\')" style="width:100%;height:42px;border-radius:12px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(249,115,22,.28);">立即开通（199元/年）</button>';
+        // V569: 未订阅用户改为「预约首年99元优惠」意愿收集——真实收费渠道就绪前不收款
+        var _intent = null; try { _intent = lsGetJSON('subscriptionIntent'); } catch (e) {}
+        if (_intent && _intent.reserved) {
+            foodBtnHtml = '<button type="button" onclick="_reserveFirstYearOffer()" style="width:100%;height:42px;border-radius:12px;border:1px solid #86EFAC;background:#F0FDF4;color:#15803D;font-size:14px;font-weight:700;cursor:pointer;">✓ 已预约首年99元 · 点击取消</button>';
+        } else {
+            foodBtnHtml = '<button type="button" onclick="_reserveFirstYearOffer()" style="width:100%;height:42px;border-radius:12px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(249,115,22,.28);">🎟️ 预约首年99元优惠（原价199元/年）</button>';
+        }
     }
     var body = '<div style="padding:14px 16px 18px;">';
     // 卡片 1：食养会员（主色高亮）
@@ -36532,7 +36540,7 @@ function _openSubscribeModal(preferTier) {
         + benefitRows(foodBenefits, '#F97316')
         + foodBtnHtml
         + '</div></div>';
-    body += '<div style="font-size:10px;color:#9CA3AF;text-align:center;line-height:1.7;">按年计费 · 模拟支付 · 到期自动回退免费版</div>';
+    body += '<div style="font-size:10px;color:#9CA3AF;text-align:center;line-height:1.7;">按年计费 · 到期回退免费版不停用 · 收费上线后优先通知已预约家庭</div>';
     body += '</div>';
     var ov = document.createElement('div');
     ov.id = 'subscribeOv';
@@ -36565,6 +36573,21 @@ function _subscribePayKind(kind) {
         showToast('✅ 食养会员开通成功');
         setTimeout(function () { try { location.reload(); } catch (e) {} }, 1200);
     });
+}
+// V569: 首年99元预约——真实支付渠道就绪前不收款，仅收集家庭付费意愿（云端键 subscriptionIntent，
+// 随家庭数据同步 Supabase，可在 Dashboard 或「导出我的数据」中统计）
+function _reserveFirstYearOffer() {
+    if (typeof isLogined === 'function' && !isLogined()) { showLoginPage(); return; }
+    if (isFoodMember()) { _subscribePayKind('food'); return; }
+    var cur = null; try { cur = lsGetJSON('subscriptionIntent'); } catch (e) {}
+    if (cur && cur.reserved) {
+        try { lsSetJSON('subscriptionIntent', null); } catch (e) {}
+        showToast('已取消首年99元预约');
+    } else {
+        try { lsSetJSON('subscriptionIntent', { reserved: true, offerPrice: 99, listPrice: 199, ts: Date.now() }); } catch (e) {}
+        showToast('🎟️ 预约成功！收费上线后按首年99元优惠，并第一时间通知您');
+    }
+    try { _openSubscribeModal(); } catch (e) {}
 }
 // V202/V245: 选中/切换双轨套餐（按 tier key），同步绿色打勾图标与底部按钮文案
 // V201/V202: 勾选/取消家庭需求
