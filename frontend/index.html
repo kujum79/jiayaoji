@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V571-20261118';
+        var APP_VER = 'V572-20261118';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -289,17 +289,17 @@
         @media (hover: hover) { .dt-recipe-row:hover .dt-recipe-thumb { transform: scale(1.05); } }
         .dt-recipe-tag { position: absolute; left: 4px; top: 4px; z-index: 2; font-size: 9px; font-weight: 700; color: #7C2D12; background: rgba(255, 255, 255, 0.92); border-radius: 6px; padding: 1px 5px; line-height: 1.5; white-space: nowrap; }
         .dt-recipe-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-        .dt-recipe-title { font-size: 15px; font-weight: 700; color: #3F2A14; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .dt-recipe-title { font-size: 15px; font-weight: 700; color: #1F2937; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         .dt-recipe-summary { font-size: 12px; color: #9CA3AF; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .dt-recipe-more { align-self: flex-end; margin-top: auto; border: 1px solid #FDE7C8; background: #FFF7ED; color: #C2410C; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 2px 8px; line-height: 1.6; cursor: pointer; }
+        .dt-recipe-more { align-self: flex-end; margin-top: auto; border: 1px solid #FDE7C8; background: #FFF7ED; color: #F97316; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 2px 8px; line-height: 1.6; cursor: pointer; }
         .dt-recipe-more:hover { background: #FFEDD5; }
         /* V246: 食邦邻聚·首页公告栏 */
         .community-bar-card { padding: 12px 14px; cursor: pointer; }
-        .community-bar-text { flex: 1; min-width: 0; font-size: 12px; color: #6B7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .community-bar-text { flex: 1; min-width: 0; font-size: 12px; color: #4B5563; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         /* V240: 订阅按钮三态（V242 起并入标题行右侧，原 .dt-sub-row 已移除） */
         /* V242: 订阅按钮位置：小喇叭右侧 */
         /* V140: 标题行 flex——左侧标题、右侧"读完整/收藏"按钮贴右边框；换一条已移除 */
-        .dt-head { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #F97316; padding-bottom: 8px; border-bottom: 1px solid #F3F4F6; margin-bottom: 8px; }
+        .dt-head { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #1F2937; padding-bottom: 8px; border-bottom: 1px solid #F3F4F6; margin-bottom: 8px; }
         .dt-head-btns { margin-left: auto; display: flex; gap: 6px; flex: 0 0 auto; }
         /* V385: 食养堂标题栏「食神盲盒」入口 */
         .dt-quiz-btn { border: none; cursor: pointer; flex: 0 0 auto; font-size: 11px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #FB923C, #F97316); border-radius: 999px; padding: 3px 9px; line-height: 1.4; white-space: nowrap; box-shadow: 0 2px 6px rgba(249, 115, 22, 0.35); animation: dtQuizFloat 2.4s ease-in-out infinite; }
@@ -399,7 +399,7 @@
         .hd-dishes { flex: 1; display: flex; flex-wrap: wrap; gap: 10px 14px; } /* V57: 行间距 10px */
         .hd-dish { display: inline-flex; align-items: center; gap: 5px; height: 24px; } /* V56: 行高约 24px */
         .hd-dish input[type="checkbox"] { width: 14px; height: 14px; accent-color: #F97316; cursor: pointer; flex-shrink: 0; margin: 0; } /* V56: 14px */
-        .hd-dish-name { font-size: 13px; line-height: 1.4; color: #374151; cursor: pointer; margin-left: 1px; } /* V56: 13px 常规深灰；V57: +1px 使勾选框到菜名 6px、菜名到🎧 5px，紧凑成视觉单元 */
+        .hd-dish-name { font-size: 13px; line-height: 1.4; color: #4B5563; cursor: pointer; margin-left: 1px; } /* V56: 13px 常规深灰；V57: +1px 使勾选框到菜名 6px、菜名到🎧 5px，紧凑成视觉单元 */
         .ingr-more-btn { border: 1px solid #F97316; background: #fff; padding: 0 8px; height: 24px; font-size: 12px; font-weight: 600; color: #F97316; border-radius: 10px; cursor: pointer; line-height: 1; margin-left: 0; display: block; } /* V412: 绝对定位容器内，固定在食材内容第一行最右 */
         .ingr-more-wrap { position: absolute; right: 0; top: 0; height: 24px; padding-left: 16px; display: flex; align-items: center; background: linear-gradient(to right, rgba(255,255,255,0) 0%, #fff 16px); } /* V412: 左侧白色渐隐，遮盖按钮下方文字 */
         .hd-listen {
@@ -4430,7 +4430,7 @@ async function _submitFeedback() {
                 <!-- V463: ＋ 移到「家中食材」标题右侧 -->
                 <button class="hd-plus-btn" onclick="openAddFridgeModal()" title="添加食材">＋</button>
                 <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;position:relative;"> <!-- V107: 做法/采购/＋ 间距 12→8px; V411: 残局清理入口移到做法左侧 -->
-                    <button type="button" id="homeFridgeCleanupBtn" onclick="openFridgeCleanup()" style="border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:700;border-radius:999px;padding:4px 10px;cursor:pointer;white-space:nowrap;">🧹 清理冰箱残局</button>
+                    <button type="button" id="homeFridgeCleanupBtn" onclick="openFridgeCleanup()" style="border:1px solid #FDBA74;background:#FFF7ED;color:#F97316;font-size:12px;font-weight:700;border-radius:999px;padding:4px 10px;cursor:pointer;white-space:nowrap;">🧹 清理冰箱残局</button>
                     <button id="homeRecipeDropBtn" class="hd-pill-btn" onclick="toggleHomeRecipeDropdown(event)" title="食材做法">做法 ▼</button>
                     <button class="hd-pill-btn" onclick="_homeGotoShopping()" title="打开食材页采购计划">采购</button>
                     <div id="homeRecipeDropdown" style="display:none;position:absolute;right:0;top:30px;z-index:60;background:white;border:1px solid #FED7AA;border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,0.10);min-width:136px;overflow:hidden;">
@@ -4453,7 +4453,7 @@ async function _submitFeedback() {
                 <span id="hdStatusBadge" style="display:inline-flex;align-items:center;"></span>
                 <!-- 就餐人（V371: 首页仅只读展示人数，选择器只在食记页可点） -->
                 <button class="hd-plus-btn" onclick="openMealPlanPage()" title="规划食谱">＋</button>
-                <span id="homeDiaryDiningSlot" style="display:inline-flex;align-items:center;"><span id="homeDiaryDiningReadonly" style="font-size:12px;color:#C2410C;font-weight:600;white-space:nowrap;"></span></span>
+                <span id="homeDiaryDiningSlot" style="display:inline-flex;align-items:center;"><span id="homeDiaryDiningReadonly" style="font-size:12px;color:#F97316;font-weight:600;white-space:nowrap;"></span></span>
                 <!-- V463: ＋ 已移到「N人」左侧；V439: 去掉首页重复的「确认」入口，确认统一在食记页 -->
                 <!-- V442: 记录入口移到 ＋ 右侧，首页正文只展示计划与成本 -->
                 <button class="hd-pill-btn" onclick="_hdRecordCurrent()" title="记录本餐实际吃了什么">记录</button>
@@ -4472,10 +4472,10 @@ async function _submitFeedback() {
                 <!-- V140: 输入提示移入输入框内（浮层）：容器 pointer-events:none 不挡输入框点击，两个文字按钮 auto 可点；聚焦/有文字时隐藏避免重叠 -->
                 <div style="flex:1;position:relative;display:flex;">
                     <input type="text" id="homeInput" placeholder="" onfocus="_homeHintToggle(true)" onblur="_homeHintToggle(false)" oninput="_homeHintToggle(true)" />
-                    <div id="homeInputHint" style="position:absolute;left:16px;top:0;bottom:0;display:flex;align-items:center;gap:8px;font-size:12px;color:#B45309;white-space:nowrap;pointer-events:none;">
+                    <div id="homeInputHint" style="position:absolute;left:16px;top:0;bottom:0;display:flex;align-items:center;gap:8px;font-size:12px;color:#9CA3AF;white-space:nowrap;pointer-events:none;">
                         <span style="flex-shrink:0;">试问：</span>
-                        <span onclick="_homeQuickAsk('今天吃什么？')" style="pointer-events:auto;cursor:pointer;color:#92400E;">今天吃什么？</span>
-                        <span onclick="_homeQuickAsk('冰箱里有什么？')" style="pointer-events:auto;cursor:pointer;color:#92400E;">冰箱里有什么？</span>
+                        <span onclick="_homeQuickAsk('今天吃什么？')" style="pointer-events:auto;cursor:pointer;color:#F97316;">今天吃什么？</span>
+                        <span onclick="_homeQuickAsk('冰箱里有什么？')" style="pointer-events:auto;cursor:pointer;color:#F97316;">冰箱里有什么？</span>
                     </div>
                 </div>
                 <button class="btn-icon" id="homeSendBtn">⌨️</button>
@@ -18336,7 +18336,7 @@ function renderHomeSavingCard() {
     var slot = document.getElementById('homeCostSaveSlot');
     if (slot) {
         slot.innerHTML = text
-            ? '<span style="cursor:pointer;color:#7A4A21;text-decoration:underline;white-space:nowrap;" onclick="openSavingPeriodReport()">' + text + '</span>'
+            ? '<span style="cursor:pointer;color:#166534;text-decoration:underline;white-space:nowrap;" onclick="openSavingPeriodReport()">' + text + '</span>'
             : '';
     }
     // 旧顶部导航槽废弃隐藏
@@ -35063,7 +35063,7 @@ function renderHomeDiaryCard() {
                 var sv = calcMealSaving(md, mealKey);
                 if (sv && (sv.home > 0 || sv.out > 0)) {
                     // V159: 去掉「💰 预计：」前缀；行右侧挂「本月已省」入口（flex 两端布局）
-                    costHtml = '<div class="hd-cost"><span>在家 <b>¥' + sv.home.toFixed(1) + '</b> / 外食 <b>¥' + (Math.round(sv.out * 10) / 10) + '</b>' + (sv.saved > 0 ? ' ｜ <span style="color:#10B981;font-weight:700;">省 ¥' + sv.saved.toFixed(1) + '</span>' : '') + '</span><span id="homeCostSaveSlot" style="flex-shrink:0;"></span></div>';
+                    costHtml = '<div class="hd-cost"><span>在家 <b>¥' + sv.home.toFixed(1) + '</b> / 外食 <b>¥' + (Math.round(sv.out * 10) / 10) + '</b>' + (sv.saved > 0 ? ' ｜ <span style="color:#166534;font-weight:700;">省 ¥' + sv.saved.toFixed(1) + '</span>' : '') + '</span><span id="homeCostSaveSlot" style="flex-shrink:0;"></span></div>';
                 } else {
                     costHtml = '<div class="hd-cost"><span>待记录</span><span id="homeCostSaveSlot" style="flex-shrink:0;"></span></div>'; // V44: 无成本数据显示待记录，不再显示 ¥0.0 / ¥0
                 }
@@ -35221,15 +35221,15 @@ function _dtRenderCard(tip) {
     if (diet && diet.title) {
         dietCard = '<div onclick="_fhOpenCardDiet()" style="cursor:pointer;border-radius:14px;padding:11px 12px;background:linear-gradient(135deg,#FFFBF3,#FFF2DF);border:1px solid #FDE7C8;">'
             + '<div style="display:flex;align-items:flex-start;gap:8px;">'
-            + '<div style="flex:1;min-width:0;font-size:15px;font-weight:800;color:#3F2A14;line-height:1.5;">' + escapeHtml(diet.title) + '</div>'
+            + '<div style="flex:1;min-width:0;font-size:15px;font-weight:800;color:#1F2937;line-height:1.5;">' + escapeHtml(diet.title) + '</div>'
             + _aiBadgeHtml(diet)
-            + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" style="flex:0 0 auto;border:none;background:none;font-size:14px;color:#C08457;cursor:pointer;padding:0 2px;" title="往期回顾">📅</button>'
+            + '<button onclick="event.stopPropagation(); _openDailyTipArchive()" style="flex:0 0 auto;border:none;background:none;font-size:14px;color:#9CA3AF;cursor:pointer;padding:0 2px;" title="往期回顾">📅</button>'
             + '</div>'
-            + '<div style="font-size:12px;color:#9A7B5A;line-height:1.65;margin-top:4px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(diet.summary || '') + '</div>'
+            + '<div style="font-size:12px;color:#4B5563;line-height:1.65;margin-top:4px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(diet.summary || '') + '</div>'
             + '</div>';
     } else {
         dietCard = '<div style="border-radius:14px;padding:11px 12px;background:#FFFBF3;border:1px dashed #FDE7C8;">'
-            + '<div style="font-size:12px;color:#B08968;">' + (dietDue ? '今日饮食文章暂未更新，稍后自动补发' : '今日 06:00 自动更新') + '</div>'
+            + '<div style="font-size:12px;color:#9CA3AF;">' + (dietDue ? '今日饮食文章暂未更新，稍后自动补发' : '今日 06:00 自动更新') + '</div>'
             + '</div>';
     }
     var recipeCard = '';
@@ -35253,8 +35253,8 @@ function _dtRenderCard(tip) {
             + '</div></div>';
     } else {
         recipeCard = '<div style="border-radius:14px;padding:11px 12px;background:#FFFBF3;border:1px dashed #FDE7C8;">'
-            + '<div style="font-size:10px;font-weight:700;color:#C2410C;">🌍 寻味天下</div>'
-            + '<div style="font-size:12px;color:#B08968;margin-top:5px;">' + (recipeDue ? '今日寻味暂未更新，稍后自动补发' : '今日 16:30 自动上架') + '</div>'
+            + '<div style="font-size:10px;font-weight:700;color:#F97316;">🌍 寻味天下</div>'
+            + '<div style="font-size:12px;color:#9CA3AF;margin-top:5px;">' + (recipeDue ? '今日寻味暂未更新，稍后自动补发' : '今日 16:30 自动上架') + '</div>'
             + '</div>';
     }
     var bodyHtml = '<div style="display:flex;flex-direction:column;gap:10px;">'
@@ -81937,19 +81937,19 @@ window.renderHomeHealthButlerCard = function () {
     var careInfo = carePlan ? _hmPlanDayInfo(carePlan) : null;
     if (!member) {
         el.innerHTML = '<div style="flex-shrink:0;text-align:left;line-height:1.25;">'
-            + '<div style="font-size:12px;font-weight:700;color:#92400E;">您的专属</div>'
-            + '<div style="font-size:17px;font-weight:900;color:#7C2D12;">健康管家</div></div>'
+            + '<div style="font-size:12px;font-weight:700;color:#6B7280;">您的专属</div>'
+            + '<div style="font-size:17px;font-weight:900;color:#1F2937;">健康管家</div></div>'
             + '<div style="flex:1;min-width:0;">'
-            + '<div style="font-size:11px;color:#92400E;line-height:1.55;">查看健康管家：白皮书、专属健康饮食方案、专属营养食谱、深度复盘（会员解锁）。</div></div>'
-            + '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#C2410C;background:#FFEDD5;border:1px solid #FDBA74;border-radius:999px;padding:4px 8px;">进入 ›</span>';
+            + '<div style="font-size:11px;color:#4B5563;line-height:1.55;">查看健康管家：白皮书、专属健康饮食方案、专属营养食谱、深度复盘（会员解锁）。</div></div>'
+            + '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#F97316;background:#FFEDD5;border:1px solid #FDBA74;border-radius:999px;padding:4px 8px;">进入 ›</span>';
         return;
     }
     el.innerHTML = '<div style="flex-shrink:0;text-align:left;line-height:1.25;">'
-        + '<div style="font-size:12px;font-weight:700;color:#92400E;">您的专属</div>'
-        + '<div style="font-size:17px;font-weight:900;color:#7C2D12;">健康管家</div></div>'
-        + '<div style="flex:1;min-width:0;"><div style="font-size:11px;color:#92400E;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(tip) + '</div>'
-        + (careInfo ? '<div style="font-size:11px;color:#C2410C;font-weight:700;margin-top:4px;">生病调理：' + escapeHtml(carePlan.memberName || '家人') + ' · 第 ' + careInfo.dayNo + ' 天 / ' + careInfo.totalDays + ' 天</div>' : '')
-        + '</div><span style="flex-shrink:0;font-size:12px;font-weight:800;color:#C2410C;">进入 ›</span>';
+        + '<div style="font-size:12px;font-weight:700;color:#6B7280;">您的专属</div>'
+        + '<div style="font-size:17px;font-weight:900;color:#1F2937;">健康管家</div></div>'
+        + '<div style="flex:1;min-width:0;"><div style="font-size:11px;color:#4B5563;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(tip) + '</div>'
+        + (careInfo ? '<div style="font-size:11px;color:#F97316;font-weight:700;margin-top:4px;">生病调理：' + escapeHtml(carePlan.memberName || '家人') + ' · 第 ' + careInfo.dayNo + ' 天 / ' + careInfo.totalDays + ' 天</div>' : '')
+        + '</div><span style="flex-shrink:0;font-size:12px;font-weight:800;color:#F97316;">进入 ›</span>';
 };
 window.openCareForm = function () {
     if (document.getElementById('careFormOverlay')) return;
@@ -82318,9 +82318,9 @@ function renderHomeCommunityBar() {
     var text = parts.length ? (parts.join('、') + '…') : '小区里还没有新动态，来看看邻居们在做什么吧';
     el.innerHTML = '<div style="display:flex;align-items:center;gap:8px;">'
         + '<span style="font-size:15px;flex-shrink:0;">🤝</span>'
-        + '<span style="font-size:13px;font-weight:700;color:#C2410C;flex-shrink:0;">食邦邻聚</span>'
+        + '<span style="font-size:13px;font-weight:700;color:#1F2937;flex-shrink:0;">食邦邻聚</span>'
         + '<span class="community-bar-text">' + escapeHtml(text) + '</span>'
-        + '<span style="flex-shrink:0;font-size:12px;font-weight:600;color:#EA580C;background:#FFF7ED;border:1px solid #FED7AA;border-radius:9px;padding:3px 8px;">去看看 ›</span>'
+        + '<span style="flex-shrink:0;font-size:12px;font-weight:600;color:#F97316;background:#FFF7ED;border:1px solid #FED7AA;border-radius:9px;padding:3px 8px;">去看看 ›</span>'
         + '</div>';
 }
 function closeCommunityPage() {
