@@ -471,11 +471,13 @@ async def call_qwen(
             "temperature": 0.2 if json_mode else 0.7,
             "timeout": timeout,
         })
+        _ai_chain_note(True)
         return result["content"].strip()
     except AIServiceBusy as exc:
         # D5-01: 并发闸门排队超时——返回 503 + 明确提示，前端据此展示「服务繁忙」而非笼统失败
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
+        _ai_chain_note(False, str(exc))
         raise HTTPException(status_code=502, detail=f"AI 服务调用失败：{exc}") from exc
 
 
@@ -504,9 +506,11 @@ async def ai_vision(req: VisionRequest) -> ChatResponse:
     task_type = req.task_type if (req.task_type and re.fullmatch(r"[a-z_]{1,24}", req.task_type)) else "vision"
     try:
         content, _provider = await route_vision(messages, max_tokens=req.max_tokens, task_type=task_type)
+        _ai_chain_note(True)
     except AIServiceBusy as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
+        _ai_chain_note(False, str(exc))
         raise HTTPException(status_code=502, detail=f"AI 视觉服务调用失败：{exc}") from exc
     return ChatResponse(response=content.strip())
 # ============================================
@@ -6840,6 +6844,30 @@ def _fire_alert(payload: Dict[str, Any]) -> None:
     task.add_done_callback(_alert_tasks.discard)
 
 
+# ===== V570: AI 全链路故障主动告警 =====
+_AI_CHAIN_STATE = {"streak": 0, "last_alert_ts": 0.0}
+_AI_CHAIN_LOCK = threading.Lock()
+
+
+def _ai_chain_note(ok: bool, err: str = "") -> None:
+    """call_qwen/route_vision 成败探针：连续 3 次全服务商失败 → 推群告警（同签名每小时最多 1 次）。"""
+    now = time.time()
+    with _AI_CHAIN_LOCK:
+        if ok:
+            _AI_CHAIN_STATE["streak"] = 0
+            return
+        _AI_CHAIN_STATE["streak"] += 1
+        if _AI_CHAIN_STATE["streak"] < 3 or now - _AI_CHAIN_STATE["last_alert_ts"] < 3600:
+            return
+        _AI_CHAIN_STATE["last_alert_ts"] = now
+    _fire_alert({
+        "method": "AI", "path": "全服务商链路",
+        "message": f"⚠️ AI 链路已连续 3 次全部服务商失败。最近错误：{err[:200]}。"
+                   "请到超管系统监控→修复→AI链路诊断 逐家排查（401 多为密钥失效，需轮换）",
+        "errorId": "ai-chain-" + time.strftime("%m%d%H%M"),
+    })
+
+
 @app.exception_handler(Exception)
 async def _unhandled_exception_handler(request: Request, exc: Exception):
     """V226: 未捕获异常统一拦截——记录 traceback，返回带 errorId 的 500。V565: 同步推送群机器人告警。"""
@@ -7241,6 +7269,37 @@ async def admin_ai_provider_reset() -> Dict[str, Any]:
     except OSError:
         pass
     return {"ok": True, "providers": _provider_list()}
+
+
+@app.post("/api/admin/ai-diagnose")
+async def admin_ai_diagnose() -> Dict[str, Any]:
+    """V570: 实时探测每家服务商健康度（最小 chat 请求），区分单家故障与密钥全失效。"""
+    if not _mc:
+        return {"ok": False, "error": "路由层未加载"}
+    out = []
+    for name, cfg in sorted(_mc.PROVIDERS.items(), key=lambda x: x[1].get("priority", 99)):
+        key = str(cfg.get("api_key") or "")
+        model = (cfg.get("models") or {}).get("text_fast") or (cfg.get("models") or {}).get("text") or ""
+        if not key or not model:
+            continue
+        entry = {"provider": name, "model": model}
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.post(
+                    cfg["base_url"].rstrip("/") + "/chat/completions",
+                    headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
+                    json={"model": model, "messages": [{"role": "user", "content": "回复OK"}], "max_tokens": 8},
+                )
+            if resp.status_code < 400 and "content" in resp.text:
+                entry["status"] = "OK"
+            else:
+                entry["status"] = f"HTTP {resp.status_code}"
+                entry["detail"] = resp.text[:160]
+        except Exception as exc:
+            entry["status"] = "ERROR"
+            entry["detail"] = str(exc)[:160]
+        out.append(entry)
+    return {"ok": True, "checkedAt": time.strftime("%Y-%m-%d %H:%M:%S"), "providers": out}
 
 
 class RemoteCommandRequest(BaseModel):

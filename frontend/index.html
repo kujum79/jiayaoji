@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V569-20261117';
+        var APP_VER = 'V570-20261118';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -12735,11 +12735,42 @@ function _openMonitorFix(errorId) {
             '<div style="' + subtitle + '">一键调整多模型路由层的首选服务商，立即生效</div></button>'
             :
             '<div style="border:1px dashed #E5E7EB;border-radius:12px;padding:10px 14px;margin-bottom:9px;font-size:11px;color:#9CA3AF;">🤖 切换备用 AI 服务商（仅「AI 异常」类型报警可用）</div>') +
+        '<button type="button" onclick="_monitorAiDiagnose()" style="' + btn + '">' +
+        '<div style="font-size:13px;font-weight:700;color:#1F2937;">🔍 AI 链路诊断</div>' +
+        '<div style="' + subtitle + '">实时探测每家服务商健康度：单家 401/超时 → 点「切换备用」即可；全部失效 → 密钥过期，需轮换密钥后重启服务</div>' +
+        '<div id="aiDiagResult" style="display:none;margin-top:8px;font-size:11px;line-height:1.9;"></div></button>' +
         '<button type="button" onclick="_monitorFixResolve()" style="' + btn + '">' +
         '<div style="font-size:13px;font-weight:700;color:#16A34A;">✅ 标记为已修复</div>' +
         '<div style="' + subtitle + '">该条转入「已修复」状态并计入今日已修复数量，刷新后不再出现在待处理列表</div></button>' +
         '</div></div>';
     document.body.appendChild(ov);
+}
+
+async function _monitorAiDiagnose() {
+    var box = document.getElementById('aiDiagResult');
+    if (!box || box._busy) return;
+    box._busy = true;
+    box.style.display = 'block';
+    box.innerHTML = '<span style="color:#6B7280;">⏳ 正在逐家探测服务商（约 10~30 秒）…</span>';
+    try {
+        var res = await fetch('/api/admin/ai-diagnose', { method: 'POST' });
+        var out = await res.json();
+        if (!out || !out.ok) {
+            box.innerHTML = '<span style="color:#DC2626;">诊断失败：' + escapeHtml((out && out.error) || ('HTTP ' + res.status)) + '</span>';
+        } else {
+            var rows = (out.providers || []).map(function (p) {
+                var good = p.status === 'OK';
+                return '<div style="color:' + (good ? '#16A34A' : '#DC2626') + ';">' + (good ? '✅' : '❌') + ' ' +
+                    escapeHtml(p.provider) + '：' + escapeHtml(p.status) +
+                    (p.detail ? ' <span style="color:#9CA3AF;">' + escapeHtml(String(p.detail).slice(0, 60)) + '</span>' : '') + '</div>';
+            }).join('');
+            box.innerHTML = (rows || '<span style="color:#6B7280;">没有可探测的服务商（均未配置密钥）</span>') +
+                '<div style="color:#9CA3AF;margin-top:2px;">探测时间：' + escapeHtml(out.checkedAt || '') + '</div>';
+        }
+    } catch (e) {
+        box.innerHTML = '<span style="color:#DC2626;">诊断请求失败，请稍后重试</span>';
+    }
+    box._busy = false;
 }
 
 async function _monitorFixResetCache() {
