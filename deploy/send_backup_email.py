@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""V567: 把每日备份压缩包作为附件发送到邮箱（QQ 邮箱 SMTP，465 SSL）。
+"""V567: 把每日备份压缩包作为附件发送到邮箱（按发件域名自动选择 SMTP 主机，465 SSL）。
 
 配置来源（优先级：环境变量 > /etc/jiayaoji/backup-email.env）：
     BACKUP_EMAIL_TO    收件邮箱
-    BACKUP_EMAIL_USER  发件 QQ 邮箱（同时作为 SMTP 账号）
-    BACKUP_EMAIL_PASS  QQ 邮箱 SMTP 授权码（不是登录密码）
+    BACKUP_EMAIL_USER  发件邮箱（同时作为 SMTP 账号，如 xxx@163.com / xxx@qq.com）
+    BACKUP_EMAIL_PASS  发件邮箱的客户端授权码（不是登录密码）
+    BACKUP_SMTP_HOST   可选，强制指定 SMTP 服务器（默认按域名自动识别）
 cron 不继承 systemd 的 EnvironmentFile，因此独立 env 文件是主路径，
 文件权限须为 600 且属主为运行备份的 admin 用户。
 
@@ -22,8 +23,26 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 
 ENV_FILE = "/etc/jiayaoji/backup-email.env"
-SMTP_HOST = "smtp.qq.com"
-SMTP_PORT = 465
+# 按发件邮箱域名自动选择 SMTP 服务器（465 SSL）；可用 BACKUP_SMTP_HOST 强制覆盖
+SMTP_HOSTS = {
+    "qq.com": "smtp.qq.com",
+    "foxmail.com": "smtp.qq.com",
+    "163.com": "smtp.163.com",
+    "126.com": "smtp.126.com",
+    "yeah.net": "smtp.yeah.net",
+}
+
+
+def resolve_smtp(user):
+    host = os.getenv("BACKUP_SMTP_HOST", "").strip()
+    if not host:
+        dom = user.rsplit("@", 1)[-1].lower()
+        host = SMTP_HOSTS.get(dom) or ("smtp." + dom)
+    try:
+        port = int(os.getenv("BACKUP_SMTP_PORT", "465") or 465)
+    except ValueError:
+        port = 465
+    return host, port
 
 
 def log(msg):
@@ -85,13 +104,14 @@ def main():
     part["Content-Disposition"] = 'attachment; filename="%s"' % name
     msg.attach(part)
 
+    host, port = resolve_smtp(user)
     try:
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=30) as s:
+        with smtplib.SMTP_SSL(host, port, timeout=30) as s:
             s.login(user, password)
             s.sendmail(user, [to], msg.as_string())
-        log("邮件发送成功: %s → %s（附件 %.2f MB）" % (user, to, size_mb))
+        log("邮件发送成功: %s → %s（%s:%d，附件 %.2f MB）" % (user, to, host, port, size_mb))
     except smtplib.SMTPAuthenticationError as e:
-        log("SMTP 认证失败（请检查 BACKUP_EMAIL_PASS 是否为 QQ 授权码）: %s" % e)
+        log("SMTP 认证失败（请确认 BACKUP_EMAIL_PASS 是邮箱「客户端授权密码/授权码」而非登录密码）: %s" % e)
     except (smtplib.SMTPException, OSError) as e:
         log("SMTP 发送失败: %s: %s" % (type(e).__name__, e))
 
