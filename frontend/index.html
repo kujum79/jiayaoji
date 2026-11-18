@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V574-20261118';
+        var APP_VER = 'V575-20261118';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -287,7 +287,7 @@
         .dt-recipe-thumb-box { position: relative; flex: 0 0 auto; width: 80px; height: 80px; border-radius: 8px; overflow: hidden; background: #FDE68A; }
         .dt-recipe-thumb { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .18s ease; }
         @media (hover: hover) { .dt-recipe-row:hover .dt-recipe-thumb { transform: scale(1.05); } }
-        .dt-recipe-tag { position: absolute; left: 4px; top: 4px; z-index: 2; font-size: 9px; font-weight: 700; color: #7C2D12; background: rgba(255, 255, 255, 0.92); border-radius: 6px; padding: 1px 5px; line-height: 1.5; white-space: nowrap; }
+        .dt-recipe-tag { position: absolute; left: 4px; top: 4px; z-index: 2; font-size: 9px; font-weight: 700; color: #4B5563; background: rgba(255, 255, 255, 0.92); border-radius: 6px; padding: 1px 5px; line-height: 1.5; white-space: nowrap; }
         .dt-recipe-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
         .dt-recipe-title { font-size: 15px; font-weight: 700; color: #1F2937; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         .dt-recipe-summary { font-size: 12px; color: #9CA3AF; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -2692,7 +2692,7 @@
         flex: 1 1 0; min-width: 0;
         padding: 8px 4px;
         border-radius: 10px; border: 1px solid #FED7AA;
-        background: #FFF7ED; color: #7A4A21;
+        background: #FFF7ED; color: #92400E;
         font-size: 13px; font-weight: 700; letter-spacing: -0.2px;
         cursor: pointer;
         /* 按钮名永不拆字（"现有食材食谱"不许折成两行）；窄屏靠缩小字号适配 */
@@ -2866,7 +2866,7 @@
     .ingr-rec-slot-row-big { margin-top:6px; }
     /* 推荐食谱汇总：按天分组 */
     .ingr-rec-day-block { border:1px solid #E5E7EB; border-radius:10px; padding:8px 10px; margin-bottom:10px; background:#FAFAF7; }
-    .ingr-rec-day-title { font-size:14px; font-weight:800; color:#7A4A21; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+    .ingr-rec-day-title { font-size:14px; font-weight:800; color:#EA580C; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
     .ingr-rec-day-title .day-date { font-size:12px; font-weight:600; color:#9CA3AF; }
     .ingr-rec-day-meal { margin-bottom:6px; }
     .ingr-rec-day-meal-title { font-size:13px; font-weight:700; color:#374151; margin-bottom:3px; }
@@ -2876,7 +2876,7 @@
     .ingr-rec-day-empty { font-size:12px; color:#9CA3AF; }
     /* 候选菜池 */
     .cand-section { border:1px solid #E5E7EB; border-radius:10px; padding:8px 10px; margin-bottom:10px; background:#FAFAF7; }
-    .cand-section-title { font-size:14px; font-weight:800; color:#7A4A21; margin-bottom:6px; }
+    .cand-section-title { font-size:14px; font-weight:800; color:#EA580C; margin-bottom:6px; }
     .cand-pool-dishes { display:flex; flex-wrap:wrap; gap:4px 10px; }
     .cand-pool-dish { display:inline-flex; align-items:center; gap:3px; font-size:13px; color:#111827; }
     .cand-pool-dish input[type="checkbox"] { width:14px; height:14px; margin:0; accent-color:#F97316; cursor:pointer; flex-shrink:0; }
@@ -3392,7 +3392,7 @@
     .diary-today-btn { background:#FFF7ED; border:1px solid #FED7AA; border-radius:8px; padding:4px 14px; font-size:13px; color:#EA580C; cursor:pointer; transition:all .15s; }
     .diary-today-btn:hover { background:#FFEDD5; }
     .diary-today-btn-inline { background:none; border:none; padding:0; font-size:13px; color:#9CA3AF; cursor:pointer; line-height:1; }
-    .diary-weather-bar { font-size:12px; color:#7A4A21; background:#FFF7ED; border:1px solid #FED7AA; border-radius:10px; padding:1px 8px; white-space:nowrap; max-width:150px; overflow:hidden; text-overflow:ellipsis; line-height:1.5; }
+    .diary-weather-bar { font-size:12px; color:#92400E; background:#FFF7ED; border:1px solid #FED7AA; border-radius:10px; padding:1px 8px; white-space:nowrap; max-width:150px; overflow:hidden; text-overflow:ellipsis; line-height:1.5; }
     .diary-today-btn-inline:hover { color:#6B7280; }
     .diary-today-btn-inline.active { color:#DC2626; font-weight:600; }
     /* 日期行右侧动作按钮组：窄屏自动紧凑，保证日期区不被挤压成竖排 */
@@ -3915,7 +3915,7 @@
         .mp-snack-rec-hint { font-size: 11px; color: #9A3412; margin: 4px 0; font-style: italic; }
         .mp-snack-rec-empty { font-size: 12px; color: #9CA3AF; padding: 8px 4px; text-align: center; }
         .mp-snack-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-        .mp-snack-label { font-size: 12px; font-weight: 600; color: #7C2D12; flex-shrink: 0; min-width: 34px; }
+        .mp-snack-label { font-size: 12px; font-weight: 600; color: #4B5563; flex-shrink: 0; min-width: 34px; }
         .mp-snack-input { height: 22px; border: 1.5px solid #FED7AA; border-radius: 6px; padding: 0 6px; font-size: 12px; outline: none; box-sizing: border-box; background: #fff; }
         .mp-snack-input-select { height: 22px; border: 1.5px solid #FED7AA; border-radius: 6px; padding: 0 2px; font-size: 12px; outline: none; box-sizing: border-box; background: #fff; }
         .mp-snack-check { width: 16px; height: 16px; accent-color: #FB923C; cursor: pointer; }
@@ -4054,7 +4054,7 @@ body.demo-mode .phone-frame { height: 100%; }
 <!-- ====== V287: 新用户创建家庭（手机号验证码通过后填写家庭名称） ====== -->
 <div id="registerFamilyModal" style="position:fixed;inset:0;z-index:100014;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeRegisterFamilyModal()">
     <div style="background:#fff;border-radius:20px;padding:24px 20px;width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
-        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">🏠 创建家庭</div>
+        <div style="font-size:18px;font-weight:800;color:#EA580C;margin-bottom:4px;text-align:center;">🏠 创建家庭</div>
         <div style="font-size:13px;color:#9CA3AF;margin-bottom:16px;text-align:center;">手机号 <span id="regFamilyPhone" style="color:#9A3412;font-weight:600;"></span> 尚未注册，请创建新家庭或加入已有家庭</div>
         <input id="regFamilyNameOnly" type="text" maxlength="20" placeholder="家庭名称（如：三仁佳欢）" onkeydown="if(event.key==='Enter')submitRegisterFamily()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;box-sizing:border-box;" />
         <button onclick="submitRegisterFamily()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">创建并进入</button>
@@ -4069,7 +4069,7 @@ body.demo-mode .phone-frame { height: 100%; }
 <!-- ====== V288: 邀请家人（家庭邀请码） ====== -->
 <div id="inviteFamilyModal" style="position:fixed;inset:0;z-index:100015;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeInviteFamilyModal()">
     <div style="background:#fff;border-radius:20px;padding:24px 20px;width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
-        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">🔗 邀请家人</div>
+        <div style="font-size:18px;font-weight:800;color:#EA580C;margin-bottom:4px;text-align:center;">🔗 邀请家人</div>
         <div style="font-size:13px;color:#9CA3AF;margin-bottom:14px;text-align:center;">把邀请码发给家人，注册时输入即可加入本家庭</div>
         <div id="inviteFamilyCode" style="font-size:26px;font-weight:800;letter-spacing:2px;color:#C2410C;background:#FFF7ED;border:1px dashed #FED7AA;border-radius:12px;padding:16px 8px;text-align:center;margin-bottom:10px;">—</div>
         <div id="inviteFamilyName" style="font-size:12px;color:#9CA3AF;text-align:center;margin-bottom:14px;"></div>
@@ -4082,7 +4082,7 @@ body.demo-mode .phone-frame { height: 100%; }
 <!-- ====== V288: 家庭信息（超级管理员编辑） ====== -->
 <div id="familyInfoModal" style="position:fixed;inset:0;z-index:100015;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeFamilyInfoModal()">
     <div style="background:#fff;border-radius:20px;padding:24px 20px;width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
-        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:14px;text-align:center;">🏠 家庭信息</div>
+        <div style="font-size:18px;font-weight:800;color:#EA580C;margin-bottom:14px;text-align:center;">🏠 家庭信息</div>
         <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:4px;">家庭名称</div>
         <input id="famInfoName" type="text" maxlength="20" placeholder="家庭名称" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
         <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:4px;">家庭住址</div>
@@ -4106,7 +4106,7 @@ body.demo-mode .phone-frame { height: 100%; }
 <!-- ====== V288: 家庭成员账号（绑定手机号一览） ====== -->
 <div id="familyAccountsModal" style="position:fixed;inset:0;z-index:100015;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeFamilyAccountsModal()">
     <div style="background:#fff;border-radius:20px;padding:24px 20px;width:100%;max-width:360px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;max-height:86vh;overflow-y:auto;">
-        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">📱 家庭帐号</div>
+        <div style="font-size:18px;font-weight:800;color:#EA580C;margin-bottom:4px;text-align:center;">📱 家庭帐号</div>
         <div id="familyAccountsSub" style="font-size:12px;color:#9CA3AF;text-align:center;margin-bottom:14px;"></div>
         <div id="familyAccountsList"></div>
         <div onclick="closeFamilyAccountsModal()" style="font-size:13px;color:#9CA3AF;margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline;">关闭</div>
@@ -4116,7 +4116,7 @@ body.demo-mode .phone-frame { height: 100%; }
 <!-- ====== 合并注册弹窗（邮箱注册 + 创建家庭 一次完成） ====== -->
 <div id="combinedRegisterModal" style="position:fixed;inset:0;z-index:100013;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeCombinedRegisterModal()">
     <div style="background:#fff;border-radius:20px;padding:24px 20px;width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;max-height:92vh;overflow-y:auto;">
-        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">📧 注册并创建家庭</div>
+        <div style="font-size:18px;font-weight:800;color:#EA580C;margin-bottom:4px;text-align:center;">📧 注册并创建家庭</div>
         <div style="font-size:13px;color:#9CA3AF;margin-bottom:16px;text-align:center;">一步完成注册，开始使用家肴记</div>
         <!-- 账号信息区 -->
         <div style="font-size:13px;color:#9A3412;font-weight:600;margin-bottom:6px;">① 账号信息</div>
@@ -4136,7 +4136,7 @@ body.demo-mode .phone-frame { height: 100%; }
 <!-- ====== 邮箱账号弹窗（备用登录 + 创建家庭第一步，从登录页移出） ====== -->
 <div id="emailAccountModal" style="position:fixed;inset:0;z-index:100010;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeEmailAccountModal()">
     <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:340px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
-        <div id="emailModalTitle" style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;">📧 邮箱登录</div>
+        <div id="emailModalTitle" style="font-size:18px;font-weight:800;color:#EA580C;margin-bottom:4px;">📧 邮箱登录</div>
         <div id="emailModalSub" style="font-size:13px;color:#9CA3AF;margin-bottom:16px;">换设备后恢复账号（备用）</div>
         <input id="loginEmail" type="email" maxlength="60" placeholder="请输入邮箱" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;" />
         <input id="loginPassword" type="password" maxlength="40" placeholder="请输入密码" onkeydown="if(event.key==='Enter')doLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:18px;outline:none;background:#FFFBEB;color:#1F2937;" />
@@ -4151,7 +4151,7 @@ body.demo-mode .phone-frame { height: 100%; }
             <div id="forgotPwdLink" onclick="showForgotPassword()" style="font-size:13px;color:#9A3412;margin-left:14px;cursor:pointer;text-decoration:underline;display:inline-block;">忘记密码？</div>
         </div>
         <div id="forgotPwdBox" style="display:none;margin-top:10px;padding:12px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;box-sizing:border-box;">
-            <div style="font-size:13px;color:#7A4A21;margin-bottom:8px;">输入注册邮箱，将发送密码重置链接：</div>
+            <div style="font-size:13px;color:#4B5563;margin-bottom:8px;">输入注册邮箱，将发送密码重置链接：</div>
             <input id="forgotEmail" type="email" maxlength="60" placeholder="注册邮箱" onkeydown="if(event.key==='Enter')sendResetEmail()" style="width:100%;padding:9px 12px;font-size:14px;border:1px solid #FED7AA;border-radius:8px;margin-bottom:8px;outline:none;background:#fff;color:#1F2937;box-sizing:border-box;" />
             <button id="forgotSendBtn" onclick="sendResetEmail()" style="width:100%;padding:10px;font-size:14px;font-weight:700;color:#fff;background:#D97706;border:none;border-radius:9px;cursor:pointer;">发送重置邮件</button>
             <div id="forgotMsg" style="display:none;font-size:12px;margin-top:8px;line-height:1.5;"></div>
@@ -4164,7 +4164,7 @@ body.demo-mode .phone-frame { height: 100%; }
 <!-- ====== 创建家庭弹窗（邮箱注册成功后第 2 步：家庭名称 + 家庭密码） ====== -->
 <div id="createFamilyModal" style="position:fixed;inset:0;z-index:100011;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;">
     <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:320px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
-        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;">🏠 创建家庭</div>
+        <div style="font-size:18px;font-weight:800;color:#EA580C;margin-bottom:4px;">🏠 创建家庭</div>
         <div style="font-size:13px;color:#9CA3AF;margin-bottom:16px;">第 2 步：给家庭起名并设置登录密码</div>
         <input id="familyNameInput" type="text" maxlength="20" placeholder="家庭名称（如：三仁佳欢）" onkeydown="if(event.key==='Enter')doCreateFamily()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
         <input id="familyCreatePass1" type="password" maxlength="40" placeholder="家庭密码（至少 6 位）" onkeydown="if(event.key==='Enter')doCreateFamily()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:12px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
@@ -4178,7 +4178,7 @@ body.demo-mode .phone-frame { height: 100%; }
 <div id="familyCodeShowModal" style="position:fixed;inset:0;z-index:100012;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;">
     <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:320px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
         <div style="font-size:36px;margin-bottom:6px;">🎉</div>
-        <div style="font-size:18px;font-weight:800;color:#7A4A21;margin-bottom:4px;">家庭创建成功</div>
+        <div style="font-size:18px;font-weight:800;color:#EA580C;margin-bottom:4px;">家庭创建成功</div>
         <div id="fcShowName" style="font-size:14px;color:#6B7280;margin-bottom:14px;"></div>
         <div style="font-size:13px;color:#9CA3AF;margin-bottom:6px;">您的家庭码</div>
         <div id="fcShowCode" style="font-size:30px;font-weight:800;color:#EA580C;letter-spacing:5px;background:#FFF7ED;border:1px dashed #FED7AA;border-radius:12px;padding:12px 8px;margin-bottom:8px;font-family:monospace;"></div>
@@ -4191,7 +4191,7 @@ body.demo-mode .phone-frame { height: 100%; }
 <!-- ====== 忘记密码·设置新密码弹窗（重置邮件链接回跳后显示） ====== -->
 <div id="resetPwdModal" style="position:fixed;inset:0;z-index:100007;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;">
     <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:320px;box-shadow:0 12px 40px rgba(0,0,0,0.2);">
-        <div style="font-size:17px;font-weight:800;color:#7A4A21;margin-bottom:6px;text-align:center;">🔐 设置新密码</div>
+        <div style="font-size:17px;font-weight:800;color:#EA580C;margin-bottom:6px;text-align:center;">🔐 设置新密码</div>
         <div style="font-size:13px;color:#9CA3AF;margin-bottom:16px;text-align:center;">这是您通过重置邮件打开的安全会话</div>
         <input id="resetPwd1" type="password" maxlength="40" placeholder="新密码（至少6位）" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
         <input id="resetPwd2" type="password" maxlength="40" placeholder="确认新密码" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
@@ -4203,7 +4203,7 @@ body.demo-mode .phone-frame { height: 100%; }
 <!-- ====== 家庭密码重置弹窗（凭家庭码直接设置新密码，无需邮箱） ====== -->
 <div id="familyResetModal" style="position:fixed;inset:0;z-index:100006;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) closeFamilyResetModal()">
     <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:320px;box-shadow:0 12px 40px rgba(0,0,0,0.2);">
-        <div style="font-size:17px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">🔑 家庭密码重置</div>
+        <div style="font-size:17px;font-weight:800;color:#EA580C;margin-bottom:4px;text-align:center;">🔑 家庭密码重置</div>
         <div style="font-size:12px;color:#9CA3AF;margin-bottom:14px;text-align:center;">凭 8 位家庭码即可重置密码，无需邮箱（新密码至少 6 位）</div>
         <input id="familyResetCode" type="text" maxlength="8" placeholder="请输入家庭码" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;text-transform:uppercase;letter-spacing:2px;box-sizing:border-box;" />
         <input id="familyResetPass1" type="password" maxlength="40" placeholder="请输入新密码" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
@@ -4217,7 +4217,7 @@ body.demo-mode .phone-frame { height: 100%; }
 <!-- ====== V188: 意见反馈弹窗（我家→设置→意见反馈；测试期收集问题与建议） ====== -->
 <div id="feedbackModal" style="position:fixed;inset:0;z-index:100014;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;" onclick="if(event.target===this) _closeFeedbackModal()">
     <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;">
-        <div style="font-size:17px;font-weight:800;color:#7A4A21;margin-bottom:4px;text-align:center;">💬 意见反馈</div>
+        <div style="font-size:17px;font-weight:800;color:#EA580C;margin-bottom:4px;text-align:center;">💬 意见反馈</div>
         <div style="font-size:12px;color:#9CA3AF;margin-bottom:14px;text-align:center;">遇到的问题、不顺手的地方、想要的东西，都可以写</div>
         <textarea id="feedbackContent" maxlength="2000" placeholder="请描述问题或建议（如：几点左右、在哪个页面、点了什么、看到了什么）" style="width:100%;height:120px;padding:11px 14px;font-size:14px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;resize:vertical;box-sizing:border-box;font-family:inherit;"></textarea>
         <input id="feedbackContact" type="text" maxlength="100" placeholder="联系方式（选填，方便我们追问细节）" style="width:100%;padding:11px 14px;font-size:14px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;box-sizing:border-box;" />
@@ -4407,7 +4407,7 @@ async function _submitFeedback() {
                     <div class="home-nav-icon" id="homeAuthBtn" onclick="onHomeAuthClick()" title="点击登录"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="display:block;"><circle cx="12" cy="7.5" r="4"/><path d="M4 20.5c0-4.4 3.6-7 8-7s8 2.6 8 7z"/></svg></div>
                 </div>
                 <!-- 行2：广告语已移除（V44 顶部精简）；省卡片链接槽保留 -->
-                <span id="homeSavingLinkWrap" style="display:none;"><span id="homeSavingLinkText" style="cursor: pointer; color: #7A4A21 !important; text-decoration: underline; font-size: 14px;" onmouseover="this.style.color='#EA580C'" onmouseout="this.style.color='#7A4A21'" onclick="openSavingPeriodReport()"></span></span>
+                <span id="homeSavingLinkWrap" style="display:none;"><span id="homeSavingLinkText" style="cursor: pointer; color: #166534 !important; text-decoration: underline; font-size: 14px;" onmouseover="this.style.color='#EA580C'" onmouseout="this.style.color='#166534'" onclick="openSavingPeriodReport()"></span></span>
             </div>
         </div>
         <!-- 节气脚本：计算当天节气名存入 __currentSolarTerm（供其他页面复用） -->
@@ -6278,7 +6278,7 @@ var Swal = {
             box.style.cssText = 'background:#fff;border-radius:18px;padding:22px 20px 16px;width:100%;max-width:320px;box-shadow:0 12px 40px rgba(0,0,0,0.2);box-sizing:border-box;text-align:center;';
             var iconHtml = opts.icon === 'info' || !opts.icon ? '<div style="font-size:38px;line-height:1;margin-bottom:10px;">💬</div>' : '';
             box.innerHTML = iconHtml
-                + '<div style="font-size:17px;font-weight:800;color:#7A4A21;margin-bottom:8px;">' + escapeHtml(String(opts.title || '')) + '</div>'
+                + '<div style="font-size:17px;font-weight:800;color:#EA580C;margin-bottom:8px;">' + escapeHtml(String(opts.title || '')) + '</div>'
                 + '<div style="font-size:14px;color:#4B5563;line-height:1.7;word-break:break-all;">' + escapeHtml(String(opts.text || '')) + '</div>';
             var btn = document.createElement('button');
             btn.textContent = '确定';
@@ -10912,7 +10912,7 @@ function _renderMyClassroom() {
         if (!_clsSubscribed) {
             // V560: 非订阅——锁定提示只挡住课程列表区，今日微课照常可看
             html += '<div style="background:#fff;border:1px solid #FED7AA;border-radius:16px;padding:20px 16px;text-align:center;margin-bottom:14px;">' +
-                '<div style="font-size:14px;font-weight:700;color:#7C2D12;line-height:1.6;margin-bottom:12px;">🔒 订阅食养会员，解锁全部系列课程与定制课</div>' +
+                '<div style="font-size:14px;font-weight:700;color:#EA580C;line-height:1.6;margin-bottom:12px;">🔒 订阅食养会员，解锁全部系列课程与定制课</div>' +
                 '<button type="button" onclick="_openSubscribeGuide()" style="width:100%;height:44px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">立即订阅</button>' +
                 '<div style="font-size:11px;color:#9CA3AF;margin-top:10px;line-height:1.7;">今日微课每日免费，更多系列课程请订阅食养会员。</div>' +
                 '</div>';
@@ -11171,7 +11171,7 @@ function _renderDailyLessonCard() {
             '<span style="font-size:11px;background:#F97316;color:#fff;border-radius:999px;padding:2px 9px;">今日微课</span>' +
             '<span style="font-size:11px;color:#9A3412;">' + escapeHtml(lesson.date) + '</span>' +
             '</div>' +
-            '<div style="font-size:15px;font-weight:700;color:#7C2D12;line-height:1.5;margin-bottom:6px;">' + escapeHtml(lesson.title) + '</div>' +
+            '<div style="font-size:15px;font-weight:700;color:#1F2937;line-height:1.5;margin-bottom:6px;">' + escapeHtml(lesson.title) + '</div>' +
             (meta.length ? '<div style="font-size:11px;color:#B45309;margin-bottom:8px;">' + escapeHtml(meta.join('　')) + '</div>' : '') +
             '<div style="font-size:12px;color:#9A3412;line-height:1.7;margin-bottom:10px;">' + escapeHtml(String(lesson.content || '').slice(0, 150)) + '…</div>' +
             '<button type="button" onclick="_openClassroomCourse(\'' + escapeAttr(lesson.id) + '\',\'daily\')" style="width:100%;padding:9px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">阅读全文</button>' +
@@ -11704,14 +11704,14 @@ function renderModulePrefsTree() {
         + '</label>'
         + '</div>'
         + '<div id="childModeDetails" style="display:' + (mode.isChildMode ? 'block' : 'none') + ';">'
-        + '<div style="font-size:12px;color:#7C2D12;margin-bottom:6px;">年龄段</div>'
+        + '<div style="font-size:12px;color:#4B5563;margin-bottom:6px;">年龄段</div>'
         + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">'
         + CHILD_AGE_RANGES.map(function(r) {
             var active = (mode.ageRange || [9,12]).join('-') === r.key;
             return '<button onclick="setChildAgeRange(\'' + r.key + '\')" style="padding:5px 10px;border:1px solid ' + (active ? '#F472B6' : '#FBBF24') + ';background:' + (active ? '#FCE7F3' : 'white') + ';color:' + (active ? '#9D174D' : '#92400E') + ';border-radius:14px;font-size:12px;cursor:pointer;' + (active ? 'font-weight:700;' : '') + '">' + r.label + '</button>';
         }).join('')
         + '</div>'
-        + '<div style="font-size:12px;color:#7C2D12;margin-bottom:4px;">小朋友名字（可选）</div>'
+        + '<div style="font-size:12px;color:#4B5563;margin-bottom:4px;">小朋友名字（可选）</div>'
         + '<input id="childNameInput" value="' + escapeHtml(mode.childName || '') + '" placeholder="小明" onchange="setChildName(this.value)" style="width:100%;padding:7px 10px;border:1px solid #FBBF24;border-radius:8px;font-size:13px;box-sizing:;">'
         + '</div>'
         + '</div>';
@@ -11786,7 +11786,7 @@ function renderPrefRow(key, label, checked, depth, isBold, parentDisabled) {
     var indent = depth * 18;
     var disabled = parentDisabled ? ' disabled="disabled"' : '';
     var checkedAttr = checked ? ' checked' : '';
-    var boldClass = isBold ? 'font-weight:700;color:#7C2D12;' : (depth === 2 ? 'color:#9CA3AF;font-size:12.5px;' : 'color:#374151;');
+    var boldClass = isBold ? 'font-weight:700;color:#EA580C;' : (depth === 2 ? 'color:#9CA3AF;font-size:12.5px;' : 'color:#374151;');
     var opacity = parentDisabled ? 'opacity:0.45;' : '';
     return '<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;margin-bottom:4px;border-radius:8px;cursor:' + (parentDisabled ? 'not-allowed' : 'pointer') + ';' + opacity + '">'
         + '<input type="checkbox" class="mp-checkbox" data-mp-key="' + key + '"' + checkedAttr + disabled + ' style="width:18px;height:18px;accent-color:#F97316;cursor:pointer;">'
@@ -12265,7 +12265,7 @@ function _exploreShowKnowledge(ingName) {
     if (!ing) return;
     showExploreModal(ing.icon + ' ' + ing.name + ' 的小知识',
         '<div style="font-size:15px;color:#374151;line-height:1.8;">' + ing.knowledge + '</div>'
-        + '<div style="margin-top:12px;padding:10px;background:#FEF3C7;border-radius:10px;font-size:13px;color:#92400E;">🤔 你知道吗？<br/><span style="font-size:14px;color:#7C2D12;font-weight:600;">' + ing.funFact + '</span></div>');
+        + '<div style="margin-top:12px;padding:10px;background:#FEF3C7;border-radius:10px;font-size:13px;color:#92400E;">🤔 你知道吗？<br/><span style="font-size:14px;color:#92400E;font-weight:600;">' + ing.funFact + '</span></div>');
 }
 function _exploreListenStory(ingName) {
     var ing = EXPLORE_INGREDIENTS.find(function(i){ return i.name === ingName; });
@@ -14681,7 +14681,7 @@ function _renderImplicitPrefCard() {
     }
     var notesHtml = '';
     if (p && p.familyNotes && Object.keys(p.familyNotes).length) {
-        notesHtml = '<div style="margin-top:8px;"><div style="font-size:12px;color:#7C2D12;margin-bottom:3px;">👨‍👩‍👧 家人特殊偏好</div>'
+        notesHtml = '<div style="margin-top:8px;"><div style="font-size:12px;color:#4B5563;margin-bottom:3px;">👨‍👩‍👧 家人特殊偏好</div>'
             + Object.keys(p.familyNotes).map(function(k) {
                 return '<div style="font-size:12px;color:#4B5563;line-height:1.6;">· <b>' + escapeHtml(k) + '</b>：' + escapeHtml(p.familyNotes[k]) + '</div>';
             }).join('') + '</div>';
@@ -19150,10 +19150,10 @@ function _fcRenderSelect() {
         + '<button type="button" onclick="_fcRenderRecords()" title="清理记录" style="border:1px solid #FED7AA;background:#FFF7ED;border-radius:999px;font-size:12px;color:#C2410C;font-weight:700;padding:4px 10px;cursor:pointer;white-space:nowrap;">📋 记录</button>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;padding:14px 16px 8px;">'
-        + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin:0 2px 10px;">检测到以下待清理食材（已为您勾选）：</div>'
+        + '<div style="font-size:13px;font-weight:700;color:#EA580C;margin:0 2px 10px;">检测到以下待清理食材（已为您勾选）：</div>'
         + (state.items.length ? rowsHtml : '<div style="text-align:center;padding:28px 10px;color:#9CA3AF;font-size:13px;background:#fff;border:1px solid #FDE7C8;border-radius:12px;">冰箱里暂时没有可清理的食材<br><span style="font-size:12px;">可在下方手动补充</span></div>')
         + '<div id="fcExtraWrap" style="display:none;margin-top:14px;">'
-        + '<div style="font-size:12px;font-weight:700;color:#7C2D12;margin:0 2px 8px;">手动补充的食材</div>'
+        + '<div style="font-size:12px;font-weight:700;color:#EA580C;margin:0 2px 8px;">手动补充的食材</div>'
         + '<div id="fcExtraChips" style="display:flex;flex-wrap:wrap;"></div>'
         + '</div>'
         + '</div>'
@@ -19238,14 +19238,14 @@ function _fcRenderPlan(selected, extras, rec) {
         + '<button type="button" onclick="closeFridgeCleanup()" style="border:none;background:none;font-size:16px;color:#9CA3AF;cursor:pointer;padding:2px 4px;line-height:1;">✕</button>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;padding:14px 16px 10px;">'
-        + '<div style="border-radius:16px;padding:14px;background:linear-gradient(135deg,#FFEDD5,#FED7AA);color:#7C2D12;">'
+        + '<div style="border-radius:16px;padding:14px;background:linear-gradient(135deg,#FFEDD5,#FED7AA);color:#92400E;">'
         + '<div style="font-size:14px;font-weight:800;">🧊 已锁定 ' + (selected.length + extras.length) + ' 种待清理食材</div>'
         + '<div style="margin-top:8px;">' + chips + '</div>'
         + '</div>'
         + '<div id="fcSolutionList" style="margin-top:14px;">'
         + '<div style="background:#fff;border:1px solid #FDE7C8;border-radius:16px;padding:24px 16px;text-align:center;">'
         + '<div style="font-size:22px;">🍳</div>'
-        + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin-top:8px;">AI 正在为你搭配清理方案…</div>'
+        + '<div style="font-size:13px;font-weight:700;color:#4B5563;margin-top:8px;">AI 正在为你搭配清理方案…</div>'
         + '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">尽量消耗已有食材，通常需要几秒</div>'
         + '</div></div>'
         + '</div>'
@@ -19301,7 +19301,7 @@ function _fcLoadSolutions() {
     if (box) {
         box.innerHTML = '<div style="background:#fff;border:1px solid #FDE7C8;border-radius:16px;padding:24px 16px;text-align:center;">'
             + '<div style="font-size:22px;">🍳</div>'
-            + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin-top:8px;">AI 正在为你搭配清理方案…</div>'
+            + '<div style="font-size:13px;font-weight:700;color:#4B5563;margin-top:8px;">AI 正在为你搭配清理方案…</div>'
             + '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">尽量消耗已有食材，通常需要几秒</div>'
             + '</div>';
     }
@@ -19402,9 +19402,9 @@ function _fcRenderJoinPicker() {
     ov.innerHTML = '<div style="width:100%;max-width:430px;background:#FFF7ED;border-radius:20px 20px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));box-sizing:border-box;">'
         + '<div style="font-size:16px;font-weight:800;color:#1F2937;">🍳 加入食记计划</div>'
         + '<div style="font-size:12px;color:#9A3412;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(s.name) + ' · 省 ¥' + (Number(s.savedAmount) || 0) + '</div>'
-        + '<div style="font-size:12px;font-weight:700;color:#7C2D12;margin:14px 2px 8px;">选择日期</div>'
+        + '<div style="font-size:12px;font-weight:700;color:#EA580C;margin:14px 2px 8px;">选择日期</div>'
         + '<div style="display:flex;gap:8px;">' + dateBtns + '</div>'
-        + '<div style="font-size:12px;font-weight:700;color:#7C2D12;margin:14px 2px 8px;">选择餐次</div>'
+        + '<div style="font-size:12px;font-weight:700;color:#EA580C;margin:14px 2px 8px;">选择餐次</div>'
         + '<div style="display:flex;gap:8px;">' + mealBtns + '</div>'
         + '<button type="button" id="fcJoinConfirmBtn" style="width:100%;height:46px;margin-top:18px;border:none;border-radius:14px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:15px;font-weight:800;cursor:pointer;">确认加入</button>'
         + '<button type="button" id="fcJoinCancelBtn" style="width:100%;height:40px;margin-top:8px;border:none;border-radius:12px;background:#F3F4F6;color:#6B7280;font-size:13px;font-weight:600;cursor:pointer;">取消</button>'
@@ -19599,7 +19599,7 @@ function _fcShowAchievement(info) {
     ov.style.cssText = 'position:fixed;inset:0;z-index:100050;background:rgba(17,24,39,.6);display:flex;align-items:center;justify-content:center;padding:22px;box-sizing:border-box;';
     ov.innerHTML = '<div style="width:360px;max-width:100%;background:linear-gradient(180deg,#FFF7ED,#fff);border-radius:20px;padding:22px 20px;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center;">'
         + '<div style="font-size:40px;line-height:1.1;">🎉</div>'
-        + '<div style="font-size:18px;font-weight:800;color:#7C2D12;margin-top:6px;">冰箱残局清理成功！</div>'
+        + '<div style="font-size:18px;font-weight:800;color:#EA580C;margin-top:6px;">冰箱残局清理成功！</div>'
         + '<div style="margin-top:14px;background:#fff;border:1px solid #FDE7C8;border-radius:14px;padding:14px;text-align:left;">'
         + '<div style="font-size:12px;color:#6B7280;line-height:1.9;">本次消耗：<span style="color:#1F2937;font-weight:700;">' + escapeHtml((_fcAchInfo.ingredients || []).join('、') || '—') + '</span></div>'
         + '<div style="font-size:12px;color:#6B7280;line-height:1.9;">节约金额：<span style="color:#16A34A;font-weight:800;">约 ¥' + (Number(_fcAchInfo.savedAmount) || 0) + '</span></div>'
@@ -19711,14 +19711,14 @@ function _fcRenderRecords() {
         + '<div style="flex:1;min-width:0;font-size:16px;font-weight:800;color:#1F2937;">🧹 清理记录</div>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;padding:14px 16px calc(18px + env(safe-area-inset-bottom));">'
-        + '<div style="border-radius:16px;padding:16px;background:linear-gradient(135deg,#FFEDD5,#FED7AA);color:#7C2D12;">'
+        + '<div style="border-radius:16px;padding:16px;background:linear-gradient(135deg,#FFEDD5,#FED7AA);color:#92400E;">'
         + '<div style="font-size:15px;font-weight:800;">把快吃不掉的食材，一次消掉</div>'
         + '<div style="font-size:12px;line-height:1.7;margin-top:6px;color:#9A3412;">冰箱残局消消乐会帮你把零散食材凑成一餐，少浪费一点，也多省一点。</div>'
         + '<div style="display:flex;gap:18px;margin-top:12px;">'
         + '<div><div style="font-size:20px;font-weight:800;">' + recs.length + '</div><div style="font-size:11px;color:#9A3412;">已清理次数</div></div>'
         + '<div><div style="font-size:20px;font-weight:800;">¥' + totalSaved + '</div><div style="font-size:11px;color:#9A3412;">累计省下</div></div>'
         + '</div></div>'
-        + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin:18px 2px 10px;">清理记录</div>'
+        + '<div style="font-size:13px;font-weight:700;color:#EA580C;margin:18px 2px 10px;">清理记录</div>'
         + listHtml
         + '</div>';
     document.body.style.overflow = 'hidden';
@@ -24846,7 +24846,7 @@ async function generateIngredientPrefRecipes() {
         var di = st.selectedDay || 0;
         var html = '';
         // ===== 顶部：候选菜（按餐分组）=====
-        html += '<div style="font-size:14px;font-weight:800;color:#7A4A21;margin-bottom:8px;">📋 候选菜池（勾选后自动分配到下方对应餐次）</div>';
+        html += '<div style="font-size:14px;font-weight:800;color:#EA580C;margin-bottom:8px;">📋 候选菜池（勾选后自动分配到下方对应餐次）</div>';
         ['breakfast','lunch','dinner'].forEach(function(meal){
             var list = st.candidates.filter(function(c){ return c.meal === meal; });
             html += '<div class="cand-section">';
@@ -27339,7 +27339,7 @@ function renderDishDetailFromKnowledge(dishName, recipe, savedIngredients, extra
         hTagsHtml = '<div style="margin-bottom:6px;">' + renderHealthTagsHtml(reason, { dishName: dishName }) + '</div>';
     }
     // 推荐理由
-    var reasonHtml = reason ? '<div style="font-size:13px;color:#7A4A21;background:#FEF3C7;border-radius:6px;padding:4px 8px;margin-bottom:6px;">💬 ' + escapeHtml(reason) + '</div>' : '';
+    var reasonHtml = reason ? '<div style="font-size:13px;color:#92400E;background:#FEF3C7;border-radius:6px;padding:4px 8px;margin-bottom:6px;">💬 ' + escapeHtml(reason) + '</div>' : '';
     // 适用人群（知识库 suitableFor）
     var suitableHtml = '';
     if (recipe.suitableFor && Array.isArray(recipe.suitableFor) && recipe.suitableFor.length) {
@@ -28473,7 +28473,7 @@ function _showIngrDupDialog(dupes, onConfirm) {
     overlay.innerHTML =
         '<div style="background:#fff;border-radius:16px;width:100%;max-width:420px;max-height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.2);">'
         + '<div style="padding:16px 18px 10px;border-bottom:1px solid #F3F4F6;">'
-        + '<div style="font-size:16px;font-weight:700;color:#7A4A21;">⚠️ 冰箱里已有同名食材</div>'
+        + '<div style="font-size:16px;font-weight:700;color:#EA580C;">⚠️ 冰箱里已有同名食材</div>'
         + '<div style="font-size:12.5px;color:#9CA3AF;margin-top:4px;line-height:1.6;">每种食材可分别选择：<b style="color:#16A34A;">累加</b>（新旧数量相加）、<b style="color:#EA580C;">改成</b>（只保留新数量）或<b>跳过</b>（保持不变）</div>'
         + '</div>'
         + '<div id="ingrDupList" style="padding:12px 18px;overflow-y:auto;flex:1;"></div>'
@@ -30782,12 +30782,12 @@ function renderExistingIngredientConfig(defaultServings) {
     var servingsOptions = '';
     for (var s=1; s<=8; s++) servingsOptions += '<option value="'+s+'"'+(s===servings?' selected':'')+'>'+s+'人</option>';
     var tagsHtml = tags.map(function(name, i){
-        return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:13px;color:#7A4A21;margin:2px;">'+escapeHtml(name)+'<span data-idx="'+i+'" style="cursor:pointer;color:#EF4444;font-weight:700;padding:0 2px;">×</span></span>';
+        return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:13px;color:#92400E;margin:2px;">'+escapeHtml(name)+'<span data-idx="'+i+'" style="cursor:pointer;color:#EF4444;font-weight:700;padding:0 2px;">×</span></span>';
     }).join('');
 
     var html = '<div style="margin-bottom:8px;">'
         + '<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:10px 12px;margin-bottom:10px;">'
-        + '<div style="font-size:13px;font-weight:600;color:#7A4A21;margin-bottom:6px;">食材来源：</div>'
+        + '<div style="font-size:13px;font-weight:600;color:#4B5563;margin-bottom:6px;">食材来源：</div>'
         + '<label style="display:flex;align-items:center;gap:6px;font-size:14px;color:#374151;cursor:pointer;margin-bottom:4px;">'
         + '<input type="radio" name="existingIngSrc" value="auto" '+(src==='auto'?'checked':'')+' style="accent-color:#F97316;"> 自动读取家中及冰箱食材（默认）</label>'
         + '<label style="display:flex;align-items:center;gap:6px;font-size:14px;color:#374151;cursor:pointer;">'
@@ -31095,7 +31095,7 @@ function renderExistingSchemesInto(result, schemes, meal) {
             ? s.priority.map(function(p){ return p.name + '（' + p.days + '天）'; }).join('、')
             : '';
         html += '<div style="background:#FFFFFF;border:1px solid #FED7AA;border-radius:10px;padding:12px;margin-bottom:8px;">'
-            + '<div style="font-size:14px;font-weight:700;color:#7A4A21;margin-bottom:6px;">方案'+s.letter+'：'+escapeHtml(s.dishes.join(' + '))+'</div>'
+            + '<div style="font-size:14px;font-weight:700;color:#1F2937;margin-bottom:6px;">方案'+s.letter+'：'+escapeHtml(s.dishes.join(' + '))+'</div>'
             + '<div style="font-size:13px;color:#16A34A;margin-bottom:3px;">✅ 已有：'+escapeHtml(haveText)+'</div>'
             + '<div style="font-size:13px;color:'+(s.need.length?'#F97316':'#16A34A')+';margin-bottom:3px;">🛒 需补购：'+escapeHtml(needText)+'</div>'
             + (s.condimentIssues && s.condimentIssues.length ? '<div style="font-size:13px;color:#B45309;margin-bottom:3px;background:#FFFBEB;border-radius:6px;padding:4px 8px;">🧂 调味品提醒：'+escapeHtml(s.condimentIssues.join('；'))+'</div>' : '')
@@ -31108,11 +31108,11 @@ function renderExistingSchemesInto(result, schemes, meal) {
     // A/B/C 未覆盖到的家中主料：每种一道菜，明确告知还能做什么、需补购什么
     if (schemes.extras && schemes.extras.length) {
         html += '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed #FED7AA;">'
-            + '<div style="font-size:14px;font-weight:700;color:#7A4A21;margin-bottom:6px;">🍳 其他食材也能做（每种食材一道，部分需补购）</div>';
+            + '<div style="font-size:14px;font-weight:700;color:#EA580C;margin-bottom:6px;">🍳 其他食材也能做（每种食材一道，部分需补购）</div>';
         schemes.extras.forEach(function(e){
             var needText = e.need.length ? e.need.join('、') : '无';
             html += '<div style="background:#FFFBF5;border:1px solid #FDE8D0;border-radius:8px;padding:8px 10px;margin-bottom:6px;">'
-                + '<div style="font-size:14px;font-weight:700;color:#7A4A21;margin-bottom:2px;">'+escapeHtml(e.forIng)+' → '+escapeHtml(e.dish)+'</div>'
+                + '<div style="font-size:14px;font-weight:700;color:#1F2937;margin-bottom:2px;">'+escapeHtml(e.forIng)+' → '+escapeHtml(e.dish)+'</div>'
                 + '<div style="font-size:13px;color:#16A34A;margin-bottom:1px;">✅ 已有：'+escapeHtml(e.have.join('、')||'无')+'</div>'
                 + '<div style="font-size:13px;color:'+(e.need.length?'#F97316':'#16A34A')+';">🛒 需补购：'+escapeHtml(needText)+'</div>'
                 + '</div>';
@@ -31390,7 +31390,7 @@ function showAddToPlanPicker(dish, source) {
     document.body.appendChild(overlay);
     function close(){ overlay.remove(); }
     function chipStyle(active){
-        return 'flex:1;min-width:0;padding:9px 4px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;text-align:center;border:1px solid '+(active?'#EA580C':'#FED7AA')+';background:'+(active?'#EA580C':'#FFF7ED')+';color:'+(active?'#FFFFFF':'#7A4A21')+';';
+        return 'flex:1;min-width:0;padding:9px 4px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;text-align:center;border:1px solid '+(active?'#EA580C':'#FED7AA')+';background:'+(active?'#EA580C':'#FFF7ED')+';color:'+(active?'#FFFFFF':'#92400E')+';';
     }
 
     function renderStep1(){
@@ -31405,14 +31405,14 @@ function showAddToPlanPicker(dish, source) {
         card.innerHTML =
             '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">'
             +'<button type="button" id="fapClose" style="background:none;border:none;font-size:26px;font-weight:600;color:#374151;cursor:pointer;padding:2px 8px;line-height:1;border-radius:6px;">&lt;</button>'
-            +'<div style="font-size:17px;font-weight:700;color:#7A4A21;">加入食记计划</div>'
+            +'<div style="font-size:17px;font-weight:700;color:#EA580C;">加入食记计划</div>'
             +'<div style="flex:1;"></div>'
             +'<button type="button" id="fapOk" style="height:32px;background:#EA580C;color:#FFFFFF;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;padding:0 14px;">✅ 确认加入</button>'
             +'</div>'
             +'<div style="font-size:14px;color:#374151;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:8px 10px;margin-bottom:14px;">菜品：<b style="color:#9A3412;">'+escapeHtml(dishName)+'</b></div>'
-            +'<div style="font-size:13px;color:#7A4A21;font-weight:600;margin-bottom:6px;">📅 选择日期</div>'
+            +'<div style="font-size:13px;color:#EA580C;font-weight:600;margin-bottom:6px;">📅 选择日期</div>'
             +'<div style="display:flex;gap:8px;margin-bottom:14px;">'+dayChips+'</div>'
-            +'<div style="font-size:13px;color:#7A4A21;font-weight:600;margin-bottom:6px;">🍽️ 选择餐次</div>'
+            +'<div style="font-size:13px;color:#EA580C;font-weight:600;margin-bottom:6px;">🍽️ 选择餐次</div>'
             +'<div style="display:flex;gap:8px;">'+mealChips+'</div>';
         overlay.innerHTML = '';
         overlay.appendChild(card);
@@ -31431,7 +31431,7 @@ function showAddToPlanPicker(dish, source) {
         var card = document.createElement('div');
         card.style.cssText = 'background:#FFFFFF;border-radius:16px;width:360px;max-width:100%;padding:18px 16px 16px;box-sizing:border-box;box-shadow:0 10px 30px rgba(0,0,0,0.18);';
         card.innerHTML =
-            '<div style="font-size:17px;font-weight:700;color:#7A4A21;margin-bottom:10px;">🛒 有食材未入库</div>'
+            '<div style="font-size:17px;font-weight:700;color:#EA580C;margin-bottom:10px;">🛒 有食材未入库</div>'
             +'<div style="font-size:14px;color:#374151;line-height:1.7;margin-bottom:6px;">已把 <b style="color:#9A3412;">'+escapeHtml(res.dishName)+'</b> 加入'+res.dayLabel+res.mealLabel+'计划并自动勾选。</div>'
             +'<div style="font-size:14px;color:#B45309;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:8px 10px;margin-bottom:16px;line-height:1.6;">缺食材：<b>'+escapeHtml(res.insufficient.join('、'))+'</b><br><span style="color:#9CA3AF;font-size:13px;">要不要一起加入备用采购清单？（食记确认计划后会生成正式采购单）</span></div>'
             +'<div style="display:flex;gap:10px;">'
@@ -32664,14 +32664,14 @@ function renderDiaryRecentDishes() {
     var html = '';
     groups.forEach(function(g){
         html += '<div style="margin-bottom:12px;">'
-            + '<div style="font-size:14px;font-weight:700;color:#7A4A21;border-bottom:1px solid #F3F4F6;padding-bottom:4px;margin-bottom:6px;">📅 ' + escapeHtml(g.dateLabel) + '</div>';
+            + '<div style="font-size:14px;font-weight:700;color:#EA580C;border-bottom:1px solid #F3F4F6;padding-bottom:4px;margin-bottom:6px;">📅 ' + escapeHtml(g.dateLabel) + '</div>';
         g.meals.forEach(function(blk){
             html += '<div style="margin:6px 0;">'
                 + '<div style="font-size:12px;font-weight:600;color:#F97316;background:#FFF7ED;display:inline-block;padding:2px 8px;border-radius:4px;margin-bottom:4px;">' + blk.icon + ' ' + blk.label + '</div>'
                 + '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
                 + blk.dishes.map(function(nm){
                     return '<button type="button" onclick="addRecentDishToPlan(this,\'' + escapeAttr(nm) + '\')" '
-                        + 'style="background:#FFF;border:1px solid #FED7AA;color:#7A4A21;border-radius:14px;padding:4px 12px;font-size:14px;cursor:pointer;">'
+                        + 'style="background:#FFF;border:1px solid #FED7AA;color:#4B5563;border-radius:14px;padding:4px 12px;font-size:14px;cursor:pointer;">'
                         + '＋ ' + escapeHtml(nm) + '</button>';
                 }).join('')
                 + '</div></div>';
@@ -34136,7 +34136,7 @@ function renderShoppingPlan(planMap, dishCount, servings) {
             <span style="font-size:15px;font-weight:600;color:#9A3412;">本次需买 <b style="font-size:20px;">${list.length}</b> 项</span>
             <span style="font-size:17px;font-weight:700;color:#DC2626;">约 ¥${estTotal.toFixed(1)}</span>
         </div>
-        <div style="font-size:12px;color:#7C2D12;margin-top:4px;line-height:1.6;">覆盖 ${catCount} 个品类 ｜ 来自 ${dishCount} 道菜${servingsStr}${ownedCount ? ` ｜ 已抵扣家中 ${ownedCount} 种库存` : ''}</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-top:4px;line-height:1.6;">覆盖 ${catCount} 个品类 ｜ 来自 ${dishCount} 道菜${servingsStr}${ownedCount ? ` ｜ 已抵扣家中 ${ownedCount} 种库存` : ''}</div>
     </div>`;
     html += `<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:6px;">
         <button type="button" onclick="selectAllShoppingItems(true)" style="padding:4px 12px;border:1px solid #FDBA74;background:#fff;color:#C2410C;border-radius:999px;font-size:12px;cursor:pointer;">全选</button>
@@ -35415,8 +35415,8 @@ function _fhOpenRecipeArchive() {
         return '<div onclick="_fhOpenRecipeArchiveAt(' + i + ')" style="display:flex;gap:10px;align-items:center;background:#fff;border:1px solid #F3E9DC;border-radius:12px;padding:10px;margin-bottom:8px;cursor:pointer;">'
             + (img ? '<img src="' + escapeAttr(img) + '" alt="" loading="lazy" style="flex:0 0 auto;width:56px;height:56px;border-radius:8px;object-fit:cover;" onerror="this.style.display=\'none\'">' : '')
             + '<div style="flex:1;min-width:0;">'
-            + '<div style="font-size:10px;color:#B08968;">' + escapeHtml(r.date || '往期') + '</div>'
-            + '<div style="margin-top:2px;font-size:14px;font-weight:700;color:#3F2A14;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(r.title) + '</div>'
+            + '<div style="font-size:10px;color:#9CA3AF;">' + escapeHtml(r.date || '往期') + '</div>'
+            + '<div style="margin-top:2px;font-size:14px;font-weight:700;color:#1F2937;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(r.title) + '</div>'
             + '</div></div>';
     }).join('');
     var ov = document.createElement('div');
@@ -35425,10 +35425,10 @@ function _fhOpenRecipeArchive() {
     ov.innerHTML = '<div style="flex-shrink:0;background:white;border-bottom:1px solid #F3E9DC;padding:10px 16px;display:flex;align-items:center;gap:8px;">'
         + '<button type="button" onclick="_fhCloseRecipeArchive()" style="border:none;background:none;font-size:18px;color:#6B7280;cursor:pointer;padding:2px 6px;line-height:1;">←</button>'
         + '<span style="font-size:15px;font-weight:700;color:#1F2937;">🌍 往期寻味</span>'
-        + '<span style="margin-left:auto;font-size:11px;color:#B08968;">共 ' + _fhArcRecipes.length + ' 篇</span>'
+        + '<span style="margin-left:auto;font-size:11px;color:#9CA3AF;">共 ' + _fhArcRecipes.length + ' 篇</span>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;padding:12px 16px calc(16px + env(safe-area-inset-bottom));">'
-        + (rows || '<div style="text-align:center;color:#B08968;font-size:13px;padding:48px 20px;">📭 暂未往期食谱</div>')
+        + (rows || '<div style="text-align:center;color:#9CA3AF;font-size:13px;padding:48px 20px;">📭 暂未往期食谱</div>')
         + '</div>';
     document.body.appendChild(ov);
 }
@@ -35596,7 +35596,7 @@ function _fhOpenRecipeDetail(r) {
     if (old) old.remove();
     var isMember = (typeof isFoodMember === 'function') ? isFoodMember() : false;
     var ing = (r.ingredients || []).map(function (x) {
-        return '<span style="display:inline-block;font-size:12px;color:#7C2D12;background:#FFF7ED;border:1px solid #FDE68A;border-radius:999px;padding:4px 9px;margin:0 6px 6px 0;">' + escapeHtml(x) + '</span>';
+        return '<span style="display:inline-block;font-size:12px;color:#92400E;background:#FFF7ED;border:1px solid #FDE68A;border-radius:999px;padding:4px 9px;margin:0 6px 6px 0;">' + escapeHtml(x) + '</span>';
     }).join('');
     var _fhIngCost = calcIngredientsCost(r.ingredients || []);   // V424: 价格前端本地计算
     var steps = (r.steps || []).map(function (s, i) {
@@ -35625,7 +35625,7 @@ function _fhOpenRecipeDetail(r) {
     var dishHtml = '';
     if (dishes.length) {
         dishHtml = '<div style="padding:16px 18px 0;">'
-            + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin-bottom:10px;">🌍 文中好味（' + dishes.length + ' 道）</div>'
+            + '<div style="font-size:13px;font-weight:700;color:#EA580C;margin-bottom:10px;">🌍 文中好味（' + dishes.length + ' 道）</div>'
             + dishes.map(function (d, di) {
                 var dname = (d && d.name) || '';
                 var dimg = (d && d.image) || (d && d.imagePrompt ? _fhCoverUrl(d.imagePrompt, _fhSeed(dname + di)) : '');
@@ -35863,7 +35863,7 @@ function _fhShowPaywall(msg) {
     ov.style.cssText = 'position:fixed;inset:0;z-index:100012;background:rgba(17,24,39,.55);display:flex;align-items:center;justify-content:center;padding:22px;box-sizing:border-box;';
     ov.innerHTML = '<div style="width:360px;max-width:100%;background:linear-gradient(180deg,#FFF7ED,#fff);border-radius:20px;padding:22px 20px;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
         + '<div style="text-align:center;font-size:34px;line-height:1.1;">👑</div>'
-        + '<div style="text-align:center;font-size:18px;font-weight:800;color:#7C2D12;margin-top:8px;line-height:1.5;">' + escapeHtml(headText) + '</div>'
+        + '<div style="text-align:center;font-size:18px;font-weight:800;color:#EA580C;margin-top:8px;line-height:1.5;">' + escapeHtml(headText) + '</div>'
         + '<div style="margin:16px 0 4px;">'
         + '<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:9px;"><span style="flex:0 0 auto;color:#16A34A;font-weight:700;">✅</span><span style="font-size:13px;color:#374151;line-height:1.65;">解锁每天的精美图文食谱与深度好文</span></div>'
         + '<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:9px;"><span style="flex:0 0 auto;color:#16A34A;font-weight:700;">✅</span><span style="font-size:13px;color:#374151;line-height:1.65;">畅学全站食养教育体系课程</span></div>'
@@ -36885,13 +36885,13 @@ function _dietContraNoteHtml(title, content) {
     var r = _dietProfileRisks();
     var items = [];
     if (r.dm) {
-        items.push('<div style="font-size:13px;color:#7C2D12;line-height:1.75;margin-top:6px;"><b>🍬 糖尿病 / 控糖成员</b>：柿子含糖量较高（约 15%～20%），血糖控制不稳时先不吃；血糖平稳可控制在半个以内，放在两餐之间，并相应减少当餐主食。</div>');
+        items.push('<div style="font-size:13px;color:#4B5563;line-height:1.75;margin-top:6px;"><b>🍬 糖尿病 / 控糖成员</b>：柿子含糖量较高（约 15%～20%），血糖控制不稳时先不吃；血糖平稳可控制在半个以内，放在两餐之间，并相应减少当餐主食。</div>');
     }
     if (r.gi) {
-        items.push('<div style="font-size:13px;color:#7C2D12;line-height:1.75;margin-top:6px;"><b>🍽 胃肠较弱成员</b>：空腹吃柿子（尤其未熟、带皮）鞣酸易与胃酸结合形成胃石。胃炎、胃溃疡、反酸者建议饭后少量、去皮、只吃熟透的，避免与螃蟹、牛奶、鸡蛋等高蛋白食物同餐大量同食。</div>');
+        items.push('<div style="font-size:13px;color:#4B5563;line-height:1.75;margin-top:6px;"><b>🍽 胃肠较弱成员</b>：空腹吃柿子（尤其未熟、带皮）鞣酸易与胃酸结合形成胃石。胃炎、胃溃疡、反酸者建议饭后少量、去皮、只吃熟透的，避免与螃蟹、牛奶、鸡蛋等高蛋白食物同餐大量同食。</div>');
     }
     if (r.baby) {
-        items.push('<div style="font-size:13px;color:#7C2D12;line-height:1.75;margin-top:6px;"><b>👶 婴幼儿</b>：3 岁以内不建议吃柿子，易呛噎且鞣酸影响消化；3～6 岁去皮去籽、饭后少量，不要空腹吃。</div>');
+        items.push('<div style="font-size:13px;color:#4B5563;line-height:1.75;margin-top:6px;"><b>👶 婴幼儿</b>：3 岁以内不建议吃柿子，易呛噎且鞣酸影响消化；3～6 岁去皮去籽、饭后少量，不要空腹吃。</div>');
     }
     if (!items.length) return '';
     return '<div style="margin-top:18px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:12px;padding:12px 14px;">'
@@ -37098,13 +37098,13 @@ function _dtArcRender() {
 }
 function _dtArcRow(dateTxt, cat, title, onclick, extraRight) {
     return '<div onclick="' + onclick + '" style="background:white;border:1px solid #F3E9DC;border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;">'
-        + '<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:12px;color:#B08968;">' + dateTxt + '</span>'
+        + '<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:12px;color:#9CA3AF;">' + dateTxt + '</span>'
         + '<span style="font-size:11px;color:#9A3412;background:#FFF3E2;border-radius:999px;padding:1px 8px;">' + cat + '</span>'
         + (extraRight || '') + '</div>'
         + '<div style="margin-top:5px;font-size:14px;font-weight:600;color:#1F2937;line-height:1.5;">' + title + '</div></div>';
 }
 function _dtArcEmpty(icon, line1, line2) {
-    return '<div style="text-align:center;color:#B08968;font-size:13px;padding:48px 20px;line-height:1.9;">' + icon + ' ' + line1 + '<br/>' + line2 + '</div>';
+    return '<div style="text-align:center;color:#9CA3AF;font-size:13px;padding:48px 20px;line-height:1.9;">' + icon + ' ' + line1 + '<br/>' + line2 + '</div>';
 }
 function _dtArcRenderHistory() {
     var body = document.getElementById('dtArcBody');
@@ -37583,7 +37583,7 @@ function _fhTreeCardHtml(a, favMode) {
         : (a.autoPublished ? '<span style="margin-left:auto;font-size:10px;color:#B45309;background:#FEF3C7;border-radius:4px;padding:1px 6px;white-space:nowrap;">AI预选</span>' : '');
     return '<div class="cat-search-item" style="display:block;cursor:pointer;" onclick="_fh' + (favMode ? 'OpenFavId' : 'OpenArchiveId') + '(\'' + String(a.id || '').replace(/'/g, '') + '\')">'
         + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
-        + '<span style="font-size:11px;color:#B08968;">' + escapeHtml(dateTxt) + '</span>'
+        + '<span style="font-size:11px;color:#9CA3AF;">' + escapeHtml(dateTxt) + '</span>'
         + '<span style="font-size:11px;color:#9A3412;background:#FFF3E2;border-radius:999px;padding:1px 8px;">' + escapeHtml(cat) + '</span>'
         + right + '</div>'
         + '<div class="cat-search-item-title" style="margin-bottom:2px;">' + escapeHtml(a.title || '无标题') + '</div>'
@@ -37813,7 +37813,7 @@ function _fhMgrRenderReviewTab(listEl, ct) {
     } catch (e) {}
     var html = '<div style="padding:12px 14px 4px;">'
         + '<div style="display:flex;align-items:center;justify-content:space-between;">'
-        + '<div style="font-size:14px;font-weight:700;color:#7C2D12;">' + (isRecipe ? '🍔 食谱文章审核' : '📝 饮食文章审核') + '</div>'
+        + '<div style="font-size:14px;font-weight:700;color:#EA580C;">' + (isRecipe ? '🍔 食谱文章审核' : '📝 饮食文章审核') + '</div>'
         + '<span style="font-size:10px;color:#B45309;background:#FFF3E2;padding:2px 8px;border-radius:999px;">发布日 ' + escapeHtml(wrap.date || '') + '</span>'
         + '</div>'
         + '<div style="margin-top:9px;padding:9px 11px;border-radius:11px;font-size:11px;line-height:1.7;background:' + (bothReady ? '#ECFDF5' : '#FFF7ED') + ';color:' + (bothReady ? '#047857' : '#9A3412') + ';">'
@@ -38677,7 +38677,7 @@ function _renderBangSeasonDetail(body) {
                 + ' style="display:inline-block;padding:4px 12px;margin:3px 6px 3px 0;background:#fff;border:1px solid #FDBA74;color:#C2410C;'
                 + 'border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;">🍲 ' + escapeHtml(dn) + '</span>';
         }).join('');
-        var dishes = dishChips || '<span style="font-size:14px;color:#7A4A21;line-height:1.8;">暂无</span>';
+        var dishes = dishChips || '<span style="font-size:14px;color:#9CA3AF;line-height:1.8;">暂无</span>';
         var html =
             '<div style="background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FED7AA;border-radius:16px;padding:20px;margin-bottom:12px;">'
             + '<div style="text-align:center;font-size:48px;">' + icon + '</div>'
@@ -38686,15 +38686,15 @@ function _renderBangSeasonDetail(body) {
             + '</div>'
             + '<div style="background:white;border:1px solid #FED7AA;border-radius:16px;padding:16px;margin-bottom:12px;">'
             + '<div style="font-size:15px;font-weight:700;color:#9A3412;margin-bottom:8px;">🍽️ 推荐食材</div>'
-            + '<div style="font-size:14px;color:#7A4A21;line-height:1.8;">' + foods + '</div>'
+            + '<div style="font-size:14px;color:#4B5563;line-height:1.8;">' + foods + '</div>'
             + '</div>'
             + '<div style="background:white;border:1px solid #FED7AA;border-radius:16px;padding:16px;margin-bottom:12px;">'
             + '<div style="font-size:15px;font-weight:700;color:#9A3412;margin-bottom:8px;">🥘 推荐菜品</div>'
-            + '<div style="font-size:14px;color:#7A4A21;line-height:1.8;">' + dishes + '</div>'
+            + '<div style="font-size:14px;color:#4B5563;line-height:1.8;">' + dishes + '</div>'
             + '</div>'
             + '<div style="background:white;border:1px solid #FED7AA;border-radius:16px;padding:16px;">'
             + '<div style="font-size:15px;font-weight:700;color:#9A3412;margin-bottom:8px;">💡 养生提示</div>'
-            + '<div style="font-size:14px;color:#7A4A21;line-height:1.8;">' + (term.tip || '') + '</div>'
+            + '<div style="font-size:14px;color:#4B5563;line-height:1.8;">' + (term.tip || '') + '</div>'
             + '</div>';
         body.innerHTML = html;
     } catch(e) {
@@ -38889,7 +38889,7 @@ function _renderNutritionGroupContent() {
                 + '</div>'
                 + '<div style="font-size:15px;font-weight:700;color:#9A3412;margin-bottom:4px;">' + p.title + '</div>'
                 + '<div style="font-size:12px;color:#EA580C;margin-bottom:6px;">目标：' + (p.targetGoals || []).join(' · ') + '</div>'
-                + (p.content ? '<div style="font-size:13px;color:#7A4A21;line-height:1.6;margin-bottom:8px;">' + p.content + '</div>' : '')
+                + (p.content ? '<div style="font-size:13px;color:#4B5563;line-height:1.6;margin-bottom:8px;">' + p.content + '</div>' : '')
                 + (p.dishes && p.dishes.length ? '<div style="font-size:12px;color:#9A3412;margin-bottom:8px;">🍽️ ' + p.dishes.map(function(d) { return d.name; }).join('、') + '</div>' : '')
                 + '<div style="display:flex;gap:8px;">'
                 + '<button onclick="_nutritionAdoptPlan(\'' + p.id + '\')" style="flex:1;padding:8px;background:#F97316;color:white;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">✅ 采纳到食记</button>'
@@ -39198,7 +39198,7 @@ function _renderRankPlans() {
             + '<div style="flex:1;"></div>'
             + '<div style="font-size:11px;color:#9CA3AF;">⭐ ' + p.savedCount + ' 收藏</div>'
             + '</div>'
-            + '<div style="font-size:12px;color:#7A4A21;margin-bottom:4px;">📆 ' + p.dateRange + '</div>'
+            + '<div style="font-size:12px;color:#9CA3AF;margin-bottom:4px;">📆 ' + p.dateRange + '</div>'
             + '<div style="font-size:12px;color:#C2410C;line-height:1.8;">' + p.dishes.map(function(d) { return '🍽️ ' + d; }).join('&nbsp;&nbsp;') + '</div>'
             + '</div>';
     });
@@ -39289,7 +39289,7 @@ function _renderRankArticles() {
             + '<div style="width:24px;height:24px;border-radius:50%;background:' + (rank <= 3 ? '#F97316' : '#FEF3C7') + ';color:' + (rank <= 3 ? 'white' : '#92400E') + ';font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;">#' + rank + '</div>'
             + '<div style="font-size:14px;font-weight:700;color:#9A3412;">' + a.title + '</div>'
             + '</div>'
-            + '<div style="font-size:12px;color:#7A4A21;line-height:1.6;margin-bottom:8px;">' + a.excerpt + '</div>'
+            + '<div style="font-size:12px;color:#4B5563;line-height:1.6;margin-bottom:8px;">' + a.excerpt + '</div>'
             + '<div style="font-size:11px;color:#9CA3AF;">@' + a.authorName + ' · 👁️ ' + a.views + ' · ⭐ ' + a.saves + '</div>'
             + '</div>';
     });
@@ -39347,12 +39347,12 @@ function _helpViewDish(dishId) {
             var tip = (typeof s === 'object' && s && s.tips) ? s.tips : '';
             return '<div style="display:flex;gap:10px;margin-bottom:8px;' + (i > 0 ? 'opacity:0.4;' : '') + '" data-step="' + i + '" onclick="_hlDishSpeakFrom(' + i + ')" title="点击从此步开始朗读">'
                 + '<div style="width:22px;height:22px;border-radius:50%;background:' + (i === 0 ? '#F97316' : '#E5E7EB') + ';color:' + (i === 0 ? 'white' : '#9CA3AF') + ';font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">' + (i + 1) + '</div>'
-                + '<div data-hltxt="s' + i + '" style="font-size:13px;color:#7A4A21;line-height:1.6;">' + text
+                + '<div data-hltxt="s' + i + '" style="font-size:13px;color:#4B5563;line-height:1.6;">' + text
                 + (tip ? '<div style="margin-top:3px;font-size:12px;color:#B45309;background:#FEF3C7;border-radius:6px;padding:3px 7px;">💡 ' + escapeHtml(tip) + '</div>' : '')
                 + '</div>'
                 + '</div>';
         }).join('')
-        + ((typeof d === 'object' && d && d.generalTips) ? '<div style="margin-top:12px;background:#FFF7ED;border:1px dashed #FDBA74;border-radius:10px;padding:8px 10px;" onclick="_hlDishSpeakFrom(' + (d.steps || []).length + ')" title="点击朗读注意事项"><div style="font-size:12px;font-weight:700;color:#C2410C;margin-bottom:3px;">⚠️ 通用注意事项</div><div data-hltxt="gt" style="font-size:12px;color:#7A4A21;line-height:1.6;">' + escapeHtml(d.generalTips) + '</div></div>' : '')
+        + ((typeof d === 'object' && d && d.generalTips) ? '<div style="margin-top:12px;background:#FFF7ED;border:1px dashed #FDBA74;border-radius:10px;padding:8px 10px;" onclick="_hlDishSpeakFrom(' + (d.steps || []).length + ')" title="点击朗读注意事项"><div style="font-size:12px;font-weight:700;color:#C2410C;margin-bottom:3px;">⚠️ 通用注意事项</div><div data-hltxt="gt" style="font-size:12px;color:#92400E;line-height:1.6;">' + escapeHtml(d.generalTips) + '</div></div>' : '')
         + '</div>'
         + '</div>'
         + '<div style="flex-shrink:0;padding:10px;background:white;border-top:1px solid #FED7AA;display:flex;gap:8px;">'
@@ -39575,7 +39575,7 @@ function _helpViewDishLite(name) {
         + '<div id="helpDishSteps">' + steps.map(function(text, i) {
             return '<div style="display:flex;gap:10px;margin-bottom:8px;' + (i > 0 ? 'opacity:0.4;' : '') + '" data-step="' + i + '" onclick="_hlDishSpeakFrom(' + i + ')" title="点击从此步开始朗读">'
                 + '<div style="width:22px;height:22px;border-radius:50%;background:' + (i === 0 ? '#F97316' : '#E5E7EB') + ';color:' + (i === 0 ? 'white' : '#9CA3AF') + ';font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">' + (i + 1) + '</div>'
-                + '<div data-hltxt="s' + i + '" style="font-size:13px;color:#7A4A21;line-height:1.6;">' + escapeHtml(text) + '</div>'
+                + '<div data-hltxt="s' + i + '" style="font-size:13px;color:#4B5563;line-height:1.6;">' + escapeHtml(text) + '</div>'
                 + '</div>';
         }).join('')
         + '</div>'
@@ -39629,7 +39629,7 @@ function _cookAlongOpen(dish) {
         + '</div>'
         + '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 20px;overflow-y:auto;">'
         + '<div id="cookStepNum" style="font-size:15px;font-weight:700;color:#C2410C;background:#FFEDD5;border-radius:999px;padding:5px 18px;margin-bottom:22px;">步骤 1 / 1</div>'
-        + '<div id="cookStepText" style="font-size:22px;font-weight:700;color:#7A4A21;line-height:1.7;margin-bottom:14px;"></div>'
+        + '<div id="cookStepText" style="font-size:22px;font-weight:700;color:#4B5563;line-height:1.7;margin-bottom:14px;"></div>'
         + '<div id="cookStepTip" style="display:none;font-size:15px;color:#B45309;background:#FEF3C7;border-radius:10px;padding:8px 14px;margin-bottom:16px;"></div>'
         + '<img id="cookStepImg" style="display:none;max-width:70%;border-radius:14px;box-shadow:0 4px 14px rgba(249,115,22,0.18);" alt="">'
         + '<div id="cookPauseHint" style="display:none;margin-top:18px;font-size:13px;color:#9CA3AF;"></div>'
@@ -39640,17 +39640,17 @@ function _cookAlongOpen(dish) {
         + '<button id="cookNextBtn" onclick="_cookNext(true)" style="flex:1;padding:11px 0;background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;">⏭ 下一步</button>'
         + '</div>'
         + '<div style="flex-shrink:0;padding:0 14px 14px;background:white;display:flex;flex-direction:column;gap:8px;">'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;color:#7A4A21;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;color:#4B5563;">'
         + '<span>自动播放</span>'
         + '<button id="cookAutoBtn" onclick="_cookToggleAuto()" style="width:44px;height:24px;border:none;border-radius:999px;background:#F97316;position:relative;cursor:pointer;"><span id="cookAutoKnob" style="position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;background:white;transition:all 0.2s;"></span></button>'
         + '</div>'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;color:#7A4A21;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;color:#4B5563;">'
         + '<span>步骤停顿</span>'
         + '<select id="cookPauseSel" onchange="_cookPauseSecChanged(this.value)" style="border:1px solid #FED7AA;border-radius:8px;padding:4px 8px;font-size:13px;color:#9A3412;background:white;">'
         + '<option value="3">3秒</option><option value="5" selected>5秒</option><option value="10">10秒</option><option value="manual">手动</option>'
         + '</select>'
         + '</div>'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;color:#7A4A21;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;color:#4B5563;">'
         + '<span>语音速度</span>'
         + '<select id="cookRateSel" onchange="_cookRateChanged(this.value)" style="border:1px solid #FED7AA;border-radius:8px;padding:4px 8px;font-size:13px;color:#9A3412;background:white;">'
         + '<option value="0.8">0.8x</option><option value="0.9" selected>0.9x</option><option value="1.0">1.0x</option><option value="1.2">1.2x</option>'
@@ -42618,7 +42618,7 @@ function _openTablewareModal() {
         var conf = TABLEWARE_USAGE[u];
         var list = arr.filter(function(t) { return (t.usage || 'daily') === u; });
         if (!list.length) return;
-        html += '<div style="font-size:13px;font-weight:700;color:#7A4A21;margin:10px 2px 6px;">' + conf.icon + ' ' + conf.label + '（' + list.length + '）</div>';
+        html += '<div style="font-size:13px;font-weight:700;color:#EA580C;margin:10px 2px 6px;">' + conf.icon + ' ' + conf.label + '（' + list.length + '）</div>';
         list.forEach(function(t) { html += _twRow(t); });
     });
     if (!html) html = '<div style="text-align:center;padding:24px;color:#9CA3AF;font-size:13px;">暂无餐具，快添加吧</div>';
@@ -45045,7 +45045,7 @@ function renderPlan() {
         return !item.ingredients.some(ing => ing && typeof ing === 'object' && ing.name && ing.quantity);
     });
     if (needFetch && dishNames.length > 0) {
-        const batchBtn = `<button id="batchFetchQtyBtn" data-date="${key}" data-meal="${mealKey}" data-servings="${planServings}" style="width:100%;background:linear-gradient(135deg,#FED7AA,#FBBF24);color:#7C2D12;border:none;border-radius:10px;padding:8px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;box-shadow:0 2px 6px rgba(251,191,36,0.3);transition:all .2s;">📋 一键获取本餐所有菜品的食材用量（${planServings}人份）</button>`;
+        const batchBtn = `<button id="batchFetchQtyBtn" data-date="${key}" data-meal="${mealKey}" data-servings="${planServings}" style="width:100%;background:linear-gradient(135deg,#FED7AA,#FBBF24);color:#92400E;border:none;border-radius:10px;padding:8px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;box-shadow:0 2px 6px rgba(251,191,36,0.3);transition:all .2s;">📋 一键获取本餐所有菜品的食材用量（${planServings}人份）</button>`;
         html = batchBtn + html;
     }
     planList.innerHTML = html;
@@ -45168,7 +45168,7 @@ ${dishListStr}
                 btnEl.disabled = false;
                 btnEl.textContent = `📋 一键获取本餐所有菜品的食材用量（${servings}人份）`;
                 btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)';
-                btnEl.style.color = '#7C2D12';
+                btnEl.style.color = '#92400E';
             }
             showToast('❌ 获取失败，请稍后重试');
             return;
@@ -45186,7 +45186,7 @@ ${dishListStr}
                 btnEl.disabled = false;
                 btnEl.textContent = `📋 一键获取本餐所有菜品的食材用量（${servings}人份）`;
                 btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)';
-                btnEl.style.color = '#7C2D12';
+                btnEl.style.color = '#92400E';
             }
             showToast('❌ AI返回格式异常');
             return;
@@ -45220,7 +45220,7 @@ ${dishListStr}
                 btnEl.disabled = false;
                 btnEl.textContent = `📋 一键获取本餐所有菜品的食材用量（${servings}人份）`;
                 btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)';
-                btnEl.style.color = '#7C2D12';
+                btnEl.style.color = '#92400E';
             }
             showToast('⚠ 未匹配到任何菜品，请重试');
         }
@@ -45230,7 +45230,7 @@ ${dishListStr}
             btnEl.disabled = false;
             btnEl.textContent = `📋 一键获取本餐所有菜品的食材用量（${servings}人份）`;
             btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)';
-            btnEl.style.color = '#7C2D12';
+            btnEl.style.color = '#92400E';
         }
         showToast('❌ 获取失败：' + String(err).slice(0, 60));
     }
@@ -45285,7 +45285,7 @@ async function fetchAllDiaryPlanIngredients(dateKey, mealKey, servings, btnEl) {
         const aiText = result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '';
 
         if (!aiText) {
-            if (btnEl) { btnEl.disabled = false; btnEl.textContent = '📋 一键获取食材用量'; btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)'; btnEl.style.color = '#7C2D12'; }
+            if (btnEl) { btnEl.disabled = false; btnEl.textContent = '📋 一键获取食材用量'; btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)'; btnEl.style.color = '#92400E'; }
             showToast('❌ 获取失败，请稍后重试');
             return;
         }
@@ -45297,7 +45297,7 @@ async function fetchAllDiaryPlanIngredients(dateKey, mealKey, servings, btnEl) {
         } catch(e) {}
 
         if (!parsed || !parsed.dishes || !Array.isArray(parsed.dishes)) {
-            if (btnEl) { btnEl.disabled = false; btnEl.textContent = '📋 一键获取食材用量'; btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)'; btnEl.style.color = '#7C2D12'; }
+            if (btnEl) { btnEl.disabled = false; btnEl.textContent = '📋 一键获取食材用量'; btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)'; btnEl.style.color = '#92400E'; }
             showToast('❌ AI返回格式异常');
             return;
         }
@@ -45324,12 +45324,12 @@ async function fetchAllDiaryPlanIngredients(dateKey, mealKey, servings, btnEl) {
             showToast('✅ 已获取 ' + updatedCount + ' 道菜的食材用量');
             renderDiary();
         } else {
-            if (btnEl) { btnEl.disabled = false; btnEl.textContent = '📋 一键获取食材用量'; btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)'; btnEl.style.color = '#7C2D12'; }
+            if (btnEl) { btnEl.disabled = false; btnEl.textContent = '📋 一键获取食材用量'; btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)'; btnEl.style.color = '#92400E'; }
             showToast('⚠ 未匹配到任何菜品，请重试');
         }
     } catch (err) {
         console.error('批量获取食材用量失败:', err);
-        if (btnEl) { btnEl.disabled = false; btnEl.textContent = '📋 一键获取食材用量'; btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)'; btnEl.style.color = '#7C2D12'; }
+        if (btnEl) { btnEl.disabled = false; btnEl.textContent = '📋 一键获取食材用量'; btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)'; btnEl.style.color = '#92400E'; }
         showToast('❌ 获取失败：' + String(err).slice(0, 60));
     }
 }
@@ -45378,7 +45378,7 @@ async function fetchMealPlanStyleIngredients(styleIdx, mealKey, servings, btnEl)
                 btnEl.disabled = false;
                 btnEl.textContent = '📋 一键获取食材用量';
                 btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)';
-                btnEl.style.color = '#7C2D12';
+                btnEl.style.color = '#92400E';
             }
             showToast('❌ 获取失败，请稍后重试');
             return;
@@ -45395,7 +45395,7 @@ async function fetchMealPlanStyleIngredients(styleIdx, mealKey, servings, btnEl)
                 btnEl.disabled = false;
                 btnEl.textContent = '📋 一键获取食材用量';
                 btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)';
-                btnEl.style.color = '#7C2D12';
+                btnEl.style.color = '#92400E';
             }
             showToast('❌ AI返回格式异常');
             return;
@@ -45426,7 +45426,7 @@ async function fetchMealPlanStyleIngredients(styleIdx, mealKey, servings, btnEl)
                 btnEl.disabled = false;
                 btnEl.textContent = '📋 一键获取食材用量';
                 btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)';
-                btnEl.style.color = '#7C2D12';
+                btnEl.style.color = '#92400E';
             }
             showToast('⚠ 未匹配到任何菜品，请重试');
         }
@@ -45436,7 +45436,7 @@ async function fetchMealPlanStyleIngredients(styleIdx, mealKey, servings, btnEl)
             btnEl.disabled = false;
             btnEl.textContent = '📋 一键获取食材用量';
             btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)';
-            btnEl.style.color = '#7C2D12';
+            btnEl.style.color = '#92400E';
         }
         showToast('❌ 获取失败：' + String(err).slice(0, 60));
     }
@@ -48101,7 +48101,7 @@ function toggleShiyangSubCatMenu(e) {
         var cur = (typeof _shiyangTab !== 'undefined') ? _shiyangTab : '节气食养';
         menu.innerHTML = SHIYANG_TABS.map(function (t) {
             var act = t === cur;
-            return '<button type="button" onclick="selectShiyangSubCat(\'' + t + '\')" style="display:block;width:100%;text-align:left;border:none;background:' + (act ? '#FFF7ED' : 'none') + ';padding:8px 10px;font-size:13px;font-weight:' + (act ? '700' : '500') + ';color:' + (act ? '#C2410C' : '#7A4A21') + ';cursor:pointer;border-radius:6px;">' + t + '</button>';
+            return '<button type="button" onclick="selectShiyangSubCat(\'' + t + '\')" style="display:block;width:100%;text-align:left;border:none;background:' + (act ? '#FFF7ED' : 'none') + ';padding:8px 10px;font-size:13px;font-weight:' + (act ? '700' : '500') + ';color:' + (act ? '#C2410C' : '#4B5563') + ';cursor:pointer;border-radius:6px;">' + t + '</button>';
         }).join('');
         setTimeout(function () { document.addEventListener('click', _closeShiyangSubCatMenuOnce); }, 0);
     }
@@ -48300,7 +48300,7 @@ function _syTermGuideHtml(termName, info, items) {
         Object.keys(buckets).forEach(function (kind) {
             if (!buckets[kind].length) return;
             html += '<div style="display:flex;align-items:baseline;gap:8px;background:#FFFDF8;border:1px solid #F0E4D2;border-radius:10px;padding:9px 12px;">'
-                + '<span style="flex:0 0 82px;font-size:13px;font-weight:700;color:#7A4A21;">' + kind + '</span>'
+                + '<span style="flex:0 0 82px;font-size:13px;font-weight:700;color:#4B5563;">' + kind + '</span>'
                 + '<span style="font-size:13px;color:#5B4632;line-height:1.7;">' + escapeHtml(buckets[kind].join('、')) + '</span></div>';
         });
         html += '</div>';
@@ -48368,7 +48368,7 @@ function _syPaneHtml(libItems, curTerm) {
         }
         html += '<div style="display:flex;align-items:center;margin-bottom:10px;">'
             + '<div style="font-size:14px;font-weight:700;color:#9A3412;">🍂 ' + segs[1] + (fhLeaf ? ' · ' + fhLeaf : '') + '</div>'
-            + '<span style="font-size:12px;color:#B08968;margin-left:8px;">共 ' + fhList.length + ' 篇</span>' + mgrBtn + '</div>';
+            + '<span style="font-size:12px;color:#9CA3AF;margin-left:8px;">共 ' + fhList.length + ' 篇</span>' + mgrBtn + '</div>';
         if (fhList.length) {
             html += fhList.map(function (a) { return _fhTreeCardHtml(a, isFavSec); }).join('');
         } else {
@@ -48407,7 +48407,7 @@ function _syPaneHtml(libItems, curTerm) {
             if (_canImportFang && _syTreeLib === 'public') {
                 secHeader = '<div style="display:flex;align-items:center;margin-bottom:10px;">'
                     + '<div style="font-size:14px;font-weight:700;color:#9A3412;">📜 食方</div>'
-                    + '<span style="font-size:12px;color:#B08968;margin-left:8px;">共 ' + items.length + ' 条</span>'
+                    + '<span style="font-size:12px;color:#9CA3AF;margin-left:8px;">共 ' + items.length + ' 条</span>'
                     + '<button type="button" onclick="openFangBatchImport()" style="margin-left:auto;border:1px solid #FDBA74;background:#FFF3E2;color:#9A3412;font-size:12px;font-weight:600;border-radius:999px;padding:4px 12px;cursor:pointer;">📤 批量导入 JSON</button>'
                     + '</div>';
             }
@@ -48448,14 +48448,14 @@ function renderShiyangContent() {
             + '.sy-layout.sy-collapsed .sy-rail{display:flex;}'
             + '.sy-rail{display:none;width:34px;flex:0 0 34px;flex-direction:column;align-items:center;background:#FAF5EE;border:1px solid #EADFD0;border-radius:10px;padding:10px 0 14px;}'
             + '.sy-tree{flex:0 0 auto;background:#FAF5EE;border:1px solid #EADFD0;border-radius:12px;padding:8px 6px 10px;}'
-            + '.sy-tree-head{display:flex;align-items:center;justify-content:space-between;padding:2px 6px 8px;font-size:13px;font-weight:700;color:#7A4A21;}'
-            + '.sy-fold{border:none;background:none;color:#B08968;font-size:15px;cursor:pointer;padding:2px 4px;line-height:1;}'
+            + '.sy-tree-head{display:flex;align-items:center;justify-content:space-between;padding:2px 6px 8px;font-size:13px;font-weight:700;color:#EA580C;}'
+            + '.sy-fold{border:none;background:none;color:#9CA3AF;font-size:15px;cursor:pointer;padding:2px 4px;line-height:1;}'
             + '.sy-row{display:flex;align-items:center;gap:5px;padding:6px 7px;border-radius:8px;font-size:13px;color:#5B4632;cursor:pointer;line-height:1.35;}'
             + '.sy-row:hover{background:#F3E9DC;}'
             + '.sy-row.sel{background:#F3E9DC;color:#9A3412;font-weight:700;}'
-            + '.sy-chev{width:9px;flex:0 0 9px;font-size:9px;color:#B08968;transition:transform .12s;display:inline-block;}'
+            + '.sy-chev{width:9px;flex:0 0 9px;font-size:9px;color:#9CA3AF;transition:transform .12s;display:inline-block;}'
             + '.sy-chev.open{transform:rotate(90deg);}'
-            + '.sy-cnt{margin-left:2px;font-size:11px;color:#B08968;flex:0 0 auto;}'
+            + '.sy-cnt{margin-left:2px;font-size:11px;color:#9CA3AF;flex:0 0 auto;}'
             + '.sy-now{background:#FFF3E2;border:1px solid #FDBA74;color:#9A3412;font-weight:700;margin:0 2px 8px;}'
             + '.sy-now-tag{margin-left:auto;font-size:11px;background:#C2410C;color:#fff;border-radius:999px;padding:0 7px;line-height:16px;}'
             + '.sy-main{flex:1;min-width:0;}'
@@ -50223,7 +50223,7 @@ function _mrShowPraise(record, praise) {
         + '</div>'
         + img
         + photoBtn
-        + (dishText ? '<div style="font-size:12px;color:#B08968;margin-bottom:8px;">🍽️ ' + escapeHtml(dishText) + '</div>' : '')
+        + (dishText ? '<div style="font-size:12px;color:#9CA3AF;margin-bottom:8px;">🍽️ ' + escapeHtml(dishText) + '</div>' : '')
         + '<div style="font-size:14px;color:#374151;line-height:1.9;white-space:pre-wrap;">' + escapeHtml(praise) + '</div>'
         + _aiDisclaimerLineHtml({ isAIGenerated: true })
         + '<button type="button" onclick="_mrSendToWorks(window._mrPraiseRecord)" style="margin-top:14px;width:100%;padding:11px 0;border:1px solid #C7D2FE;border-radius:12px;background:#EEF2FF;color:#4338CA;font-size:14px;font-weight:700;cursor:pointer;">🚀 发到我的创作</button>'
@@ -52304,7 +52304,7 @@ function renderKnowledgeHome() {
         <!-- 饮食安全提醒 -->
         <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:14px 16px;margin-bottom:10px;">
             <div style="font-size:15px;font-weight:700;color:#9A3412;margin-bottom:8px;">⚠️ 饮食安全提醒</div>
-            <div style="font-size:14px;color:#7C2D12;line-height:1.7;">${escapeHtml(guide.safety)}</div>
+            <div style="font-size:14px;color:#4B5563;line-height:1.7;">${escapeHtml(guide.safety)}</div>
         </div>
     `;
 
@@ -56539,10 +56539,10 @@ function openHiddenKbManager() {
         return '<div style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid #F3F0E9;">'
             + '<span style="flex:1;font-size:13px;color:#5B4632;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(k.title || '无标题') + '</span>'
             + '<button onclick="_kbRestore(' + k.id + ')" style="flex-shrink:0;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;">恢复</button></div>';
-    }).join('') : '<div style="text-align:center;color:#B08968;font-size:13px;padding:20px 0;">暂无隐藏的文章</div>';
+    }).join('') : '<div style="text-align:center;color:#9CA3AF;font-size:13px;padding:20px 0;">暂无隐藏的文章</div>';
     ov.innerHTML = '<div style="background:#FFFDF8;border-radius:14px;width:88%;max-width:360px;max-height:70vh;display:flex;flex-direction:column;padding:14px;">'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><b style="font-size:14px;color:#7A4A21;">已隐藏的文章</b>'
-        + '<button onclick="this.closest(\'#hiddenKbOverlay\').remove()" style="border:none;background:none;font-size:16px;cursor:pointer;color:#B08968;">✕</button></div>'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><b style="font-size:14px;color:#EA580C;">已隐藏的文章</b>'
+        + '<button onclick="this.closest(\'#hiddenKbOverlay\').remove()" style="border:none;background:none;font-size:16px;cursor:pointer;color:#9CA3AF;">✕</button></div>'
         + '<div style="overflow-y:auto;">' + listHtml + '</div></div>';
 }
 function filterByVisibility(list) {
@@ -61596,7 +61596,7 @@ async function fetchAllWeeklyDishIngredients(btnEl) {
             btnEl.disabled = false;
             btnEl.textContent = '📋 一键获取所有菜品的食材用量';
             btnEl.style.background = 'linear-gradient(135deg,#FED7AA,#FBBF24)';
-            btnEl.style.color = '#7C2D12';
+            btnEl.style.color = '#92400E';
         }
         showToast('⚠ 未获取到用量数据，请重试');
     }
@@ -63273,7 +63273,7 @@ function renderDiary() {
             if (_reasonItems.length > 0) {
                 window.__diaryReasonHtml = '<details style="position:relative;display:inline-block;align-self:flex-end;margin:0;">'
                     + '<summary style="cursor:pointer;list-style:none;font-size:10.5px;line-height:1;color:#9A3412;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:2px 8px;display:inline-block;white-space:nowrap;">推荐理由</summary>'
-                    + '<div style="position:absolute;right:0;top:calc(100% + 5px);width:260px;max-width:72vw;z-index:40;font-size:12px;color:#7A4A21;background:#FFFDF7;border:1px solid #FDE68A;border-radius:8px;padding:7px 9px;line-height:1.7;box-shadow:0 8px 20px rgba(0,0,0,0.12);">'
+                    + '<div style="position:absolute;right:0;top:calc(100% + 5px);width:260px;max-width:72vw;z-index:40;font-size:12px;color:#4B5563;background:#FFFDF7;border:1px solid #FDE68A;border-radius:8px;padding:7px 9px;line-height:1.7;box-shadow:0 8px 20px rgba(0,0,0,0.12);">'
                     + _reasonItems.map(function(r){ return '<div><b>' + escapeHtml(r.name) + '</b>：' + escapeHtml(r.text) + '</div>'; }).join('')
                     + '</div></details>';
             }
@@ -68057,7 +68057,7 @@ function renderOrderDetail() {
     }).join('');
 
     var html = '<div style="background:linear-gradient(135deg,#FFF7ED,#FFFBEB);border:1px solid #FED7AA;border-radius:10px;padding:10px;margin-bottom:10px;">' +
-        '<div style="font-size:14px;font-weight:700;color:#7C2D12;">📍 ' + escapeHtml(r.name || '') + '</div>' +
+        '<div style="font-size:14px;font-weight:700;color:#92400E;">📍 ' + escapeHtml(r.name || '') + '</div>' +
         '<div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;align-items:center;">' +
             (cuisine ? '<span style="font-size:11px;color:#9A3412;background:#FED7AA;border-radius:4px;padding:1px 6px;">' + escapeHtml(cuisine) + '</span>' : '') +
             (avg > 0 ? '<span style="font-size:11px;color:#92400E;">人均 ¥' + avg + '</span>' : '') +
@@ -72792,7 +72792,7 @@ function _openWeeklyKpiReport() {
                 + '</div>'
                 + '<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:14px;margin-bottom:12px;">'
                 + '<div style="font-size:13px;font-weight:700;color:#9A3412;margin-bottom:6px;">🔍 深度归因</div>'
-                + '<div style="font-size:14px;color:#7C2D12;line-height:1.7;">' + escapeHtml(attr.headline) + '</div>'
+                + '<div style="font-size:14px;color:#92400E;line-height:1.7;">' + escapeHtml(attr.headline) + '</div>'
                 + '<div style="font-size:12px;color:#9A3412;line-height:1.6;margin-top:8px;padding-top:8px;border-top:1px dashed #FED7AA;">📎 依据：本周外食 ' + cur.outMeals + ' 餐、蔬菜菜品 ' + cur.vegCount + ' 道（占比 ' + cur.vegRatio + '%）。' + escapeHtml(attr.historyNote || '') + '</div>'
                 + '</div>'
                 + '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px;">'
@@ -75063,12 +75063,12 @@ function openDiaryRecordModal(mealKey) {
         } else {
             listEl.innerHTML = planned.map(function(u, i) {
                 return '<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;margin-bottom:6px;">'
-                    + '<span style="font-size:14px;color:#7A4A21;white-space:nowrap;">' + escapeHtml(u.name) + '</span>'
+                    + '<span style="font-size:14px;color:#4B5563;white-space:nowrap;">' + escapeHtml(u.name) + '</span>'
                     + '<span style="font-size:12px;color:#9CA3AF;white-space:nowrap;">计划 ' + u.qty + u.unit + '</span>'
                     + '<span style="flex:1;"></span>'
-                    + '<span style="font-size:13px;color:#7A4A21;white-space:nowrap;">实际</span>'
+                    + '<span style="font-size:13px;color:#4B5563;white-space:nowrap;">实际</span>'
                     + '<input type="number" min="0" step="0.1" value="' + actualIngredientUsage[i].qty + '" data-idx="' + i + '" class="meal-usage-input" style="width:64px;padding:5px 8px;border:1px solid #FDBA74;border-radius:6px;font-size:13px;box-sizing:border-box;">'
-                    + '<span style="font-size:13px;color:#7A4A21;white-space:nowrap;">' + escapeHtml(u.unit) + '</span>'
+                    + '<span style="font-size:13px;color:#4B5563;white-space:nowrap;">' + escapeHtml(u.unit) + '</span>'
                     + '</div>';
             }).join('');
             listEl.querySelectorAll('.meal-usage-input').forEach(function(inp) {
@@ -80177,7 +80177,7 @@ window._hmOpenMealSchedule = function (ev) {
     var rows = '';
     for (var d = 0; d < 7; d++) {
         rows += '<div style="display:flex;align-items:center;gap:6px;margin-top:8px;">'
-            + '<div style="width:40px;font-size:12px;font-weight:800;color:#7C2D12;flex-shrink:0;">' + week[d] + '</div>';
+            + '<div style="width:40px;font-size:12px;font-weight:800;color:#4B5563;flex-shrink:0;">' + week[d] + '</div>';
         for (var j = 0; j < _HM_MEAL_DEFS.length; j++) {
             var mk = _HM_MEAL_DEFS[j][0], on = st[d][mk] !== false;
             rows += '<button type="button" onclick="_hmToggleHomeMeal(' + d + ',\'' + mk + '\',event)" style="flex:1;padding:7px 0;border-radius:9px;border:1px solid ' + (on ? '#F97316' : '#FED7AA') + ';background:' + (on ? 'linear-gradient(135deg,#F97316,#EA580C)' : '#fff') + ';color:' + (on ? '#fff' : '#C2410C') + ';font-size:12px;font-weight:800;cursor:pointer;">' + _HM_MEAL_DEFS[j][1] + '</button>';
@@ -80947,7 +80947,7 @@ function _hmAdvicePlanBlockHtml(plan) {
         +   '<span style="margin-left:auto;font-size:11px;color:#6B7280;">第 ' + info.dayNo + ' 天 / 共 ' + info.totalDays + ' 天</span>'
         +   overBadge
         + '</div>'
-        + '<div style="font-size:13px;font-weight:800;color:#7C2D12;margin-top:4px;">👑 ' + escapeHtml(plan.memberName || '家人') + '的' + escapeHtml(_spPlanDisplayName(plan)) + '</div>'
+        + '<div style="font-size:13px;font-weight:800;color:#EA580C;margin-top:4px;">👑 ' + escapeHtml(plan.memberName || '家人') + '的' + escapeHtml(_spPlanDisplayName(plan)) + '</div>'
         + '<div style="height:6px;border-radius:3px;background:#fff;overflow:hidden;margin-top:6px;box-shadow:inset 0 0 0 1px #FDE68A;">'
         +   '<div style="height:100%;width:' + pct + '%;border-radius:3px;background:linear-gradient(90deg,#FB923C,#F97316);"></div>'
         + '</div>'
@@ -80970,7 +80970,7 @@ function _hmAdviceReportBlockHtml(plan) {
         +   '<div style="font-size:12px;font-weight:800;color:#C2410C;">专项健康饮食报告</div>'
         +   '<button type="button" onclick="_hmToggleReport(event)" style="margin-left:auto;padding:3px 8px;border:1px solid #FDBA74;border-radius:9px;background:#fff;color:#C2410C;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">' + (_HM_REPORT_OPEN ? '收起' : '查看完整报告 ›') + '</button>'
         + '</div>'
-        + '<div style="font-size:12px;color:#7C2D12;line-height:1.75;margin-top:4px;">' + escapeHtml(bodyText).replace(/\n/g, '<br>') + '</div>'
+        + '<div style="font-size:12px;color:#4B5563;line-height:1.75;margin-top:4px;">' + escapeHtml(bodyText).replace(/\n/g, '<br>') + '</div>'
         + '</div>';
 }
 function _hmAdviceCardHtml() {
@@ -80999,7 +80999,7 @@ function _hmAdviceCardHtml() {
         + _hmAdviceReportBlockHtml(plan)
         + '<div style="border-top:1px dashed #FDBA74;margin-top:10px;padding-top:10px;">'
         +   '<div style="font-size:12px;font-weight:800;color:#C2410C;margin-bottom:4px;">今日建议</div>'
-        +   '<div style="font-size:14px;color:#7C2D12;line-height:1.75;font-weight:700;">' + escapeHtml(a.action) + '</div>'
+        +   '<div style="font-size:14px;color:#1F2937;line-height:1.75;font-weight:700;">' + escapeHtml(a.action) + '</div>'
         +   '<div style="font-size:12px;color:#9A3412;line-height:1.7;margin-top:6px;">' + escapeHtml(a.why) + '</div>'
         +   '<button type="button" onclick="_hmAdviceAct(event)" style="margin-top:10px;padding:8px 14px;border:none;border-radius:10px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:13px;font-weight:800;cursor:pointer;">就这么办 ›</button>'
         +   '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">来自家庭记录与节气，仅供日常饮食参考，不替代医疗建议。</div>'
@@ -81470,7 +81470,7 @@ function _hmCareCardHtml() {
         });
         html += '<div style="margin-top:10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:11px;padding:10px;">'
             + '<div style="display:flex;align-items:flex-start;gap:8px;">'
-            +   '<div style="flex:1;min-width:0;font-size:13px;font-weight:800;color:#7C2D12;">' + head + '</div>'
+            +   '<div style="flex:1;min-width:0;font-size:13px;font-weight:800;color:#92400E;">' + head + '</div>'
             +   '<span style="flex-shrink:0;font-size:11px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:1px 6px;">' + dayTag + '</span>'
             +   '<span onclick="_careDismiss()" title="收起" style="flex-shrink:0;color:#9CA3AF;font-size:14px;font-weight:700;cursor:pointer;line-height:1;">✕</span>'
             + '</div>'
@@ -81776,7 +81776,7 @@ window._wpShowModal = function (data) {
     var items = (d.mistakes || []).map(function (m, i) {
         return '<div style="display:flex;gap:8px;background:#FFF7ED;border:1px solid #FDE68A;border-radius:12px;padding:10px;margin-top:8px;">'
             + '<div style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:#F97316;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;">' + (i + 1) + '</div>'
-            + '<div style="font-size:12px;color:#7C2D12;line-height:1.7;min-width:0;">' + escapeHtml(String(m || '')) + '</div>'
+            + '<div style="font-size:12px;color:#4B5563;line-height:1.7;min-width:0;">' + escapeHtml(String(m || '')) + '</div>'
             + '</div>';
     }).join('');
     var ov = document.createElement('div');
@@ -81785,13 +81785,13 @@ window._wpShowModal = function (data) {
     ov.onclick = function (e) { if (e.target === ov) ov.remove(); };
     ov.innerHTML = '<div style="width:360px;max-width:100%;max-height:88vh;overflow-y:auto;background:#fff;border-radius:20px;padding:18px;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,.3);">'
         + '<div style="text-align:center;"><div style="font-size:30px;">👑</div>'
-        + '<div style="font-size:17px;font-weight:800;color:#7C2D12;margin-top:4px;">家庭膳食健康白皮书</div>'
+        + '<div style="font-size:17px;font-weight:800;color:#EA580C;margin-top:4px;">家庭膳食健康白皮书</div>'
         + '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">已结合您家家庭档案与近期三餐生成</div></div>'
         + '<div style="font-size:13px;font-weight:800;color:#B45309;margin-top:14px;">⚠️ 3 个最容易踩的饮食误区</div>'
         + items
         + '<div style="margin-top:12px;background:linear-gradient(135deg,#FFEDD5,#FEF3C7);border:1px solid #FDBA74;border-radius:12px;padding:12px;">'
         + '<div style="font-size:13px;font-weight:800;color:#C2410C;">🎯 未来 30 天健康大方向</div>'
-        + '<div style="font-size:12px;color:#7C2D12;line-height:1.75;margin-top:5px;">' + escapeHtml(String(d.direction || '')) + '</div></div>'
+        + '<div style="font-size:12px;color:#4B5563;line-height:1.75;margin-top:5px;">' + escapeHtml(String(d.direction || '')) + '</div></div>'
         + '<button type="button" onclick="_wpDownloadPoster()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">🖼 下载完整版海报</button>'
         + '<button type="button" onclick="document.getElementById(\'wpModalOv\').remove()" style="width:100%;margin-top:8px;padding:10px;border:none;border-radius:12px;background:#F3F4F6;color:#6B7280;font-size:13px;font-weight:600;cursor:pointer;">稍后再看</button>'
         + '<div style="font-size:10px;color:#9CA3AF;line-height:1.6;text-align:center;margin-top:10px;">⚠️ 本内容仅为日常饮食参考，不构成医疗诊断。如患有疾病，请务必遵医嘱。</div>'
@@ -81891,7 +81891,7 @@ window._ybOpen = function () {
     ov.onclick = function (e) { if (e.target === ov) ov.remove(); };
     ov.innerHTML = '<button type="button" onclick="document.getElementById(\'ybOv\').remove()" style="position:fixed;top:14px;right:14px;z-index:100071;width:38px;height:38px;border-radius:50%;border:none;background:rgba(255,255,255,.95);color:#374151;font-size:22px;font-weight:700;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);">×</button>'
         + '<div style="width:360px;max-width:100%;background:#fff;border-radius:20px;padding:14px;box-sizing:border-box;">'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;"><div style="font-size:15px;font-weight:800;color:#7C2D12;">📅 我的年度账单</div>'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;"><div style="font-size:15px;font-weight:800;color:#EA580C;">📅 我的年度账单</div>'
         + '<button type="button" onclick="document.getElementById(\'ybOv\').remove()" style="border:none;background:none;font-size:18px;color:#9CA3AF;cursor:pointer;">×</button></div>'
         + '<img src="' + dataUrl + '" style="width:100%;border-radius:12px;margin-top:10px;border:1px solid #FDE68A;" />'
         + '<div style="display:flex;gap:8px;margin-top:12px;">'
@@ -81978,14 +81978,14 @@ window.openCareForm = function () {
         + '<button type="button" onclick="closeCareForm()" style="border:none;background:#FFEDD5;color:#C2410C;width:30px;height:30px;border-radius:9px;font-size:16px;cursor:pointer;">×</button></div>'
         + '<div style="font-size:11px;color:#92400E;line-height:1.6;margin:0 0 4px;">选家人 + 场景 + 症状，生成 7 天调理食谱。</div>'
         + _careDisclaimerHtml()
-        + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">选择调理场景</div>'
+        + '<div style="font-size:12px;color:#EA580C;font-weight:700;margin:10px 0 4px;">选择调理场景</div>'
         + '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + sceneChips + '</div>'
         + '<div style="font-size:11px;color:#B45309;background:#FFFBEB;border:1px dashed #FDE68A;border-radius:9px;padding:6px 9px;margin-top:7px;line-height:1.7;">' + escapeHtml(_scene.focus) + (_scene.k === 'illness' ? '（占用每年 4 次调理配额）' : '（不占调理配额，可续排）') + '</div>'
-        + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">选择家人</div>'
+        + '<div style="font-size:12px;color:#EA580C;font-weight:700;margin:10px 0 4px;">选择家人</div>'
         + '<select id="careMemberSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + memberOpts + '</select>'
-        + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">' + (_scene.k === 'illness' ? '选择症状' : '选择阶段') + '</div>'
+        + '<div style="font-size:12px;color:#EA580C;font-weight:700;margin:10px 0 4px;">' + (_scene.k === 'illness' ? '选择症状' : '选择阶段') + '</div>'
         + '<select id="careSymptomSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + symOpts + '</select>'
-        + '<div style="font-size:12px;color:#7C2D12;font-weight:700;margin:10px 0 4px;">补充描述（选填）</div>'
+        + '<div style="font-size:12px;color:#EA580C;font-weight:700;margin:10px 0 4px;">补充描述（选填）</div>'
         + '<textarea id="careDescInput" rows="3" placeholder="例如：这两天有点低烧、没胃口，想吃清淡的" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:13px;resize:none;"></textarea>'
         + '<button type="button" id="careSubmitBtn" onclick="submitCareForm()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:11px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">生成 7 天调理食谱</button>'
         + '</div>';
