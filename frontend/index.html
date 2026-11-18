@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V573-20261118';
+        var APP_VER = 'V574-20261118';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -35524,15 +35524,15 @@ function _fhOpenHall() {
     ov.innerHTML = '<div style="flex:0 0 auto;background:#fff;border-bottom:1px solid #FED7AA;padding:12px 14px;">'
         + '<div style="display:flex;align-items:center;gap:8px;">'
         + '<button type="button" onclick="_fhCloseHall()" style="border:none;background:none;font-size:17px;color:#6B7280;cursor:pointer;padding:2px 4px;line-height:1;">←</button>'
-        + '<div style="font-size:17px;font-weight:800;color:#1F2937;">食养堂</div>'
+        + '<div style="font-size:17px;font-weight:800;color:#EA580C;">食养堂</div>'
         + '<button type="button" onclick="_fhOpenEdu()" style="border:none;border-radius:999px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:12px;font-weight:700;padding:7px 12px;cursor:pointer;box-shadow:0 3px 10px rgba(249,115,22,.28);">🎓 食养教育</button>'
         + '</div>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;padding:14px 14px 28px;">'
         + (isMember ? '' : '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.6;">🔒 食养会员可解锁全部深度文章、🌍 寻味天下与食养教育课程</div>')
-        + '<div style="font-size:13px;font-weight:700;color:#1F2937;margin:2px 2px 8px;">📖 今日饮食文章</div>'
+        + '<div style="font-size:13px;font-weight:700;color:#EA580C;margin:2px 2px 8px;">📖 今日饮食文章</div>'
         + artHtml
-        + '<div style="font-size:13px;font-weight:700;color:#1F2937;margin:16px 2px 8px;">🌍 寻味天下</div>'
+        + '<div style="font-size:13px;font-weight:700;color:#EA580C;margin:16px 2px 8px;">🌍 寻味天下</div>'
         + recHtml
         + '</div>';
     document.body.appendChild(ov);
@@ -35652,7 +35652,7 @@ function _fhOpenRecipeDetail(r) {
     ov.style.cssText = 'position:fixed;inset:0;z-index:100010;background:#FFF7ED;display:flex;flex-direction:column;max-width:430px;margin:0 auto;';
     ov.innerHTML = '<div style="flex:0 0 auto;background:#fff;border-bottom:1px solid #FED7AA;display:flex;align-items:center;gap:8px;padding:10px 14px;">'
         + '<button type="button" onclick="_fhCloseRecipe()" style="border:none;background:none;font-size:17px;color:#6B7280;cursor:pointer;padding:2px 4px;line-height:1;">←</button>'
-        + '<div style="flex:1;min-width:0;font-size:15px;font-weight:700;color:#1F2937;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">🌍 寻味天下</div>'
+        + '<div style="flex:1;min-width:0;font-size:15px;font-weight:700;color:#EA580C;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">🌍 寻味天下</div>'
         // V443: 恢复右上角语音播报（V393 下线后遗漏，寻味天下详情页一直没有喇叭）
         + '<button type="button" id="fhRecipeSpeakBtn" onclick="_fhSpeakRecipe()" title="语音播报" style="flex:0 0 auto;border:none;background:none;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1;color:#F97316;">🔊</button>'
         + '</div>'
@@ -35670,11 +35670,11 @@ function _fhOpenRecipeDetail(r) {
         + contentHtml
         + dishHtml
         + (!dishes.length && steps ? '<div style="padding:14px 18px 0;">'
-        + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin-bottom:10px;">🍳 做法</div>'
+        + '<div style="font-size:13px;font-weight:700;color:#EA580C;margin-bottom:10px;">🍳 做法</div>'
         + steps
         + '</div>' : '')
         + (!dishes.length && ing ? '<div style="padding:14px 18px 0;">'
-        + '<div style="font-size:13px;font-weight:700;color:#7C2D12;margin-bottom:8px;">🧺 食材</div>'
+        + '<div style="font-size:13px;font-weight:700;color:#EA580C;margin-bottom:8px;">🧺 食材</div>'
         + '<div>' + ing + '</div>'
         + (_fhIngCost > 0 ? '<div style="margin-top:8px;font-size:12px;font-weight:700;color:#B45309;">💰 食材成本约 ¥' + _fhIngCost + '（按本地基准价估算）</div>' : '')
         + '</div>' : '')
@@ -36916,7 +36916,7 @@ function _openDailyTipFull(tip) {
     var emoji = String(window.__currentSolarTerm || '') ? '🎐' : '🍂';
     var tipsHtml = (tip.tips || []).map(function (t) { return '<div style="display:flex;gap:6px;margin-top:6px;font-size:13px;color:#4B5563;line-height:1.6;"><span style="color:#F97316;">·</span><span>' + t + '</span></div>'; }).join('');
     var foodsHtml = (tip.relatedIngredients || []).length
-        ? '<div style="margin-top:18px;"><div style="font-size:14px;font-weight:700;color:#1F2937;">🥬 当季食材</div>'
+        ? '<div style="margin-top:18px;"><div style="font-size:14px;font-weight:700;color:#EA580C;">🥬 当季食材</div>'
           + '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;">'
           + tip.relatedIngredients.map(function (f) { return '<span style="padding:5px 14px;background:#FFF7ED;color:#C2410C;border-radius:999px;font-size:13px;">' + f + '</span>'; }).join('')
           + '</div></div>' : '';
