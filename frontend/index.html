@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V576-20261118';
+        var APP_VER = 'V577-20261118';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -2540,8 +2540,8 @@
     .prep-overview-cat { margin-bottom:4px; }
     .prep-overview-cat:last-child { margin-bottom:0; }
     .prep-overview-cat b { color:#374151; margin-right:4px; }
-    .prep-tag { display:inline-block; padding:1px 6px; margin:2px 6px 2px 0; background:#F5F3FF; color:#4F46E5; border-radius:6px; cursor:pointer; font-size:12px; }
-    .prep-tag:active { background:#E8DEF8; }
+    .prep-tag { display:inline-block; padding:1px 6px; margin:2px 6px 2px 0; background:#FFF7ED; color:#9A3412; border-radius:6px; cursor:pointer; font-size:12px; }
+    .prep-tag:active { background:#FFEDD5; }
     .prep-empty { color:#9CA3AF; }
     .prep-param-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }   /* 窄屏放不下时整组换行，防挤压竖排 */
     .prep-param-row + .prep-param-row { margin-top:10px; }
@@ -2572,8 +2572,8 @@
     /* 需采购食材清单：标题行 + 右侧「点击展开/收起」倒三角按钮 */
     .prep-shop-list-header { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:8px 16px 4px; }
     .prep-shop-list-header > span { font-size:14px; font-weight:700; color:#374151; min-width:0; line-height:1.4; }
-    .prep-shop-toggle-btn { flex-shrink:0; padding:4px 12px; font-size:13px; font-weight:600; color:#2563EB; background:#EFF6FF; border:none; border-radius:999px; cursor:pointer; white-space:nowrap; min-height:28px; line-height:1.4; }
-    .prep-shop-toggle-btn:active { background:#DBEAFE; }
+    .prep-shop-toggle-btn { flex-shrink:0; padding:4px 12px; font-size:13px; font-weight:600; color:#C2410C; background:#FFF7ED; border:none; border-radius:999px; cursor:pointer; white-space:nowrap; min-height:28px; line-height:1.4; }
+    .prep-shop-toggle-btn:active { background:#FFEDD5; }
     .prep-shop-toggle-arrow { display:inline-block; margin-left:3px; font-size:11px; }
     .prep-total-kinds { font-size:14px; font-weight:600; color:#374151; margin-left:auto; }
     .prep-servings-row { display:flex; align-items:center; gap:8px; margin-top:10px; padding:8px 10px; background:#FFF7ED; border:1px solid #FED7AA; border-radius:10px; font-size:13px; line-height:1.5; color:#374151; flex-wrap:wrap; }
@@ -2589,7 +2589,7 @@
     .prep-servings-item select { padding:5px 8px; border:1px solid #E5E7EB; border-radius:7px; font-size:14px; font-weight:600; }
     .prep-summary-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:10px; border-bottom:1px dashed #F3F4F6; }
     .prep-summary-row .left { font-size:14px; color:#374151; }
-    .prep-summary-row .left b { color:#1E40AF; }
+    .prep-summary-row .left b { color:#C2410C; }
     .prep-summary-row .right { font-size:14px; color:#374151; }
     .prep-summary-row .right b { color:#DC2626; }
     .prep-shop-table { width:100%; max-width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; }
@@ -2710,12 +2710,12 @@
     }
     .prep-ai-btn:active { background: #FFEDD5; border-color: #FDBA74; }
     .prep-ai-btn.ai-btn-existing { background: #FFF7ED; color: #9A3412; border-color: #FED7AA; }
-    .prep-ai-btn.ai-btn-newbuy   { background: #ECFDF5; color: #065F46; border-color: #6EE7B7; }
-    .prep-ai-btn.ai-btn-newbuy:active { background: #D1FAE5; }
-    .prep-ai-btn.ai-btn-weekend  { background: #E0E7FF; color: #3730A3; border-color: #A5B4FC; }
-    .prep-ai-btn.ai-btn-weekend:active { background: #C7D2FE; }
-    .prep-ai-btn.ai-btn-preferred{ background: linear-gradient(135deg,#ECFDF5 0%, #FEF9C3 100%); color: #065F46; border-color: #86EFAC; }
-    .prep-ai-btn.ai-btn-preferred:active { background: #D1FAE5; border-color: #4ADE80; }
+    .prep-ai-btn.ai-btn-newbuy   { background: #FFF7ED; color: #9A3412; border-color: #FED7AA; }
+    .prep-ai-btn.ai-btn-newbuy:active { background: #FFEDD5; }
+    .prep-ai-btn.ai-btn-weekend  { background: #FFF7ED; color: #9A3412; border-color: #FED7AA; }
+    .prep-ai-btn.ai-btn-weekend:active { background: #FFEDD5; }
+    .prep-ai-btn.ai-btn-preferred{ background: #FFF7ED; color: #9A3412; border-color: #FED7AA; }
+    .prep-ai-btn.ai-btn-preferred:active { background: #FFEDD5; border-color: #FDBA74; }
 
     /* 现购食材录入：多行输入列表 */
     .prep-new-buy-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; box-sizing: border-box; }
