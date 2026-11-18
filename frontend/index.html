@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V570-20261118';
+        var APP_VER = 'V571-20261118';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -23169,7 +23169,7 @@ async function genRecipesFromIngredients(newBuy, mergeFridge) {
             }
             return scored.slice(0, 6);
         }
-        // 调 AI（3.5 秒内未返回立即走本地兜底，避免空等 60s 超时）
+        // 调 AI（20 秒内未返回立即走本地兜底，避免空等 60s 超时）
         let meals = null;
         try {
             if (typeof callAliyunQwenApi === 'function') {
@@ -23181,7 +23181,7 @@ async function genRecipesFromIngredients(newBuy, mergeFridge) {
                     + `家中已有食材：${mergeFridge ? (existingNames.length?existingNames.join('、'):'(空)') : '(空，本次仅基于新买食材)'}。`
                     + `刚新买的食材（带数量/单位/价格提示，仅参考份量）：${newBuyNames.length?newBuySummary:'(未录入新买)'}。`
                     + (mergeFridge ? '请尽量优先消耗已有食材，新买食材作为主搭。' : '请只依据新买食材组合菜谱，3~6 道菜，每道菜 ingredients 为主要食材（不用细到调料）。');
-                const fastFallback = new Promise(function(res){ setTimeout(function(){ res(null); }, 5000); });
+                const fastFallback = new Promise(function(res){ setTimeout(function(){ res(null); }, 20000); });
                 const res = await Promise.race([callAliyunQwenApi(sys, usr, { mode: getCurrentRecommendMode() }), fastFallback]);
                 const arr = (res && Array.isArray(res.meals)) ? res.meals : null;
                 if (arr && arr.length >= 2) {
@@ -24127,7 +24127,7 @@ async function generateIngredientPrefRecipes() {
           + '（体力劳动者）——主食增加约30%、蛋白质增加约20%，多选管饱主食与肉鱼蛋硬菜；食材用量已按 主食×1.3 / 高蛋白×1.2 自动加量</div>'
         : '';
     summaryEl.innerHTML = `正在融合：时节「<b>${solarTermName||'(无节气数据)'}</b>」 · 家人偏好 · 近 30 天爱吃食材 Top3：<b>${liked.slice(0,3).map(x=>x.name).join(' / ') || '(暂无偏好，先通用推荐)'}</b>…` + _v174Banner + _v175Banner + _v176Banner;
-    wrap.innerHTML = `<div style="text-align:center;padding:24px;color:#6B7280;font-size:14px;">正在生成今/明/后 × 3 餐 × 3-5 道菜推荐（优先走 AI，3.5s 未响应则使用本地偏好库）…</div>`;
+    wrap.innerHTML = `<div style="text-align:center;padding:24px;color:#6B7280;font-size:14px;">正在生成今/明/后 × 3 餐 × 3-5 道菜推荐（优先走 AI，20s 未响应则使用本地偏好库）…</div>`;
     if (submitBtn) { submitBtn.disabled = true; submitBtn.classList.add('is-disabled'); submitBtn.textContent = '确认选择'; }
 
     // 缓存全局 latest（sendIngrPrefRecipesToDiary 回读用）
@@ -24177,7 +24177,7 @@ async function generateIngredientPrefRecipes() {
 推荐食材：${solarIngs.join('、')||'无'}
 请优先推荐当季食材制作的菜谱，并在推荐理由中说明${solarTermName||'当季'}节气养生原则；使用当季食材的菜，reason 以"🌿当季食材"开头。
 目标日期：${daysText}；家庭成员/口味：${familyText || '（2 人家庭，默认）'}；近 30 天爱吃食材 Top：${topLiked}；家中久放需优先消耗的食材：${freshText}；${divText ? divText.replace(/\n/g, ' ') + '；' : ''}${modeHint}${_constSec}${_tagSec}；每道菜 reason 需包含节气标注（如"${solarTermName||'当季'}节气推荐"），用到久放食材的菜需在 reason 中标注"建议优先使用XX"；请输出 3 天 3 餐的 ${_dcCnt.dinnerNum} 道菜/餐个性化推荐（${servings}人家庭，宁少勿多，不得超出），并为每道菜给出 15~22 字中文推荐理由。流质类（粥/稀饭/豆浆/米糊/羹/甜汤）同一餐最多 1 道（早餐不能又粥又豆浆）。`;
-            var fastFb = new Promise(function(r){ setTimeout(function(){ r(null); }, 5000); });
+            var fastFb = new Promise(function(r){ setTimeout(function(){ r(null); }, 20000); });
             var res = await Promise.race([ callAliyunQwenApi(sys, usr, { mode: modeKey }), fastFb ]);
             if (res && res.byDate && typeof res.byDate === 'object') {
                 // 归一化 3 天 × 3 餐 × 4 道菜
@@ -25318,7 +25318,7 @@ async function generateWeekendRecipes23() {
         if (typeof callAliyunQwenApi === 'function') {
             const sys = '你是家肴记的家庭周末菜谱策划。请返回严格一个 JSON：{ plans: [ { title:"方案A · 主题", summary:"一句摘要20字内", days:{ "YYYYMMDD": { breakfast:[菜名...], lunch:[...], dinner:[...] }, ... } }, ... ] }，共 2~3 套；键名必须一致；不附加任何说明；每一天必须有 breakfast/lunch/dinner 三个数组，每个数组是 2~4 个家常菜菜名字符串；日期 key 必须严格等于 user 给的 "YYYYMMDD"。';
             const usr = `目标日期：${days.map(d => d.dateKey + '=' + d.label).join('、')}；家庭人数：${servings}人；家中现有的食材可优先消耗：${existingIngs.length?existingIngs.join('、'):'(随意)'}；请输出 2~3 套不同风格的完整周末方案（例如团圆聚餐/轻食养生/快手省时），每顿 2~4 道菜。`;
-            const fastFallback = new Promise(function(res){ setTimeout(function(){ res(null); }, 5000); });
+            const fastFallback = new Promise(function(res){ setTimeout(function(){ res(null); }, 20000); });
             const res = await Promise.race([callAliyunQwenApi(sys, usr, { mode: getCurrentRecommendMode() }), fastFallback]);
             if (res && Array.isArray(res.plans) && res.plans.length >= 2) {
                 plans = res.plans.slice(0, 3).map((p, i) => ({
@@ -30264,7 +30264,7 @@ function _filterNoPorridgeWithSoup(dishes, mealKey) {
     return dishes;
 }
 
-// 新增：为单日单餐生成 AI 推荐食谱（3.5s 超时，失败走本地兜底）
+// 新增：为单日单餐生成 AI 推荐食谱（20s 超时，失败走本地兜底）
 // ==================== 🌤️ 天气建议拼入推荐 Prompt（V138：本地映射 + /api/weather，天气失败不阻塞）====================
 // 城市来源：familyData.address（若有）→ familyHomeAddress（家庭住址，extractCityFromAddress 提取城市）
 // 30 分钟前端缓存（后端另有 3 小时缓存）；超时 3s；任何失败返回 ''（prompt 不含天气段）
@@ -30479,7 +30479,7 @@ async function _generateAiRecipesForSingleDateMeal(dateKey, mealKey, retryFeedba
                 // V103: 学习闭环——用户反馈（点赞菜加权、不合适菜避开）
                 + (function(){ var fh = _buildFeedbackPromptHint(); return fh ? (fh + '。') : ''; })()
                 + '；请输出 ' + _needN + ' 道菜的推荐。';
-            var fastFb = new Promise(function(r){ setTimeout(function(){ r(null); }, 5000); });
+            var fastFb = new Promise(function(r){ setTimeout(function(){ r(null); }, 20000); });
             var res = await Promise.race([ callAliyunQwenApi(sys, usr, { mode: 'diet' }), fastFb ]);
             if (res && res.byDate && res.byDate[dateKey] && Array.isArray(res.byDate[dateKey][mealKey])) {
                 var dishes = res.byDate[dateKey][mealKey].map(function(item){
