@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V578-20261118';
+        var APP_VER = 'V579-20261118';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -41805,7 +41805,7 @@ function renderFamily() {
                     <button type="button" onclick="_openCommunityAuditConsole()" style="flex:1;box-sizing:border-box;padding:9px 6px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:12px;font-weight:600;color:#9A3412;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
                         🤝 社区服务审核<span id="communityAuditBadge" style="display:none;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;background:#DC2626;color:#fff;border-radius:9px;font-size:11px;font-weight:700;line-height:18px;text-align:center;">0</span>
                     </button>
-                    <button type="button" onclick="_openCommunityTradePanel()" style="flex:1;box-sizing:border-box;padding:9px 6px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;font-size:12px;font-weight:600;color:#166534;cursor:pointer;">
+                    <button type="button" onclick="_openCommunityTradePanel()" style="flex:1;box-sizing:border-box;padding:9px 6px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:12px;font-weight:600;color:#9A3412;cursor:pointer;">
                         💰 社区交易与风控
                     </button>
                 </div>
