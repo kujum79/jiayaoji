@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V577-20261118';
+        var APP_VER = 'V578-20261118';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -3445,7 +3445,7 @@
         .diary-meal-label {
             font-size: 15px;
             font-weight: 700;
-            color: #374151;
+            color: #EA580C; /* V578: 餐次小节头统一品牌橙 */
         }
         .diary-meal-actions {
             display: flex;
@@ -3500,14 +3500,14 @@
             margin-bottom: 6px;
         }
         .diary-section-plan {
-            background: #F0FDF4;
+            background: #FFF7ED; /* V578: 计划块由绿底绿字改米橙底深字（全APP暖色系统一） */
             border-left: none;
-            color: #166534;
+            color: #1F2937;
         }
         .diary-section-actual {
-            background: #EFF6FF;
+            background: #F9FAFB; /* V578: 实际块由蓝底蓝字改浅灰底灰字，与计划块冷暖相衬 */
             border-left: none;
-            color: #1E40AF;
+            color: #4B5563;
         }
         .diary-section-empty {
             background: #F9FAFB;
