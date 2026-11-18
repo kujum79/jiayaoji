@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V572-20261118';
+        var APP_VER = 'V573-20261118';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -279,7 +279,7 @@
             margin: 10px 0 0 0; /* V140: 卡片间距 16→10px，为食养堂与输入框之间让出间隙 */
             box-sizing: border-box;
         }
-        .home-card-title { font-size: 16px; font-weight: 600; color: #1F2937; margin-bottom: 10px; } /* V45: 与"晚餐"字号统一 16px */
+        .home-card-title { font-size: 16px; font-weight: 600; color: #EA580C; margin-bottom: 10px; } /* V45: 与"晚餐"字号统一 16px */
         /* V405: 傍晚「寻味天下」改为左图右文（V413：废弃 200px 大图背景叠加文字；V414：缩略图 80×80，「寻味天下」改为图片左上角角标） */
         .daily-tip-card { min-height: 110px; overflow: hidden; }
         .dt-recipe-row { display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: #fff; border: 1px solid #FDE7C8; border-radius: 14px; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
@@ -299,7 +299,7 @@
         /* V240: 订阅按钮三态（V242 起并入标题行右侧，原 .dt-sub-row 已移除） */
         /* V242: 订阅按钮位置：小喇叭右侧 */
         /* V140: 标题行 flex——左侧标题、右侧"读完整/收藏"按钮贴右边框；换一条已移除 */
-        .dt-head { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #1F2937; padding-bottom: 8px; border-bottom: 1px solid #F3F4F6; margin-bottom: 8px; }
+        .dt-head { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #EA580C; padding-bottom: 8px; border-bottom: 1px solid #F3F4F6; margin-bottom: 8px; }
         .dt-head-btns { margin-left: auto; display: flex; gap: 6px; flex: 0 0 auto; }
         /* V385: 食养堂标题栏「食神盲盒」入口 */
         .dt-quiz-btn { border: none; cursor: pointer; flex: 0 0 auto; font-size: 11px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #FB923C, #F97316); border-radius: 999px; padding: 3px 9px; line-height: 1.4; white-space: nowrap; box-shadow: 0 2px 6px rgba(249, 115, 22, 0.35); animation: dtQuizFloat 2.4s ease-in-out infinite; }
@@ -372,7 +372,7 @@
             padding: 2px 3px; line-height: 1;
             flex-shrink: 0;
         }
-        .hd-meal { font-size: 16px; font-weight: 700; color: #1F2937; line-height: 1.3; white-space: nowrap; } /* V45: 16px 与卡片标题统一 */
+        .hd-meal { font-size: 16px; font-weight: 700; color: #EA580C; line-height: 1.3; white-space: nowrap; } /* V45: 16px 与卡片标题统一 */
         .hd-date { font-size: 11px; color: #9CA3AF; white-space: nowrap; } /* V49: 11px 层级 */
         .hd-pill-btn {
             /* V60: 统一 24px 高/12px 字（适用：做法▼/采购/计划确认/记录实际/已确认/2人▼） */
@@ -81938,7 +81938,7 @@ window.renderHomeHealthButlerCard = function () {
     if (!member) {
         el.innerHTML = '<div style="flex-shrink:0;text-align:left;line-height:1.25;">'
             + '<div style="font-size:12px;font-weight:700;color:#6B7280;">您的专属</div>'
-            + '<div style="font-size:17px;font-weight:900;color:#1F2937;">健康管家</div></div>'
+            + '<div style="font-size:17px;font-weight:900;color:#EA580C;">健康管家</div></div>'
             + '<div style="flex:1;min-width:0;">'
             + '<div style="font-size:11px;color:#4B5563;line-height:1.55;">查看健康管家：白皮书、专属健康饮食方案、专属营养食谱、深度复盘（会员解锁）。</div></div>'
             + '<span style="flex-shrink:0;font-size:11px;font-weight:800;color:#F97316;background:#FFEDD5;border:1px solid #FDBA74;border-radius:999px;padding:4px 8px;">进入 ›</span>';
@@ -81946,7 +81946,7 @@ window.renderHomeHealthButlerCard = function () {
     }
     el.innerHTML = '<div style="flex-shrink:0;text-align:left;line-height:1.25;">'
         + '<div style="font-size:12px;font-weight:700;color:#6B7280;">您的专属</div>'
-        + '<div style="font-size:17px;font-weight:900;color:#1F2937;">健康管家</div></div>'
+        + '<div style="font-size:17px;font-weight:900;color:#EA580C;">健康管家</div></div>'
         + '<div style="flex:1;min-width:0;"><div style="font-size:11px;color:#4B5563;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(tip) + '</div>'
         + (careInfo ? '<div style="font-size:11px;color:#F97316;font-weight:700;margin-top:4px;">生病调理：' + escapeHtml(carePlan.memberName || '家人') + ' · 第 ' + careInfo.dayNo + ' 天 / ' + careInfo.totalDays + ' 天</div>' : '')
         + '</div><span style="flex-shrink:0;font-size:12px;font-weight:800;color:#F97316;">进入 ›</span>';
@@ -82318,7 +82318,7 @@ function renderHomeCommunityBar() {
     var text = parts.length ? (parts.join('、') + '…') : '小区里还没有新动态，来看看邻居们在做什么吧';
     el.innerHTML = '<div style="display:flex;align-items:center;gap:8px;">'
         + '<span style="font-size:15px;flex-shrink:0;">🤝</span>'
-        + '<span style="font-size:13px;font-weight:700;color:#1F2937;flex-shrink:0;">食邦邻聚</span>'
+        + '<span style="font-size:13px;font-weight:700;color:#EA580C;flex-shrink:0;">食邦邻聚</span>'
         + '<span class="community-bar-text">' + escapeHtml(text) + '</span>'
         + '<span style="flex-shrink:0;font-size:12px;font-weight:600;color:#F97316;background:#FFF7ED;border:1px solid #FED7AA;border-radius:9px;padding:3px 8px;">去看看 ›</span>'
         + '</div>';
