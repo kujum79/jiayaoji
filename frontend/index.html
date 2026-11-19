@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V582-20261120';
+        var APP_VER = 'V583-20261120';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -9521,7 +9521,7 @@ function migrateGlobalDiningOutPlans(fid) {
 
 // ==================== V203: 饮食教育课程库 ====================
 // eduCourses：公共课程库（全局键，不含隐私数据）；courseProgress：学习进度（家庭前缀隔离）
-var _EDU_COURSES_VER = 2;
+var _EDU_COURSES_VER = 3;
 var EDU_COURSES_SEED = [
     {
         id: 'course_001',
@@ -9961,43 +9961,58 @@ function _migrateCourseLibraryV212() {
 }
 
 // V582: 冬季 84 课（window.WINTER_COURSES，edu/winter.js）灌入食养堂「课程库」两级结构。
-// 按节气分 6 个系列（folderId=winter_拼音），每课一条文章（articleId=课程 id）。
-// 幂等：localStorage._winterLibVer==='1' 直接跳过；合并不覆盖：按 id 去重，保留用户手工内容。
+// V583: 改为按人群分 14 个系列（winter_c1..winter_d6，每系列 6 节气各 1 篇），targetTags 只放
+// 该人群一个标签，供「我的专属课堂」按家庭标签交集选择性推荐；课程库列表仍对所有人可见。
+// 幂等：localStorage._winterLibVer==='2' 直接跳过；执行时先清掉 V582 的 winter_ 旧系列/旧文章
+// （含按节气分的 6 系列），再灌入新结构；用户手工内容（非 winter_ 前缀）不动。
+var _WINTER_FOLDER_DEFS = {
+    C1: { name: '一人食单身青年', tag: '单身青年' },
+    C2: { name: '一锅三代家庭掌勺人', tag: '家庭掌勺' },
+    C3: { name: '银发独居长者', tag: '长者' },
+    C4: { name: '久坐脑力族', tag: '久坐族' },
+    C5: { name: '倒班夜班族', tag: '夜班族' },
+    C6: { name: '户外劳动者', tag: '体力劳动者' },
+    C7: { name: '孕产哺乳期', tag: '产后妈妈' },
+    C8: { name: '体重与健身管理', tag: '体重管理' },
+    D1: { name: '小小食客3-5岁', tag: '婴幼儿' },
+    D2: { name: '节气小当家6-8岁', tag: '儿童' },
+    D3: { name: '厨房小研究员9-12岁', tag: '儿童' },
+    D4: { name: '青春食养13-17岁', tag: '青少年' },
+    D5: { name: '成人通识18-59岁', tag: '成人' },
+    D6: { name: '银龄食养60岁以上', tag: '长者' }
+};
 function _seedWinterCourseLibrary() {
     try {
-        if (localStorage.getItem('_winterLibVer') === '1') return;
+        if (localStorage.getItem('_winterLibVer') === '2') return;
         // 先跑旧版迁移，避免灌入后迁移逻辑把 legacy 旧键误判为"已有新数据"而丢弃
         _migrateCourseLibraryV212();
         var src = Array.isArray(window.WINTER_COURSES) ? window.WINTER_COURSES : [];
-        if (!src.length) { localStorage.setItem('_winterLibVer', '1'); return; }
-        var folders = getCourseFolders();
-        var articles = getCourseArticles();
-        var haveFolder = {}, haveArticle = {};
-        folders.forEach(function (f) { if (f && f.folderId) haveFolder[f.folderId] = true; });
-        articles.forEach(function (a) { if (a && a.articleId) haveArticle[a.articleId] = true; });
         var now = Date.now();
-        var groupOrder = [], groupMap = {};
+        // 清理 V582 按节气灌的旧系列/旧文章（folderId/articleId 均以 winter_ 开头），保留手工内容
+        var folders = getCourseFolders().filter(function (f) { return !f || String(f.folderId).indexOf('winter_') !== 0; });
+        var articles = getCourseArticles().filter(function (a) { return !a || String(a.articleId).indexOf('winter_') !== 0; });
+        var haveFolder = {};
+        folders.forEach(function (f) { if (f && f.folderId) haveFolder[f.folderId] = true; });
+        var haveArticle = {};
+        articles.forEach(function (a) { if (a && a.articleId) haveArticle[a.articleId] = true; });
         src.forEach(function (c) {
             if (!c || !c.id) return;
-            // 课程 id 形如 winter_lidong_C1，前两段即 folderId（winter_lidong）
+            // 课程 id 形如 winter_lidong_C1，尾段即人群编号 C1..D6
             var parts = String(c.id).split('_');
-            var folderId = parts.length >= 2 ? parts[0] + '_' + parts[1] : 'winter';
-            var jq = String(c.jieqi || '冬季');
-            if (!groupMap[folderId]) {
-                groupMap[folderId] = {
+            var code = parts[parts.length - 1];
+            var def = _WINTER_FOLDER_DEFS[code];
+            if (!def) return;
+            var folderId = 'winter_' + code.toLowerCase();
+            if (!haveFolder[folderId]) {
+                haveFolder[folderId] = true;
+                folders.push({
                     folderId: folderId,
-                    folderName: jq + ' · 冬季食养系列',
-                    targetTags: [],
-                    description: '84 课全冬季：每节气 8 类人群 + 6 个年龄段，公测全免费',
-                    createdAt: now,
-                    _tagSeen: {}
-                };
-                groupOrder.push(folderId);
+                    folderName: '冬季食养 · ' + def.name,
+                    targetTags: [def.tag],
+                    description: '冬季六节气食养（立冬/小雪/大雪/冬至/小寒/大寒），每节气 1 课共 6 篇，公测全免费',
+                    createdAt: now
+                });
             }
-            var g = groupMap[folderId];
-            (Array.isArray(c.targetAudience) ? c.targetAudience : []).forEach(function (t) {
-                if (t && !g._tagSeen[t]) { g._tagSeen[t] = true; g.targetTags.push(String(t)); }
-            });
             if (haveArticle[c.id]) return;
             haveArticle[c.id] = true;
             articles.push({
@@ -10012,14 +10027,9 @@ function _seedWinterCourseLibrary() {
                 createdAt: now
             });
         });
-        groupOrder.forEach(function (fid) {
-            var g = groupMap[fid];
-            delete g._tagSeen;
-            if (!haveFolder[fid]) folders.push(g);
-        });
         if (!saveCourseFolders(folders)) return;
         if (!saveCourseArticles(articles)) return;
-        localStorage.setItem('_winterLibVer', '1');
+        localStorage.setItem('_winterLibVer', '2');
     } catch (e) {
         console.warn('[winterLib] 冬季课程灌入课程库失败（不影响课程中心）:', e);
     }
