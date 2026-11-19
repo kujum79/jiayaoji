@@ -143,10 +143,20 @@ begin
 end;
 $$;
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-    after insert on auth.users
-    for each row execute function public.handle_new_user();
+-- 注意：Supabase 禁止对 auth.users 上的既有触发器执行 drop（object dependency is not supported），
+-- 改为"不存在才创建"；已存在则其绑定的就是本脚本的 handle_new_user()，无需重建
+do $$
+begin
+    if not exists (
+        select 1 from pg_trigger t
+          join pg_class c on c.oid = t.tgrelid
+         where t.tgname = 'on_auth_user_created'
+           and c.relname = 'users' and c.relnamespace = 'auth'::regnamespace
+           and not t.tgisinternal
+    ) then
+        execute 'create trigger on_auth_user_created after insert on auth.users for each row execute function public.handle_new_user()';
+    end if;
+end $$;
 
 -- 2) 新建家庭 → 创建者自动进入 family_members(owner)
 create or replace function public.handle_new_family()
@@ -214,8 +224,9 @@ as $$
     ) t;
 $$;
 
-revoke all on function public.my_family() from public;
-grant execute on function public.my_family() to authenticated;
+-- 授权语句容错：线上同名函数可能属主为其他角色（早期迁移半途失败遗留），失败仅跳过
+do $$ begin execute 'revoke all on function public.my_family() from public'; exception when others then raise notice 'skip: %', sqlerrm; end $$;
+do $$ begin execute 'grant execute on function public.my_family() to authenticated'; exception when others then raise notice 'skip: %', sqlerrm; end $$;
 
 -- ============================================================
 -- RPC：以当前登录用户身份创建家庭（SECURITY DEFINER，绕开 RLS 差异）
@@ -273,8 +284,8 @@ begin
 end;
 $$;
 
-revoke all on function public.create_family_for_me(text, text, text) from public;
-grant execute on function public.create_family_for_me(text, text, text) to authenticated;
+do $$ begin execute 'revoke all on function public.create_family_for_me(text, text, text) from public'; exception when others then raise notice 'skip: %', sqlerrm; end $$;
+do $$ begin execute 'grant execute on function public.create_family_for_me(text, text, text) to authenticated'; exception when others then raise notice 'skip: %', sqlerrm; end $$;
 
 -- ============================================================
 -- RPC：家人用「家庭码」加入家庭（绕过 families 的 select 限制）
@@ -314,12 +325,30 @@ begin
 end;
 $$;
 
-revoke all on function public.join_family_by_code(text) from public;
-grant execute on function public.join_family_by_code(text) to authenticated;
+do $$ begin execute 'revoke all on function public.join_family_by_code(text) from public'; exception when others then raise notice 'skip: %', sqlerrm; end $$;
+do $$ begin execute 'grant execute on function public.join_family_by_code(text) to authenticated'; exception when others then raise notice 'skip: %', sqlerrm; end $$;
 
 -- ============================================================
 -- 开启 RLS + 策略
 -- ============================================================
+-- 先把四张表属主统一收回 postgres（早年迁移用其他角色建的表会导致 drop/create policy 报
+-- "must be owner of table"）；若当前角色无权变更属主则跳过，交由脚本末尾保险丝处理
+do $$
+declare r record;
+begin
+    for r in select tablename from pg_tables
+              where schemaname='public'
+                and tablename in ('profiles','families','family_members','family_data')
+    loop
+        begin
+            execute 'alter table public.' || r.tablename || ' owner to postgres';
+            raise notice '属主已收回 postgres: %', r.tablename;
+        exception when others then
+            raise notice '属主变更跳过 %: %', r.tablename, sqlerrm;
+        end;
+    end loop;
+end $$;
+
 alter table public.profiles       enable row level security;
 alter table public.families       enable row level security;
 alter table public.family_members enable row level security;
@@ -441,7 +470,7 @@ begin
 end;
 $$;
 
-grant execute on function public.delete_my_account() to authenticated;
+do $$ begin execute 'grant execute on function public.delete_my_account() to authenticated'; exception when others then raise notice 'skip: %', sqlerrm; end $$;
 
 -- 查询当前账号的家庭与身份（owner / member），无家庭时返回 {}
 create or replace function public.my_family_role()
@@ -463,7 +492,27 @@ as $$
     '{}'::jsonb);
 $$;
 
-grant execute on function public.my_family_role() to authenticated;
+do $$ begin execute 'grant execute on function public.my_family_role() to authenticated'; exception when others then raise notice 'skip: %', sqlerrm; end $$;
+
+-- ============================================================
+-- 保险丝：任何表开了 RLS 却没有任何策略 → 抛错让整脚本回滚，
+-- 避免出现"RLS 开启但全员读写被拒"导致线上 APP 锁死
+-- ============================================================
+do $$
+declare bad text;
+begin
+    select string_agg(t, ', ') into bad
+      from unnest(array['profiles','families','family_members','family_data']) t
+     where exists (select 1 from pg_class c
+                    where c.relname = t and c.relrowsecurity
+                      and c.relnamespace = 'public'::regnamespace)
+       and not exists (select 1 from pg_policies p
+                        where p.tablename = t and p.schemaname = 'public');
+    if bad is not null then
+        raise exception 'RLS已开启但表 % 缺少策略，整个脚本回滚，线上不受影响', bad;
+    end if;
+    raise notice '保险丝通过：四表 RLS 与策略齐备';
+end $$;
 
 -- ============================================================
 -- 验收 SQL（执行后应返回 4 张表 + 各自的 policy 数）
