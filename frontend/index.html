@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V580-20261119';
+        var APP_VER = 'V581-20261120';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -103,6 +103,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Supabase SDK（本地化部署，避免 jsdelivr 在国内被墙/连接关闭） -->
     <script src="images/supabase.js"></script>
+    <!-- V581: 冬季食养课程库（六节气 × 14 课），供 _initEduCourses 合并进公共课程库 -->
+    <script src="edu/winter.js"></script>
     <style>
         /* ====== 全局样式 ====== */
         * { box-sizing: border-box; }
@@ -9519,7 +9521,7 @@ function migrateGlobalDiningOutPlans(fid) {
 
 // ==================== V203: 饮食教育课程库 ====================
 // eduCourses：公共课程库（全局键，不含隐私数据）；courseProgress：学习进度（家庭前缀隔离）
-var _EDU_COURSES_VER = 1;
+var _EDU_COURSES_VER = 2;
 var EDU_COURSES_SEED = [
     {
         id: 'course_001',
@@ -9582,7 +9584,8 @@ function _initEduCourses() {
         var cur = null;
         try { cur = raw ? JSON.parse(raw) : null; } catch (e) { cur = null; }
         if (ver === String(_EDU_COURSES_VER) && Array.isArray(cur) && cur.length) return;
-        localStorage.setItem('eduCourses', JSON.stringify(EDU_COURSES_SEED));
+        // V581: 种子合并冬季食养课程（edu/winter.js 的 window.WINTER_COURSES），版本号 +1 触发全设备重灌
+        localStorage.setItem('eduCourses', JSON.stringify(EDU_COURSES_SEED.concat(window.WINTER_COURSES || [])));
         localStorage.setItem('eduCoursesVer', String(_EDU_COURSES_VER));
     } catch (e) { console.warn('[eduCourses] 初始化失败:', e); }
 }
