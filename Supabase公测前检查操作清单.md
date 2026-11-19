@@ -2,7 +2,8 @@
 
 > **进度（2026-11-19）**：第一步 RLS 已由 AI 助手通过 SQL 迁移完成并验收——
 > 4 表 relrowsecurity 全 true，策略 15 条（families/family_data/family_members 各 4、profiles 3）。
-> 迁移脚本：supabase/rls_apply.sql（幂等可重跑）。本清单第一步作废，第二步（CSV 导出导入验证）仍待执行。
+> 迁移脚本：supabase/rls_apply.sql（幂等可重跑）。本清单第一步作废。
+> **端到端验证也已通过**（登录恢复+跨设备同步实测），第二步 CSV 导入导出演练可选做。
 
 > 给完全不懂技术也能照做的版本。全程只需点击和截图，约 15 分钟。
 > 遇到任何一步和描述对不上，就在那个界面截一张图发给 AI 助手，不要继续往下点。
