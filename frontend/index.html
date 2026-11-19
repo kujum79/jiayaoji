@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V581-20261120';
+        var APP_VER = 'V582-20261120';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -9960,6 +9960,71 @@ function _migrateCourseLibraryV212() {
     }
 }
 
+// V582: 冬季 84 课（window.WINTER_COURSES，edu/winter.js）灌入食养堂「课程库」两级结构。
+// 按节气分 6 个系列（folderId=winter_拼音），每课一条文章（articleId=课程 id）。
+// 幂等：localStorage._winterLibVer==='1' 直接跳过；合并不覆盖：按 id 去重，保留用户手工内容。
+function _seedWinterCourseLibrary() {
+    try {
+        if (localStorage.getItem('_winterLibVer') === '1') return;
+        // 先跑旧版迁移，避免灌入后迁移逻辑把 legacy 旧键误判为"已有新数据"而丢弃
+        _migrateCourseLibraryV212();
+        var src = Array.isArray(window.WINTER_COURSES) ? window.WINTER_COURSES : [];
+        if (!src.length) { localStorage.setItem('_winterLibVer', '1'); return; }
+        var folders = getCourseFolders();
+        var articles = getCourseArticles();
+        var haveFolder = {}, haveArticle = {};
+        folders.forEach(function (f) { if (f && f.folderId) haveFolder[f.folderId] = true; });
+        articles.forEach(function (a) { if (a && a.articleId) haveArticle[a.articleId] = true; });
+        var now = Date.now();
+        var groupOrder = [], groupMap = {};
+        src.forEach(function (c) {
+            if (!c || !c.id) return;
+            // 课程 id 形如 winter_lidong_C1，前两段即 folderId（winter_lidong）
+            var parts = String(c.id).split('_');
+            var folderId = parts.length >= 2 ? parts[0] + '_' + parts[1] : 'winter';
+            var jq = String(c.jieqi || '冬季');
+            if (!groupMap[folderId]) {
+                groupMap[folderId] = {
+                    folderId: folderId,
+                    folderName: jq + ' · 冬季食养系列',
+                    targetTags: [],
+                    description: '84 课全冬季：每节气 8 类人群 + 6 个年龄段，公测全免费',
+                    createdAt: now,
+                    _tagSeen: {}
+                };
+                groupOrder.push(folderId);
+            }
+            var g = groupMap[folderId];
+            (Array.isArray(c.targetAudience) ? c.targetAudience : []).forEach(function (t) {
+                if (t && !g._tagSeen[t]) { g._tagSeen[t] = true; g.targetTags.push(String(t)); }
+            });
+            if (haveArticle[c.id]) return;
+            haveArticle[c.id] = true;
+            articles.push({
+                articleId: String(c.id),
+                folderId: folderId,
+                title: String(c.title || '未命名课程'),
+                content: String(c.content || ''),
+                duration: Number(c.duration) || 5,
+                isPremium: false,
+                price: 0,
+                type: 'article',
+                createdAt: now
+            });
+        });
+        groupOrder.forEach(function (fid) {
+            var g = groupMap[fid];
+            delete g._tagSeen;
+            if (!haveFolder[fid]) folders.push(g);
+        });
+        if (!saveCourseFolders(folders)) return;
+        if (!saveCourseArticles(articles)) return;
+        localStorage.setItem('_winterLibVer', '1');
+    } catch (e) {
+        console.warn('[winterLib] 冬季课程灌入课程库失败（不影响课程中心）:', e);
+    }
+}
+
 // 兼容视图：把「系列+文章」拍平为扁平课程结构（推荐算法 / 阅读器统一消费）
 function getCourseLibrary() {
     _migrateCourseLibraryV212();
@@ -10560,8 +10625,11 @@ if (document.readyState === 'loading') {
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _initEduCourses);
+    // V582: 冬季 84 课同步灌入食养堂「课程库」（courseFolders/courseArticles）
+    document.addEventListener('DOMContentLoaded', _seedWinterCourseLibrary);
 } else {
     setTimeout(_initEduCourses, 0);
+    setTimeout(_seedWinterCourseLibrary, 0);
 }
 
 // ==================== V206: 我的专属课堂（订阅用户） ====================
