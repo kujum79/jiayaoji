@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V579-20261118';
+        var APP_VER = 'V580-20261119';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4010,8 +4010,9 @@ body.demo-mode .phone-frame { height: 100%; }
         <div style="font-size:48px;margin-bottom:8px;">🍳</div>
         <div style="font-size:22px;font-weight:800;color:#9A3412;margin-bottom:4px;">家肴记</div>
         <div style="font-size:14px;color:#9CA3AF;margin-bottom:18px;">AI 家庭膳食助理</div>
-        <!-- 主面板：手机号 + 模拟验证码 登录/注册（V287 起替代邮箱与家庭密码登录） -->
-        <div id="loginPanelPhone">
+        <!-- V580 过渡方案：主面板改为「家庭名称+家庭密码」；手机号登录因短信网关未开通降为备用 -->
+        <div id="loginPanelPhone" style="display:none;">
+            <div style="margin:0 0 12px;padding:8px 10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;font-size:12px;color:#92400E;line-height:1.6;text-align:left;">⚠️ 短信网关正在开通中：公测期间验证码将以弹窗模拟显示，暂不推荐。请优先使用「家庭名称 + 家庭密码」登录。</div>
             <div style="font-size:13px;color:#9CA3AF;margin-bottom:14px;line-height:1.6;">手机号登录 · 未注册将自动创建家庭</div>
             <input id="loginPhone" type="tel" inputmode="numeric" maxlength="11" autocomplete="tel" placeholder="请输入手机号" oninput="onLoginPhoneInput(this)" onkeydown="if(event.key==='Enter'){var c=document.getElementById('loginCode');if(c)c.focus();}" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;box-sizing:border-box;" />
             <div style="display:flex;gap:8px;margin-bottom:14px;">
@@ -4027,11 +4028,11 @@ body.demo-mode .phone-frame { height: 100%; }
             <div style="font-size:12px;color:#9CA3AF;margin-top:10px;display:none;">登录即表示同意家肴记服务条款</div>
             <div style="margin-top:12px;padding-top:12px;border-top:1px solid #F3F4F6;">
                 <button type="button" onclick="openEmailAccountModal()" style="width:100%;padding:11px;font-size:14px;font-weight:700;color:#fff;background:linear-gradient(135deg,#F97316,#EA580C);border:none;border-radius:10px;cursor:pointer;">📧 邮箱 + 密码登录（Supabase 鉴权）</button>
-                <button type="button" onclick="toggleFamilyLoginPanel(1)" style="width:100%;margin-top:8px;padding:8px;font-size:12px;font-weight:500;color:#9CA3AF;background:#fff;border:1px solid #E5E7EB;border-radius:10px;cursor:pointer;">旧版：家庭名称 + 家庭密码登录（过渡期）</button>
+                <button type="button" onclick="toggleFamilyLoginPanel(1)" style="width:100%;margin-top:8px;padding:8px;font-size:12px;font-weight:500;color:#9CA3AF;background:#fff;border:1px solid #E5E7EB;border-radius:10px;cursor:pointer;">← 返回「家庭名称 + 家庭密码」登录</button>
             </div>
         </div>
-        <!-- V294: 家庭成员用「家庭名称 + 家庭密码」登录（无需手机号） -->
-        <div id="loginPanelFamily" style="display:none;">
+        <!-- V580: 主面板——家庭成员用「家庭名称 + 家庭密码」登录（无需手机号） -->
+        <div id="loginPanelFamily">
             <div style="font-size:13px;color:#9CA3AF;margin-bottom:14px;line-height:1.6;">家人无需手机号，输入家庭名称与家庭密码即可进入</div>
             <input id="loginFamName" type="text" maxlength="20" placeholder="家庭名称" onkeydown="if(event.key==='Enter'){var p=document.getElementById('loginFamPass');if(p)p.focus();}" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:10px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;box-sizing:border-box;" />
             <input id="loginFamPass" type="password" maxlength="40" placeholder="家庭密码" onkeydown="if(event.key==='Enter')doFamilyPassLogin()" style="width:100%;padding:12px 14px;font-size:16px;border:1px solid #FED7AA;border-radius:10px;margin-bottom:14px;outline:none;background:#FFFBEB;color:#1F2937;text-align:center;box-sizing:border-box;" />
@@ -4041,8 +4042,12 @@ body.demo-mode .phone-frame { height: 100%; }
             </label>
             <button id="loginFamBtn" onclick="doFamilyPassLogin()" disabled style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:not-allowed;opacity:0.5;">登录</button>
             <div id="loginFamErr" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;line-height:1.6;"></div>
-            <div onclick="toggleFamilyLoginPanel(0)" style="font-size:13px;color:#9CA3AF;margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline;">← 返回手机号登录</div>
-            <div style="font-size:12px;color:#B45309;margin-top:8px;text-align:center;line-height:1.6;">忘记家庭密码？请用手机号登录后，在「我家 → 修改家庭名称」中重设</div>
+            <div onclick="openForgotPasswordFromLogin()" style="font-size:12px;color:#EA580C;margin-top:10px;text-align:center;cursor:pointer;text-decoration:underline;">忘记家庭密码？点此用家庭码重置</div>
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid #F3F4F6;">
+                <button type="button" onclick="startCreateFamilyFlow()" style="width:100%;padding:11px;font-size:14px;font-weight:700;color:#fff;background:linear-gradient(135deg,#F97316,#EA580C);border:none;border-radius:10px;cursor:pointer;">➕ 新用户：创建家庭（邮箱注册）</button>
+                <button type="button" onclick="openEmailAccountModal()" style="width:100%;margin-top:8px;padding:10px;font-size:13px;font-weight:600;color:#C2410C;background:#fff;border:1px solid #FED7AA;border-radius:10px;cursor:pointer;">📧 邮箱 + 密码登录</button>
+                <button type="button" onclick="toggleFamilyLoginPanel(0)" style="width:100%;margin-top:8px;padding:8px;font-size:12px;color:#9CA3AF;background:#fff;border:1px solid #E5E7EB;border-radius:10px;cursor:pointer;">📱 手机号登录（短信开通中，暂不推荐）</button>
+            </div>
         </div>
     </div>
 </div>
