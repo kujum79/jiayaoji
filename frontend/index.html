@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V583-20261120';
+        var APP_VER = 'V584-20261120';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -10765,6 +10765,9 @@ function getFamilyTags(familyMembers) {
         if (m.constitution) push(m.constitution);
         if (Array.isArray(m.conditions)) m.conditions.forEach(push);
         if (Array.isArray(m.diseases)) m.diseases.forEach(push);
+        // V584: 活动强度/作息派生家庭标签——与冬季课程系列 winter_c4(久坐族)/winter_c5(夜班族) 的 targetTags 字符串一致，可直接交集命中
+        if (m.activityLevel && String(m.activityLevel).indexOf('久坐') >= 0) push('久坐族');
+        if (m.workSchedule && /夜班|倒班/.test(String(m.workSchedule))) push('夜班族');
         var age = Number(m.age);
         if (age > 0) {
             out.push(age + '岁');
@@ -35968,11 +35971,13 @@ function _fhPayGo() {
     else if (typeof _subscribePayKind === 'function') _subscribePayKind('food');
 }
 var _fhEduFolderId = null;
+var _fhEduTab = 'reco'; // V584: 课程库列表过滤：reco=推荐（系列标签与家庭标签有交集）/ all=全部；仅内存态，每次进入默认推荐
 function _fhOpenEdu() {
     // V445: 教育层本身对所有人开放（少年食趣为全员功能），具体课程文件夹/文章仍逐项校验会员
     var old = document.getElementById('fhEduOv');
     if (old) old.remove();
     _fhEduFolderId = null;
+    _fhEduTab = 'reco';
     var ov = document.createElement('div');
     ov.id = 'fhEduOv';
     ov.style.cssText = 'position:fixed;inset:0;z-index:100007;background:#FFF7ED;display:flex;flex-direction:column;max-width:430px;margin:0 auto;';
@@ -36045,9 +36050,23 @@ function _fhEduRender() {
         body.innerHTML = entryHtml + '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:22px 16px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">课程正在上架中<br>稍后再来看看，或先从上方「我的专属课堂」学习已有课程</div>';
         return;
     }
-    body.innerHTML = entryHtml
-        + '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.6;">按课程文件夹学习，点击进入课程列表</div>'
-        + folders.map(function (f) {
+    // V584: 默认「推荐」过滤——只列 targetTags 与家庭标签有交集的系列（复用 getRecommendedCourses 的交集口径）；「全部」为原全量列表
+    var recoIds = {};
+    try {
+        var reco = getRecommendedCourses();
+        ((reco && reco.list) || []).forEach(function (g) { if (g && g.folder && g.folder.folderId) recoIds[g.folder.folderId] = true; });
+    } catch (e) {}
+    var shown = _fhEduTab === 'all' ? folders : folders.filter(function (f) { return f && recoIds[f.folderId]; });
+    var _tabChip = function (key, label) {
+        var on = _fhEduTab === key;
+        return '<button type="button" onclick="_fhEduSetTab(\'' + key + '\')" style="border:1px solid ' + (on ? '#EA580C' : '#E5E7EB') + ';background:' + (on ? '#EA580C' : '#fff') + ';color:' + (on ? '#fff' : '#6B7280') + ';font-size:12px;font-weight:600;border-radius:999px;padding:4px 16px;cursor:pointer;">' + label + '</button>';
+    };
+    var tabHtml = '<div style="display:flex;gap:8px;margin:2px 2px 10px;">' + _tabChip('reco', '推荐') + _tabChip('all', '全部') + '</div>';
+    var listHtml;
+    if (!shown.length) {
+        listHtml = '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:18px 16px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">暂无匹配你家庭标签的系列，点『全部』浏览完整课程库</div>';
+    } else {
+        listHtml = shown.map(function (f) {
             var cnt = arts.filter(function (a) { return a && a.folderId === f.folderId; }).length;
             return '<div onclick="_fhEduOpenFolder(\'' + escapeAttr(f.folderId) + '\')" style="background:#fff;border:1px solid #EDE9E3;border-radius:16px;padding:14px 16px;margin-bottom:10px;cursor:pointer;">'
                 + '<div style="display:flex;align-items:center;gap:9px;">'
@@ -36059,6 +36078,15 @@ function _fhEduRender() {
                 + (f.description ? '<div style="font-size:12px;color:#9CA3AF;line-height:1.6;margin-top:6px;">' + escapeHtml(f.description) + '</div>' : '')
                 + '</div>';
         }).join('');
+    }
+    body.innerHTML = entryHtml
+        + tabHtml
+        + '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.6;">按课程文件夹学习，点击进入课程列表</div>'
+        + listHtml;
+}
+function _fhEduSetTab(t) {
+    _fhEduTab = t === 'all' ? 'all' : 'reco';
+    _fhEduRender();
 }
 function _fhEduOpenFolder(fid) {
     if (!isFoodMember()) { _fhShowPaywall(); return; }
