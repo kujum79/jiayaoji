@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V592-20261120';
+        var APP_VER = 'V593-20261120';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -54052,7 +54052,7 @@ function getKnowledgeCategories() {
     if (raw) {
         var parsed = null;
         try { parsed = JSON.parse(raw); } catch(e) {}
-        if (parsed) return _mergeDefaultSubCategories(parsed);
+        if (parsed) { var _pm = _mergeDefaultSubCategories(parsed); _alignTreeArrays(_pm); return _pm; }
     }
     // 初始化：预设树 + 一次性并入旧覆盖层（knowledgeCatalogOverrides）的自定义分类
     var init = {
@@ -54086,7 +54086,7 @@ function getKnowledgeCategories() {
         });
     } catch(e) {}
     try { lsSet('knowledgeCategories', JSON.stringify(init)); } catch(e) {}
-    return _mergeDefaultSubCategories(init);
+    var _im = _mergeDefaultSubCategories(init); _alignTreeArrays(_im); return _im;
 }
 // 旧数据迁移：把 DEFAULT_CATEGORY_TREE 中缺失的默认子分类合并进已存的树（只增不删，保护用户自定义分类）
 function _mergeDefaultSubCategories(kc) {
@@ -54152,6 +54152,16 @@ function findCategoryNode(tree, id) {
     return null;
 }
 function sortByOrder(arr) { return (arr || []).slice().sort(function(a, b) { return (a.order || 0) - (b.order || 0); }); }
+// V593: 把分类树各层数组按 order 字段就地重排——侧栏等按数组原序渲染的消费者立即反映"分类管理"的排序调整
+function _alignTreeArrays(kc) {
+    var walk = function (nodes) {
+        if (!Array.isArray(nodes)) return;
+        nodes.sort(function (x, y) { return ((x && x.order) || 0) - ((y && y.order) || 0); });
+        nodes.forEach(function (n) { if (n && n.children) walk(n.children); });
+    };
+    if (kc && kc.public) walk(kc.public.tree);
+    if (kc && kc.family) walk(kc.family.tree);
+}
 
 // 录入表单当前应使用的分类树层级：与 saveNewKnowledge 的 asPublic 判定保持一致
 function getFormCategoryLayer() {
@@ -56446,6 +56456,9 @@ function catMgrMove(id, dir) {
     var a = sorted[idx], b = sorted[swapIdx];
     var tmp = a.order; a.order = b.order; b.order = tmp;
     if (a.order === b.order) b.order = b.order + dir;
+    // V593: 同步交换数组位置——按数组原序渲染的侧栏立即生效
+    var ia = siblings.indexOf(a), ib = siblings.indexOf(b);
+    if (ia >= 0 && ib >= 0) { var t2 = siblings[ia]; siblings[ia] = siblings[ib]; siblings[ib] = t2; }
     saveKnowledgeCategories(kc);
     logAdminAction('调整分类排序', id + (dir > 0 ? ' ↓下移' : ' ↑上移'));
     renderCategoryTree();
