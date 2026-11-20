@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V585-20261120';
+        var APP_VER = 'V586-20261120';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -81501,16 +81501,45 @@ function _careAllSymptoms() {
 }
 // V585: 生病场景当前选中症状（单选，沿用原下拉的单选交互）
 var _CARE_SYM_SEL = '';
+// V586: 症状选择改为 5 组手风琴——当前展开的组名（内存态，不持久化；'' 表示全收起）
+var _CARE_SYM_OPEN_GROUP = '';
+function _careGroupOfSym(sym) {
+    for (var i = 0; i < _CARE_SYMPTOMS.length; i++) {
+        if (_CARE_SYMPTOMS[i].items.indexOf(sym) >= 0) return _CARE_SYMPTOMS[i].group;
+    }
+    return '';
+}
+function _careSymAccordionHtml() {
+    return _CARE_SYMPTOMS.map(function (g) {
+        var open = g.group === _CARE_SYM_OPEN_GROUP;
+        var html = '<div onclick="_careToggleGroup(\'' + g.group + '\')" style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #FED7AA;border-radius:10px;padding:11px 12px;margin-bottom:6px;cursor:pointer;">'
+            + '<span style="font-size:14px;font-weight:700;color:#1F2937;">' + escapeHtml(g.group) + '</span>'
+            + '<span style="font-size:12px;color:#9CA3AF;">' + (open ? '▴' : '▾') + '</span>'
+            + '</div>';
+        if (open) {
+            html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:2px 2px 10px;">' + g.items.map(function (s) {
+                var on = s === _CARE_SYM_SEL;
+                return '<button type="button" class="careSymChip" data-sym="' + escapeHtml(s) + '" onclick="_carePickSymptom(this)" style="padding:6px 10px;border-radius:999px;border:1px solid ' + (on ? '#F97316' : '#FED7AA') + ';background:' + (on ? 'linear-gradient(135deg,#F97316,#EA580C)' : '#fff') + ';color:' + (on ? '#fff' : '#C2410C') + ';font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">' + escapeHtml(s) + '</button>';
+            }).join('') + '</div>';
+        }
+        return html;
+    }).join('');
+}
+function _careSymRefresh() {
+    var w = document.getElementById('careSymWrap');
+    if (w) w.innerHTML = _careSymAccordionHtml();
+    var lb = document.getElementById('careSymSelLabel');
+    if (lb) lb.textContent = _CARE_SYM_SEL ? ('已选：' + _CARE_SYM_SEL) : '';
+}
+window._careToggleGroup = function (name) {
+    _CARE_SYM_OPEN_GROUP = (_CARE_SYM_OPEN_GROUP === name) ? '' : name;
+    _careSymRefresh();
+};
 window._carePickSymptom = function (btn) {
     if (!btn) return;
     _CARE_SYM_SEL = btn.getAttribute('data-sym') || '';
-    var chips = document.querySelectorAll('.careSymChip');
-    for (var i = 0; i < chips.length; i++) {
-        var on = chips[i] === btn;
-        chips[i].style.border = '1px solid ' + (on ? '#F97316' : '#FED7AA');
-        chips[i].style.background = on ? 'linear-gradient(135deg,#F97316,#EA580C)' : '#fff';
-        chips[i].style.color = on ? '#fff' : '#C2410C';
-    }
+    _CARE_SYM_OPEN_GROUP = ''; // V586: 选中后自动收起该组
+    _careSymRefresh();
 };
 // V538: 特殊时期调理场景——「生病」占用每年 4 次配额，其余场景不占配额
 var _CARE_SCENES = [
@@ -82092,16 +82121,13 @@ window.openCareForm = function () {
     var _scene = _careSceneByKey(_CARE_SCENE);
     var _isIllness = _scene.k === 'illness';
     var symOpts = _scene.symptoms.map(function (s) { return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>'; }).join('');
-    // V585: 生病场景症状改为 5 组分组 chips（45 项，单选，默认选中第一项）；其余场景保持原下拉
-    if (_isIllness) _CARE_SYM_SEL = _CARE_SYMPTOMS[0].items[0];
+    // V586: 生病场景症状改为 5 组手风琴下拉（组按钮点开才显示该组 chips，单选，选中后自动收起）；其余场景保持原下拉
+    if (_isIllness) {
+        _CARE_SYM_SEL = _CARE_SYMPTOMS[0].items[0];
+        _CARE_SYM_OPEN_GROUP = _careGroupOfSym(_CARE_SYM_SEL); // 默认展开含当前选中症状的组
+    }
     var symHtml = _isIllness
-        ? _CARE_SYMPTOMS.map(function (g) {
-            return '<div style="font-size:11px;color:#9CA3AF;margin:8px 2px 4px;">' + g.group + '</div>'
-                + '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + g.items.map(function (s) {
-                    var on = s === _CARE_SYM_SEL;
-                    return '<button type="button" class="careSymChip" data-sym="' + escapeHtml(s) + '" onclick="_carePickSymptom(this)" style="padding:6px 10px;border-radius:999px;border:1px solid ' + (on ? '#F97316' : '#FED7AA') + ';background:' + (on ? 'linear-gradient(135deg,#F97316,#EA580C)' : '#fff') + ';color:' + (on ? '#fff' : '#C2410C') + ';font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">' + escapeHtml(s) + '</button>';
-                }).join('') + '</div>';
-        }).join('')
+        ? '<div id="careSymWrap">' + _careSymAccordionHtml() + '</div>'
         : '<select id="careSymptomSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + symOpts + '</select>';
     var sceneChips = _CARE_SCENES.map(function (sc) {
         var on = sc.k === _scene.k;
@@ -82121,7 +82147,7 @@ window.openCareForm = function () {
         + '<div style="font-size:11px;color:#B45309;background:#FFFBEB;border:1px dashed #FDE68A;border-radius:9px;padding:6px 9px;margin-top:7px;line-height:1.7;">' + escapeHtml(_scene.focus) + (_scene.k === 'illness' ? '（占用每年 4 次调理配额）' : '（不占调理配额，可续排）') + '</div>'
         + '<div style="font-size:12px;color:#EA580C;font-weight:700;margin:10px 0 4px;">选择家人</div>'
         + '<select id="careMemberSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + memberOpts + '</select>'
-        + '<div style="font-size:12px;color:#EA580C;font-weight:700;margin:10px 0 4px;">' + (_scene.k === 'illness' ? '选择症状' : '选择阶段') + '</div>'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#EA580C;font-weight:700;margin:10px 0 4px;">' + (_scene.k === 'illness' ? '<span>选择症状</span><span id="careSymSelLabel" style="font-size:11px;font-weight:800;">已选：' + escapeHtml(_CARE_SYM_SEL) + '</span>' : '选择阶段') + '</div>'
         + symHtml
         + '<div style="font-size:12px;color:#EA580C;font-weight:700;margin:10px 0 4px;">补充描述（选填）</div>'
         + '<textarea id="careDescInput" rows="3" placeholder="例如：这两天有点低烧、没胃口，想吃清淡的" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:13px;resize:none;"></textarea>'
