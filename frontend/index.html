@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V593-20261120';
+        var APP_VER = 'V595-20261120';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -35489,9 +35489,45 @@ function _fhSlotType() {
 }
 function _fhIsRecipeSlot() { return _fhSlotType() === 'recipe_article'; }
 function _fhTrackOf(ct) { try { return _fhTracks && _fhTracks[ct] ? _fhTracks[ct] : null; } catch (e) { return null; } }
+// ==================== V594: 寻味天下真实照片封面 ====================
+// 图源 Wikimedia Commons（自由版权），已自托管到 images/xunwei/（国内直连，不依赖外网）；
+// 按标题/摘要关键词匹配，未命中回退 AI 绘图。新增地域时下载图片到此目录并补一行映射即可。
+var _FH_REAL_PHOTOS = [
+    ['重庆|山城美食|渝味', 'images/xunwei/chongqing.jpg'],
+    ['鲁菜|山东|齐鲁|济南|葱烧海参|糖醋鲤鱼', 'images/xunwei/shandong.jpg'],
+    ['粤菜|广东|广州|岭南|早茶|烧腊|老火汤', 'images/xunwei/guangdong.jpg'],
+    ['川菜|四川|成都|天府|回锅肉|麻婆豆腐', 'images/xunwei/sichuan.jpg'],
+    ['苏菜|江苏|南京|苏州|淮扬|金陵', 'images/xunwei/jiangsu.jpg'],
+    ['浙菜|浙江|杭州|西湖|东坡', 'images/xunwei/zhejiang.jpg'],
+    ['闽菜|福建|厦门|福州|佛跳墙', 'images/xunwei/fujian.jpg'],
+    ['湘菜|湖南|长沙|剁椒|小炒肉', 'images/xunwei/hunan.jpg'],
+    ['徽菜|安徽|黄山|臭鳜鱼', 'images/xunwei/anhui.jpg'],
+    ['北京|京菜|烤鸭', 'images/xunwei/beijing.jpg'],
+    ['上海|本帮|沪上|狮子头', 'images/xunwei/shanghai.jpg'],
+    ['陕西|西安|肉夹馍|泡馍|长安', 'images/xunwei/xian.jpg'],
+    ['东北|锅包肉|哈尔滨|长春|沈阳', 'images/xunwei/dongbei.jpg'],
+    ['新疆|乌鲁木齐|羊肉串|烤串', 'images/xunwei/xinjiang.jpg'],
+    ['云南|昆明|过桥米线|滇味', 'images/xunwei/yunnan.jpg'],
+    ['贵州|贵阳|酸汤', 'images/xunwei/guizhou.jpg'],
+    ['天津|煎饼果子', 'images/xunwei/tianjin.jpg'],
+    ['湖北|武汉|热干面|藕汤', 'images/xunwei/hubei.jpg'],
+    ['广西|桂林|南宁|螺蛳粉', 'images/xunwei/guangxi.jpg'],
+    ['甘肃|兰州|牛肉面', 'images/xunwei/gansu.jpg'],
+    ['海南|文昌鸡', 'images/xunwei/hainan.jpg']
+];
+function _fhRealPhoto(text) {
+    text = String(text || '');
+    if (!text) return '';
+    for (var i = 0; i < _FH_REAL_PHOTOS.length; i++) {
+        var ks = _FH_REAL_PHOTOS[i][0].split('|');
+        for (var j = 0; j < ks.length; j++) { if (text.indexOf(ks[j]) >= 0) return _FH_REAL_PHOTOS[i][1]; }
+    }
+    return '';
+}
 function _fhRecipeFromArticle(a) {
     if (!a) return null;
-    var cover = a.coverImage || '';
+    // V594: 真实照片优先（按地域关键词匹配自托管图），无匹配再用后端 AI 封面
+    var cover = _fhRealPhoto((a.title || '') + ' ' + (a.summary || '')) || a.coverImage || '';
     if (!cover && a.imagePrompt) cover = _fhCoverUrl(a.imagePrompt, _fhSeed(a.id || a.title));
     return {
         id: a.id || ('fhr_srv_' + (a.date || '')),
@@ -35778,7 +35814,7 @@ function _fhOpenRecipeDetail(r) {
             + '<div style="font-size:13px;font-weight:700;color:#EA580C;margin-bottom:10px;">🌍 文中好味（' + dishes.length + ' 道）</div>'
             + dishes.map(function (d, di) {
                 var dname = (d && d.name) || '';
-                var dimg = (d && d.image) || (d && d.imagePrompt ? _fhCoverUrl(d.imagePrompt, _fhSeed(dname + di)) : '');
+                var dimg = _fhRealPhoto(dname) || (d && d.image) || (d && d.imagePrompt ? _fhCoverUrl(d.imagePrompt, _fhSeed(dname + di)) : '');
                 var dsteps = (d && Array.isArray(d.steps)) ? d.steps : [];
                 var dstepsHtml = dsteps.map(function (s, si) {
                     return '<div style="display:flex;gap:6px;margin-bottom:4px;">'
@@ -56304,6 +56340,81 @@ function openCatEditDialog(opts) {
     window.__catEditOpts = opts;
 }
 
+// V595: 分类重命名后同步迁移条目上的旧分类名（侧栏/分组按条目 subCategory 等字段渲染，否则显示旧名）
+function _migrateCatItems(oldName, newName, layer) {
+    var n = 0;
+    (typeof dietKnowledge !== 'undefined' ? dietKnowledge : []).forEach(function (k) {
+        if (!k) return;
+        if (String(k.layer || 'public') !== String(layer || 'public')) return;
+        var hit = false;
+        ['category', 'subCategory', 'leafCategory', 'subCategory3'].forEach(function (f) {
+            if (k[f] === oldName) { k[f] = newName; hit = true; }
+        });
+        if (hit) {
+            n++;
+            var tg = k.tags || [];
+            for (var i = 0; i < tg.length; i++) { if (tg[i] === oldName) tg[i] = newName; }
+        }
+    });
+    if (n) {
+        saveDietKnowledge();
+        try { renderDietKnowledge(); } catch (e) {}
+        try { renderShiyangContent(); } catch (e) {}
+    }
+    return n;
+}
+// V595: 孤儿分类名自愈——历史改名未同步的条目，按"最长公共前缀≥2且唯一"回填为当前树中的新名（幂等）
+function _healOrphanSubCategories() {
+    var kc = getKnowledgeCategories();
+    var n = 0;
+    function cpLen(a, b) { var i = 0; while (i < a.length && i < b.length && a.charAt(i) === b.charAt(i)) i++; return i; }
+    (typeof dietKnowledge !== 'undefined' ? dietKnowledge : []).forEach(function (k) {
+        if (!k) return;
+        var layer = String(k.layer || 'public');
+        var tree = (kc[layer] && kc[layer].tree) || [];
+        var main = null;
+        for (var i = 0; i < tree.length; i++) { if (tree[i].id === k.mainCategory || tree[i].name === k.category) { main = tree[i]; break; } }
+        if (!main) return;
+        var names = (main.children || []).map(function (c) { return c.name; });
+        var val = String(k.subCategory || '');
+        if (!val || names.indexOf(val) >= 0) return;
+        var best = '', bestLen = 1, tie = false;
+        names.forEach(function (nm) {
+            var l = cpLen(val, String(nm || ''));
+            if (l > bestLen) { bestLen = l; best = nm; tie = false; }
+            else if (l === bestLen && l > 1) { tie = true; }
+        });
+        if (best && !tie) {
+            k.subCategory = best;
+            if (k.category === val) k.category = best;
+            var tg = k.tags || [];
+            for (var j = 0; j < tg.length; j++) { if (tg[j] === val) tg[j] = best; }
+            n++;
+        }
+    });
+    if (n) saveDietKnowledge();
+    return n;
+}
+// V595: 启动后一次性自愈（等 dietKnowledge 就绪；仅超管会改分类，其他设备空跑无害）
+(function () {
+    var tries = 0;
+    function heal() {
+        try {
+            if (lsGet('_catHealV595') === '1') return;
+            tries++;
+            if (typeof dietKnowledge === 'undefined' || !dietKnowledge.length) { if (tries < 20) setTimeout(heal, 3000); return; }
+            var n = _healOrphanSubCategories();
+            lsSet('_catHealV595', '1');
+            if (n) {
+                showToast('🔧 已自动同步 ' + n + ' 条内容的分类名');
+                try { renderDietKnowledge(); } catch (e) {}
+                try { renderShiyangContent(); } catch (e) {}
+            }
+        } catch (e) {}
+    }
+    setTimeout(heal, 4000);
+})();
+
 // 保存添加/编辑（家庭库锁定拦截 + 审计日志）
 function catMgrSaveEdit() {
     if (!requireSuperAdmin()) return;
@@ -56319,10 +56430,19 @@ function catMgrSaveEdit() {
         var node = findCategoryNode(tree, opts.node.id);
         if (!node) return showToast('分类不存在');
         if (node.id === 'uncategorized') return showToast('系统节点不可编辑');
+        var oldName = node.name || '';
         node.name = name;
         node.icon = icon;
         if (orderRaw !== '') node.order = parseInt(orderRaw, 10) || node.order;
-        logAdminAction('编辑分类', opts.layer + ' › ' + (opts.node.name || '') + ' → ' + name);
+        logAdminAction('编辑分类', opts.layer + ' › ' + oldName + ' → ' + name);
+        saveKnowledgeCategories(kc);
+        // V595: 改名时把该分类下条目的分类字段一并迁移，侧栏立即显示新名
+        var migrated = (oldName && oldName !== name) ? _migrateCatItems(oldName, name, opts.layer) : 0;
+        document.getElementById('catEditOverlay').remove();
+        renderCategoryTree();
+        renderCatalogManager();
+        showToast(migrated ? ('✅ 已保存，' + migrated + ' 条内容的分类名已同步') : '✅ 已保存');
+        return;
     } else {
         var id = 'cat_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
         if (opts.mode === 'add-main') {
