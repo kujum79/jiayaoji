@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V590-20261120';
+        var APP_VER = 'V591-20261120';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -56671,6 +56671,9 @@ function openSuperLibraryManager() {
 
 // V268: 退出超管「文库管理」（左上角 < 返回）——恢复到公共文库并回到「我家」
 function exitKnowledgeAdmin() {
+    // V591: 展开饮食文库态（kb-admin-lib）下 visibility 已是 public，switchKnowledgeVisibility 不会触发清理，这里显式移除两个管理态类
+    document.body.classList.remove('kb-admin-lib');
+    document.body.classList.remove('kb-admin-mode');
     try { switchKnowledgeVisibility('public'); } catch (e) {}
     try { switchTab('family'); } catch (e) {}
 }
@@ -77420,7 +77423,10 @@ let menuOpen = false;
 menuBtn.addEventListener('click', function(e) {
     e.stopPropagation();
     // V268: 超管「文库管理」页：左上角 < 退出返回
-    if (currentTab === 'knowledge' && currentKnowledgeVisibility === 'admin') {
+    // V591: 文库管理内展开饮食文库后 visibility 已切为 public（kb-admin-lib），返回同样要退出文库管理，而不是打开对话历史
+    if (currentTab === 'knowledge' && (currentKnowledgeVisibility === 'admin'
+        || document.body.classList.contains('kb-admin-mode')
+        || document.body.classList.contains('kb-admin-lib'))) {
         exitKnowledgeAdmin();
         return;
     }
