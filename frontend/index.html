@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V588-20261120';
+        var APP_VER = 'V589-20261120';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -105,6 +105,7 @@
     <script src="images/supabase.js"></script>
     <!-- V581: 冬季食养课程库（六节气 × 14 课），供 _initEduCourses 合并进公共课程库 -->
     <script src="edu/winter.js"></script>
+    <script src="edu/shifang.js"></script>
     <style>
         /* ====== 全局样式 ====== */
         * { box-sizing: border-box; }
@@ -10035,6 +10036,67 @@ function _seedWinterCourseLibrary() {
     }
 }
 
+// V589: 症状食疗方灌入饮食文库「食方」分类（数据源 dietKnowledge，subCategory='食方'）
+// 幂等模式同 _seedWinterCourseLibrary：_shifangLibVer 标记 + shifang_ 前缀清理，用户手工条目不动
+function _seedShifangLibrary() {
+    try {
+        if (localStorage.getItem('_shifangLibVer') === '1') return;
+        if (typeof dietKnowledge === 'undefined' || typeof SYMPTOM_SHIFANG === 'undefined') return;
+        var src = SYMPTOM_SHIFANG || {};
+        // 先清掉本种子灌过的旧条目（按 shifangKey 前缀识别），再按最新库内容重灌
+        var kept = dietKnowledge.filter(function (k) {
+            return !k || String(k.shifangKey || '').indexOf('shifang_') !== 0;
+        });
+        var now = Date.now();
+        Object.keys(src).forEach(function (sym) {
+            var sf = src[sym] || {};
+            var body = [];
+            body.push('【概述】');
+            body.push(String(sf.overview || ''));
+            body.push('');
+            body.push('【饮食原则】');
+            (sf.principles || []).forEach(function (p, i) { body.push((i + 1) + '. ' + p); });
+            body.push('');
+            body.push('【食疗方】');
+            (sf.recipes || []).forEach(function (r) { body.push(r.n + '. ' + r.text); });
+            body.push('');
+            body.push(String(sf.note || ''));
+            var item = {
+                id: nextKnowledgeId++,
+                type: 'shiyang',
+                title: sym + ' · 食疗方精选（' + (sf.recipes || []).length + '则）',
+                source: '《饮食疗法》内科疾病的食物疗法',
+                content: body.join('\n'),
+                image: '',
+                images: [],
+                tags: ['食方', sym],
+                sceneTags: [],
+                createdAt: now,
+                sourceType: 'import',
+                sourceUrl: '',
+                mainCategory: 'shiyang',
+                category: '食方',
+                subCategory: '食方',
+                leafCategory: '',
+                subCategory3: '',
+                layer: 'public',
+                visibility: 'public',
+                auditStatus: 'ok',
+                scope: 'family',
+                stats: { ref: 0, replication: 0, download: 0 },
+                shifangKey: 'shifang_' + sym
+            };
+            if (typeof stampKnowledgePermissions === 'function') stampKnowledgePermissions(item);
+            kept.push(item);
+        });
+        dietKnowledge = kept;
+        lsSet('dietKnowledge', JSON.stringify(dietKnowledge));
+        localStorage.setItem('_shifangLibVer', '1');
+    } catch (e) {
+        console.warn('[shifangLib] 食疗方灌入饮食文库失败:', e);
+    }
+}
+
 // 兼容视图：把「系列+文章」拍平为扁平课程结构（推荐算法 / 阅读器统一消费）
 function getCourseLibrary() {
     _migrateCourseLibraryV212();
@@ -10637,9 +10699,12 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _initEduCourses);
     // V582: 冬季 84 课同步灌入食养堂「课程库」（courseFolders/courseArticles）
     document.addEventListener('DOMContentLoaded', _seedWinterCourseLibrary);
+    // V589: 症状食疗方灌入饮食文库「食方」分类（dietKnowledge）
+    document.addEventListener('DOMContentLoaded', _seedShifangLibrary);
 } else {
     setTimeout(_initEduCourses, 0);
     setTimeout(_seedWinterCourseLibrary, 0);
+    setTimeout(_seedShifangLibrary, 0);
 }
 
 // ==================== V206: 我的专属课堂（订阅用户） ====================
@@ -82243,6 +82308,19 @@ window.submitCareForm = function () {
     try { fangRag = searchFoodTherapy(getHealthCoreTags()); } catch (e) {}
     var description = '场景：' + scene.label + '；阶段/症状：' + symptom + (desc ? '；补充：' + desc : '')
         + '；配餐重点：' + scene.focus;
+    // V589: 症状命中食疗方库（edu/shifang.js）时，把饮食原则+食方全文随请求上送，后端注入 prompt
+    var shifangRef = '';
+    try {
+        var _sf = (typeof SYMPTOM_SHIFANG !== 'undefined' && SYMPTOM_SHIFANG[symptom]) ? SYMPTOM_SHIFANG[symptom] : null;
+        if (_sf) {
+            var _sfLines = ['【' + symptom + ' · 饮食原则】'];
+            (_sf.principles || []).forEach(function (p, i) { _sfLines.push((i + 1) + '. ' + p); });
+            _sfLines.push('【' + symptom + ' · 传统食疗方】');
+            (_sf.recipes || []).forEach(function (r) { _sfLines.push(r.n + '. ' + r.text); });
+            if (_sf.note) _sfLines.push(String(_sf.note));
+            shifangRef = _sfLines.join('\n');
+        }
+    } catch (e) {}
     btn.disabled = true;
     btn.textContent = '生成 7 天食谱中…';
     btn.style.opacity = '0.75';
@@ -82257,6 +82335,7 @@ window.submitCareForm = function () {
             solarTerm: solarTerm,
             fangRefs: (typeof _fangRagToText === 'function') ? _fangRagToText(fangRag) : '',
             fangRag: fangRag,
+            shifangRef: shifangRef,
             allergens: (typeof _familyAllergens === 'function') ? _familyAllergens() : []
         })
     }).then(function (res) { return res.json(); }).then(function (data) {

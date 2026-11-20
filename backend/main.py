@@ -6115,6 +6115,7 @@ class SpecialPlanRequest(BaseModel):
     fangRefs: List[str] = []  # V378: 匹配的 3-5 条「食方」参考资料（文本兜底）
     fangRag: List[Dict[str, Any]] = []  # V381: 本地 RAG 检索出的食方 JSON 语料
     allergens: List[str] = []  # V381: 家庭过敏原（命中参考语料食材须剔除）
+    shifangRef: str = ""  # V589: 症状食疗方库全文（饮食原则+食方+按语，前端 edu/shifang.js）
 
 
 _SPECIAL_PLAN_LABELS = {
@@ -6138,7 +6139,7 @@ _SPECIAL_PLAN_PROMPT = """你是一位专业的家庭营养师。请为家庭中
 【家庭成员过敏原】{allergens}
 【专家参考语料】：
 {fangRefs}
-
+{shifangBlock}
 【任务要求】：
 1. 请根据上述传统食方，结合用户的节气与体质，生成今天的一日三餐。
 2. 如果参考语料中的食材与用户过敏原冲突，必须剔除，并在报告中说明原因。
@@ -6146,12 +6147,12 @@ _SPECIAL_PLAN_PROMPT = """你是一位专业的家庭营养师。请为家庭中
 4. 如果某项传统食材（如：人参）不适合该家庭成员（如：儿童），请坚决剔除，并说明原因。
 
 【要求】
-1. 输出一个包含 7 天一日三餐的 JSON 数据；每一天的早、中、晚餐都必须给出 2-3 道菜，结构为「1 道主食 + 1 道汤/粥 + 1 道菜」，同一餐不能只给一碗汤/羹；三人及以上家庭每餐按 3 道菜设计。
+1. 输出一个包含 7 天一日三餐的 JSON 数据；每一天的早、中、晚餐每餐只推荐一个食方（全天三餐+加餐共不超过 5 个食方），食方须是主食与菜肴搭配的完整一餐，同一餐不能只给一碗汤/羹。
 2. 同一餐最多只能有 1 道「粥/糊/羹/汤/面」类；同一天不得重复同一道菜，也不得重复同一蔬菜主食材。
 3. 生成一段 200 字左右的【专项健康饮食报告】。
 4. 报告需结合节气（当前为{solarTerm}）。
 5. 严禁使用治疗、治愈等医疗词汇。生病调理需强调补水、易消化；若【具体情况】中的场景不是生病（如考前冲刺、术后恢复、生理期、熬夜加班），请按该场景的配餐重点安排，不要套用发热病程逻辑；慢病调理需强调低GI主食、少油少盐、足量蔬菜与优质蛋白，并说明饮食不能替代药物；孩子成长/体育生需强调高蛋白高钙；职业人群需按作息安排三餐节奏（久坐控精制碳水与油、夜班温和进餐、体力劳动保证能量与蛋白）；中老年需保证足量优质蛋白、钙与维D，少盐少油、食材软烂易嚼好吸收。
-6. 每餐用「、」连接多道菜，返回格式：{{ "weeklyPlan": {{ "day1": ["小米粥、水煮蛋、清炒菠菜", "杂粮饭、山药排骨汤、清炒时蔬", "糙米饭、番茄蛋花汤、蒜蓉西兰花"], "day2": ["...", "...", "..."] }}, "report": "..." }}
+6. 每餐只写 1 个食方（每餐数组长度=1，不要用「、」连接多道菜），返回格式：{{ "weeklyPlan": {{ "day1": ["小米红枣粥", "莲子炖瘦猪肉", "山药排骨汤"], "day2": ["...", "...", "..."] }}, "report": "..." }}
 只输出 JSON，不要输出 Markdown 代码块或额外说明。"""
 
 
@@ -6199,6 +6200,15 @@ async def special_plan(req: SpecialPlanRequest) -> Dict[str, Any]:
     fang_text = json.dumps(rag_refs, ensure_ascii=False, indent=1) if rag_refs else "（暂无匹配食方，请结合节气与成员体质常规推演。）"
     allergen_list = [str(a).strip()[:20] for a in (req.allergens or []) if str(a).strip()][:10]
     allergen_text = "、".join(allergen_list) if allergen_list else "无已知过敏原"
+    # V589: 症状食疗方库（如失眠 12 则）注入——命中症状时强制优先从中选方，每餐一方、三餐不同方
+    shifang_ref = (req.shifangRef or "").strip()[:6000]
+    if shifang_ref:
+        shifang_block = (
+            "【症状食疗方库（传统食方）】：\n" + shifang_ref + "\n"
+            "推荐食方必须优先从以上传统食疗方中选择（可微调食材用量以适配家庭），每餐一方；三餐分别选不同方。"
+        )
+    else:
+        shifang_block = ""
 
     prompt = _SPECIAL_PLAN_PROMPT.format(
         memberBrief=member_brief,
@@ -6208,6 +6218,7 @@ async def special_plan(req: SpecialPlanRequest) -> Dict[str, Any]:
         solarTerm=solar_term,
         allergens=allergen_text,
         fangRefs=fang_text,
+        shifangBlock=shifang_block,
     )
     messages = [
         {"role": "system", "content": "你是家肴记的专业家庭营养师，严格按用户要求的 JSON 格式输出。"},
