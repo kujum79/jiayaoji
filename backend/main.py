@@ -1863,6 +1863,76 @@ def _fh_db():
     return conn
 
 
+# ========== V590: 云端食方（超管扫描上传，食养会员设备拉取可见） ==========
+_CLOUD_SHIFANG_SQL = """
+    CREATE TABLE IF NOT EXISTS cloud_shifang (
+        id         TEXT PRIMARY KEY,
+        sym        TEXT DEFAULT '',
+        title      TEXT DEFAULT '',
+        content    TEXT DEFAULT '',
+        source     TEXT DEFAULT '',
+        updated_at INTEGER DEFAULT 0
+    )
+"""
+
+
+class CloudShifangItem(BaseModel):
+    id: str = Field(max_length=40)
+    sym: str = Field(default="", max_length=20)
+    title: str = Field(default="", max_length=60)
+    content: str = Field(default="", max_length=20000)
+    source: str = Field(default="", max_length=60)
+
+
+class CloudShifangSaveRequest(BaseModel):
+    items: List[CloudShifangItem] = Field(default_factory=list, max_length=50)
+
+
+@app.post("/api/admin/cloud-shifang")
+async def admin_cloud_shifang_save(req: CloudShifangSaveRequest) -> Dict[str, Any]:
+    """V590: 超管保存扫描整理的食方到云端库（同 id 覆盖更新）。"""
+    if not req.items:
+        return {"ok": False, "error": "没有可保存的条目"}
+    now_ms = int(time.time() * 1000)
+    saved = 0
+    try:
+        with _fh_db() as conn:
+            conn.execute(_CLOUD_SHIFANG_SQL)
+            for it in req.items:
+                if not it.id or not it.content.strip():
+                    continue
+                conn.execute(
+                    "INSERT INTO cloud_shifang (id, sym, title, content, source, updated_at) "
+                    "VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+                    "sym=excluded.sym, title=excluded.title, content=excluded.content, "
+                    "source=excluded.source, updated_at=excluded.updated_at",
+                    (it.id, it.sym.strip(), it.title.strip(), it.content, it.source.strip(), now_ms),
+                )
+                saved += 1
+            conn.commit()
+    except Exception as exc:
+        print(f"[cloudshifang] 保存失败: {exc}")
+        return {"ok": False, "error": f"保存失败：{exc}"}
+    return {"ok": True, "saved": saved}
+
+
+@app.get("/api/cloud-shifang")
+async def cloud_shifang_list() -> Dict[str, Any]:
+    """V590: 拉取全部云端食方。门禁在前端：仅食养会员/超管设备会调用并合并进饮食文库。"""
+    try:
+        with _fh_db() as conn:
+            conn.execute(_CLOUD_SHIFANG_SQL)
+            rows = conn.execute("SELECT * FROM cloud_shifang ORDER BY updated_at DESC").fetchall()
+    except Exception as exc:
+        print(f"[cloudshifang] 读取失败: {exc}")
+        return {"ok": False, "error": "食方库读取失败"}
+    return {"ok": True, "items": [
+        {"id": r["id"], "sym": r["sym"], "title": r["title"],
+         "content": r["content"], "source": r["source"], "updatedAt": r["updated_at"]}
+        for r in rows
+    ]}
+
+
 # V404: 早晚双峰应用内调度（06:30 饮食 / 16:30 食谱），与 systemd timer 双保险，发布本身幂等
 _FH_SCHEDULE: Tuple[Tuple[str, str], ...] = (("06:30", "diet_article"), ("16:30", "recipe_article"))
 _FH_SCHEDULER_STARTED = False

@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V589-20261120';
+        var APP_VER = 'V590-20261120';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -48572,22 +48572,35 @@ function _syPaneHtml(libItems, curTerm) {
             items = libItems.filter(function (k) { return k.subCategory === sec; });
         }
         // V380: 超管在「食方」分类下提供批量导入 JSON 入口
+        // V590: 食方改为食养会员专属（超管可见可传）；新增「上传扫描食方」走 OCR→AI 整理→云端食方库
         var secHeader = '';
         if (sec === '食方') {
-            var _canImportFang = false;
+            var _sfIsSuper = false;
             try {
-                _canImportFang = (typeof isSuperAdmin === 'function' && isSuperAdmin())
+                _sfIsSuper = (typeof isSuperAdmin === 'function' && isSuperAdmin())
                     || !!(JSON.parse(lsGet('superAdmin') || '{}') || {}).isLoggedIn;
             } catch (e) {}
-            if (_canImportFang && _syTreeLib === 'public') {
-                secHeader = '<div style="display:flex;align-items:center;margin-bottom:10px;">'
-                    + '<div style="font-size:14px;font-weight:700;color:#9A3412;">📜 食方</div>'
-                    + '<span style="font-size:12px;color:#9CA3AF;margin-left:8px;">共 ' + items.length + ' 条</span>'
-                    + '<button type="button" onclick="openFangBatchImport()" style="margin-left:auto;border:1px solid #FDBA74;background:#FFF3E2;color:#9A3412;font-size:12px;font-weight:600;border-radius:999px;padding:4px 12px;cursor:pointer;">📤 批量导入 JSON</button>'
-                    + '</div>';
+            var _sfIsMember = false;
+            try { _sfIsMember = (typeof isSubscribed === 'function' && isSubscribed()); } catch (e) {}
+            if (!_sfIsMember && !_sfIsSuper) {
+                html += '<div style="background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FDBA74;border-radius:14px;padding:18px 14px;margin-bottom:12px;text-align:center;">'
+                    + '<div style="font-size:15px;font-weight:700;color:#9A3412;margin-bottom:6px;">🔒 食方 · 食养会员专属</div>'
+                    + '<div style="font-size:12px;color:#B45309;line-height:1.7;">按症状整理的食疗方精选持续上新，<br>开通食养会员即可查看。</div></div>';
+            } else {
+                if (_sfIsSuper && _syTreeLib === 'public') {
+                    secHeader = '<div style="display:flex;align-items:center;margin-bottom:10px;">'
+                        + '<div style="font-size:14px;font-weight:700;color:#9A3412;">📜 食方</div>'
+                        + '<span style="font-size:12px;color:#9CA3AF;margin-left:8px;">共 ' + items.length + ' 条</span>'
+                        + '<button type="button" onclick="openFangBatchImport()" style="margin-left:auto;border:1px solid #FDBA74;background:#FFF3E2;color:#9A3412;font-size:12px;font-weight:600;border-radius:999px;padding:4px 12px;cursor:pointer;">📤 批量导入 JSON</button>'
+                        + '<button type="button" onclick="openShifangScanUpload()" style="margin-left:8px;border:1px solid #FDBA74;background:#FFF3E2;color:#9A3412;font-size:12px;font-weight:600;border-radius:999px;padding:4px 12px;cursor:pointer;">📷 上传扫描食方</button>'
+                        + '</div>';
+                }
+                _pullCloudShifang();
+                html += secHeader + (items.length ? items.map(_shiyangCardHtml).join('') : _shiyangEmptyHtml('暂无食方内容（云端新食方上架后自动同步）'));
             }
+        } else {
+            html += secHeader + (items.length ? items.map(_shiyangCardHtml).join('') : _shiyangEmptyHtml('暂无' + sec + '内容'));
         }
-        html += secHeader + (items.length ? items.map(_shiyangCardHtml).join('') : _shiyangEmptyHtml('暂无' + sec + '内容'));
     } else if (segs.length === 3 && segs[2] === '婴儿辅食' && getYoungestInfantStage() === '0-6m') {
         // V321: 婴儿辅食安全拦截——家庭中有 0-6 个月婴儿时不展示任何辅食内容
         html += '<div style="background:#EFF6FF;border:2px solid #93C5FD;border-radius:14px;padding:20px 16px;margin-bottom:12px;text-align:center;">'
@@ -58311,6 +58324,230 @@ function _fangImportFile(input) {
             : ('未导入新食方' + (skipped ? '（' + skipped + ' 条重复/无效已跳过）' : '')));
     };
     reader.readAsText(file, 'utf-8');
+}
+
+// ====== V590: 云端食方——超管扫描上传（OCR→AI整理→预览校对→云端库），食养会员/超管设备拉取合并 ======
+function _csIsSuper() {
+    try {
+        if (typeof isSuperAdmin === 'function' && isSuperAdmin()) return true;
+        return !!(JSON.parse(lsGet('superAdmin') || '{}') || {}).isLoggedIn;
+    } catch (e) { return false; }
+}
+var _csPullAt = 0;
+async function _pullCloudShifang(force) {
+    try {
+        var isMember = false;
+        try { isMember = (typeof isSubscribed === 'function' && isSubscribed()); } catch (e) {}
+        if (!isMember && !_csIsSuper()) {
+            // 非会员：移除本设备已合并的云端条目（会员过期后食方消失）
+            if (_csStripLocal()) { saveDietKnowledge(); }
+            return;
+        }
+        if (!force && Date.now() - _csPullAt < 10 * 60 * 1000) return;
+        var resp = await fetch('/api/cloud-shifang', { cache: 'no-store' });
+        var j = await resp.json();
+        if (!j || !j.ok || !Array.isArray(j.items)) return;
+        _csPullAt = Date.now();
+        if (_csMergeItems(j.items)) {
+            saveDietKnowledge();
+            try { renderShiyangContent(); } catch (e) {}
+            try { renderDietKnowledge(); } catch (e) {}
+        }
+    } catch (e) {}
+}
+function _csStripLocal() {
+    var before = dietKnowledge.length;
+    dietKnowledge = dietKnowledge.filter(function (k) {
+        return !k || String(k.shifangKey || '').indexOf('cloudshifang_') !== 0;
+    });
+    return dietKnowledge.length !== before;
+}
+function _csMergeItems(items) {
+    var kept = dietKnowledge.filter(function (k) {
+        return !k || String(k.shifangKey || '').indexOf('cloudshifang_') !== 0;
+    });
+    var now = Date.now(), added = 0;
+    (items || []).forEach(function (it) {
+        if (!it || !it.id || !String(it.content || '').trim()) return;
+        var sym = String(it.sym || '').trim();
+        var item = {
+            id: nextKnowledgeId++,
+            type: 'shiyang',
+            title: String(it.title || (sym ? sym + ' · 食疗方精选' : '食方')),
+            source: String(it.source || '扫描录入'),
+            content: String(it.content),
+            image: '', images: [],
+            tags: ['食方'].concat(sym ? [sym] : []),
+            sceneTags: [],
+            createdAt: Number(it.updatedAt) || now,
+            sourceType: 'import', sourceUrl: '',
+            mainCategory: 'shiyang', category: '食方', subCategory: '食方',
+            leafCategory: '', subCategory3: '',
+            layer: 'public', visibility: 'public', auditStatus: 'ok', scope: 'family',
+            stats: { ref: 0, replication: 0, download: 0 },
+            shifangKey: 'cloudshifang_' + it.id
+        };
+        if (typeof stampKnowledgePermissions === 'function') stampKnowledgePermissions(item);
+        kept.push(item); added++;
+    });
+    dietKnowledge = kept;
+    return added;
+}
+function openShifangScanUpload() {
+    if (!_csIsSuper()) { showToast('仅超级管理员可上传扫描食方'); return; }
+    var input = document.getElementById('shifangScanInput');
+    if (!input) {
+        input = document.createElement('input');
+        input.type = 'file'; input.id = 'shifangScanInput';
+        input.accept = 'image/*'; input.multiple = true;
+        input.style.display = 'none';
+        input.addEventListener('change', function () { _csScanFiles(this.files); });
+        document.body.appendChild(input);
+    }
+    input.value = '';
+    input.click();
+}
+function _csOv(show, text) {
+    var ov = document.getElementById('csScanOv');
+    if (!show) { if (ov) ov.remove(); return; }
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'csScanOv';
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:99999;display:flex;align-items:center;justify-content:center;';
+        ov.innerHTML = '<div style="background:#fff;border-radius:16px;padding:24px 28px;max-width:280px;text-align:center;">'
+            + '<div style="font-size:26px;margin-bottom:10px;">📷</div>'
+            + '<div id="csScanTxt" style="font-size:14px;font-weight:700;color:#9A3412;line-height:1.6;"></div></div>';
+        document.body.appendChild(ov);
+    }
+    var t = document.getElementById('csScanTxt');
+    if (t) t.textContent = text || '处理中…';
+}
+function _csScanFiles(files) {
+    var arr = Array.prototype.slice.call(files || []).filter(function (f) { return /^image\//.test(f.type); }).slice(0, 12);
+    if (!arr.length) { showToast('请选择书页照片'); return; }
+    var pages = [], i = 0;
+    _csOv(true, '正在识别第 1/' + arr.length + ' 页…');
+    (function next() {
+        if (i >= arr.length) { _csStructure(pages.join('\n———\n')); return; }
+        _dtCompressImg(arr[i], function (dataUrl) {
+            fetch('/ai/vision', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_prompt: '这是养生食疗书籍的一页扫描图。请逐字转录本页全部中文文字，保留标题、编号与方名，按原文顺序输出；忽略页码与页眉。无法辨认的字用〔?〕标注。只输出转录文本，不要任何解释。',
+                    image_data_url: dataUrl, max_tokens: 3000, task_type: 'shifang_ocr'
+                })
+            }).then(function (r) { return r.json(); }).then(function (j) {
+                pages.push(String((j && j.response) || ''));
+                i++;
+                _csOv(true, i >= arr.length ? 'AI 整理食方结构中…' : '正在识别第 ' + (i + 1) + '/' + arr.length + ' 页…');
+                next();
+            }).catch(function (e) {
+                _csOv(false);
+                showToast('第 ' + (i + 1) + ' 页识别失败：' + (e.message || '网络错误'));
+            });
+        });
+    })();
+}
+async function _csStructure(raw) {
+    try {
+        if (!String(raw || '').trim()) throw new Error('未识别到文字');
+        var prompt = '以下是养生食疗书籍扫描页的转录文本（可能含错字与页眉页码）。请整理为一条「症状食疗方」知识条目，只输出严格 JSON（不要 markdown 代码块）：\n'
+            + '{"sym":"症状名(2~6字)","overview":"概述","principles":["饮食原则1","饮食原则2"],"recipes":[{"n":1,"text":"方名：组成用量与做法全文"}],"note":"按语"}\n'
+            + '【要求】\n1. 食疗方逐则完整保留组成、用量与做法，不得省略；\n'
+            + '2. 修正明显的转录错字，存疑的字保留原文并加〔?〕；\n'
+            + '3. 删除页码、页眉等无关内容；\n'
+            + '4. 概述/原则/按语若原文缺失可据食疗方归纳，但严禁出现"治疗、治愈、疗效、处方、偏方"等医疗表述，用"滋养、调理"等食养词汇；\n'
+            + '5. sym 取本页针对的主要症状或场景名。\n'
+            + '【转录文本】\n' + raw;
+        var result = await aiChatMultiProvider('你是家庭膳食知识编辑，擅长把书稿整理为结构化食方。', prompt, { maxTokens: 3000, temperature: 0.3, taskType: 'knowledge' });
+        var reply = (result && result.choices && result.choices[0] && result.choices[0].message) ? String(result.choices[0].message.content || '') : '';
+        reply = reply.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/i, '').trim();
+        var d;
+        try { d = JSON.parse(reply); } catch (e) { d = { sym: '', overview: reply, principles: [], recipes: [], note: '' }; }
+        _csOv(false);
+        _csOpenPreview(d);
+    } catch (e) {
+        _csOv(false);
+        showToast('整理失败：' + (e.message || 'AI 无响应'));
+    }
+}
+function _csBuildBody(d) {
+    var body = [];
+    body.push('【概述】');
+    body.push(String(d.overview || ''));
+    body.push('');
+    body.push('【饮食原则】');
+    (d.principles || []).forEach(function (p, i) { body.push((i + 1) + '. ' + p); });
+    body.push('');
+    body.push('【食疗方】');
+    (d.recipes || []).forEach(function (r, i) { body.push((r.n || (i + 1)) + '. ' + r.text); });
+    body.push('');
+    body.push(String(d.note || ''));
+    return body.join('\n');
+}
+function _csOpenPreview(d) {
+    var old = document.getElementById('csPrevOv');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'csPrevOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99998;display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:390px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">'
+        + '<div style="padding:14px 16px 10px;border-bottom:1px solid #F3F4F6;display:flex;align-items:center;">'
+        + '<div style="font-size:15px;font-weight:700;color:#9A3412;">📜 食方预览与校对</div>'
+        + '<button onclick="document.getElementById(\'csPrevOv\').remove()" style="margin-left:auto;border:none;background:none;font-size:20px;color:#9CA3AF;cursor:pointer;">×</button></div>'
+        + '<div style="padding:12px 16px;overflow-y:auto;flex:1;">'
+        + '<div style="font-size:12px;color:#9CA3AF;margin-bottom:8px;line-height:1.6;">请通读校对：错别字、用量、方名。保存后仅食养会员设备可见。</div>'
+        + '<div style="font-size:13px;font-weight:700;color:#4B5563;margin-bottom:4px;">症状名</div>'
+        + '<input id="csPrevSym" value="' + String(d.sym || '').replace(/"/g, '&quot;') + '" placeholder="如：便秘" style="width:100%;border:1px solid #E5E7EB;border-radius:8px;padding:8px 10px;font-size:14px;color:#111827;margin-bottom:10px;" />'
+        + '<div style="font-size:13px;font-weight:700;color:#4B5563;margin-bottom:4px;">正文（【概述】【饮食原则】【食疗方】【按语】分节）</div>'
+        + '<textarea id="csPrevBody" style="width:100%;min-height:240px;border:1px solid #E5E7EB;border-radius:8px;padding:10px;font-size:13px;line-height:1.7;color:#111827;font-family:inherit;">'
+        + _csBuildBody(d).replace(/</g, '&lt;') + '</textarea>'
+        + '</div>'
+        + '<div style="padding:10px 16px 14px;border-top:1px solid #F3F4F6;display:flex;gap:10px;">'
+        + '<button onclick="document.getElementById(\'csPrevOv\').remove()" style="flex:1;border:1px solid #E5E7EB;background:#fff;color:#6B7280;font-size:14px;font-weight:600;border-radius:10px;padding:10px;cursor:pointer;">放弃</button>'
+        + '<button id="csPrevSaveBtn" onclick="_csSaveUpload()" style="flex:1.5;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:700;border-radius:10px;padding:10px;cursor:pointer;">保存到云端</button></div>'
+        + '</div>';
+    document.body.appendChild(ov);
+}
+async function _csSaveUpload() {
+    var symEl = document.getElementById('csPrevSym');
+    var bodyEl = document.getElementById('csPrevBody');
+    if (!symEl || !bodyEl) return;
+    var sym = symEl.value.trim();
+    var body = bodyEl.value.trim();
+    if (!sym) { showToast('请填写症状名'); return; }
+    if (body.length < 40) { showToast('正文太短，请检查识别结果'); return; }
+    var recipeCount = 0;
+    var mIdx = body.indexOf('【食疗方】');
+    if (mIdx >= 0) {
+        recipeCount = (body.slice(mIdx).match(/^\d+\./gm) || []).length;
+    }
+    var title = sym + ' · 食疗方精选（' + recipeCount + '则）';
+    var id = 'cs' + Date.now().toString(36);
+    var item = { id: id, sym: sym, title: title, content: body, source: '扫描录入' };
+    var btn = document.getElementById('csPrevSaveBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
+    try {
+        var resp = await fetch('/api/admin/cloud-shifang', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: [item] })
+        });
+        var j = await resp.json();
+        if (!j || !j.ok) throw new Error((j && j.error) || '服务端保存失败');
+        _csMergeItems([item]);
+        saveDietKnowledge();
+        _csPullAt = Date.now();
+        var ov = document.getElementById('csPrevOv');
+        if (ov) ov.remove();
+        try { renderShiyangContent(); } catch (e) {}
+        try { renderDietKnowledge(); } catch (e) {}
+        try { updateVisibilityCounts(); } catch (e) {}
+        logAdminAction('上传扫描食方', '超管上传食方《' + title + '》，已入云端食方库（食养会员可见）');
+        showToast('✅ 已保存到云端，食养会员设备自动同步');
+    } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = '保存到云端'; }
+        showToast('保存失败：' + (e.message || '网络错误'));
+    }
 }
 
 function onLeafCategoryChange() {
