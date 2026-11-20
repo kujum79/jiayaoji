@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V584-20261120';
+        var APP_VER = 'V585-20261120';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -81423,7 +81423,7 @@ function openSpecialPlanBoard(focusPlanId) {
             +   '</div>'
             +   '<div style="font-size:13px;color:#4B5563;line-height:1.9;">' + reportHtml + '</div>'
             +   fangBadgeHtml
-            +   '<div style="font-size:11px;color:#9CA3AF;line-height:1.7;margin-top:10px;padding-top:8px;border-top:1px dashed #FDE68A;">📖 该方案引用了《传统食养库》中的智慧，仅供日常饮食参考，不替代医疗建议。</div>'
+            +   '<div style="font-size:11px;color:#9CA3AF;line-height:1.7;margin-top:10px;padding-top:8px;border-top:1px dashed #FDE68A;">📖 本方案仅供日常饮食参考；慢性病请遵医嘱继续用药，勿以食疗替代治疗。</div>'
             + '</div>'
             + '</div>';
         // V533: 计划的进度与报告统一在「专属健康饮食方案」内展示，这里不再重复
@@ -81488,17 +81488,33 @@ function openSpecialPlanBoard(focusPlanId) {
 window.openSpecialPlanBoard = openSpecialPlanBoard;
 
 // ==================== V464: 健康管家 · 家庭调理特供 ====================
+// V585: 生病症状从 6 项扩容为 45 项、按 5 组分组（原 6 项的 d/a 字段无引用，已随结构升级移除）
 var _CARE_SYMPTOMS = [
-    { k: '感冒发烧', d: '陈皮姜丝粥', a: '饮食以温热、易消化为主，少量多次喝温水，暂避生冷油腻。' },
-    { k: '肠胃不适', d: '山药小米粥', a: '选择软烂少油的食物，少量多餐，暂避辛辣、冰饮和过饱。' },
-    { k: '术后恢复', d: '鲈鱼豆腐汤', a: '优先优质蛋白和易消化食材，少盐少油，循序渐进增加食量。' },
-    { k: '孕期反应', d: '陈皮瘦肉粥', a: '清淡少油、少量多餐，避开气味刺激；具体请以产科医嘱为准。' },
-    { k: '咽喉不适', d: '雪梨百合羹', a: '温热湿润的食物更友好，避免过烫、过咸和辛辣。' },
-    { k: '其他', d: '山药排骨汤', a: '以清淡易消化为主，保证主食和蔬菜搭配。' }
+    { group: '感冒发热', items: ['感冒', '发烧', '咳嗽', '咽喉肿痛', '鼻塞流涕', '头痛', '乏力'] },
+    { group: '消化肠胃', items: ['食欲不振', '消化不良', '恶心', '呕吐', '胃痛', '腹胀', '腹痛', '腹泻', '便秘', '嗳气反酸', '口干口臭'] },
+    { group: '疼痛·睡眠', items: ['失眠', '心悸', '肩颈酸痛', '腰背痛', '关节疼痛', '手足麻木', '手脚抽筋', '眼干涩', '健忘专注差'] },
+    { group: '女性调理', items: ['痛经', '月经不调', '经量偏多', '乳房胀痛', '孕期不适', '产后乳少', '更年期潮热'] },
+    { group: '慢性代谢', items: ['血压偏高', '血糖偏高', '血脂偏高', '尿酸高痛风', '贫血', '骨质疏松', '过敏性鼻炎', '皮肤敏感长痘', '体重偏高', '脱发'] }
 ];
+function _careAllSymptoms() {
+    return _CARE_SYMPTOMS.reduce(function (acc, g) { return acc.concat(g.items); }, []);
+}
+// V585: 生病场景当前选中症状（单选，沿用原下拉的单选交互）
+var _CARE_SYM_SEL = '';
+window._carePickSymptom = function (btn) {
+    if (!btn) return;
+    _CARE_SYM_SEL = btn.getAttribute('data-sym') || '';
+    var chips = document.querySelectorAll('.careSymChip');
+    for (var i = 0; i < chips.length; i++) {
+        var on = chips[i] === btn;
+        chips[i].style.border = '1px solid ' + (on ? '#F97316' : '#FED7AA');
+        chips[i].style.background = on ? 'linear-gradient(135deg,#F97316,#EA580C)' : '#fff';
+        chips[i].style.color = on ? '#fff' : '#C2410C';
+    }
+};
 // V538: 特殊时期调理场景——「生病」占用每年 4 次配额，其余场景不占配额
 var _CARE_SCENES = [
-    { k: 'illness', label: '生病', emoji: '🤒', symptoms: _CARE_SYMPTOMS.map(function (s) { return s.k; }), focus: '按中医「一候」7 天：前 2 天清淡易消化、注意补液，中间 3 天健脾扶正，最后 2 天巩固恢复' },
+    { k: 'illness', label: '生病', emoji: '🤒', symptoms: _careAllSymptoms(), focus: '按中医「一候」7 天：前 2 天清淡易消化、注意补液，中间 3 天健脾扶正，最后 2 天巩固恢复' },
     { k: 'exam', label: '考前冲刺', emoji: '📚', symptoms: ['备考冲刺期', '模拟考期', '临考 1 周', '考试期间'], focus: '稳血糖主食（燕麦、杂粮饭）、优质蛋白与铁（牛肉、鸡蛋、深海鱼）、补脑脂肪（核桃、亚麻籽）、护眼（蓝莓、胡萝卜、菠菜）、助眠（小米、百合）；少油炸、少咖啡因、不空腹应试' },
     { k: 'postop', label: '术后恢复', emoji: '🩹', symptoms: ['术后 1 周内', '术后 2-4 周', '伤口愈合期', '食欲不振'], focus: '优质蛋白与维C促愈合（鱼、蛋、瘦肉、深色蔬菜），少盐少油、软烂易消化，少量多餐，循序渐进' },
     { k: 'period', label: '生理期', emoji: '🌸', symptoms: ['经期', '经前不适', '经后期'], focus: '补铁与温补（瘦牛肉、猪肝、红枣、黑芝麻），温热饮食、忌生冷，少咖啡因与高盐' },
@@ -82074,7 +82090,19 @@ window.openCareForm = function () {
         return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>';
     }).join('');
     var _scene = _careSceneByKey(_CARE_SCENE);
+    var _isIllness = _scene.k === 'illness';
     var symOpts = _scene.symptoms.map(function (s) { return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>'; }).join('');
+    // V585: 生病场景症状改为 5 组分组 chips（45 项，单选，默认选中第一项）；其余场景保持原下拉
+    if (_isIllness) _CARE_SYM_SEL = _CARE_SYMPTOMS[0].items[0];
+    var symHtml = _isIllness
+        ? _CARE_SYMPTOMS.map(function (g) {
+            return '<div style="font-size:11px;color:#9CA3AF;margin:8px 2px 4px;">' + g.group + '</div>'
+                + '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + g.items.map(function (s) {
+                    var on = s === _CARE_SYM_SEL;
+                    return '<button type="button" class="careSymChip" data-sym="' + escapeHtml(s) + '" onclick="_carePickSymptom(this)" style="padding:6px 10px;border-radius:999px;border:1px solid ' + (on ? '#F97316' : '#FED7AA') + ';background:' + (on ? 'linear-gradient(135deg,#F97316,#EA580C)' : '#fff') + ';color:' + (on ? '#fff' : '#C2410C') + ';font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">' + escapeHtml(s) + '</button>';
+                }).join('') + '</div>';
+        }).join('')
+        : '<select id="careSymptomSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + symOpts + '</select>';
     var sceneChips = _CARE_SCENES.map(function (sc) {
         var on = sc.k === _scene.k;
         return '<button type="button" onclick="_carePickScene(\'' + sc.k + '\',event)" style="padding:7px 10px;border-radius:999px;border:1px solid ' + (on ? '#F97316' : '#FED7AA') + ';background:' + (on ? 'linear-gradient(135deg,#F97316,#EA580C)' : '#fff') + ';color:' + (on ? '#fff' : '#C2410C') + ';font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;">' + sc.emoji + ' ' + sc.label + '</button>';
@@ -82094,7 +82122,7 @@ window.openCareForm = function () {
         + '<div style="font-size:12px;color:#EA580C;font-weight:700;margin:10px 0 4px;">选择家人</div>'
         + '<select id="careMemberSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + memberOpts + '</select>'
         + '<div style="font-size:12px;color:#EA580C;font-weight:700;margin:10px 0 4px;">' + (_scene.k === 'illness' ? '选择症状' : '选择阶段') + '</div>'
-        + '<select id="careSymptomSel" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:14px;">' + symOpts + '</select>'
+        + symHtml
         + '<div style="font-size:12px;color:#EA580C;font-weight:700;margin:10px 0 4px;">补充描述（选填）</div>'
         + '<textarea id="careDescInput" rows="3" placeholder="例如：这两天有点低烧、没胃口，想吃清淡的" style="width:100%;padding:10px;border:1px solid #FDBA74;border-radius:10px;background:#fff;font-size:13px;resize:none;"></textarea>'
         + '<button type="button" id="careSubmitBtn" onclick="submitCareForm()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:11px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:800;cursor:pointer;">生成 7 天调理食谱</button>'
@@ -82111,12 +82139,13 @@ window.submitCareForm = function () {
     var symEl = document.getElementById('careSymptomSel');
     var descEl = document.getElementById('careDescInput');
     var btn = document.getElementById('careSubmitBtn');
-    if (!memberEl || !symEl) return;
+    if (!memberEl) return;
+    var scene = _careSceneByKey(_CARE_SCENE);
     var memberName = memberEl.value;
-    var symptom = symEl.value;
+    // V585: 生病场景症状取自分组 chips 单选态；其余场景仍读原下拉
+    var symptom = scene.k === 'illness' ? _CARE_SYM_SEL : (symEl ? symEl.value : '');
     var desc = descEl ? String(descEl.value || '').trim() : '';
     if (!memberName || !symptom) { showToast('请选择家人和症状'); return; }
-    var scene = _careSceneByKey(_CARE_SCENE);
     // V538: 只有「生病」占用每年 4 次配额；考前 / 术后 / 生理期 / 熬夜不占配额，可续排
     if (scene.k === 'illness') {
         var quota = getSpecialPlanQuota('illness');
