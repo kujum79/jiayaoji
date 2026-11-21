@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V600-20261121';
+        var APP_VER = 'V601-20261121';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -13522,6 +13522,21 @@ function _errClassify(url) {
 window.__cloudBackupReady = false;
 window.__pendingBackup = false;
 window.__allowShrinkOnce = false;
+// V601 P1: 等待 Supabase 会话从存储恢复完成。启动期 initAuth/enterFamily 触发的云端读写
+// 常在 sb.auth 会话就绪前执行，family_data 的 select 被 RLS 过滤成空数组、upsert 直接被拒
+// （D1 实测：清缓存登录非英中后只见默认档案"我"，云端实为"非英/大义"——恢复被"空数据"误判静默跳过）。
+async function _sbWaitSession(timeoutMs) {
+    if (!sb) return false;
+    var _t0 = Date.now();
+    while (Date.now() - _t0 < (timeoutMs || 8000)) {
+        try {
+            var s = await sb.auth.getSession();
+            if (s && s.data && s.data.session) return true;
+        } catch (e) {}
+        await new Promise(function (res) { setTimeout(res, 500); });
+    }
+    return false;
+}
 function _cloudMarkReady() {
     window.__cloudBackupReady = true;
     if (window.__pendingBackup) {
@@ -13754,6 +13769,7 @@ async function cloudBackupRestoreIfNeeded() {
         if (!fid) return false;
         if (window.__hadLocalFamilyData !== false) { _cloudMarkReady(); return false; } // 仅"启动时本地无数据"才恢复，绝不覆盖现有数据
         if (sessionStorage.getItem('_cloudRestored') === fid) { _cloudMarkReady(); return false; } // 防恢复后重载死循环
+        await _sbWaitSession(8000); // V601: 会话未就绪时 select 会被 RLS 过滤成空，必须先等
         var uuid = await _sbResolveFamilyUuid();
         if (!uuid || !sb) { _cloudMarkReady(); return false; }
         var r = await withTimeout(sb.from('family_data').select('key,value').eq('family_id', uuid), 20000, '云端数据恢复');
@@ -13780,6 +13796,7 @@ async function _sbPullMissing() {
     if (window.__demoMode || !sb) return false;
     var fid = _sbFamCode();
     if (!fid) return false;
+    await _sbWaitSession(8000); // V601: 同恢复链路——会话未就绪时 select 被 RLS 过滤成空，补齐会静默失效
     var uuid = await _sbResolveFamilyUuid();
     if (!uuid) return false;
     try {
