@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V605-20261121';
+        var APP_VER = 'V606-20261121';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -62036,25 +62036,25 @@ function showWeeklyAiRecommendationModal(recommendation, weekDates, dayCount, sc
     });
     // ===== 后置校验结束 =====
 
-    // ===== 菜品数量补充：每餐不足2道时自动补齐 =====
-    const FILL_POOL = {
-        breakfast: [{name:'水煮蛋',reason:'补充蛋白质'},{name:'牛奶',reason:'补充奶类'},{name:'豆浆',reason:'补充植物蛋白'},{name:'煮玉米',reason:'补充粗粮'}],
-        lunch: [{name:'紫菜蛋花汤',reason:'补充汤品'},{name:'清炒时蔬',reason:'补充蔬菜'},{name:'番茄炒蛋',reason:'补充蛋白质和蔬菜'},{name:'凉拌黄瓜',reason:'补充蔬菜'}],
-        dinner: [{name:'冬瓜排骨汤',reason:'补充汤品'},{name:'清炒菠菜',reason:'补充蔬菜'},{name:'蒸蛋羹',reason:'补充蛋白质'},{name:'凉拌木耳',reason:'补充蔬菜'}]
-    };
+    // ===== 菜品数量补充：按就餐人数补齐每餐道数（V606：AI 返回道数不足/缺餐次时兜底，缺失餐次自动创建） =====
+    var _padSvW = (typeof getDiaryDiningGroup === 'function' && getDiaryDiningGroup()) ? getDiaryDiningGroup().members.length : ((typeof getFamilyMembers === 'function' ? (getFamilyMembers().length || 3) : 3));
+    var _padDcW = getDishCountByMembers(_padSvW || 3);
+    var _padNumsW = { breakfast: _padDcW.breakNum, lunch: _padDcW.lunchNum, dinner: _padDcW.dinnerNum };
     days.forEach(day => {
-        const meals = day.meals || {};
+        if (!day) return;
+        if (!day.meals) day.meals = {};
+        const meals = day.meals;
         ['breakfast','lunch','dinner'].forEach(mt => {
+            if (scenario === 'workday' && mt === 'lunch') return;  // 工作日场景不排午餐，不得重建
+            if (scenario === 'reunion') return;                    // 团圆餐已按 6-8 道保底
             const meal = meals[mt];
-            if (meal && meal._normalizedDishes && meal._normalizedDishes.length < 2) {
-                var fillItems = FILL_POOL[mt] || FILL_POOL['lunch'];
-                for (var fi3 = 0; fi3 < fillItems.length && meal._normalizedDishes.length < 2; fi3++) {
-                    if (!globalUsed2.has(fillItems[fi3].name)) {
-                        meal._normalizedDishes.push({name: fillItems[fi3].name, ingredients: null, reason: fillItems[fi3].reason});
-                        globalUsed2.add(fillItems[fi3].name);
-                    }
-                }
+            var cur = [];
+            if (meal && Array.isArray(meal._normalizedDishes)) cur = meal._normalizedDishes;
+            else if (meal && meal.dishes) {
+                var raw = Array.isArray(meal.dishes) ? meal.dishes : [meal.dishes];
+                cur = raw.map(d => (typeof d === 'string') ? {name:d,ingredients:null,reason:''} : {name:(d&&d.name)||String(d),ingredients:(d&&d.ingredients)||null,reason:(d&&d.reason)||''});
             }
+            meals[mt] = Object.assign({}, meal || {}, { _normalizedDishes: _mpPadMeal(cur, _padNumsW[mt], mt, '按人数自动补齐', globalUsed2) });
         });
     });
     // ===== 菜品数量补充结束 =====
@@ -69948,6 +69948,7 @@ var _mealPlanStyleNames = ['家常风', '快手风', '养生风'];
 var _mealPlanStyleKeys = ['A', 'B', 'C'];
 
 // V387: 按人数裁剪每餐道数（1人 2/2/2；2人 3/3/3；3人及以上保持原方案）
+// V606: 同时做下限补齐——AI 偶发返回道数不足/整个餐次缺失时，从内置家常方案池补足到目标道数
 function _trimStylesForServings(styles, servings) {
     try {
         var dc = (typeof getDishCountByMembers === 'function') ? getDishCountByMembers(servings || 1) : { breakNum: 3, lunchNum: 4, dinnerNum: 4 };
@@ -69955,11 +69956,54 @@ function _trimStylesForServings(styles, servings) {
         return styles.map(function (st) {
             var out = Object.assign({}, st);
             ['breakfast', 'lunch', 'dinner'].forEach(function (m) {
-                if (Array.isArray(out[m])) out[m] = out[m].slice(0, Math.max(1, nums[m]));
+                var arr = Array.isArray(out[m]) ? out[m].slice(0, Math.max(1, nums[m])) : [];
+                out[m] = _mpPadMeal(arr, nums[m], m);
             });
             return out;
         });
     } catch (e) { return styles; }
+}
+
+// V606: 每餐道数补齐工具。arr 元素可为 {name,tag} / {name,ingredients,reason} / 字符串；
+// 不足 target 时从 _getFallbackStyles() 对应餐次池按名去重追加（跳过全家忌口菜），池耗尽则尽力而为。
+// padReason: 补齐菜的推荐理由文案；usedSet: 额外需避开的菜名集合（跨天/跨餐去重用）。
+function _mpPadMeal(arr, target, mealKey, padReason, usedSet) {
+    var out = Array.isArray(arr) ? arr.slice() : [];
+    if (!(target > 0) || out.length >= target) return out;
+    var pool = _mpPadPool(mealKey);
+    if (!pool.length) return out;
+    var used = {};
+    out.forEach(function (d) { used[(d && d.name) ? String(d.name) : String(d || '')] = 1; });
+    if (usedSet) { try { usedSet.forEach(function (n) { used[String(n)] = 1; }); } catch (e) {} }
+    var words = (typeof _familyForbiddenWords === 'function') ? _familyForbiddenWords() : [];
+    for (var i = 0; i < pool.length && out.length < target; i++) {
+        var item = pool[i];
+        if (used[item.name]) continue;
+        if (words.length && typeof _dishBlockedByFamily === 'function' && _dishBlockedByFamily(item.name, item.tag, words)) continue;
+        used[item.name] = 1;
+        if (usedSet) { try { usedSet.add(item.name); } catch (e) {} }
+        out.push({ name: item.name, tag: item.tag || '', ingredients: null, reason: padReason || '' });
+    }
+    return out;
+}
+var _MP_PAD_POOL = null;
+function _mpPadPool(mealKey) {
+    if (!_MP_PAD_POOL) {
+        var built = { breakfast: [], lunch: [], dinner: [] };
+        try {
+            _getFallbackStyles().forEach(function (st) {
+                ['breakfast', 'lunch', 'dinner'].forEach(function (mk) {
+                    (st[mk] || []).forEach(function (d) {
+                        if (!d || !d.name) return;
+                        var dup = built[mk].some(function (x) { return x.name === d.name; });
+                        if (!dup) built[mk].push({ name: d.name, tag: d.tag || '' });
+                    });
+                });
+            });
+            _MP_PAD_POOL = built;
+        } catch (e) { return []; }
+    }
+    return _MP_PAD_POOL[mealKey] || [];
 }
 
 function _mpFormatDate(date) {
@@ -71007,25 +71051,25 @@ function _updateWeeklyModalWithAi(aiRecommendation) {
     });
     // ===== 菜品排序结束 =====
 
-    // ===== 菜品数量补充：每餐不足2道时自动补齐 =====
-    const FILL_POOL_A = {
-        breakfast: [{name:'水煮蛋',reason:'补充蛋白质'},{name:'牛奶',reason:'补充奶类'},{name:'豆浆',reason:'补充植物蛋白'},{name:'煮玉米',reason:'补充粗粮'}],
-        lunch: [{name:'紫菜蛋花汤',reason:'补充汤品'},{name:'清炒时蔬',reason:'补充蔬菜'},{name:'番茄炒蛋',reason:'补充蛋白质和蔬菜'},{name:'凉拌黄瓜',reason:'补充蔬菜'}],
-        dinner: [{name:'冬瓜排骨汤',reason:'补充汤品'},{name:'清炒菠菜',reason:'补充蔬菜'},{name:'蒸蛋羹',reason:'补充蛋白质'},{name:'凉拌木耳',reason:'补充蔬菜'}]
-    };
+    // ===== 菜品数量补充：按就餐人数补齐每餐道数（V606：AI 返回道数不足/缺餐次时兜底，缺失餐次自动创建） =====
+    var _padSvU = (typeof getDiaryDiningGroup === 'function' && getDiaryDiningGroup()) ? getDiaryDiningGroup().members.length : ((typeof getFamilyMembers === 'function' ? (getFamilyMembers().length || 3) : 3));
+    var _padDcU = getDishCountByMembers(_padSvU || 3);
+    var _padNumsU = { breakfast: _padDcU.breakNum, lunch: _padDcU.lunchNum, dinner: _padDcU.dinnerNum };
     days.forEach(day => {
-        const meals = day.meals || {};
+        if (!day) return;
+        if (!day.meals) day.meals = {};
+        const meals = day.meals;
         ['breakfast','lunch','dinner'].forEach(mt => {
+            if (_updScenario === 'workday' && mt === 'lunch') return;  // 工作日场景不排午餐，不得重建
+            if (_updScenario === 'reunion') return;                    // 团圆餐已按 6-8 道保底
             const meal = meals[mt];
-            if (meal && meal._normalizedDishes && meal._normalizedDishes.length < 2) {
-                var fillItems = FILL_POOL_A[mt] || FILL_POOL_A['lunch'];
-                for (var fi4 = 0; fi4 < fillItems.length && meal._normalizedDishes.length < 2; fi4++) {
-                    if (!globalUsed.has(fillItems[fi4].name)) {
-                        meal._normalizedDishes.push({name: fillItems[fi4].name, ingredients: null, reason: fillItems[fi4].reason});
-                        globalUsed.add(fillItems[fi4].name);
-                    }
-                }
+            var cur = [];
+            if (meal && Array.isArray(meal._normalizedDishes)) cur = meal._normalizedDishes;
+            else if (meal && meal.dishes) {
+                var raw = Array.isArray(meal.dishes) ? meal.dishes : [meal.dishes];
+                cur = raw.map(d => (typeof d === 'string') ? {name:d,ingredients:null,reason:''} : {name:(d&&d.name)||String(d),ingredients:(d&&d.ingredients)||null,reason:(d&&d.reason)||''});
             }
+            meals[mt] = Object.assign({}, meal || {}, { _normalizedDishes: _mpPadMeal(cur, _padNumsU[mt], mt, '按人数自动补齐', globalUsed) });
         });
     });
     // ===== 菜品数量补充结束 =====
