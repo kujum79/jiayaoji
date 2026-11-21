@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V599-20261121';
+        var APP_VER = 'V600-20261121';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -12511,7 +12511,10 @@ function showExploreModal(title, body, isTTS) {
 function lsGet(key) {
     var prefixedKey = familyKey(key);
     // V195: 演示模式只读演示命名空间，业务键不回退全局键（防止串读真实账号残留在本机的数据）
-    if (window.__demoMode && _isBackupKey(key)) return localStorage.getItem(prefixedKey);
+    // V600 P1: 旧实现走 familyKey()——但演示态 getFamilyId()=null 时 familyKey 原样返回键名，
+    // 等于直接读全局键，演示页因此串显了本机上一真实家庭的省钱账本（D1 实测 ¥50 假串号根因）。
+    // 改为显式 DEMO_ 命名空间读取，与启动灌入的 'DEMO_'+fid+'_'+k 一致。
+    if (window.__demoMode && _isBackupKey(key)) return localStorage.getItem('DEMO_' + (window.__demoFid || '') + '_' + key);
     var val = localStorage.getItem(prefixedKey);
     if (val !== null) return val;
     // V133: 仅保留全局键回退（登录前存的数据，属同一设备同一用户可认领）。
