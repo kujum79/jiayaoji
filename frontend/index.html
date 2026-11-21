@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V603-20261121';
+        var APP_VER = 'V604-20261121';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -7551,6 +7551,11 @@ async function doCreateFamily() {
             } catch(ePass) { console.warn('family_setup_pass 不可用（可稍后在设置中凭家庭码开通）:', ePass); }
             setLoginFamily({ id: r.data.id, name: r.data.family_name, owner_id: r.data.owner_id });
             setFamilyId(code);   // 本地家庭码同步设置, 避免登录后再弹"创建/加入家庭"浮层
+            // V604 P1: 与 V547（手机号注册路径）对齐——全新建家必须清掉本机全局遗留业务键。
+            // lsGet 在家庭前缀键缺失时回退读全局键（V133 为"登录前数据认领"保留），
+            // 旧设备/旧测试残留的全局 fridgeItems 会整包带进新家庭（实测：新建"三人家"
+            // 冰箱出现番茄/菠菜等 8 样"已过期"示例食材，即全局键里 10 月中旬的旧种子）。
+            try { _purgeGlobalBackupKeys(); } catch (ePurge) {}
             closeCreateFamilyModal();
             showToast('家庭创建成功');
             showAppRoot();   // 软切换进主界面，避免弱网下整页重载几十秒
