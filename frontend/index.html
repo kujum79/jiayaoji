@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V602-20261121';
+        var APP_VER = 'V603-20261121';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -6643,10 +6643,30 @@ async function doFamilyPassLogin() {
     // （D1 实测：非英中本机凭据命中直登，云端"非英/大义"档案永远拉不下来）。
     var _localMatch = !!(rec && String(rec.password) === pwd);
     if (_localMatch) {
-        var _hasSess = false;
+        var _hasSess = false, _sessEmail = '';
         if (sb) {
-            try { var _ss = await sb.auth.getSession(); _hasSess = !!(_ss && _ss.data && _ss.data.session); } catch (e) {}
+            try { var _ss = await sb.auth.getSession(); if (_ss && _ss.data && _ss.data.session) { _hasSess = true; _sessEmail = String((_ss.data.session.user || {}).email || '').toLowerCase(); } } catch (e) {}
         } else { _hasSess = true; } // sb 不可用（离线/初始化失败）→ 保持 V294 原行为
+        // V603 P1: 会话存在≠会话属于本家庭——同设备先后登录多家时，残留的上一家会话会让
+        // 本机凭据短路进错账号（D1 实测：登三仁佳欢后 sb 会话仍是非英中 whcss13，RLS 读空只见默认档案）。
+        // 故校验会话邮箱与该家庭绑定邮箱（RPC 优先，REST 兜底）一致才允许短路。
+        if (_hasSess && sb) {
+            var _wantEmail = '';
+            try {
+                var _er = await withTimeout(sb.rpc('get_family_email', { family_name_input: name }), 8000, '归属校验');
+                if (!_er.error && _er.data) {
+                    var _rows = Array.isArray(_er.data) ? _er.data : [_er.data];
+                    if (_rows.length === 1 && _rows[0]) _wantEmail = String(_rows[0].owner_email || '').toLowerCase();
+                }
+            } catch (e) {}
+            if (!_wantEmail) {
+                try {
+                    var _qr = await withTimeout(sb.from('families').select('owner_email').eq('family_name', name).limit(1), 8000, '归属校验');
+                    if (!_qr.error && _qr.data && _qr.data.length === 1) _wantEmail = String(_qr.data[0].owner_email || '').toLowerCase();
+                } catch (e) {}
+            }
+            if (!_wantEmail || _sessEmail !== _wantEmail) _hasSess = false;
+        }
         if (_hasSess) { _applyFamilySession(rec); return; }
     }
     // V597 P0 修复：本机无凭据（新设备/清缓存）或本机密码已过期（他端改过密）或会话已失效（V602）
