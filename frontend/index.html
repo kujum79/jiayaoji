@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V595-20261120';
+        var APP_VER = 'V596-20261121';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -7122,6 +7122,9 @@ async function doCombinedRegister() {
     clearErr();
     // 表单校验
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showErr('请输入正确的邮箱'); return; }
+    // V596: Supabase 不接受中文邮箱（signup 返回 invalid format），必须前置拦截并给出人话提示，
+    // 否则用户以为建家成功、实际云端无记录，之后"家庭名称+密码"永远登不进
+    if (/[^\x00-\x7F]/.test(email)) { showErr('注册邮箱不支持中文，请使用字母/数字邮箱（无需真实收信，如 abc123@xx.com）'); return; }
     if (ePass.length < 6) { showErr('邮箱密码至少 6 位'); return; }
     if (!fName) { showErr('请输入家庭名称'); return; }
     if (fPass1.length < 6) { showErr('家庭密码至少 6 位'); return; }
@@ -7193,7 +7196,9 @@ async function doCombinedRegister() {
         }
     } catch(e) {
         var msg = e && e.message || '未知错误';
-        if (msg.indexOf('rate limit') > -1 || msg.indexOf('over_email_send_rate_limit') > -1) {
+        if (msg.indexOf('invalid format') > -1 || msg.indexOf('Unable to validate email') > -1) {
+            msg = '注册邮箱格式不被云端支持（不支持中文邮箱），请改用字母/数字邮箱重试';
+        } else if (msg.indexOf('rate limit') > -1 || msg.indexOf('over_email_send_rate_limit') > -1) {
             msg = '注册过于频繁，请稍后再试（每小时限3次）';
         } else if (msg.indexOf('already') > -1 && msg.indexOf('registered') > -1) {
             msg = '该邮箱已注册，请直接登录';
@@ -7339,6 +7344,7 @@ async function doRegister() {
     function clearErr() { if (errBox) { errBox.textContent = ''; errBox.style.display = 'none'; } }
     clearErr();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showErr('请输入正确的邮箱'); return; }
+    if (/[^\x00-\x7F]/.test(email)) { showErr('注册邮箱不支持中文，请使用字母/数字邮箱（无需真实收信，如 abc123@xx.com）'); return; }
     if (pwd.length < 6) { showErr('密码至少 6 位'); return; }
     try {
         var btn = document.getElementById('loginBtn');
@@ -12491,7 +12497,10 @@ function lsGet(key) {
     // V336: mealRecords 历史为全局键，多家庭三餐记录混存同一键且无归属信息，禁止回退读取全局键
     // （否则每个家庭都会读到其他家庭的记录＝串号）；历史全局 mealRecords 不做迁移，保持原样不读取
     // V553: dailyLessons 同样禁止回退全局键——微课带家庭画像，跨家庭读取会造成「familyBrief 与档案不符」
-    if (prefixedKey !== key && key !== 'mealRecords' && key !== 'dailyLessons') {
+    // V596: 全部家庭业务键一律禁止回退全局键——同浏览器换家庭登录时，
+    // 新家庭读不到自己的键却捡走上一家庭的全局残留（实测新建家庭首页显示"累计省下¥39"即 savedMoneyLedger 串号）。
+    // 全局业务键只可能来自 V192 之前的历史版本，其归属家庭无法判定，宁可不显示也不能串号。
+    if (prefixedKey !== key && !_isBackupKey(key)) {
         var gval = localStorage.getItem(key);
         if (gval !== null) return gval;
     }
