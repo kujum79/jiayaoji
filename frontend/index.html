@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V604-20261121';
+        var APP_VER = 'V605-20261121';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -35564,8 +35564,7 @@ function _fhCoverUrl(prompt, seed) {
 }
 function _fhOpenCardDiet() {
     if (!_fhCardDiet) return;
-    if (typeof isFoodMember === 'function' && !isFoodMember()) { _fhShowPaywall(); return; }
-    _fhOpenArticleDetail(_fhCardDiet);
+    _fhOpenArticleDetail(_fhCardDiet);   // V605: 图文阅读免费，去掉会员闸门
 }
 function _fhOpenCardRecipe() { if (_fhCardRecipe) _fhOpenRecipeDetail(_fhCardRecipe); }
 function _fhSlotType() {
@@ -35602,7 +35601,8 @@ var _FH_REAL_PHOTOS = [
     ['湖北|武汉|热干面|藕汤', 'images/xunwei/hubei.jpg'],
     ['广西|桂林|南宁|螺蛳粉', 'images/xunwei/guangxi.jpg'],
     ['甘肃|兰州|牛肉面', 'images/xunwei/gansu.jpg'],
-    ['海南|文昌鸡', 'images/xunwei/hainan.jpg']
+    ['海南|文昌鸡', 'images/xunwei/hainan.jpg'],
+    ['台北|台湾|九份|卤肉饭', 'images/xunwei/taiwan.jpg']
 ];
 function _fhRealPhoto(text) {
     text = String(text || '');
@@ -35615,9 +35615,9 @@ function _fhRealPhoto(text) {
 }
 function _fhRecipeFromArticle(a) {
     if (!a) return null;
-    // V594: 真实照片优先（按地域关键词匹配自托管图），无匹配再用后端 AI 封面
-    var cover = _fhRealPhoto((a.title || '') + ' ' + (a.summary || '')) || a.coverImage || '';
-    if (!cover && a.imagePrompt) cover = _fhCoverUrl(a.imagePrompt, _fhSeed(a.id || a.title));
+    // V594: 真实照片优先（按地域关键词匹配自托管图）
+    // V605: 弃用 pollinations AI 兜底（免费额度限流会返回"Free limit reached"占位卡），无匹配统一用自托管通用家常菜图
+    var cover = _fhRealPhoto((a.title || '') + ' ' + (a.summary || '')) || 'images/xunwei/default.jpg';
     return {
         id: a.id || ('fhr_srv_' + (a.date || '')),
         title: a.title || '',
@@ -35754,14 +35754,12 @@ function _fhCachedTip() {
     try { return (typeof _dtGetCached === 'function') ? _dtGetCached() : null; } catch (e) { return null; }
 }
 function _fhOpenArticleDetail(item) {
-    if (!isFoodMember()) { _fhShowPaywall(); return; }
-    if (!item) return;
+    if (!item) return;   // V605: 图文阅读免费，去掉会员闸门
     try { _dtCurTip = item; } catch (e) {}
     _openDailyTipFull(item);
 }
 function _fhOpenHomeArticle() {
-    if (!isFoodMember()) { _fhShowPaywall(); return; }
-    _fhOpenArticleDetail(_fhArticleList(_fhCachedTip())[0]);
+    _fhOpenArticleDetail(_fhArticleList(_fhCachedTip())[0]);   // V605: 图文阅读免费，去掉会员闸门
 }
 function _fhOpenHomeRecipe() {
     _fhOpenRecipeDetail(_fhRecipeOfDay());
@@ -35804,7 +35802,7 @@ function _fhOpenHall() {
         + '</div>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;padding:14px 14px 28px;">'
-        + (isMember ? '' : '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.6;">🔒 食养会员可解锁全部深度文章、🌍 寻味天下与食养教育课程</div>')
+        + (isMember ? '' : '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.6;">🎓 食养会员可解锁全部食养教育课程（图文阅读已免费开放）</div>')
         + '<div style="font-size:13px;font-weight:700;color:#EA580C;margin:2px 2px 8px;">📖 今日饮食文章</div>'
         + artHtml
         + '<div style="font-size:13px;font-weight:700;color:#EA580C;margin:16px 2px 8px;">🌍 寻味天下</div>'
@@ -35821,8 +35819,7 @@ function _fhCloseHall() {
     if (!document.getElementById('classroomCourseOverlay')) document.body.style.overflow = '';
 }
 function _fhHallOpenArticle(i) {
-    if (!isFoodMember()) { _fhShowPaywall(); return; }
-    _fhOpenArticleDetail(_FH_HALL_ARTICLES[i]);
+    _fhOpenArticleDetail(_FH_HALL_ARTICLES[i]);   // V605: 图文阅读免费，去掉会员闸门
 }
 function _fhHallOpenRecipe(id) {
     var r = _fhFindRecipe(id);
@@ -35869,7 +35866,6 @@ function _fhOpenRecipeDetail(r) {
     _fhCurRecipe = r;
     var old = document.getElementById('fhRecipeOv');
     if (old) old.remove();
-    var isMember = (typeof isFoodMember === 'function') ? isFoodMember() : false;
     var ing = (r.ingredients || []).map(function (x) {
         return '<span style="display:inline-block;font-size:12px;color:#92400E;background:#FFF7ED;border:1px solid #FDE68A;border-radius:999px;padding:4px 9px;margin:0 6px 6px 0;">' + escapeHtml(x) + '</span>';
     }).join('');
@@ -35880,20 +35876,11 @@ function _fhOpenRecipeDetail(r) {
             + '<span style="flex:1;font-size:13px;color:#374151;line-height:1.7;">' + escapeHtml(s) + '</span>'
             + '</div>';
     }).join('');
-    // V405: 未订阅=可见封面大图与文章开头，正文做截断+模糊处理
+    // V605: 图文阅读全面免费——正文始终完整渲染（原未订阅截断+模糊+「解锁全文」按钮已移除）
     var bodyText = String(r.content || '');
     var contentHtml = '';
     if (bodyText) {
-        if (isMember) {
-            contentHtml = '<div style="padding:10px 18px 0;"><div style="font-size:13px;color:#4B5563;line-height:1.9;white-space:pre-wrap;">' + escapeHtml(bodyText) + '</div></div>';
-        } else {
-            contentHtml = '<div style="padding:10px 18px 0;">'
-                + '<div style="font-size:13px;color:#4B5563;line-height:1.9;white-space:pre-wrap;">' + escapeHtml(bodyText.slice(0, 90)) + '…</div>'
-                + '<div style="position:relative;margin-top:8px;">'
-                + '<div style="max-height:118px;overflow:hidden;filter:blur(3.5px);font-size:13px;color:#4B5563;line-height:1.9;white-space:pre-wrap;user-select:none;">' + escapeHtml(bodyText.slice(90, 520)) + '</div>'
-                + '<button type="button" onclick="_fhShowPaywall(\'🔒 订阅食养会员，解锁海量精美图文食谱与健康指导。\')" style="position:absolute;left:0;right:0;bottom:0;border:none;background:linear-gradient(180deg,rgba(255,247,237,0),#FFF7ED 58%);padding:30px 0 6px;font-size:13px;font-weight:700;color:#C2410C;cursor:pointer;">🔒 解锁全文</button>'
-                + '</div></div>';
-        }
+        contentHtml = '<div style="padding:10px 18px 0;"><div style="font-size:13px;color:#4B5563;line-height:1.9;white-space:pre-wrap;">' + escapeHtml(bodyText) + '</div></div>';
     }
     // V405: 正文下方渲染 2-4 张菜品卡片，每张右下角独立「加入食记」
     var dishes = Array.isArray(r.dishes) ? r.dishes : [];
@@ -35903,7 +35890,7 @@ function _fhOpenRecipeDetail(r) {
             + '<div style="font-size:13px;font-weight:700;color:#EA580C;margin-bottom:10px;">🌍 文中好味（' + dishes.length + ' 道）</div>'
             + dishes.map(function (d, di) {
                 var dname = (d && d.name) || '';
-                var dimg = _fhRealPhoto(dname) || (d && d.image) || (d && d.imagePrompt ? _fhCoverUrl(d.imagePrompt, _fhSeed(dname + di)) : '');
+                var dimg = _fhRealPhoto(dname) || '';   // V605: 菜品卡弃用 pollinations（限流占位卡），无真实图则不渲染图片
                 var dsteps = (d && Array.isArray(d.steps)) ? d.steps : [];
                 var dstepsHtml = dsteps.map(function (s, si) {
                     return '<div style="display:flex;gap:6px;margin-bottom:4px;">'
