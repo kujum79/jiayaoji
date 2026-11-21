@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V596-20261121';
+        var APP_VER = 'V597-20261121';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -6628,7 +6628,7 @@ function _loginFamErr(msg) {
     var e = document.getElementById('loginFamErr');
     if (e) { e.textContent = msg; e.style.display = 'block'; }
 }
-function doFamilyPassLogin() {
+async function doFamilyPassLogin() {
     if (!_legalRequireConsent()) return;
     var e0 = document.getElementById('loginFamErr');
     if (e0) { e0.textContent = ''; e0.style.display = 'none'; }
@@ -6637,20 +6637,24 @@ function doFamilyPassLogin() {
     if (!name) { showToast('请输入家庭名称'); _loginFamErr('请输入家庭名称'); return; }
     if (!pwd) { showToast('请输入家庭密码'); _loginFamErr('请输入家庭密码'); return; }
     var rec = findFamilyCredByName(name);
-    if (!rec) {
-        // V370（原 V368-A）：家庭凭据只存在本机，空设备/清缓存后必然找不到，引导改用手机号登录
-        if (getFamilyCreds().length === 0) {
-            toggleFamilyLoginPanel(0);
-            _loginPhoneErr('当前设备没有家庭登录凭据，请改用手机号 + 验证码登录');
-            showToast('本机无家庭凭据，请用手机号登录');
-            setTimeout(function () { var pi = document.getElementById('loginPhone'); if (pi) pi.focus(); }, 50);
+    // 本机存过该家庭且密码一致 → 直接进（离线可用，保持 V294 原行为）
+    if (rec && String(rec.password) === pwd) { _applyFamilySession(rec); return; }
+    // V597 P0 修复：本机无凭据（新设备/清缓存）或本机密码已过期（他端改过密）
+    // → 自动回退云端登录（get_family_email RPC + owner 邮箱密码认证），不再误导航去手机号登录（短信网关未开通，等于死路）
+    if (typeof doFamilyLogin === 'function') {
+        var btnF = document.getElementById('loginFamBtn');
+        if (btnF) { btnF.disabled = true; btnF.textContent = '云端验证中…'; }
+        var okCloud = false;
+        try { okCloud = await doFamilyLogin(name, pwd, true); } catch (e) { okCloud = false; }
+        if (btnF) { btnF.disabled = false; btnF.textContent = '登录'; }
+        if (okCloud) {
+            // 回写本机凭据：下次登录免走云端；familyId 用云端会话落定的家庭码
+            try { setFamilyPassword(getFamilyId(), name, pwd); } catch (e) {}
             return;
         }
-        _loginFamErr('未找到该家庭，或该家庭尚未设置家庭密码');
-        return;
     }
-    if (String(rec.password) !== pwd) { _loginFamErr('家庭密码错误'); return; }
-    _applyFamilySession(rec);
+    if (rec) { _loginFamErr('家庭密码错误'); return; }
+    _loginFamErr('未找到该家庭或密码不正确：请核对家庭名称，或用下方「忘记家庭密码？点此用家庭码重置」');
 }
 function _applyFamilySession(rec) {
     var fid = String(rec.familyId || '');
@@ -7884,14 +7888,17 @@ async function doFamilyReset() {
 }
 
 // 家庭登录（家庭名称 → families 查 owner_email → Supabase Auth signInWithPassword）
-async function doFamilyLogin() {
-    if (!sb) { showToast('服务未就绪，请刷新重试'); return; }
-    var name = ((document.getElementById('familyLoginName') || {}).value || '').trim();
-    var pass = ((document.getElementById('familyLoginPass') || {}).value || '').trim();
+// V597: 支持程序化调用——aName/aPass 传入家庭名/密码（登录页主入口云端回退用），aQuiet=true 时不弹提示只返回布尔
+async function doFamilyLogin(aName, aPass, aQuiet) {
+    if (!sb) { if (!aQuiet) showToast('服务未就绪，请刷新重试'); return false; }
+    var name = (aName !== undefined ? String(aName) : (((document.getElementById('familyLoginName') || {}).value) || '')).trim();
+    var pass = (aPass !== undefined ? String(aPass) : (((document.getElementById('familyLoginPass') || {}).value) || '')).trim();
     var errBox = document.getElementById('familyLoginErrBox');
     function showErr(msg) {
-        showToast(msg);
-        if (errBox) { errBox.innerHTML = msg; errBox.style.display = 'block'; }
+        if (!aQuiet) {
+            showToast(msg);
+            if (errBox) { errBox.innerHTML = msg; errBox.style.display = 'block'; }
+        }
     }
     function clearErr() { if (errBox) { errBox.textContent = ''; errBox.style.display = 'none'; } }
     clearErr();
@@ -7982,6 +7989,7 @@ async function doFamilyLogin() {
 
         // 4) 登录成功
         enterFamily(fam, u);
+        return true;
     } catch(e) {
         var msg = (e && e.message) || '';
         if (msg.indexOf('Invalid login credentials') > -1) { msg = '密码错误，请重试'; }
