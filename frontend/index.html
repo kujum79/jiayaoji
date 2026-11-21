@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V601-20261121';
+        var APP_VER = 'V602-20261121';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -6638,8 +6638,18 @@ async function doFamilyPassLogin() {
     if (!pwd) { showToast('请输入家庭密码'); _loginFamErr('请输入家庭密码'); return; }
     var rec = findFamilyCredByName(name);
     // 本机存过该家庭且密码一致 → 直接进（离线可用，保持 V294 原行为）
-    if (rec && String(rec.password) === pwd) { _applyFamilySession(rec); return; }
-    // V597 P0 修复：本机无凭据（新设备/清缓存）或本机密码已过期（他端改过密）
+    // V602 P1: 但必须先确认 Supabase 会话仍在——会话过期/被清后若仍走本机短路，
+    // family_data 读写会被 RLS 静默拦死（select 返回空、upsert 被拒），云端同步整体失效
+    // （D1 实测：非英中本机凭据命中直登，云端"非英/大义"档案永远拉不下来）。
+    var _localMatch = !!(rec && String(rec.password) === pwd);
+    if (_localMatch) {
+        var _hasSess = false;
+        if (sb) {
+            try { var _ss = await sb.auth.getSession(); _hasSess = !!(_ss && _ss.data && _ss.data.session); } catch (e) {}
+        } else { _hasSess = true; } // sb 不可用（离线/初始化失败）→ 保持 V294 原行为
+        if (_hasSess) { _applyFamilySession(rec); return; }
+    }
+    // V597 P0 修复：本机无凭据（新设备/清缓存）或本机密码已过期（他端改过密）或会话已失效（V602）
     // → 自动回退云端登录（get_family_email RPC + owner 邮箱密码认证），不再误导航去手机号登录（短信网关未开通，等于死路）
     if (typeof doFamilyLogin === 'function') {
         var btnF = document.getElementById('loginFamBtn');
@@ -6653,6 +6663,8 @@ async function doFamilyPassLogin() {
             return;
         }
     }
+    // V602: 云端不可达但本机凭据匹配 → 退回离线本机登录（不让弱网锁死老设备）
+    if (_localMatch) { _applyFamilySession(rec); return; }
     if (rec) { _loginFamErr('家庭密码错误'); return; }
     _loginFamErr('未找到该家庭或密码不正确：请核对家庭名称，或用下方「忘记家庭密码？点此用家庭码重置」');
 }
