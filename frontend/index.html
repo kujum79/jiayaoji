@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V597-20261121';
+        var APP_VER = 'V598-20261121';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -77,7 +77,7 @@
        演示模式只读拦截与游客态写键拦截都会被绕过（实测演示日历被改写为 24590 字节）。 */
     var _FAMILY_BACKUP_KEYS = ['dietCalendar','familyData','contactsData','diningGroups','customDiningGroups','familyHomeAddress',
         'shoppingDay','chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
-        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
+        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate','knowledgeCategories',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
         'diningOutPlans','courseProgress','customCourses','subscriptionStatus','subscriptionIntent','customCourseOrders','courseLibraryPurchases','dailyLessons','customCaseOrders','reviewRiskAI','expertAssessments','specialPlans','communityPosts','communityPhoneAuth','foodDiaries','userPoints','pointRecords','checkinStatus','pointRedemptions','pointCourseCredits','pointAiCredits','mealRecords','gutRestSettings','singleMealMode','commissionRecords','expertConsultations','fridgeCleanupRecords','healthButlerCare','savedMoneyLedger','healthWhitePaper','homeMealSetting'];
     /* 微信内锁定网页字体不跟随"微信字体大小"设置放大（否则窄屏布局全被撑爆） */
@@ -9495,7 +9495,7 @@ function familyKey(key) {
     var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','customDiningGroups','familyHomeAddress',
         'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
-        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
+        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate','knowledgeCategories',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile',
         'diningOutPlans',
         'courseProgress',
@@ -10054,9 +10054,18 @@ function _seedWinterCourseLibrary() {
 // 幂等模式同 _seedWinterCourseLibrary：_shifangLibVer 标记 + shifang_ 前缀清理，用户手工条目不动
 function _seedShifangLibrary() {
     try {
-        if (localStorage.getItem('_shifangLibVer') === '1') return;
+        // V598 P1 修复：种子必须"已登录家庭 + 云端恢复完成后"灌入。
+        // 旧版在游客态启动就灌并置全局标记，登录→云端恢复覆盖 dietKnowledge 后种子条目被冲掉、标记又阻止重灌，
+        // 导致新设备食方分类恒为 0（D2 三仁佳欢实测）。
+        var _sfid = (typeof getFamilyId === 'function') ? (getFamilyId() || '') : '';
+        if (!_sfid) return; // 游客态不灌：写了也白写（登录后恢复会覆盖）
         if (typeof dietKnowledge === 'undefined' || typeof SYMPTOM_SHIFANG === 'undefined') return;
         var src = SYMPTOM_SHIFANG || {};
+        var _want = Object.keys(src).length;
+        var _have = 0;
+        dietKnowledge.forEach(function (k) { if (k && String(k.shifangKey || '').indexOf('shifang_') === 0) _have++; });
+        // 自愈式：条目数达标且本家庭标记已置才跳过；云端恢复冲掉条目后下次启动自动重灌
+        if (_have >= _want && _want > 0 && localStorage.getItem(_sfid + '_shifangLibVer') === '1') return;
         // 先清掉本种子灌过的旧条目（按 shifangKey 前缀识别），再按最新库内容重灌
         var kept = dietKnowledge.filter(function (k) {
             return !k || String(k.shifangKey || '').indexOf('shifang_') !== 0;
@@ -10105,7 +10114,7 @@ function _seedShifangLibrary() {
         });
         dietKnowledge = kept;
         lsSet('dietKnowledge', JSON.stringify(dietKnowledge));
-        localStorage.setItem('_shifangLibVer', '1');
+        localStorage.setItem(_sfid + '_shifangLibVer', '1');
     } catch (e) {
         console.warn('[shifangLib] 食疗方灌入饮食文库失败:', e);
     }
@@ -13803,7 +13812,7 @@ function claimGlobalDataForFamily() {
     var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','customDiningGroups','familyHomeAddress',
         'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
-        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
+        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate','knowledgeCategories',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile'];
     if (!localStorage.getItem(claimFlag)) {
         for (var i = 0; i < familyKeys.length; i++) {
@@ -13845,7 +13854,7 @@ function exportFamilyData() {
     var familyKeys = ['dietCalendar','familyData','contactsData','diningGroups','customDiningGroups','familyHomeAddress',
         'shoppingDay',
         'chatHistory','dietKnowledge','fridgeItems','shoppingPlans','purchaseHistory',
-        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate',
+        'shoppingChecked','currentDiningGroup','snackItems','lastAutoRecommendDate','knowledgeCategories',
         'behaviorProfile','dismissedRecommendDishes','implicitPreferences','preferenceProfile','singleMealMode'];
     var data = {};
     for (var i = 0; i < familyKeys.length; i++) {
