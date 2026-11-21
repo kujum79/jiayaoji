@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V598-20261121';
+        var APP_VER = 'V599-20261121';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -7908,6 +7908,10 @@ async function doFamilyLogin(aName, aPass, aQuiet) {
 
     // 统一进入逻辑
     function enterFamily(fam, u) {
+        // V599 P1: 记录登录前的家庭码——退出登录不整页刷新，内存里 mealRecords/省钱账本/
+        // dietCalendar 等仍是上一家庭的（resetFamilyMemoryToGuest 只重置了部分键），
+        // 换家庭若不整页重载就会"新家庭显示上一家数据"（D1 实测：退铁岭家登小高，省下¥50 串显）。
+        var _prevCode = (typeof getFamilyId === 'function') ? (getFamilyId() || '') : '';
         // 家庭名称兜底：登录输入的 name 就是家庭名称（按它查询的），
         // 防止 get_family_email RPC 等来源缺 family_name 字段时右上角错误显示成邮箱前缀
         var famName = fam.family_name || name;
@@ -7926,6 +7930,8 @@ async function doFamilyLogin(aName, aPass, aQuiet) {
             showToast('⚠️ 该家庭尚未生成家庭码，请联系家庭创建者');
         }
         showToast('登录成功');
+        // 与登录前家庭不同（含游客/退出后/换号）→ 整页重载，杜绝上一家庭内存残留
+        if (code && _prevCode !== code) { setTimeout(function () { location.reload(); }, 350); return; }
         showAppRoot();
     }
 
