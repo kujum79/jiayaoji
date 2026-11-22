@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V610-20261122';
+        var APP_VER = 'V611-20261122';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -76498,7 +76498,7 @@ function openMealRecordModal(mealKey, opts) {
             return '<div style="background:' + (_isSp ? '#FFF7ED' : '#F9FAFB') + ';border:1px solid ' + (_isSp ? '#FED7AA' : '#F3F4F6') + ';border-radius:10px;padding:6px 8px;margin-bottom:6px;">'
                 + '<div style="display:flex;align-items:center;gap:6px;">'
                 + '<input type="checkbox" class="umr-f-dish-cb" data-name="' + escapeAttr(n) + '"' + (checked ? ' checked' : '') + ' style="flex-shrink:0;width:14px;height:14px;margin:0;cursor:pointer;">'
-                + '<span title="' + escapeAttr(n) + '" style="font-size:14px;color:' + (checked ? (_isSp ? '#C2410C' : '#9A3412') : '#9CA3AF') + ';font-weight:' + (_isSp ? '700' : '600') + ';width:84px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' + (checked ? '' : 'text-decoration:line-through;') + '">' + escapeHtml(n) + '</span>'
+                + '<span class="umr-f-dish-name" data-i="' + i + '" title="点击修改菜名" style="font-size:14px;color:' + (checked ? (_isSp ? '#C2410C' : '#9A3412') : '#9CA3AF') + ';font-weight:' + (_isSp ? '700' : '600') + ';width:84px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text;' + (checked ? '' : 'text-decoration:line-through;') + '">' + escapeHtml(n) + '</span>'
                 + (_isSp ? '<span style="flex-shrink:0;">' + _spTag + '</span>' : '')
                 + _ingHtml
                 + '<button type="button" data-i="' + i + '" class="umr-f-dish-del" title="删除" style="background:none;border:none;color:#FB923C;font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;">✕</button>'
@@ -76559,6 +76559,44 @@ function openMealRecordModal(mealKey, opts) {
         box.querySelectorAll('.umr-f-dish-ing').forEach(function (el) {
             el.addEventListener('click', function () {
                 try { openDishIngPanel(this.dataset.name); } catch (e) { console.warn('[V608] 打开食材用量小屏失败:', e); }
+            });
+        });
+        // V611: 点击菜名原地改名——评价/评分/勾选/食材用量随新菜名迁移；
+        // 空名、与本餐其他菜重名或按 Esc 取消时还原原名（只改实际记录，不回写计划）
+        box.querySelectorAll('.umr-f-dish-name').forEach(function (sp) {
+            sp.addEventListener('click', function () {
+                try {
+                    var self = this;
+                    var idx = parseInt(self.dataset.i, 10);
+                    var oldName = fDishes[idx];
+                    if (!oldName || isNaN(idx)) return;
+                    var inp = document.createElement('input');
+                    inp.type = 'text';
+                    inp.value = oldName;
+                    inp.style.cssText = 'width:84px;flex-shrink:0;font-size:14px;font-weight:600;color:#9A3412;border:1px solid #FDBA74;border-radius:6px;padding:2px 4px;box-sizing:border-box;';
+                    self.replaceWith(inp);
+                    inp.focus();
+                    inp.select();
+                    var done = false;
+                    function finish(cancelled) {
+                        if (done) return; done = true;
+                        var nn = String(inp.value || '').trim();
+                        if (!cancelled && nn && nn !== oldName && fDishes.indexOf(nn) < 0) {
+                            fDishes[idx] = nn;
+                            [fDishComments, fDishChecked, fDishRatings, fDishTastes, fDishIngredients].forEach(function (map) {
+                                try {
+                                    if (Object.prototype.hasOwnProperty.call(map, oldName)) { map[nn] = map[oldName]; delete map[oldName]; }
+                                } catch (e) {}
+                            });
+                        }
+                        renderFDishTags();
+                    }
+                    inp.addEventListener('blur', function () { finish(false); });
+                    inp.addEventListener('keydown', function (e) {
+                        if (e.key === 'Enter') { e.preventDefault(); finish(false); }
+                        else if (e.key === 'Escape') { finish(true); }
+                    });
+                } catch (e) { console.warn('[V611] 菜名改名失败:', e); }
             });
         });
     }
