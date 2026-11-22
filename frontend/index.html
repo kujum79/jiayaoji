@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V608-20261122';
+        var APP_VER = 'V609-20261122';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -76358,6 +76358,15 @@ function openMealRecordModal(mealKey, opts) {
             });
         });
     } catch (e) { console.warn('[V608] 载入菜品食材失败:', e); }
+    // V609: 打开弹窗后，无食材信息的菜先由系统自动识别主要食材及用量（内置库即时/AI异步，
+    // 同菜名防重复请求），显示在菜名右边，用户再点击修改或补用量；延迟到弹窗首帧渲染完成后触发
+    try {
+        setTimeout(function () {
+            fDishes.forEach(function (n) {
+                try { if (n && !fDishIngredients[n]) _autoFillDishIngredients(n); } catch (e) {}
+            });
+        }, 0);
+    } catch (e) {}
 
     // 已有同类型弹窗先移除，避免元素 id 冲突
     const oldOv = document.getElementById('umrOverlay');
@@ -76475,11 +76484,11 @@ function openMealRecordModal(mealKey, opts) {
             const _spHits = (typeof specialInterventionsForDish === 'function') ? specialInterventionsForDish(spItems, n) : [];
             const _isSp = _spHits.length > 0;
             const _spTag = (typeof specialInterventionBadgesHtml === 'function') ? specialInterventionBadgesHtml(spItems, n) : '';
-            // V608: 食材文本——最多显示3项，用「·」连接；无任何食材信息时显示灰色「+ 补用量」
+            // V609: 只显示2种主要食材（菜名右侧更清爽），完整清单在小屏中查看编辑
             const _ings = fDishIngredients[n];
             let _ingHtml;
             if (_ings && _ings.length) {
-                const _txt = _ings.slice(0, 3).map(function (s) { return String(s || '').trim(); }).filter(Boolean).join(' · ');
+                const _txt = _ings.slice(0, 2).map(function (s) { return String(s || '').trim(); }).filter(Boolean).join(' · ');
                 _ingHtml = '<span class="umr-f-dish-ing" data-name="' + escapeAttr(n) + '" title="' + escapeAttr(_ings.join(' · ')) + '" style="flex:1;min-width:0;font-size:12px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;">' + escapeHtml(_txt || '＋ 补用量') + '</span>';
             } else {
                 _ingHtml = '<span class="umr-f-dish-ing" data-name="' + escapeAttr(n) + '" style="flex:1;min-width:0;font-size:12px;color:#9CA3AF;cursor:pointer;">＋ 补用量</span>';
@@ -76492,19 +76501,17 @@ function openMealRecordModal(mealKey, opts) {
                 + _ingHtml
                 + '<button type="button" data-i="' + i + '" class="umr-f-dish-del" title="删除" style="background:none;border:none;color:#FB923C;font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;">✕</button>'
                 + '</div>'
-                // V608: 评价输入框移到第二行独占整行
-                + '<div style="margin-top:4px;">'
-                + '<input type="text" data-name="' + escapeAttr(n) + '" class="umr-f-dish-cmt" value="' + escapeAttr(cmt) + '" placeholder="对这道菜的评价" style="width:100%;padding:6px 8px;border:1px solid #E5E7EB;border-radius:7px;font-size:13px;box-sizing:border-box;">'
+                // V609: 第二行 = 评价输入框 + 「好吃/一般」按钮同行（按钮在输入框右边）
+                + '<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">'
+                + '<input type="text" data-name="' + escapeAttr(n) + '" class="umr-f-dish-cmt" value="' + escapeAttr(cmt) + '" placeholder="对这道菜的评价" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #E5E7EB;border-radius:7px;font-size:13px;box-sizing:border-box;">'
+                + '<span class="umr-f-dish-sent" data-name="' + escapeAttr(n) + '" data-sent="1" style="font-size:12px;padding:4px 8px;border-radius:10px;cursor:pointer;white-space:nowrap;flex-shrink:0;border:1px solid ' + (fDishRatings[n] === 5 ? '#FDBA74' : '#E5E7EB') + ';background:' + (fDishRatings[n] === 5 ? '#FFF7ED' : '#fff') + ';">👍 好吃</span>'
+                + '<span class="umr-f-dish-sent" data-name="' + escapeAttr(n) + '" data-sent="0" style="font-size:12px;padding:4px 8px;border-radius:10px;cursor:pointer;white-space:nowrap;flex-shrink:0;border:1px solid ' + (fDishRatings[n] === 2 ? '#FCA5A5' : '#E5E7EB') + ';background:' + (fDishRatings[n] === 2 ? '#FEF2F2' : '#fff') + ';">👎 一般</span>'
                 + '</div>'
-                // V449: 逐道菜评分简化为 👍/👎（默认不评分，点 👎 再选原因；星级只在「查看详情」展示）
-                + '<div style="display:flex;align-items:center;gap:6px;margin-top:3px;padding-left:20px;flex-wrap:wrap;">'
-                + '<span class="umr-f-dish-sent" data-name="' + escapeAttr(n) + '" data-sent="1" style="font-size:12px;padding:2px 8px;border-radius:10px;cursor:pointer;border:1px solid ' + (fDishRatings[n] === 5 ? '#FDBA74' : '#E5E7EB') + ';background:' + (fDishRatings[n] === 5 ? '#FFF7ED' : '#fff') + ';">👍 好吃</span>'
-                + '<span class="umr-f-dish-sent" data-name="' + escapeAttr(n) + '" data-sent="0" style="font-size:12px;padding:2px 8px;border-radius:10px;cursor:pointer;border:1px solid ' + (fDishRatings[n] === 2 ? '#FCA5A5' : '#E5E7EB') + ';background:' + (fDishRatings[n] === 2 ? '#FEF2F2' : '#fff') + ';">👎 一般</span>'
-                + (fDishRatings[n] === 2 ? ['太咸', '太淡', '太油', '太辣', '不想再吃'].map(function (t) {
+                // V449: 👎 时口味原因芯片另起一行（点 👎 再选原因；星级只在「查看详情」展示）
+                + (fDishRatings[n] === 2 ? '<div style="display:flex;align-items:center;gap:6px;margin-top:3px;padding-left:20px;flex-wrap:wrap;">' + ['太咸', '太淡', '太油', '太辣', '不想再吃'].map(function (t) {
                     const on = fDishTastes[n] === t;
                     return '<span class="umr-f-dish-taste" data-name="' + escapeAttr(n) + '" data-t="' + escapeAttr(t) + '" style="font-size:11px;padding:1px 7px;border-radius:9px;cursor:pointer;border:1px solid ' + (on ? '#FCA5A5' : '#E5E7EB') + ';background:' + (on ? '#FEE2E2' : '#fff') + ';color:' + (on ? '#B91C1C' : '#6B7280') + ';">' + t + '</span>';
-                }).join('') : '')
-                + '</div>'
+                }).join('') + '</div>' : '')
                 + '</div>';
         }).join('');
         box.querySelectorAll('.umr-f-dish-del').forEach(function (b) {
