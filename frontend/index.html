@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V613-20261122';
+        var APP_VER = 'V614-20261122';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -76419,6 +76419,8 @@ function openMealRecordModal(mealKey, opts) {
         +         '</span>'
         +       '</div>'
         +       '<div id="umrFPhotos" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>'
+        // V614: 上传图片下方——本餐总价（已勾选菜品的小计之和）
+        +       '<div id="umrFMealSum" style="display:none;justify-content:space-between;align-items:center;margin-top:8px;padding:8px 10px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;font-size:13px;color:#92400E;font-weight:600;"></div>'
         +       '<input id="umrFComment" maxlength="60" placeholder="一句话评价（可选）" style="margin-top:10px;width:100%;padding:9px 10px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;box-sizing:border-box;">'
         +       '<div style="margin-top:12px;">'
         +         '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">📍 其他就餐地点<span style="font-size:12px;color:#9CA3AF;font-weight:400;">（默认在家，外食可不选）</span></div>'
@@ -76508,6 +76510,8 @@ function openMealRecordModal(mealKey, opts) {
                 + '<input type="text" data-name="' + escapeAttr(n) + '" class="umr-f-dish-cmt" value="' + escapeAttr(cmt) + '" placeholder="对这道菜的评价" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #E5E7EB;border-radius:7px;font-size:13px;box-sizing:border-box;">'
                 + '<span class="umr-f-dish-sent" data-name="' + escapeAttr(n) + '" data-sent="1" style="font-size:12px;padding:4px 8px;border-radius:10px;cursor:pointer;white-space:nowrap;flex-shrink:0;border:1px solid ' + (fDishRatings[n] === 5 ? '#FDBA74' : '#E5E7EB') + ';background:' + (fDishRatings[n] === 5 ? '#FFF7ED' : '#fff') + ';">👍 好吃</span>'
                 + '<span class="umr-f-dish-sent" data-name="' + escapeAttr(n) + '" data-sent="0" style="font-size:12px;padding:4px 8px;border-radius:10px;cursor:pointer;white-space:nowrap;flex-shrink:0;border:1px solid ' + (fDishRatings[n] === 2 ? '#FCA5A5' : '#E5E7EB') + ';background:' + (fDishRatings[n] === 2 ? '#FEF2F2' : '#fff') + ';">👎 一般</span>'
+                // V614: 「一般」按钮右侧显示这道菜总价（按食材用量清单 × 参考价估算；无食材用量则不显示）
+                + (_dishPriceText(n) ? '<span class="umr-f-dish-price" title="这道菜食材预估总价" style="font-size:12px;color:#DC2626;font-weight:700;white-space:nowrap;flex-shrink:0;">' + _dishPriceText(n) + '</span>' : '')
                 + '</div>'
                 // V449: 👎 时口味原因芯片另起一行（点 👎 再选原因；星级只在「查看详情」展示）
                 + (fDishRatings[n] === 2 ? '<div style="display:flex;align-items:center;gap:6px;margin-top:3px;padding-left:20px;flex-wrap:wrap;">' + ['太咸', '太淡', '太油', '太辣', '不想再吃'].map(function (t) {
@@ -76599,6 +76603,41 @@ function openMealRecordModal(mealKey, opts) {
                 } catch (e) { console.warn('[V611] 菜名改名失败:', e); }
             });
         });
+        refreshMealSum(); // V614: 菜品增删/勾选/食材用量变化后刷新本餐总价
+    }
+        // V614: 这道菜预估总价——食材用量清单（["鸡蛋2个",…]）逐项按参考价引擎估价求和；
+        // 与「食材用量」小屏同源（estimatePrepPrice，采购维护过的单价优先）
+    function _dishPriceNum(n) {
+        try {
+            if (typeof estimatePrepPrice !== 'function' || typeof _parseIngredientQtyList !== 'function') return 0;
+            var list = _parseIngredientQtyList(fDishIngredients[n] || []);
+            if (!list || !list.length) return 0;
+            var sum = 0;
+            list.forEach(function (it) {
+                if (!it || !it.name || !(it.qty > 0)) return;
+                sum += Number(estimatePrepPrice(it.name, it.qty, it.unit || '个')) || 0;
+            });
+            return sum;
+        } catch (e) { return 0; }
+    }
+    function _dishPriceText(n) {
+        var s = _dishPriceNum(n);
+        return s > 0 ? '¥' + s.toFixed(2) : '';
+    }
+    function refreshMealSum() {
+        try {
+            var el = document.getElementById('umrFMealSum');
+            if (!el) return;
+            var sum = 0, cnt = 0;
+            fDishes.forEach(function (n) {
+                if (fDishChecked[n] === false) return; // 未勾选=这顿没吃这道菜，不计入
+                var s = _dishPriceNum(n);
+                if (s > 0) { sum += s; cnt++; }
+            });
+            if (!cnt) { el.style.display = 'none'; return; }
+            el.style.display = 'flex';
+            el.innerHTML = '<span>🧮 本餐总价（' + cnt + ' 道菜）</span><span style="color:#DC2626;">¥' + sum.toFixed(2) + '</span>';
+        } catch (e) {}
     }
     // V608: 单菜食材用量底部小屏（复用 openMealUsagePanel 视觉风格，独立 id=umrIngOv 避免冲突）
     function openDishIngPanel(dishName) {
