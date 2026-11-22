@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V615-20261122';
+        var APP_VER = 'V616-20261122';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -64052,12 +64052,23 @@ function renderDiary() {
             allDishes.sort(function(a,b){ return a.sortKey - b.sortKey || a.idx - b.idx; });
             var checkedCount = 0;
             allDishes.forEach(function(it){ if (it.meta.confirmed) checkedCount++; });
+            // V616: 已记录的餐次以「记录」为准——计划里有、但实际记录中没有的菜，
+            // 置灰划线并标「没吃」，避免卡片显示 4 道而记录只有 3 道的观感不一致
+            var _actualNameSet = null;
+            if (hasActual) {
+                _actualNameSet = {};
+                data.actual.dishes.forEach(function (d) {
+                    var nn = typeof d === 'string' ? d : ((d && d.name) || '');
+                    if (nn) _actualNameSet[nn] = true;
+                });
+            }
             var rowsHtml = '';
             if (allDishes.length === 0) rowsHtml = '<div class="diary-empty-source">（暂无计划菜品，点 ☰ 选择食谱）</div>';
             else rowsHtml = allDishes.map(function(it){
                 // V237: 命专项干预的菜高亮显示（普通菜保持原样）
                 var _siHits = (typeof specialInterventionsForDish === 'function') ? specialInterventionsForDish(_siList, it.name) : [];
                 var _isSpecial = _siHits.length > 0;
+                var _notEaten = !!_actualNameSet && !_actualNameSet[it.name]; // V616
                 return '<label class="diary-dish-row" style="display:inline-flex;align-items:center;gap:2px;'
                     + (_isSpecial
                         ? 'max-width:100%;flex-wrap:wrap;white-space:normal;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:0 4px;'
@@ -64066,7 +64077,8 @@ function renderDiary() {
                     + ' data-datekey="' + escapeAttr(dateKey) + '" data-meal="' + escapeAttr(meal.key) + '" data-dish="' + escapeAttr(it.name) + '"'
                     + (it.meta.confirmed ? ' checked' : '')
                     + ' onchange="diaryToggleDishConfirmed(\'' + escapeAttr(dateKey) + '\',\'' + escapeAttr(meal.key) + '\',\'' + escapeAttr(it.name) + '\', this.checked)"/>'
-                    + '<span class="dish-tag-clickable"' + (_isSpecial ? ' style="color:#C2410C;font-weight:700;"' : '') + ' onclick="showDishDetail(\'' + escapeAttr(it.name) + '\',\'' + escapeAttr(dateKey) + '\',\'' + escapeAttr(meal.key) + '\')">' + escapeHtml(it.name) + '</span>'
+                    + '<span class="dish-tag-clickable"' + (_isSpecial ? ' style="color:#C2410C;font-weight:700;"' : (_notEaten ? ' style="color:#9CA3AF;text-decoration:line-through;"' : '')) + ' onclick="showDishDetail(\'' + escapeAttr(it.name) + '\',\'' + escapeAttr(dateKey) + '\',\'' + escapeAttr(meal.key) + '\')">' + escapeHtml(it.name) + '</span>'
+                    + (_notEaten ? '<span style="font-size:10px;line-height:16px;color:#6B7280;background:#F3F4F6;border-radius:4px;padding:0 4px;margin-left:2px;white-space:nowrap;" title="计划里有但这餐的记录中没有">没吃</span>' : '')
                     + (it.meta.source === 'manual' ? '<span style="font-size:10px;line-height:16px;color:#B45309;background:#FEF3C7;border-radius:4px;padding:0 4px;margin-left:2px;white-space:nowrap;">手动</span>' : '')
                     + (typeof specialInterventionBadgesHtml === 'function' ? specialInterventionBadgesHtml(_siList, it.name) : '')
                     + '</label>';
@@ -64090,7 +64102,7 @@ function renderDiary() {
             }
             planHtml = '<div class="diary-source-group" style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px 8px;flex:1 1 0;min-width:120px;margin:0;padding:0;background:transparent;border:none;border-radius:0;">'
                 + rowsHtml + '</div>'
-                + _renderMealNutritionSummary(allDishes);
+                + _renderMealNutritionSummary(_actualNameSet ? allDishes.filter(function(it){ return _actualNameSet[it.name]; }) : allDishes); // V616: 已记录餐次营养只算实际吃下的菜
             var planConfirmedLocal = (data.plan.state === 'confirmed' || data.plan.confirmed === true || data.plan.state === 'completed');
             var btnLabel = planConfirmedLocal ? '复核' : '确认'; // V372: 已确认时按钮承担复核/撤销职责
             window.__diaryPlanBtnHtml = '<button onclick="confirmDiaryMealPlan(\'' + escapeAttr(meal.key) + '\',\'' + escapeAttr(dateKey) + '\')" class="diary-plan-btn' + (planConfirmedLocal ? ' diary-plan-btn-review' : '') + '" title="' + (planConfirmedLocal ? '复核/调整本餐计划' : '确认本餐计划') + '">' + btnLabel + '</button>';
