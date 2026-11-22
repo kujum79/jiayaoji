@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V619-20261122';
+        var APP_VER = 'V620-20261122';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -22265,6 +22265,17 @@ function estimatePrepPrice(name, qty, unit) {
     const std = normalizeIngredientName(n) || n;
     let base = Number(window._recShopDefaultPrices[n]);
     if (!isFinite(base) || base <= 0) base = Number(window._recShopDefaultPrices[std]);
+    if (!isFinite(base) || base <= 0) {
+        // V620: 名称包含价格表关键字时按最长匹配取价（如"猪肋排"→肋排35元/斤），
+        // 避免 guessFoodCategory 误判（猪肋排曾被判成"蔬菜"）导致单价严重失真
+        var _bk620 = '', _bv620 = 0;
+        for (var _k620 in window._recShopDefaultPrices) {
+            if ((n.indexOf(_k620) >= 0 || std.indexOf(_k620) >= 0) && _k620.length > _bk620.length) {
+                _bk620 = _k620; _bv620 = Number(window._recShopDefaultPrices[_k620]) || 0;
+            }
+        }
+        if (_bk620 && _bv620 > 0) base = _bv620;
+    }
     if (!isFinite(base) || base <= 0) {
         // 兜底价：按类别粗略给，避免 ¥10 一刀切导致 0.02 极值
         const cat = String(guessFoodCategory(n) || '').trim();
