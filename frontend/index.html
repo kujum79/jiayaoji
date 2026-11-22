@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V621-20261122';
+        var APP_VER = 'V622-20261122';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -18220,11 +18220,37 @@ function _savingBreakfastOutCap(name) {
     if (/肉|鱼|虾|鸡|鸭|牛|猪|羊/.test(n)) return 12;
     return 8; // 小菜/素菜
 }
+// V622: 记录弹窗食材行=整道菜用量（非每人份）——直接按行计价；行内无任何调料/油时补 ¥1 调料估算
+var _ING_SEASONING_RE = /(盐|油|酱油|生抽|老抽|蚝油|醋|料酒|糖|淀粉|生粉|味精|鸡精|胡椒|花椒|八角|桂皮|香叶|豆瓣|豆豉|酱|葱|姜|蒜|辣椒|孜然|五香)/;
+function _dishIngRowsCost(arr) {
+    var main = 0, hasSeasoning = false;
+    (arr || []).forEach(function (s) {
+        s = String(s || '').trim();
+        if (!s) return;
+        var m = s.match(/^(.+?)\s*(\d+(?:\.\d+)?)\s*([^\s\d]*)$/);
+        var nm = m ? m[1].trim() : s;
+        var q = m ? parseFloat(m[2]) : 0;
+        var u = m ? (m[3] || '个') : '个';
+        if (_ING_SEASONING_RE.test(nm)) hasSeasoning = true;
+        if (q > 0 && typeof estimatePrepPrice === 'function') main += Number(estimatePrepPrice(nm, q, u)) || 0;
+    });
+    var gap = (main > 0 && !hasSeasoning) ? 1 : 0;
+    return { main: Math.round(main * 100) / 100, gap: gap, total: Math.round((main + gap) * 100) / 100 };
+}
 // 单道菜算账（按人数）：{home, out, saved}
-function calcDishSaving(dishName, servings, mealType) {
+function calcDishSaving(dishName, servings, mealType, ingArr) {
     var sv = Math.max(1, Number(servings) || 1);
     var perOut = getDishRestaurantPerPerson(dishName);
     var out = Math.round(perOut * _savingOutFactor(dishName, sv));
+    // V622: 有记录用量行（整道菜口径）时优先按行计价，不再 perServing×人数/比例估算
+    // （番茄蛋汤 300g番茄+2蛋 是一锅的量，曾被引擎按"每人份×4"算成 ¥35.52）
+    if (ingArr && ingArr.length) {
+        var _rc622 = _dishIngRowsCost(ingArr);
+        if (_rc622.total > 0) {
+            var _h622 = _rc622.total > out ? Math.round(out * 0.6 * 10) / 10 : _rc622.total;
+            return { name: dishName, home: _h622, out: out, saved: Math.max(0, Math.round((out - _h622) * 10) / 10), fromRows: true };
+        }
+    }
     if (mealType === 'breakfast') {
         out = Math.min(out, Math.round(_savingBreakfastOutCap(dishName) * _savingOutFactor(dishName, sv)));
     }
@@ -18345,7 +18371,18 @@ function calcMealSaving(md, mealType) {
     if (!names.length) return null;
     var sv = _savingServingsOf(md);
     // V97: noRecipe 菜现在带比例估算值（estimated），不再整道剔除
-    var dishes = names.map(function (nm) { return calcDishSaving(nm, sv, mealType); });
+    // V622: 收集逐菜记录用量行（整道菜口径），有行的菜按行计价
+    var _ingMap622 = {};
+    src.forEach(function (d) {
+        var nm = _savingDishName(d);
+        if (nm && d && Array.isArray(d.ingredients) && d.ingredients.length) _ingMap622[nm] = d.ingredients;
+    });
+    if (md.plan && md.plan.dishIngredients) {
+        Object.keys(md.plan.dishIngredients).forEach(function (nm) {
+            if (!_ingMap622[nm]) _ingMap622[nm] = md.plan.dishIngredients[nm];
+        });
+    }
+    var dishes = names.map(function (nm) { return calcDishSaving(nm, sv, mealType, _ingMap622[nm]); });
     var home = dishes.reduce(function (s, x) { return s + x.home; }, 0);
     var out = dishes.reduce(function (s, x) { return s + x.out; }, 0);
     // V477: 早餐整餐外卖价按人均 14 元封顶（3 人约 ¥42），避免家常早餐被算成 ¥77
@@ -76656,8 +76693,16 @@ function openMealRecordModal(mealKey, opts) {
         refreshMealSum(); // V614: 菜品增删/勾选/食材用量变化后刷新本餐总价
     }
         // V614: 这道菜预估总价；V618: 改为与食记卡片「本餐花费」同口径——
-        // 优先用算账引擎 calcDishSaving（完整食谱配料×用餐人数），引擎无结果时回退食材行加和
+        // V622: 有记录食材行时直接按行计价（行=整道菜用量，不×人数），与卡片/小屏 footer 同口径；
+        // 无行数据才回退算账引擎 calcDishSaving（完整食谱配料×用餐人数）
     function _dishPriceNum(n) {
+        try {
+            var _arr622 = fDishIngredients[n];
+            if (_arr622 && _arr622.length && typeof _dishIngRowsCost === 'function') {
+                var _rc622 = _dishIngRowsCost(_arr622);
+                if (_rc622.total > 0) return _rc622.total;
+            }
+        } catch (e) {}
         try {
             if (typeof calcDishSaving === 'function' && typeof _savingServingsOf === 'function') {
                 var _sv618 = _savingServingsOf(getMealData(dateKey, mealKey)) || 1;
@@ -76828,20 +76873,12 @@ function openMealRecordModal(mealKey, opts) {
                 });
                 var sumEl = uo.querySelector('#umrIngSum');
                 if (sumEl) {
-                    // V621: 透明算式「主料总价 ×N人 =积，+调料/油差额 =本菜总价」。
-                    // 行数量=每人份用量；引擎口径=每人份×N人，故差额=引擎总价−(主料合计×N)，
-                    // V619 曾错按「引擎−主料合计（未乘人数）」算差额导致 +¥20.66 虚高
-                    var _n621 = 1;
-                    try { _n621 = _savingServingsOf(getMealData(dateKey, mealKey)) || 1; } catch (e) {}
-                    var _eng621 = 0;
-                    try { _eng621 = _dishPriceNum(dishName) || 0; } catch (e) {}
-                    var _times621 = Math.round(sum * _n621 * 100) / 100;
-                    var _gap621 = (_eng621 > _times621 + 0.05) ? (_eng621 - _times621) : 0;
-                    var _total621 = _gap621 > 0 ? _eng621 : _times621;
+                    // V622: 食材行=整道菜用量（一锅），不再×人数；行内没有任何调料/油类时补 ¥1.00 调料估算
+                    var _hasSea622 = rows.some(function (r) { return _ING_SEASONING_RE.test(String(r.name || '')); });
+                    var _gap622 = (sum > 0 && !_hasSea622) ? 1 : 0;
                     sumEl.innerHTML = '<span>🧮 主料总价 ¥' + sum.toFixed(2) + '</span>'
-                        + '<span>×' + _n621 + '人 <span style="color:#B45309;">¥' + _times621.toFixed(2) + '</span></span>'
-                        + (_gap621 > 0 ? '<span style="font-weight:400;color:#16A34A;font-size:11px;">含调料/油估算 +¥' + _gap621.toFixed(2) + '</span>' : '')
-                        + '<span style="color:#DC2626;">本菜总价 ¥' + _total621.toFixed(2) + '</span>';
+                        + (_gap622 > 0 ? '<span style="font-weight:400;color:#16A34A;font-size:11px;">含调料/油估算 +¥' + _gap622.toFixed(2) + '</span>' : '')
+                        + '<span style="color:#DC2626;">本菜总价 ¥' + (sum + _gap622).toFixed(2) + '</span>';
                 }
             } catch (e) {}
         }
