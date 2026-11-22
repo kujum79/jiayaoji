@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V609-20261122';
+        var APP_VER = 'V610-20261122';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -76489,7 +76489,9 @@ function openMealRecordModal(mealKey, opts) {
             let _ingHtml;
             if (_ings && _ings.length) {
                 const _txt = _ings.slice(0, 2).map(function (s) { return String(s || '').trim(); }).filter(Boolean).join(' · ');
-                _ingHtml = '<span class="umr-f-dish-ing" data-name="' + escapeAttr(n) + '" title="' + escapeAttr(_ings.join(' · ')) + '" style="flex:1;min-width:0;font-size:12px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;">' + escapeHtml(_txt || '＋ 补用量') + '</span>';
+                _ingHtml = '<span class="umr-f-dish-ing" data-name="' + escapeAttr(n) + '" title="' + escapeAttr(_ings.join(' · ')) + '" style="flex:1;min-width:0;font-size:12px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;">' + escapeHtml(_txt || '＋ 补用量') + '</span>'
+                    // V610: 食材文本右侧固定「＋补用量」小按钮，明示可继续补充
+                    + '<span class="umr-f-dish-ing" data-name="' + escapeAttr(n) + '" style="flex-shrink:0;font-size:11px;color:#F97316;border:1px dashed #FDBA74;background:#FFFBEB;border-radius:8px;padding:1px 6px;cursor:pointer;white-space:nowrap;">＋补用量</span>';
             } else {
                 _ingHtml = '<span class="umr-f-dish-ing" data-name="' + escapeAttr(n) + '" style="flex:1;min-width:0;font-size:12px;color:#9CA3AF;cursor:pointer;">＋ 补用量</span>';
             }
@@ -76583,7 +76585,7 @@ function openMealRecordModal(mealKey, opts) {
             + '<div style="font-size:16px;font-weight:700;color:#374151;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🧾 ' + escapeHtml(dishName) + ' · 食材用量</div>'
             + '<button id="umrIngConfirm" style="padding:6px 14px;background:#F97316;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;">✓ 确认</button>'
             + '</div>'
-            + '<div style="font-size:13px;color:#6B7280;margin-bottom:10px;">保存后按这些用量扣减冰箱库存；数量清空则删除该食材。</div>'
+            + '<div style="font-size:13px;color:#6B7280;margin-bottom:10px;">保存后按这些用量扣减冰箱库存；名称/数量/单位都可改，点 ✕ 移除该食材。</div>'
             + '<div id="umrIngList"></div>'
             + '<div style="display:flex;gap:6px;margin-top:10px;">'
             + '<input id="umrIngNewName" placeholder="食材名称" style="flex:1;min-width:0;padding:7px 9px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;box-sizing:border-box;">'
@@ -76595,15 +76597,29 @@ function openMealRecordModal(mealKey, opts) {
         document.body.appendChild(uo);
         function renderIngRows() {
             var listEl = uo.querySelector('#umrIngList');
+            // V610: 食材名称改为可编辑输入框，单位也可改，行尾加 ✕ 删除按钮
             listEl.innerHTML = rows.length ? rows.map(function (r, i) {
                 return '<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;margin-bottom:6px;">'
-                    + '<span style="font-size:14px;color:#4B5563;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(r.name) + '</span>'
-                    + '<input type="number" min="0" step="0.1" value="' + escapeAttr(r.qty) + '" data-idx="' + i + '" class="umr-ing-qty" style="width:72px;padding:5px 8px;border:1px solid #FDBA74;border-radius:6px;font-size:13px;box-sizing:border-box;">'
-                    + '<span style="font-size:13px;color:#4B5563;white-space:nowrap;">' + escapeHtml(r.unit || '') + '</span>'
+                    + '<input type="text" value="' + escapeAttr(r.name) + '" data-idx="' + i + '" class="umr-ing-name" placeholder="食材名称" style="flex:1;min-width:0;padding:5px 8px;border:1px solid #FDBA74;border-radius:6px;font-size:13px;box-sizing:border-box;background:white;">'
+                    + '<input type="number" min="0" step="0.1" value="' + escapeAttr(r.qty) + '" data-idx="' + i + '" class="umr-ing-qty" style="width:64px;padding:5px 8px;border:1px solid #FDBA74;border-radius:6px;font-size:13px;box-sizing:border-box;">'
+                    + '<input type="text" value="' + escapeAttr(r.unit || '') + '" data-idx="' + i + '" class="umr-ing-unit" placeholder="单位" style="width:48px;padding:5px 8px;border:1px solid #FDBA74;border-radius:6px;font-size:13px;box-sizing:border-box;background:white;">'
+                    + '<button type="button" data-idx="' + i + '" class="umr-ing-del" title="删除该食材" style="background:none;border:none;color:#FB923C;font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;">✕</button>'
                     + '</div>';
             }).join('') : '<div style="padding:14px;text-align:center;color:#9CA3AF;font-size:13px;">暂无食材，可在下方添加</div>';
             listEl.querySelectorAll('.umr-ing-qty').forEach(function (inp) {
                 inp.addEventListener('input', function () { rows[parseInt(this.dataset.idx, 10)].qty = this.value; });
+            });
+            listEl.querySelectorAll('.umr-ing-name').forEach(function (inp) {
+                inp.addEventListener('input', function () { rows[parseInt(this.dataset.idx, 10)].name = this.value; });
+            });
+            listEl.querySelectorAll('.umr-ing-unit').forEach(function (inp) {
+                inp.addEventListener('input', function () { rows[parseInt(this.dataset.idx, 10)].unit = this.value; });
+            });
+            listEl.querySelectorAll('.umr-ing-del').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    rows.splice(parseInt(this.dataset.idx, 10), 1);
+                    renderIngRows();
+                });
             });
         }
         renderIngRows();
@@ -76626,8 +76642,9 @@ function openMealRecordModal(mealKey, opts) {
                 var arr = [];
                 rows.forEach(function (r) {
                     var q = parseFloat(r.qty);
-                    if (!r.name || !(q > 0)) return; // 已有数量项删掉数量 → 整项移除
-                    arr.push(String(r.name) + (Math.round(q * 10) / 10) + (r.unit || '个'));
+                    var nm = String((r.name || '')).trim(); // V610: 名称可编辑，去空格后为空则整项移除
+                    if (!nm || !(q > 0)) return;
+                    arr.push(nm + (Math.round(q * 10) / 10) + ((r.unit || '').trim() || '个'));
                 });
                 if (arr.length) fDishIngredients[dishName] = arr;
                 else delete fDishIngredients[dishName];
