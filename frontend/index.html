@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V618-20261122';
+        var APP_VER = 'V619-20261122';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -22139,7 +22139,7 @@ window._recShopDefaultPrices = {
     '鱿鱼': 25, '章鱼': 30, '墨鱼': 25, '海带': 8, '紫菜': 10,
     '小龙虾': 35, '基围虾': 35, '明虾': 30,
     // ====== 主粮（元/斤） ======
-    '大米': 5, '面条': 6, '挂面': 7, '意大利面': 10, '面粉': 5, '全麦粉': 7,
+    '大米': 3, '面条': 6, '挂面': 7, '意大利面': 10, '面粉': 5, '全麦粉': 7,
     '小米': 8, '燕麦': 8, '燕麦片': 9, '糯米': 8, '糙米': 8, '黑米': 9, '薏米': 12,
     '年糕': 8, '粉丝': 6, '粉条': 7, '米粉': 6,
     '馄饨皮': 5, '饺子皮': 5, '吐司': 12, '面包': 12,
@@ -26153,7 +26153,7 @@ function renderRecShopPlan() {
         '鱿鱼': 25, '章鱼': 30, '墨鱼': 25, '海带': 8, '紫菜': 10, '裙带菜': 10,
         '小龙虾': 35, '龙虾': 120, '基围虾': 35, '明虾': 30, '皮皮虾': 40,
         // ====== 主粮（元/斤） ======
-        '大米': 5, '面条': 6, '挂面': 7, '意大利面': 10, '面粉': 5, '全麦粉': 7,
+        '大米': 3, '面条': 6, '挂面': 7, '意大利面': 10, '面粉': 5, '全麦粉': 7,
         '小米': 8, '燕麦': 8, '燕麦片': 9, '糯米': 8, '糙米': 8, '黑米': 9, '薏米': 12,
         '年糕': 8, '粉丝': 6, '粉条': 7, '米粉': 6, '米线': 7,
         '馄饨皮': 5, '饺子皮': 5, '吐司': 12, '面包': 12, '馒头': 4, '包子': 6,
@@ -76816,7 +76816,16 @@ function openMealRecordModal(mealKey, opts) {
                     if (totEl && totEl !== document.activeElement) totEl.value = (parseFloat(r.qty) > 0) ? t.toFixed(2) : '';
                 });
                 var sumEl = uo.querySelector('#umrIngSum');
-                if (sumEl) sumEl.innerHTML = '<span>🧮 本菜总价</span><span style="color:#DC2626;">¥' + sum.toFixed(2) + '</span>';
+                if (sumEl) {
+                    // V619: 本菜总价=主料小计+算账引擎的调料/油类差额（显式标注，解释与卡片花费的差异）；并标 ×用餐人数
+                    var _engHome619 = 0;
+                    try { _engHome619 = _dishPriceNum(dishName) || 0; } catch (e) {}
+                    var _gap619 = (_engHome619 > sum + 0.05) ? (_engHome619 - sum) : 0;
+                    var _svTxt619 = '';
+                    try { _svTxt619 = '（×' + (_savingServingsOf(getMealData(dateKey, mealKey)) || 1) + '人）'; } catch (e) {}
+                    sumEl.innerHTML = '<span>🧮 本菜总价' + _svTxt619 + '</span><span style="color:#DC2626;">¥' + (sum + _gap619).toFixed(2) + '</span>'
+                        + (_gap619 > 0 ? '<span style="font-weight:400;color:#16A34A;font-size:11px;margin-left:6px;">含调料/油估算 +¥' + _gap619.toFixed(2) + '</span>' : '');
+                }
             } catch (e) {}
         }
         renderIngRows();
