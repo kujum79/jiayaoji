@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V612-20261122';
+        var APP_VER = 'V613-20261122';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -76623,7 +76623,7 @@ function openMealRecordModal(mealKey, opts) {
             + '<div style="font-size:16px;font-weight:700;color:#374151;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🧾 ' + escapeHtml(dishName) + ' · 食材用量</div>'
             + '<button id="umrIngConfirm" style="padding:6px 14px;background:#F97316;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;">✓ 确认</button>'
             + '</div>'
-            + '<div style="font-size:13px;color:#6B7280;margin-bottom:10px;">保存后按这些用量扣减冰箱库存；名称/数量/单位都可改，点 ✕ 移除该食材。</div>'
+            + '<div style="font-size:13px;color:#6B7280;margin-bottom:10px;">保存后按这些用量扣减冰箱库存；名称/数量/单位都可改，点 ✕ 移除该食材。单价默认为参考价（重量类按元/斤、计数类按元/单位），改单价或改小计会互相同步。</div>'
             + '<div id="umrIngList"></div>'
             // V612: 本菜预估总价（随食材/数量/单位编辑实时刷新）
             + '<div id="umrIngSum" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;margin-bottom:4px;font-size:13px;color:#166534;font-weight:600;"></div>'
@@ -76637,30 +76637,46 @@ function openMealRecordModal(mealKey, opts) {
         document.body.appendChild(uo);
         function renderIngRows() {
             var listEl = uo.querySelector('#umrIngList');
-            // V610: 食材名称改为可编辑输入框，单位也可改，行尾加 ✕ 删除按钮
-            // V612: 每行食材下方显示 单价 与 小计
+            // V613: 单价/小计移到「单位」右边且可编辑（改单价→算小计；改小计→反推单价），每行食材回到单行高度
             listEl.innerHTML = rows.length ? rows.map(function (r, i) {
-                return '<div style="padding:8px 10px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;margin-bottom:6px;">'
-                    + '<div style="display:flex;align-items:center;gap:6px;">'
-                    + '<input type="text" value="' + escapeAttr(r.name) + '" data-idx="' + i + '" class="umr-ing-name" placeholder="食材名称" style="flex:1;min-width:0;padding:5px 8px;border:1px solid #FDBA74;border-radius:6px;font-size:13px;box-sizing:border-box;background:white;">'
-                    + '<input type="number" min="0" step="0.1" value="' + escapeAttr(r.qty) + '" data-idx="' + i + '" class="umr-ing-qty" style="width:64px;padding:5px 8px;border:1px solid #FDBA74;border-radius:6px;font-size:13px;box-sizing:border-box;">'
-                    + '<input type="text" value="' + escapeAttr(r.unit || '') + '" data-idx="' + i + '" class="umr-ing-unit" placeholder="单位" style="width:48px;padding:5px 8px;border:1px solid #FDBA74;border-radius:6px;font-size:13px;box-sizing:border-box;background:white;">'
+                var q = parseFloat(r.qty);
+                return '<div style="display:flex;align-items:center;gap:4px;padding:8px 8px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;margin-bottom:6px;">'
+                    + '<input type="text" value="' + escapeAttr(r.name) + '" data-idx="' + i + '" class="umr-ing-name" placeholder="食材名称" style="flex:1;min-width:44px;padding:5px 6px;border:1px solid #FDBA74;border-radius:6px;font-size:12px;box-sizing:border-box;background:white;">'
+                    + '<input type="number" min="0" step="0.1" value="' + escapeAttr(r.qty) + '" data-idx="' + i + '" class="umr-ing-qty" placeholder="数量" style="width:50px;padding:5px 4px;border:1px solid #FDBA74;border-radius:6px;font-size:12px;box-sizing:border-box;">'
+                    + '<input type="text" value="' + escapeAttr(r.unit || '') + '" data-idx="' + i + '" class="umr-ing-unit" placeholder="单位" style="width:38px;padding:5px 4px;border:1px solid #FDBA74;border-radius:6px;font-size:12px;box-sizing:border-box;background:white;">'
+                    + '<input type="number" min="0" step="0.01" value="' + (_curUp(r) ? _curUp(r).toFixed(2) : '') + '" data-idx="' + i + '" class="umr-ing-up" placeholder="单价" title="单价（重量类按元/斤，计数类按元/单位），可修改" style="width:54px;padding:5px 4px;border:1px solid #FDBA74;border-radius:6px;font-size:12px;box-sizing:border-box;background:white;">'
+                    + '<input type="number" min="0" step="0.01" value="' + (q > 0 ? _rowTotal(r).toFixed(2) : '') + '" data-idx="' + i + '" class="umr-ing-tot" placeholder="小计" title="小计=单价×折算数量，可直接改小计反推单价" style="width:56px;padding:5px 4px;border:1px solid #FDBA74;border-radius:6px;font-size:12px;box-sizing:border-box;background:white;">'
                     + '<button type="button" data-idx="' + i + '" class="umr-ing-del" title="删除该食材" style="background:none;border:none;color:#FB923C;font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;">✕</button>'
-                    + '</div>'
-                    + '<div style="display:flex;gap:12px;margin-top:4px;padding-left:2px;font-size:11px;color:#92400E;">'
-                    + '<span class="umr-ing-up" data-idx="' + i + '">' + escapeHtml(_ingUnitLabel(r)) + '</span>'
-                    + '<span class="umr-ing-tot" data-idx="' + i + '">' + escapeHtml(_ingTotalLabel(r)) + '</span>'
-                    + '</div>'
                     + '</div>';
             }).join('') : '<div style="padding:14px;text-align:center;color:#9CA3AF;font-size:13px;">暂无食材，可在下方添加</div>';
             listEl.querySelectorAll('.umr-ing-qty').forEach(function (inp) {
                 inp.addEventListener('input', function () { rows[parseInt(this.dataset.idx, 10)].qty = this.value; refreshPrices(); });
             });
             listEl.querySelectorAll('.umr-ing-name').forEach(function (inp) {
-                inp.addEventListener('input', function () { rows[parseInt(this.dataset.idx, 10)].name = this.value; refreshPrices(); });
+                // 改名后参考价失去意义：清除单价覆盖，重新按新名称估算
+                inp.addEventListener('input', function () { var r = rows[parseInt(this.dataset.idx, 10)]; r.name = this.value; delete r.up; refreshPrices(); });
             });
             listEl.querySelectorAll('.umr-ing-unit').forEach(function (inp) {
-                inp.addEventListener('input', function () { rows[parseInt(this.dataset.idx, 10)].unit = this.value; refreshPrices(); });
+                inp.addEventListener('input', function () { var r = rows[parseInt(this.dataset.idx, 10)]; r.unit = this.value; delete r.up; refreshPrices(); });
+            });
+            // V613: 直接改单价 → 小计=单价×折算量
+            listEl.querySelectorAll('.umr-ing-up').forEach(function (inp) {
+                inp.addEventListener('input', function () {
+                    var r = rows[parseInt(this.dataset.idx, 10)];
+                    var v = parseFloat(this.value);
+                    if (isNaN(v)) delete r.up; else r.up = Math.max(0, v);
+                    refreshPrices();
+                });
+            });
+            // V613: 直接改小计 → 反推单价=小计÷折算量
+            listEl.querySelectorAll('.umr-ing-tot').forEach(function (inp) {
+                inp.addEventListener('input', function () {
+                    var r = rows[parseInt(this.dataset.idx, 10)];
+                    var jq = _jinQty(r);
+                    var v = parseFloat(this.value);
+                    if (jq > 0 && !isNaN(v)) r.up = Math.max(0, v / jq);
+                    refreshPrices();
+                });
             });
             listEl.querySelectorAll('.umr-ing-del').forEach(function (btn) {
                 btn.addEventListener('click', function () {
@@ -76670,48 +76686,49 @@ function openMealRecordModal(mealKey, opts) {
             });
             refreshPrices();
         }
-        // V612: 单价/小计/总价估算——复用采购清单同款参考价引擎 estimatePrepPrice
-        // （重量容量类按「元/斤」显示单价，计数类按「元/单位」；用户在采购里维护过的单价优先生效）
-        var _WU_RE = /克|g|千克|kg|公斤|斤|两|毫升|ml|升|L/i;
-        function _ingTotal(r) {
+        // V613: 单价口径——重量/容量类按「元/斤」（克、毫升≈1/500斤），计数类按「元/当前单位」；
+        // 估算复用采购清单参考价引擎 estimatePrepPrice，用户改过的单价(r.up)优先生效
+        function _isWV(u) {
+            return u === '千克' || u === '公斤' || /^kg$/i.test(u) || u === '斤' || u === '市斤' || u === '两' ||
+                u === '克' || /^g$/i.test(u) || u === '毫升' || /^ml$/i.test(u) || u === '升' || /^l$/i.test(u);
+        }
+        function _jinQty(r) {
+            var q = parseFloat(r.qty);
+            if (!(q > 0)) return 0;
+            var u = String(r.unit || '').trim() || '个';
+            if (!_isWV(u)) return q;
+            if (u === '千克' || u === '公斤' || /^kg$/i.test(u) || u === '升' || /^l$/i.test(u)) return q * 2;
+            if (u === '斤' || u === '市斤') return q;
+            if (u === '两') return q / 10;
+            return q / 500; // 克/毫升
+        }
+        function _estUp(r) {
             try {
                 if (typeof estimatePrepPrice !== 'function') return 0;
                 var nm = String(r.name || '').trim();
-                var q = parseFloat(r.qty);
-                if (!nm || !(q > 0)) return 0;
-                return Number(estimatePrepPrice(nm, q, String(r.unit || '').trim() || '个')) || 0;
+                if (!nm) return 0;
+                var u = String(r.unit || '').trim() || '个';
+                if (_isWV(u)) return Number(estimatePrepPrice(nm, 1, '斤')) || 0;
+                return Number(estimatePrepPrice(nm, 1, u)) || 0;
             } catch (e) { return 0; }
         }
-        function _ingUnitLabel(r) {
-            try {
-                if (typeof estimatePrepPrice !== 'function') return '';
-                var nm = String(r.name || '').trim();
-                if (!nm) return '';
-                var un = String(r.unit || '').trim() || '个';
-                if (_WU_RE.test(un)) return '单价 ¥' + (Number(estimatePrepPrice(nm, 1, '斤')) || 0).toFixed(2) + '/斤';
-                return '单价 ¥' + (Number(estimatePrepPrice(nm, 1, un)) || 0).toFixed(2) + '/' + un;
-            } catch (e) { return ''; }
-        }
-        function _ingTotalLabel(r) {
-            var q = parseFloat(r.qty);
-            return '小计 ' + (q > 0 ? ('¥' + _ingTotal(r).toFixed(2)) : '—');
-        }
-        // V612: 只刷新价格文本与本菜总价，不重建输入框（避免编辑中丢焦点）
+        function _curUp(r) { return (typeof r.up === 'number' && isFinite(r.up) && r.up >= 0) ? r.up : _estUp(r); }
+        function _rowTotal(r) { return _curUp(r) * _jinQty(r); }
+        // V613: 只刷新单价/小计输入框与总价（跳过正在输入的框，避免打断编辑），不重建行结构
         function refreshPrices() {
             try {
                 var listEl = uo.querySelector('#umrIngList');
+                var sum = 0;
                 rows.forEach(function (r, i) {
                     var upEl = listEl.querySelector('.umr-ing-up[data-idx="' + i + '"]');
                     var totEl = listEl.querySelector('.umr-ing-tot[data-idx="' + i + '"]');
-                    if (upEl) upEl.textContent = _ingUnitLabel(r);
-                    if (totEl) totEl.textContent = _ingTotalLabel(r);
+                    var t = _rowTotal(r);
+                    sum += t;
+                    if (upEl && upEl !== document.activeElement) upEl.value = _curUp(r) ? _curUp(r).toFixed(2) : '';
+                    if (totEl && totEl !== document.activeElement) totEl.value = (parseFloat(r.qty) > 0) ? t.toFixed(2) : '';
                 });
                 var sumEl = uo.querySelector('#umrIngSum');
-                if (sumEl) {
-                    var sum = 0;
-                    rows.forEach(function (r) { sum += _ingTotal(r); });
-                    sumEl.innerHTML = '<span>🧮 本菜预估总价</span><span style="color:#DC2626;">¥' + sum.toFixed(2) + '</span>';
-                }
+                if (sumEl) sumEl.innerHTML = '<span>🧮 本菜总价</span><span style="color:#DC2626;">¥' + sum.toFixed(2) + '</span>';
             } catch (e) {}
         }
         renderIngRows();
