@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V606-20261121';
+        var APP_VER = 'V607-20261122';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -15582,11 +15582,22 @@ function convertFridgeUnit(value, fromUnit, toUnit) {
 
 // 聚合此餐所有菜品的计划用量（一人份 × 用餐人数），同名同单位合并
 // 返回 [{name, qty, unit}]
+// V607: 菜品自带量化食材清单（如"鸡蛋2个、虾米15g"）时，直接按该道菜的实发用量扣减（不再乘人数）；
+//       无量化清单的菜仍走"食材→食谱→用量"映射表 × 用餐人数
 function buildMealPlannedUsage(dishes, servings, dishMeta) {
     var map = {};
     (dishes || []).forEach(function(d) {
         var name = typeof d === 'string' ? d : (d && d.name);
         if (!name) return;
+        var own = (d && d.ingredients) ? _parseIngredientQtyList(d.ingredients) : [];
+        if (own.length > 0) {
+            own.forEach(function(ing) {
+                var key = ing.name + '|' + ing.unit;
+                if (!map[key]) map[key] = { name: ing.name, qty: 0, unit: ing.unit };
+                map[key].qty += ing.qty;
+            });
+            return;
+        }
         var res = (typeof getOnePersonIngredients === 'function') ? getOnePersonIngredients(name, dishMeta) : { list: [] };
         (res.list || []).forEach(function(ing) {
             var q1 = Number(ing.qty) || 0;
@@ -15603,6 +15614,48 @@ function buildMealPlannedUsage(dishes, servings, dishMeta) {
         r.qty = Math.round(r.qty * 10) / 10;
         return r;
     });
+}
+
+// V607: 把菜品食材清单（字符串数组/分号顿号分隔串/对象数组）解析为 [{name,qty,unit}]；
+// 解析不出数字的条目（适量/少许等）跳过；名称含数字视为异常（如"姜3-4片"）不采信
+function _parseIngredientQtyList(ingredients) {
+    var out = [];
+    var tokens = [];
+    function _std(n) { return (typeof normalizeIngredientName === 'function') ? normalizeIngredientName(n) : n; }
+    function _unit(u) {
+        u = String(u || '').trim();
+        if (u === 'G') return 'g';
+        if (u === 'KG' || u === 'Kg') return 'kg';
+        if (u === 'ML') return 'ml';
+        return u || '个';
+    }
+    if (Array.isArray(ingredients)) {
+        ingredients.forEach(function(x) {
+            if (x === null || x === undefined) return;
+            if (typeof x === 'object') {
+                var nm = String(x.name || '').trim();
+                var q = Number((x.quantity !== undefined && x.quantity !== null) ? x.quantity : x.qty);
+                if (nm && q > 0) out.push({ name: _std(nm), qty: q, unit: _unit(x.unit) });
+            } else {
+                tokens.push(String(x));
+            }
+        });
+    } else if (typeof ingredients === 'string') {
+        tokens = ingredients.split(/[、,，;；\/\n]+/);
+    }
+    tokens.forEach(function(t) {
+        t = String(t || '').trim();
+        if (!t) return;
+        var m = t.match(/^(.+?)\s*(\d+(?:\.\d+)?)\s*([^\s\d]*)$/);
+        if (!m) return;
+        var rawName = m[1].trim();
+        if (/\d/.test(rawName)) return;
+        var nm = _std(rawName);
+        var qty = Number(m[2]);
+        if (!nm || !(qty > 0)) return;
+        out.push({ name: nm, qty: qty, unit: _unit(m[3]) });
+    });
+    return out;
 }
 
 // 按实际数量扣减冰箱库存（同名多批次依次扣，支持 g/kg、ml/L 换算）
