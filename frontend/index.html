@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V616-20261122';
+        var APP_VER = 'V617-20261122';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -76209,6 +76209,17 @@ function _getMealPlanDishNames(dateKey, mealKey) {
             : [];
     } catch (e) { return []; }
 }
+// V617: 已记录的餐次以「记录」为准——优先返回 actual.dishes，无记录时回退 plan.dishes
+function _getMealRecordedOrPlanDishNames(dateKey, mealKey) {
+    try {
+        const data = getMealData(dateKey, mealKey);
+        const act = (data.actual && Array.isArray(data.actual.dishes))
+            ? data.actual.dishes.map(d => typeof d === 'string' ? d : ((d && d.name) || '')).filter(Boolean)
+            : [];
+        if (act.length) return act;
+    } catch (e) {}
+    return _getMealPlanDishNames(dateKey, mealKey);
+}
 
 /**
  * 全家模式落库（mode='family'，历史无 mode 字段的数据照常读取）
@@ -76327,9 +76338,10 @@ function openMealRecordModal(mealKey, opts) {
     let mode = 'family';
 
     // 全家面板状态：V181 默认带入今日计划菜品（今晚就吃等场景用 prefillDishes 覆盖）
+    // V617: 该餐已记录时改为带入实际记录的菜品，与食记卡片/花费口径一致
     let fDishes = (Array.isArray(opts.prefillDishes) && opts.prefillDishes.length)
         ? opts.prefillDishes.slice().filter(Boolean)
-        : _getMealPlanDishNames(dateKey, mealKey);
+        : _getMealRecordedOrPlanDishNames(dateKey, mealKey);
     let fRating = 0;
     let fLocation = '家';
     let fDishComments = {}; // V182: 每道菜的单独评价 {菜名: 评价}
@@ -76370,6 +76382,21 @@ function openMealRecordModal(mealKey, opts) {
             });
         });
     } catch (e) { console.warn('[V608] 载入菜品食材失败:', e); }
+    // V617: 已记录餐次同步载入各菜已有的评价/好吃一般/口味原因，重开弹窗即见上次记录
+    try {
+        const _mdV617 = getMealData(dateKey, mealKey);
+        const _adV617 = (_mdV617 && _mdV617.actual && Array.isArray(_mdV617.actual.dishes)) ? _mdV617.actual.dishes : [];
+        _adV617.forEach(function (d) {
+            try {
+                if (!d || typeof d !== 'object') return;
+                const _nm = String(d.name || '').trim();
+                if (!_nm || fDishes.indexOf(_nm) < 0) return;
+                if (d.userComment) fDishComments[_nm] = d.userComment;
+                if (d.rating) fDishRatings[_nm] = d.rating;
+                if (d.taste) fDishTastes[_nm] = d.taste;
+            } catch (e) {}
+        });
+    } catch (e) {}
     // V609: 打开弹窗后，无食材信息的菜先由系统自动识别主要食材及用量（内置库即时/AI异步，
     // 同菜名防重复请求），显示在菜名右边，用户再点击修改或补用量；延迟到弹窗首帧渲染完成后触发
     try {
@@ -76960,7 +76987,7 @@ function openMealRecordModal(mealKey, opts) {
             fDishComments = {};
             fDishes = (Array.isArray(opts.prefillDishes) && opts.prefillDishes.length)
                 ? opts.prefillDishes.slice().filter(Boolean)
-                : _getMealPlanDishNames(dateKey, mealKey);
+                : _getMealRecordedOrPlanDishNames(dateKey, mealKey); // V617
             fDishChecked = {};
             fDishes.forEach(function (n) { fDishChecked[n] = true; });
             renderFDishTags();
