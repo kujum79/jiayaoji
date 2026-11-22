@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V617-20261122';
+        var APP_VER = 'V618-20261122';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -76644,9 +76644,16 @@ function openMealRecordModal(mealKey, opts) {
         });
         refreshMealSum(); // V614: 菜品增删/勾选/食材用量变化后刷新本餐总价
     }
-        // V614: 这道菜预估总价——食材用量清单（["鸡蛋2个",…]）逐项按参考价引擎估价求和；
-        // 与「食材用量」小屏同源（estimatePrepPrice，采购维护过的单价优先）
+        // V614: 这道菜预估总价；V618: 改为与食记卡片「本餐花费」同口径——
+        // 优先用算账引擎 calcDishSaving（完整食谱配料×用餐人数），引擎无结果时回退食材行加和
     function _dishPriceNum(n) {
+        try {
+            if (typeof calcDishSaving === 'function' && typeof _savingServingsOf === 'function') {
+                var _sv618 = _savingServingsOf(getMealData(dateKey, mealKey)) || 1;
+                var _cs618 = calcDishSaving(String(n || '').trim(), _sv618, mealKey);
+                if (_cs618 && _cs618.home > 0) return _cs618.home;
+            }
+        } catch (e) {}
         try {
             if (typeof estimatePrepPrice !== 'function' || typeof _parseIngredientQtyList !== 'function') return 0;
             var list = _parseIngredientQtyList(fDishIngredients[n] || []);
@@ -76670,12 +76677,15 @@ function openMealRecordModal(mealKey, opts) {
             var sum = 0, cnt = 0;
             fDishes.forEach(function (n) {
                 if (fDishChecked[n] === false) return; // 未勾选=这顿没吃这道菜，不计入
+                // V618: 与卡片算账引擎同口径——纯水果/配餐饮品不计入本餐总价
+                if ((typeof isPlainFruitDish === 'function' && isPlainFruitDish(n)) ||
+                    (typeof isPlainDrinkDish === 'function' && isPlainDrinkDish(n))) return;
                 var s = _dishPriceNum(n);
                 if (s > 0) { sum += s; cnt++; }
             });
             if (!cnt) { el.style.display = 'none'; return; }
             el.style.display = 'flex';
-            el.innerHTML = '<span>🧮 本餐总价（' + cnt + ' 道菜）</span><span style="color:#DC2626;">¥' + sum.toFixed(2) + '</span>';
+            el.innerHTML = '<span>🧮 本餐总价（' + cnt + ' 道菜 · 与食记花费同口径）</span><span style="color:#DC2626;">¥' + (Math.round(sum * 10) / 10).toFixed(1) + '</span>';
         } catch (e) {}
     }
     // V608: 单菜食材用量底部小屏（复用 openMealUsagePanel 视觉风格，独立 id=umrIngOv 避免冲突）
