@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V607-20261122';
+        var APP_VER = 'V608-20261122';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -76243,6 +76243,11 @@ function saveFamilyMealRecord(o) {
                 userComment: ((o.dishComments && o.dishComments[n]) || '').trim(),
                 rating: parseInt(o.dishRatings && o.dishRatings[n], 10) || 0, // V339(D6-04): 逐道菜星级
                 taste: ((o.dishTastes && o.dishTastes[n]) || '').trim(), // V449: 👎 原因 / 口味标签
+                // V608: 菜品自带量化食材清单（["鸡蛋2个",…]），finalizeActualIngredients→buildMealPlannedUsage 据此精确扣减
+                ingredients: (function () {
+                    var arr = o.dishIngredients && o.dishIngredients[n];
+                    return Array.isArray(arr) && arr.length ? arr.map(String) : undefined;
+                })(),
                 aiFeedback: ''
             };
         }),
@@ -76285,13 +76290,17 @@ function saveFamilyMealRecord(o) {
         });
     } catch (e) { console.warn('同步日历实际记录失败：', e); }
 
-    // 在家做饭自动扣减冰箱食材
+    // V608: 移除旧「每样食材扣1」循环——updateMealActual→finalizeActualIngredients 已按
+    // dish.ingredients/用量映射表精确扣减，再走 deductIngredientsForDish 会双重扣减
     let deducted = 0;
-    if (record.diningType === '在家做饭') {
-        names.forEach(function (n) {
-            try { deducted += (deductIngredientsForDish(n) || []).length; } catch (e) {}
-        });
-    }
+    try {
+        if (record.diningType === '在家做饭') {
+            var _calNow = getDietCalendar();
+            var _mdNow = _calNow[String(date)] && _calNow[String(date)][o.mealKey];
+            var _actNow = _mdNow && _mdNow.actual;
+            deducted = (_actNow && Array.isArray(_actNow.deductedIngs)) ? _actNow.deductedIngs.length : 0;
+        }
+    } catch (e) {}
     return { record: record, deducted: deducted };
 }
 
@@ -76314,6 +76323,8 @@ function openMealRecordModal(mealKey, opts) {
     let fDishComments = {}; // V182: 每道菜的单独评价 {菜名: 评价}
     let fDishRatings = {}; // V339(D6-04): 每道菜单独星级 {菜名: 1~5}，0/未设置=未评分
     let fDishTastes = {};  // V449: 👎 时补选的原因（太咸/太淡…），最终写入 dishes[].taste
+    let fDishIngredients = {}; // V608: 每道菜的量化食材 {菜名: ["鸡蛋2个","虾米15g",…]}（"名称+数量+单位"字符串数组，按菜名键控）
+    let fIngAiPending = {};    // V608: 同一菜名 AI 生成食材的防重复请求标记
     let fPhotos = [];      // V450: 本餐照片（拍照/上传，最多 6 张），生成海报时可选其中一张
     // V183: 右上角「🍽️ 在外就餐」开关：接收当天外出就餐计划（餐厅/食谱/人数/预算）
     let fEatingOut = false;
@@ -76331,6 +76342,22 @@ function openMealRecordModal(mealKey, opts) {
     // 菜品勾选：默认全部勾选（取消勾选的菜不写入实际记录）
     let fDishChecked = {};
     fDishes.forEach(function (n) { fDishChecked[n] = true; });
+    // V608: 打开弹窗时从已有实际餐/计划餐载入原 dish.ingredients（量化食材随菜名带过来，供显示与精确扣减）
+    try {
+        const _md0 = getMealData(dateKey, mealKey);
+        [_md0 && _md0.actual && _md0.actual.dishes, _md0 && _md0.plan && _md0.plan.dishes].forEach(function (list) {
+            (Array.isArray(list) ? list : []).forEach(function (d) {
+                try {
+                    if (!d || typeof d !== 'object') return;
+                    const _nm = String(d.name || '').trim();
+                    if (!_nm || fDishIngredients[_nm]) return;
+                    if (fDishes.indexOf(_nm) < 0) return;
+                    const _src = Array.isArray(d.ingredients) ? d.ingredients : [];
+                    if (_src.length) fDishIngredients[_nm] = _src.map(String);
+                } catch (e) {}
+            });
+        });
+    } catch (e) { console.warn('[V608] 载入菜品食材失败:', e); }
 
     // 已有同类型弹窗先移除，避免元素 id 冲突
     const oldOv = document.getElementById('umrOverlay');
@@ -76440,7 +76467,7 @@ function openMealRecordModal(mealKey, opts) {
             box.innerHTML = '<span style="font-size:13px;color:#D1D5DB;line-height:30px;">还没有菜品，在下方输入框添加实际吃的菜</span>';
             return;
         }
-        // V182/V184: 每行一道菜——勾选 | 菜名 | 对这道菜的评价输入框 | ✕
+        // V608: 每道菜两行——第一行 勾选|菜名|食材文本(点击编辑用量)|✕；第二行 评价输入框独占整行
         box.innerHTML = fDishes.map(function (n, i) {
             const cmt = fDishComments[n] || '';
             const checked = fDishChecked[n] !== false;
@@ -76448,13 +76475,26 @@ function openMealRecordModal(mealKey, opts) {
             const _spHits = (typeof specialInterventionsForDish === 'function') ? specialInterventionsForDish(spItems, n) : [];
             const _isSp = _spHits.length > 0;
             const _spTag = (typeof specialInterventionBadgesHtml === 'function') ? specialInterventionBadgesHtml(spItems, n) : '';
+            // V608: 食材文本——最多显示3项，用「·」连接；无任何食材信息时显示灰色「+ 补用量」
+            const _ings = fDishIngredients[n];
+            let _ingHtml;
+            if (_ings && _ings.length) {
+                const _txt = _ings.slice(0, 3).map(function (s) { return String(s || '').trim(); }).filter(Boolean).join(' · ');
+                _ingHtml = '<span class="umr-f-dish-ing" data-name="' + escapeAttr(n) + '" title="' + escapeAttr(_ings.join(' · ')) + '" style="flex:1;min-width:0;font-size:12px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;">' + escapeHtml(_txt || '＋ 补用量') + '</span>';
+            } else {
+                _ingHtml = '<span class="umr-f-dish-ing" data-name="' + escapeAttr(n) + '" style="flex:1;min-width:0;font-size:12px;color:#9CA3AF;cursor:pointer;">＋ 补用量</span>';
+            }
             return '<div style="background:' + (_isSp ? '#FFF7ED' : '#F9FAFB') + ';border:1px solid ' + (_isSp ? '#FED7AA' : '#F3F4F6') + ';border-radius:10px;padding:6px 8px;margin-bottom:6px;">'
                 + '<div style="display:flex;align-items:center;gap:6px;">'
                 + '<input type="checkbox" class="umr-f-dish-cb" data-name="' + escapeAttr(n) + '"' + (checked ? ' checked' : '') + ' style="flex-shrink:0;width:14px;height:14px;margin:0;cursor:pointer;">'
                 + '<span title="' + escapeAttr(n) + '" style="font-size:14px;color:' + (checked ? (_isSp ? '#C2410C' : '#9A3412') : '#9CA3AF') + ';font-weight:' + (_isSp ? '700' : '600') + ';width:84px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' + (checked ? '' : 'text-decoration:line-through;') + '">' + escapeHtml(n) + '</span>'
                 + (_isSp ? '<span style="flex-shrink:0;">' + _spTag + '</span>' : '')
-                + '<input type="text" data-name="' + escapeAttr(n) + '" class="umr-f-dish-cmt" value="' + escapeAttr(cmt) + '" placeholder="对这道菜的评价" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #E5E7EB;border-radius:7px;font-size:13px;box-sizing:border-box;">'
+                + _ingHtml
                 + '<button type="button" data-i="' + i + '" class="umr-f-dish-del" title="删除" style="background:none;border:none;color:#FB923C;font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;">✕</button>'
+                + '</div>'
+                // V608: 评价输入框移到第二行独占整行
+                + '<div style="margin-top:4px;">'
+                + '<input type="text" data-name="' + escapeAttr(n) + '" class="umr-f-dish-cmt" value="' + escapeAttr(cmt) + '" placeholder="对这道菜的评价" style="width:100%;padding:6px 8px;border:1px solid #E5E7EB;border-radius:7px;font-size:13px;box-sizing:border-box;">'
                 + '</div>'
                 // V449: 逐道菜评分简化为 👍/👎（默认不评分，点 👎 再选原因；星级只在「查看详情」展示）
                 + '<div style="display:flex;align-items:center;gap:6px;margin-top:3px;padding-left:20px;flex-wrap:wrap;">'
@@ -76472,7 +76512,7 @@ function openMealRecordModal(mealKey, opts) {
                 const idx = parseInt(this.dataset.i, 10);
                 const removed = fDishes[idx];
                 fDishes.splice(idx, 1);
-                if (removed) { delete fDishComments[removed]; delete fDishChecked[removed]; delete fDishRatings[removed]; delete fDishTastes[removed]; }
+                if (removed) { delete fDishComments[removed]; delete fDishChecked[removed]; delete fDishRatings[removed]; delete fDishTastes[removed]; delete fDishIngredients[removed]; }
                 renderFDishTags();
                 renderFPlanHint(); // V181: 删除后提示条可变为"加回今日计划菜"
             });
@@ -76506,6 +76546,148 @@ function openMealRecordModal(mealKey, opts) {
                 renderFDishTags();
             });
         });
+        // V608: 点击食材文本/「+ 补用量」→ 底部小屏编辑该菜食材用量
+        box.querySelectorAll('.umr-f-dish-ing').forEach(function (el) {
+            el.addEventListener('click', function () {
+                try { openDishIngPanel(this.dataset.name); } catch (e) { console.warn('[V608] 打开食材用量小屏失败:', e); }
+            });
+        });
+    }
+    // V608: 单菜食材用量底部小屏（复用 openMealUsagePanel 视觉风格，独立 id=umrIngOv 避免冲突）
+    function openDishIngPanel(dishName) {
+        var rows = (fDishIngredients[dishName] || []).map(function (s) {
+            s = String(s || '').trim();
+            if (!s) return null;
+            try {
+                var m = s.match(/^(.+?)\s*(\d+(?:\.\d+)?)\s*([^\s\d]*)$/);
+                if (m) return { name: m[1].trim(), qty: m[2], unit: m[3] || '个' };
+            } catch (e) {}
+            return { name: s, qty: '', unit: '' }; // 解析不出数量：只显示名称
+        }).filter(Boolean);
+        var existed = document.getElementById('umrIngOv');
+        if (existed) existed.remove();
+        var uo = document.createElement('div');
+        uo.id = 'umrIngOv';
+        uo.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(31,41,55,0.5);display:flex;align-items:flex-end;justify-content:center;';
+        uo.addEventListener('click', function (e) { if (e.target === uo) uo.remove(); });
+        uo.innerHTML = '<div style="background:white;border-radius:20px 20px 0 0;padding:20px;width:420px;max-width:calc(100% - 10px);max-height:80vh;overflow-y:auto;box-shadow:0 -4px 20px rgba(0,0,0,0.15);">'
+            + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">'
+            + '<button id="umrIngBack" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6B7280;padding:0;line-height:1;">＜</button>'
+            + '<div style="font-size:16px;font-weight:700;color:#374151;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🧾 ' + escapeHtml(dishName) + ' · 食材用量</div>'
+            + '<button id="umrIngConfirm" style="padding:6px 14px;background:#F97316;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;">✓ 确认</button>'
+            + '</div>'
+            + '<div style="font-size:13px;color:#6B7280;margin-bottom:10px;">保存后按这些用量扣减冰箱库存；数量清空则删除该食材。</div>'
+            + '<div id="umrIngList"></div>'
+            + '<div style="display:flex;gap:6px;margin-top:10px;">'
+            + '<input id="umrIngNewName" placeholder="食材名称" style="flex:1;min-width:0;padding:7px 9px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;box-sizing:border-box;">'
+            + '<input id="umrIngNewQty" type="number" min="0" step="0.1" placeholder="数量" style="width:72px;padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;box-sizing:border-box;">'
+            + '<input id="umrIngNewUnit" placeholder="单位" style="width:58px;padding:7px 8px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;box-sizing:border-box;">'
+            + '<button id="umrIngAddRow" type="button" style="padding:0 12px;border:1px solid #FED7AA;background:#FFFBEB;color:#F97316;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">＋</button>'
+            + '</div>'
+            + '</div>';
+        document.body.appendChild(uo);
+        function renderIngRows() {
+            var listEl = uo.querySelector('#umrIngList');
+            listEl.innerHTML = rows.length ? rows.map(function (r, i) {
+                return '<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;margin-bottom:6px;">'
+                    + '<span style="font-size:14px;color:#4B5563;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(r.name) + '</span>'
+                    + '<input type="number" min="0" step="0.1" value="' + escapeAttr(r.qty) + '" data-idx="' + i + '" class="umr-ing-qty" style="width:72px;padding:5px 8px;border:1px solid #FDBA74;border-radius:6px;font-size:13px;box-sizing:border-box;">'
+                    + '<span style="font-size:13px;color:#4B5563;white-space:nowrap;">' + escapeHtml(r.unit || '') + '</span>'
+                    + '</div>';
+            }).join('') : '<div style="padding:14px;text-align:center;color:#9CA3AF;font-size:13px;">暂无食材，可在下方添加</div>';
+            listEl.querySelectorAll('.umr-ing-qty').forEach(function (inp) {
+                inp.addEventListener('input', function () { rows[parseInt(this.dataset.idx, 10)].qty = this.value; });
+            });
+        }
+        renderIngRows();
+        uo.querySelector('#umrIngBack').addEventListener('click', function () { uo.remove(); });
+        uo.querySelector('#umrIngAddRow').addEventListener('click', function () {
+            try {
+                var nm = (uo.querySelector('#umrIngNewName').value || '').trim();
+                var q = String(uo.querySelector('#umrIngNewQty').value || '').trim();
+                var un = (uo.querySelector('#umrIngNewUnit').value || '').trim();
+                if (!nm) { showToast('请填写食材名称'); return; }
+                rows.push({ name: nm, qty: q, unit: un || '个' });
+                uo.querySelector('#umrIngNewName').value = '';
+                uo.querySelector('#umrIngNewQty').value = '';
+                uo.querySelector('#umrIngNewUnit').value = '';
+                renderIngRows();
+            } catch (e) { console.warn('[V608] 新增食材行失败:', e); }
+        });
+        uo.querySelector('#umrIngConfirm').addEventListener('click', function () {
+            try {
+                var arr = [];
+                rows.forEach(function (r) {
+                    var q = parseFloat(r.qty);
+                    if (!r.name || !(q > 0)) return; // 已有数量项删掉数量 → 整项移除
+                    arr.push(String(r.name) + (Math.round(q * 10) / 10) + (r.unit || '个'));
+                });
+                if (arr.length) fDishIngredients[dishName] = arr;
+                else delete fDishIngredients[dishName];
+            } catch (e) { console.warn('[V608] 保存食材用量失败:', e); }
+            uo.remove();
+            renderFDishTags();
+        });
+    }
+    // V608: 解析 AI/兜底返回为「名称数量单位」字符串数组（兼容 数组 / {ingredients} / rawText 内嵌 JSON）
+    function _parseIngArray(res) {
+        try {
+            var raw = null;
+            if (Array.isArray(res)) raw = res;
+            else if (res && Array.isArray(res.ingredients)) raw = res.ingredients;
+            else if (res && res.rawText) {
+                var m = String(res.rawText).match(/\[[\s\S]*\]/);
+                if (m) raw = JSON.parse(m[0]);
+            }
+            if (!raw || !raw.length) return null;
+            var arr = raw.map(function (x) {
+                if (x && typeof x === 'object') {
+                    var nm = String(x.name || '').trim();
+                    if (!nm) return null;
+                    var q = Number((x.quantity !== undefined && x.quantity !== null) ? x.quantity : x.qty);
+                    return nm + (q > 0 ? (Math.round(q * 10) / 10) + (x.unit || '个') : '');
+                }
+                return String(x || '').trim() || null;
+            }).filter(Boolean);
+            return arr.length ? arr : null;
+        } catch (e) { return null; }
+    }
+    // V608: 手动添加菜名后三级自动带出食材：(a)内置食谱库 (b)AI 生成 (c)失败留「+ 补用量」不阻塞
+    function _autoFillDishIngredients(nm) {
+        if (!nm || fDishIngredients[nm]) return;
+        var servings = 3; // 用餐人数取不到时默认 3
+        try { servings = (typeof getMealServings === 'function') ? (getMealServings(dateKey, mealKey, 3) || 3) : 3; } catch (e) {}
+        // (a) 内置库 getDishIngredientsWithServings
+        try {
+            if (typeof getDishIngredientsWithServings === 'function') {
+                var lib = getDishIngredientsWithServings(nm, servings);
+                if (lib && lib.length) {
+                    var arr = lib.map(function (x) {
+                        if (!x || !x.name) return null;
+                        var q = Number(x.quantity);
+                        return String(x.name) + (q > 0 ? (Math.round(q * 10) / 10) + (x.unit || '个') : '');
+                    }).filter(Boolean);
+                    if (arr.length) { fDishIngredients[nm] = arr; renderFDishTags(); return; }
+                }
+            }
+        } catch (e) { console.warn('[V608] 内置库查食材失败:', e); }
+        // (b) AI 异步生成（复用 callAliyunQwenApi 后端 /plan 通道；同菜名防重复；弹窗关闭/菜被删则丢弃）
+        if (fIngAiPending[nm]) return;
+        if (typeof callAliyunQwenApi !== 'function') return;
+        fIngAiPending[nm] = true;
+        (async function () {
+            try {
+                var sys = '你只需返回严格 JSON 数组，元素为"食材名+数量+单位"字符串（如["鸡蛋2个","虾米15g","面粉40g"]），给出该菜的3种主要食材及用量（按' + servings + '人份）。单位用：个、克、毫升、勺、片。不要任何其他文字。';
+                var usr = '菜名：' + nm + '，' + servings + '人份';
+                var res = await callAliyunQwenApi(sys, usr, { mode: 'diet' });
+                var arr = _parseIngArray(res);
+                if (arr && arr.length && document.getElementById('umrOverlay') && fDishes.indexOf(nm) > -1) {
+                    fDishIngredients[nm] = arr;
+                    renderFDishTags();
+                }
+            } catch (e) { console.warn('[V608] AI 生成食材失败:', e); }
+            fIngAiPending[nm] = false; // (c) 失败/超时：保持「+ 补用量」，可手动补
+        })();
     }
     // V450: 本餐照片缩略图（拍照/上传，生成海报时可选）
     function renderFPhotos() {
@@ -76653,6 +76835,8 @@ function openMealRecordModal(mealKey, opts) {
         inp.value = '';
         renderFDishTags();
         renderFPlanHint();
+        // V608: 新加入且无食材信息的菜，三级自动带出用量（内置库→AI→留「+ 补用量」）
+        try { _autoFillDishIngredients(n); } catch (e) { console.warn('[V608] 自动带出食材失败:', e); }
     }
 
     function doSave(quick) {
@@ -76694,6 +76878,7 @@ function openMealRecordModal(mealKey, opts) {
             // V344(D7-04): 快速记录=整餐 4 星，逐道菜同步写 4 星，避免明细显示「未评分」、偏好画像拿不到单菜评分
             dishRatings: quick ? (function () { var m = {}; dishes.forEach(function (n) { m[String(n || '').trim()] = 4; }); return m; })() : fDishRatings,
             dishTastes: quick ? {} : fDishTastes, // V449: 👎 原因（写入 dishes[].taste，供偏好画像排除/纠偏）
+            dishIngredients: quick ? {} : fDishIngredients, // V608: 逐菜量化食材（写入 dishes[].ingredients，供扣冰箱按用量精确扣减）
             images: fPhotos.slice() // V450: 拍照/上传的本餐照片
         });
         if (!res) return;
