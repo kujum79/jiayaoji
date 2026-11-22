@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V614-20261122';
+        var APP_VER = 'V615-20261122';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -76411,7 +76411,7 @@ function openMealRecordModal(mealKey, opts) {
         +       '</div>'
         +       '<div id="umrFPlanHint"></div>'
         +       '<div style="display:flex;align-items:center;gap:10px;margin-top:14px;">'
-        +         '<span style="font-size:13px;font-weight:600;color:#374151;">⭐ 总体评分</span>'
+        +         '<span style="font-size:13px;font-weight:600;color:#374151;white-space:nowrap;">总体评分</span>'
         +         '<span id="umrFStars" style="font-size:24px;line-height:1;letter-spacing:2px;user-select:none;"></span>'
         +         '<span style="margin-left:auto;display:flex;gap:6px;">'
         +           '<button id="umrFCameraBtn" type="button" style="padding:6px 9px;border:1px solid #FDBA74;background:#FFFBF5;color:#C2410C;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📷 拍照</button>'
@@ -76870,7 +76870,7 @@ function openMealRecordModal(mealKey, opts) {
                 + '<img src="' + u + '" alt="本餐照片" style="display:block;width:58px;height:58px;object-fit:cover;border-radius:9px;border:1px solid #E5E7EB;">'
                 + '<span class="umr-f-photo-del" data-i="' + i + '" title="删除" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:rgba(17,24,39,.75);color:#fff;font-size:11px;line-height:18px;text-align:center;cursor:pointer;">✕</span>'
                 + '</span>';
-        }).join('') + (fPhotos.length ? '' : '<span style="font-size:11px;color:#9CA3AF;line-height:58px;">可选：拍张照片，海报更好看</span>');
+        }).join('');
         box.querySelectorAll('.umr-f-photo-del').forEach(function (el) {
             el.addEventListener('click', function () {
                 fPhotos.splice(parseInt(this.dataset.i, 10), 1);
