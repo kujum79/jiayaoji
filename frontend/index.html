@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V634-20261123';
+        var APP_VER = 'V635-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -56329,16 +56329,21 @@ function _saLibMainOf(k) { return String(k.mainCategory || k.categoryId || ''); 
 function _saLibSubOf(k) { return String(k.subCategory || k.subCategoryId || ''); }
 function _saLibLeafOf(k) { return String(k.leafCategory || k.leafCategoryId || ''); }
 // 当前节点下全部公共条目：父节点=含全部后代；叶子匹配兼容二层（父即叶子）与三层树数据
+// V635: 条目 sub/leaf 字段存的可能是名称（添加表单/审核流程按名称存），而自定义分类节点 id 是 cat_<时间戳>——
+// 各级同时接受 id 与显示名两种值比对（id/名称双兼容），否则自定义分类恒显示 0 篇
 function _saLibItemsForPath(key) {
     var segs = String(key || '').split('|').filter(Boolean);
     var all = (typeof dietKnowledge !== 'undefined' && dietKnowledge ? dietKnowledge : []).filter(function (k) { return k && (k.layer === 'public' || _kbTreatAsPublic(k)); });
     if (!segs.length) return all;
+    var names = _saLibPathNames(key); // 各级显示名（节点缺失时可能短于 segs）
     var mainId = segs[0], subId = segs[1] || '', leafId = segs[2] || '';
+    var mainName = names[0] || '', subName = names[1] || '', leafName = names[2] || '';
+    var m = function (val, id, name) { return val === id || (!!name && val === name); };
     return all.filter(function (k) {
-        if (_saLibMainOf(k) !== mainId) return false;
+        if (!m(_saLibMainOf(k), mainId, mainName)) return false;
         if (!subId) return true;
-        if (!leafId) return _saLibSubOf(k) === subId || _saLibLeafOf(k) === subId;
-        return _saLibSubOf(k) === leafId || (_saLibSubOf(k) === subId && _saLibLeafOf(k) === leafId);
+        if (!leafId) return m(_saLibSubOf(k), subId, subName) || m(_saLibLeafOf(k), subId, subName);
+        return m(_saLibSubOf(k), leafId, leafName) || (m(_saLibSubOf(k), subId, subName) && m(_saLibLeafOf(k), leafId, leafName));
     });
 }
 // 双栏样式（只注入一次，仿 syTreeStyle）
@@ -60508,27 +60513,49 @@ async function aiGenerateKnowledgeContent() {
     // 食材分类走结构化生成（特征/营养/产地/成分表/搭配/配图）
     if (mainCat === 'ingredient') { await aiGenerateIngredient(); return; }
     var tags = (document.getElementById('newKnowledgeTags') || {}).value || '';
-    if (!title.trim() && !tags.trim()) {
-        showToast('请先填写标题或标签，AI 将据此生成内容');
-        return;
-    }
     var catNames = { ingredient: '食材', recipe: '食谱', solar: '节气', 'food-therapy': '食疗', symptom: '症状调理', cooking: '烹饪技巧', 'dining-out': '在外就餐' };
-    var prompt = '请为家庭饮食知识库撰写一条知识内容。\n';
-    prompt += '标题：' + (title.trim() || '（自拟）') + '\n';
-    prompt += '分类：' + (catNames[mainCat] || '饮食常识') + '\n';
-    if (tags.trim()) prompt += '标签：' + tags.trim() + '\n';
-    prompt += '\n【要求】\n1. 输出150-300字正文，实用、通俗，面向家庭日常饮食；\n2. 如涉及食材/食谱，可包含要点做法或挑选/储存建议；\n3. 如涉及健康表述，须谨慎客观，不夸大疗效；\n4. 只输出正文，不要标题、序号和多余说明；\n5. 删除文中所有图片引用、图片链接与图片占位描述，保持正文原意不变。';
+    // V635: 双模式——正文框已有内容（如用户上传长文）→「整理模式」保留原文原意；正文为空 → 原「生成模式」
+    var bodyText = (contentEl.value || '').trim();
+    var isOrganize = !!bodyText;
+    var prompt;
+    if (isOrganize) {
+        var srcText = bodyText;
+        var _truncated = false;
+        if (srcText.length > 12000) { srcText = srcText.slice(0, 12000); _truncated = true; }
+        prompt = '请整理以下原文：\n'
+            + '1)保持原意与全部细节，不得缩写、不得改写观点、不得替换做法；\n'
+            + '2)删除图片引用、图片链接、图片占位与重复出现的图注行；\n'
+            + '3)修正错别字与明显标点；\n'
+            + '4)保留小标题与条目结构，输出整理后全文（字数与原文相当）；\n'
+            + '5)只输出正文。\n'
+            + '标题：' + (title.trim() || '（无）') + '\n'
+            + '原文：\n' + srcText;
+        if (_truncated) showToast('原文超过 12000 字，已截断后整理');
+    } else {
+        if (!title.trim() && !tags.trim()) {
+            showToast('请先填写标题或标签，AI 将据此生成内容');
+            return;
+        }
+        prompt = '请为家庭饮食知识库撰写一条知识内容。\n';
+        prompt += '标题：' + (title.trim() || '（自拟）') + '\n';
+        prompt += '分类：' + (catNames[mainCat] || '饮食常识') + '\n';
+        if (tags.trim()) prompt += '标签：' + tags.trim() + '\n';
+        prompt += '\n【要求】\n1. 输出200-400字正文，实用、通俗，面向家庭日常饮食；\n2. 如涉及食材/食谱，可包含要点做法或挑选/储存建议；\n3. 如涉及健康表述，须谨慎客观，不夸大疗效；\n4. 只输出正文，不要标题、序号和多余说明；\n5. 删除文中所有图片引用、图片链接与图片占位描述，保持正文原意不变。';
+    }
 
     var oldText = btn ? btn.textContent : '';
-    if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+    if (btn) { btn.disabled = true; btn.textContent = isOrganize ? '整理中…' : '生成中…'; }
     try {
         // V130: 改走统一入口（/plan 优先，失败回退直连）
-        var result = await aiChatMultiProvider('你是家庭膳食知识编辑，擅长撰写简洁实用的家庭饮食知识。', prompt, { maxTokens: 800, temperature: 0.7, taskType: 'knowledge' });
+        var opts = isOrganize
+            ? { maxTokens: 4000, temperature: 0.2, taskType: 'knowledge' }
+            : { maxTokens: 800, temperature: 0.7, taskType: 'knowledge' };
+        var result = await aiChatMultiProvider('你是家庭膳食知识编辑，擅长撰写简洁实用的家庭饮食知识。', prompt, opts);
         var reply = (result.choices && result.choices[0] && result.choices[0].message) ? result.choices[0].message.content : '';
         if (!reply.trim()) { showToast('AI 未返回内容，请重试'); }
-        else { contentEl.value = reply.trim(); showToast('✅ AI 已生成内容'); }
+        else { contentEl.value = reply.trim(); showToast(isOrganize ? '✅ AI 已整理原文（保留原意）' : '✅ AI 已生成内容'); }
     } catch (e) {
-        showToast('生成失败：' + (e.message || '网络错误'));
+        showToast((isOrganize ? '整理失败：' : '生成失败：') + (e.message || '网络错误'));
     }
     if (btn) { btn.disabled = false; btn.textContent = oldText; }
 }
