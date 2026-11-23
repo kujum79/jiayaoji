@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V639-20261123';
+        var APP_VER = 'V640-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -37980,6 +37980,14 @@ function _fhAutoFallback(force) {
 
 // 食养堂树状子分类（与生成端 category 一致）；食养收藏沿用同一套，仅内容=用户收藏
 var _FH_TREE_CATS = ['节气食养', '天气食养', '当季食材', '厨房技巧', '选材避坑', '家庭宴客', '饮食文化', '食育', '食方'];
+// V640: 管理态（_kbInAdminMgrView）隐藏已并入「食谱→节气饮食」的三个食养节点（节气食养/当季食材/饮食文化）；
+// 食养堂会员页与普通浏览态不受影响（判定仅在管理态生效）
+var _KB_MIGRATED_SY_CATS = ['节气食养', '当季食材', '饮食文化'];
+function _fhTreeCatsVisible() {
+    var cats = _FH_TREE_CATS.slice();
+    try { if (_kbInAdminMgrView()) cats = cats.filter(function (c) { return _KB_MIGRATED_SY_CATS.indexOf(c) < 0; }); } catch (e) {}
+    return cats;
+}
 var _fhServerArchive = [];          // 服务端自动发布归档（会话内缓存）
 var _fhServerArchiveAt = 0;
 var _fhArchiveLoading = false;
@@ -48760,7 +48768,7 @@ function _syItemsForLayer(lib) {
 // 板块下级：节气食养→四季；其余→常量 ∪ 数据里实际用过的 leafCategory
 function _sySectionChildren(lib, sec, libItems) {
     if (sec === '节气食养') return ['春季', '夏季', '秋季', '冬季'];
-    if (sec === '食养堂' || sec === '食养收藏') return _FH_TREE_CATS.slice();
+    if (sec === '食养堂' || sec === '食养收藏') return _fhTreeCatsVisible(); // V640: 管理态隐藏已迁移三分类
     if (sec === '食养食谱') return null;
     var base;
     if (sec === '人群配餐') base = SHIYANG_POPULATIONS.slice();
@@ -49107,7 +49115,7 @@ function renderShiyangContent() {
                 var fk = lib + '|' + extraSec;
                 html += rowHtml(fk, '🍂 ' + extraSec, { branch: true, count: _sySecCount(libItems, extraSec) });
                 if (_syTreeOpen[fk]) {
-                    _FH_TREE_CATS.forEach(function (fc) {
+                    _fhTreeCatsVisible().forEach(function (fc) { // V640: 管理态隐藏已迁移三分类
                         var _fcl = fc + (_premiumLocked(fc) ? ' <span style="font-size:10px;">🔒</span>' : '');
                         html += rowHtml(fk + '|' + fc, _fcl, { count: _syLeafCount(libItems, extraSec, fc) });
                     });
@@ -56505,6 +56513,128 @@ document.addEventListener('click', function (e) {
 function _saLibExitSy() {
     _saLibSyMode = false;
     renderLibTabView();
+}
+// ============ V640: 节气文章一次性迁移（食养堂归档 → 公共文库 食谱→节气饮食→四季） ============
+// 全局函数，控制台/超管可调用；幂等：已存在同 kbSrcId 或同 title 的条目则跳过
+// 廿四节气近似表（固定月日，取 date 之前最近的一个节气 → 节气归季）
+var _KB_JIEQI_TABLE = [
+    { n: '小寒', m: 1, d: 6 }, { n: '大寒', m: 1, d: 20 },
+    { n: '立春', m: 2, d: 4 }, { n: '雨水', m: 2, d: 19 },
+    { n: '惊蛰', m: 3, d: 6 }, { n: '春分', m: 3, d: 21 },
+    { n: '清明', m: 4, d: 5 }, { n: '谷雨', m: 4, d: 20 },
+    { n: '立夏', m: 5, d: 6 }, { n: '小满', m: 5, d: 21 },
+    { n: '芒种', m: 6, d: 6 }, { n: '夏至', m: 6, d: 21 },
+    { n: '小暑', m: 7, d: 7 }, { n: '大暑', m: 7, d: 23 },
+    { n: '立秋', m: 8, d: 8 }, { n: '处暑', m: 8, d: 23 },
+    { n: '白露', m: 9, d: 8 }, { n: '秋分', m: 9, d: 23 },
+    { n: '寒露', m: 10, d: 8 }, { n: '霜降', m: 10, d: 24 },
+    { n: '立冬', m: 11, d: 8 }, { n: '小雪', m: 11, d: 22 },
+    { n: '大雪', m: 12, d: 7 }, { n: '冬至', m: 12, d: 22 }
+];
+// 节气归季：冬：立冬~大寒；春：立春~谷雨；夏：立夏~大暑；秋：立秋~霜降
+var _KB_JIEQI_SEASON = {};
+(function () {
+    var groups = {
+        '春季': ['立春', '雨水', '惊蛰', '春分', '清明', '谷雨'],
+        '夏季': ['立夏', '小满', '芒种', '夏至', '小暑', '大暑'],
+        '秋季': ['立秋', '处暑', '白露', '秋分', '寒露', '霜降'],
+        '冬季': ['立冬', '小雪', '大雪', '冬至', '小寒', '大寒']
+    };
+    Object.keys(groups).forEach(function (se) {
+        groups[se].forEach(function (t) { _KB_JIEQI_SEASON[t] = se; });
+    });
+})();
+// 按 date(YYYY-MM-DD) 查近似表取「之前最近的一个节气」→ 归季；早于小寒归上一年冬至（冬）
+function _kbSeasonByJieqiDate(dateStr) {
+    var mm = /^(\d{1,2})-(\d{1,2})/.exec(String(dateStr || '').trim().replace(/^\d{4}-/, ''));
+    if (!mm) return '';
+    var md = parseInt(mm[1], 10) * 100 + parseInt(mm[2], 10);
+    if (!(md >= 101 && md <= 1231)) return '';
+    var best = null;
+    for (var i = 0; i < _KB_JIEQI_TABLE.length; i++) {
+        var v = _KB_JIEQI_TABLE[i].m * 100 + _KB_JIEQI_TABLE[i].d;
+        if (v <= md && (!best || v > best.v)) best = { v: v, n: _KB_JIEQI_TABLE[i].n };
+    }
+    if (!best) best = { v: 1222, n: '冬至' }; // 1月1~5日：上一年冬至之后
+    return _KB_JIEQI_SEASON[best.n] || '';
+}
+// date 缺失/不可解析时按标题中的节气/季节词判定
+function _kbSeasonByTitleWords(title) {
+    var t = String(title || '');
+    for (var i = 0; i < _KB_JIEQI_TABLE.length; i++) {
+        if (t.indexOf(_KB_JIEQI_TABLE[i].n) >= 0) return _KB_JIEQI_SEASON[_KB_JIEQI_TABLE[i].n];
+    }
+    var sw = { '春季': '春季', '春天': '春季', '夏季': '夏季', '夏天': '夏季', '秋季': '秋季', '秋天': '秋季', '冬季': '冬季', '冬天': '冬季' };
+    var ks = Object.keys(sw);
+    for (var j = 0; j < ks.length; j++) { if (t.indexOf(ks[j]) >= 0) return sw[ks[j]]; }
+    return '';
+}
+async function _kbMigrateJieqiArticles() {
+    if (!requireSuperAdmin()) return null;
+    var CATS = ['节气食养', '当季食材', '饮食文化'];
+    var stats = { total: 0, 春季: 0, 夏季: 0, 秋季: 0, 冬季: 0, skipped: 0, failed: 0, undated: 0 };
+    // 复用 sy 视图同一数据加载链路（服务端归档缓存 + 本地手动发布合并），不自行定 days
+    try { await _fhLoadServerArchive(); } catch (e) {}
+    var pool = [];
+    try {
+        pool = _fhArchiveAll().filter(function (a) {
+            return a && a.title && CATS.indexOf(String(a.category || '').trim()) >= 0;
+        });
+    } catch (e) { showToast('归档数据读取失败：' + (e.message || e)); return null; }
+    stats.total = pool.length;
+    var migrated = 0;
+    var _ctx = getCurrentUserContext();
+    for (var i = 0; i < pool.length; i++) {
+        var a = pool[i];
+        try {
+            // 幂等：已存在同 kbSrcId 或同 title 的条目则跳过
+            var dup = dietKnowledge.some(function (k) {
+                return k && (String(k.kbSrcId || '') === String(a.id) || String(k.title || '') === String(a.title || ''));
+            });
+            if (dup) { stats.skipped++; continue; }
+            // 季节判定：优先按 date 查节气近似表；缺失按标题词；仍无法判定归「冬季」并计数
+            var season = _kbSeasonByJieqiDate(a.date) || _kbSeasonByTitleWords(a.title);
+            if (!season) { season = '冬季'; stats.undated++; }
+            var content = _kbStripImageRefs(String(a.content || ''));
+            dietKnowledge.unshift({
+                id: nextKnowledgeId++,
+                type: 'recipe',
+                title: a.title,
+                source: '用户添加',
+                content: content || '[图片]',
+                image: '',
+                images: [],
+                categoryId: 'recipe',
+                subCategoryId: '食养',
+                leafCategoryId: season,
+                mainCategory: 'recipe',
+                subCategory: '食养',
+                leafCategory: season,
+                createdAt: Date.now(),
+                sourceType: 'migrated',
+                tags: [String(a.category || ''), String(a.date || '')],
+                kbSrcId: a.id,
+                sceneTags: [],
+                auditStatus: '',
+                visibility: 'family',
+                scope: 'family',
+                layer: 'public',
+                createdBy: _ctx.id || 'unknown',
+                shareScope: 'none'
+            });
+            stats[season]++;
+            migrated++;
+        } catch (e) { stats.failed++; }
+    }
+    // 走既有公共层持久化路径（与 saveNewKnowledge 公共层入库相同机制：saveDietKnowledge + 操作日志）
+    if (migrated > 0) {
+        saveDietKnowledge();
+        logAdminAction('节气文章迁移', '迁移 ' + migrated + ' 篇（春' + stats['春季'] + '/夏' + stats['夏季'] + '/秋' + stats['秋季'] + '/冬' + stats['冬季'] + '），跳过 ' + stats.skipped + '，失败 ' + stats.failed);
+        try { if (document.body.classList.contains('kb-admin-lib')) renderLibTabView(); } catch (e) {}
+    }
+    console.log('[V640 节气文章迁移] 归档源 ' + stats.total + ' 条：迁移 ' + migrated + '（春' + stats['春季'] + '/夏' + stats['夏季'] + '/秋' + stats['秋季'] + '/冬' + stats['冬季'] + '，其中无日期归冬 ' + stats.undated + '）；跳过 ' + stats.skipped + '；失败 ' + stats.failed);
+    showToast('节气文章迁移完成：迁移 ' + migrated + ' 篇，跳过 ' + stats.skipped + ' 篇');
+    return stats;
 }
 // V628: 「AI生成本分类」——打开 AI 批量生成弹窗并预选当前双栏分类
 // （article→shiwen 映射；cooking/dining-out 不在 _AI_BULK_CATS 中，保持弹窗默认分类打开）
