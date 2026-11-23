@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V631-20261123';
+        var APP_VER = 'V632-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -8607,7 +8607,10 @@ function getCurrentUserContext() {
 
 // V625: 当前是否处于「文库管理」视图——面板态（kb-admin-mode）或层级浏览态（kb-admin-lib，饮食文库）
 // 公共层 edit/delete 超管短路在这两个视图内生效；普通食知 Tab 的饮食文库（无管理态类）保持只读
+// V632: 管理/浏览分离——管理态下点 📚 进入「纯浏览态」（kb-lib-browse），此态等同普通只读文库，
+// 所有编辑胶囊/删除入口与公共层短路消失（_kbInAdminMgrView 返回 false）
 function _kbInAdminMgrView() {
+    if (document.body.classList.contains('kb-lib-browse')) return false; // V632: 浏览态不算管理视图
     return document.body.classList.contains('kb-admin-mode') || document.body.classList.contains('kb-admin-lib');
 }
 
@@ -53783,8 +53786,9 @@ var LIB_VIEW_TABS = [
     { id: 'shibang', label: '食榜' }  // V134：食榜自首页顶部入口迁入文库
 ];
 function _onLibraryBtnClick() {
-    // V272/V282: 文库管理态下点 📚：展开/收回「饮食文库」内容（留在文库管理页内切换）
-    if (document.body.classList.contains('kb-admin-lib')) { _kbAdminLibClose(); return; }
+    // V632: 管理/浏览分离——浏览态（kb-admin-lib + kb-lib-browse）点 📚 回管理态；管理态点 📚 进纯浏览态
+    if (document.body.classList.contains('kb-lib-browse')) { _kbLibBrowseExit(); return; }
+    if (document.body.classList.contains('kb-admin-lib')) { _kbLibBrowseEnter(); return; }
     if (currentTab === 'knowledge' && currentKnowledgeVisibility === 'admin') { _kbAdminLibOpen(); return; }
     if (document.body.classList.contains('kb-admin-mode')) { _kbAdminLibOpen(); return; }
     if (currentKnowledgeViewMode === 'chat') {
@@ -53797,14 +53801,28 @@ function _onLibraryBtnClick() {
 function _kbAdminLibOpen() {
     document.body.classList.remove('kb-admin-mode');
     document.body.classList.add('kb-admin-lib');
+    document.body.classList.remove('kb-lib-browse'); // V632: 进入一律落管理态主视图（双栏）
+    _saLibSyMode = false; // V632: 重置食养 sy 子模式
     // V282: 展开文库时必须切到 public/家庭层数据源，否则 filterByVisibility('admin') 返回空，篇数与文章都不显示
     currentKnowledgeVisibility = 'public';
     switchKnowledgeView('libtab');
     _applyAdminTopBarOnly();
 }
+// V632: 管理态 → 纯浏览态：显示 libTabRow、移除头部工具条/底部日志链接、_kbInAdminMgrView 转 false（等同普通只读文库）
+function _kbLibBrowseEnter() {
+    document.body.classList.add('kb-lib-browse');
+    _saLibSyMode = false;
+    renderLibTabView();
+}
+// V632: 纯浏览态 → 回管理态主视图（双栏）
+function _kbLibBrowseExit() {
+    document.body.classList.remove('kb-lib-browse');
+    renderLibTabView();
+}
 // 收回饮食文库内容，回到文库管理面板
 function _kbAdminLibClose() {
     document.body.classList.remove('kb-admin-lib');
+    document.body.classList.remove('kb-lib-browse'); // V632: 兜底清浏览态
     currentKnowledgeVisibility = 'admin';
     switchKnowledgeView('library');
     renderAdminPanel();
@@ -53927,14 +53945,40 @@ function renderLibTabView() {
     const row = document.getElementById('libTabRow');
     const content = document.getElementById('libTabContent');
     if (!row || !content) return;
-    // V625: 文库管理态下，待审核+工具条注入 libtab 视图顶部（随视图刷新；非管理态自动移除）
+    // V625: 文库管理态下，工具条注入 libtab 视图顶部、日志链接注入底部（随视图刷新；非管理态/浏览态自动移除）
     try { _renderSaLibAdminHeader(); } catch (e) {}
+    // V632: 管理/浏览分离——管理态隐藏横排 Tab 行（主体=双栏，分类切换走左树）；浏览态/普通食知恢复显示
+    var _inMgr = document.body.classList.contains('kb-admin-lib') && !document.body.classList.contains('kb-lib-browse');
+    row.style.display = _inMgr ? 'none' : '';
     // 分类 Tab 行：点击在文库页内直接渲染该分类内容（食榜 Tab 页内渲染四子榜）
     row.innerHTML = LIB_VIEW_TABS.map(function (t) {
         const act = t.id === _libCurTab;
         const handler = t.id === 'shibang' ? '_libSelectShibang()' : '_libGoCategory(\'' + t.id + '\')';
         return '<button onclick="' + handler + '" style="flex-shrink:0;border:none;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:' + (act ? '700' : '500') + ';cursor:pointer;background:' + (act ? '#C2410C' : '#FFF7ED') + ';color:' + (act ? 'white' : '#9A3412') + ';">' + t.label + '</button>';
     }).join('');
+    // V632: 管理态主视图——食养 sy 子模式（左树点「食养」进入，含 V627 归档编辑胶囊）或分类编辑双栏；食榜不可达
+    if (_inMgr) {
+        if (_saLibSyMode) {
+            _libRestoreCategoryContent();
+            _libEmbedCategoryContent();
+            renderCategoryView('shiyang');
+            var _syBar = document.getElementById('saLibSyBackBar');
+            if (!_syBar) {
+                _syBar = document.createElement('div');
+                _syBar.id = 'saLibSyBackBar';
+                _syBar.style.cssText = 'flex-shrink:0;display:flex;align-items:center;gap:10px;padding:6px 0 8px;';
+                _syBar.innerHTML = '<button onclick="_saLibExitSy()" style="padding:5px 12px;border:none;border-radius:8px;background:#C2410C;color:white;font-size:12px;font-weight:700;cursor:pointer;">↩ 返回分类编辑</button>'
+                    + '<span style="font-size:12px;color:#A18A6D;">食养内容管理（sy 目录视图）</span>';
+                content.insertBefore(_syBar, content.firstChild);
+            }
+            return;
+        }
+        // V628: 主体「食养 sy 同款双栏」——左栏公共分类树手风琴 + 右栏该分类全部公共文章（编辑/删除/详情 + 上传工具条）
+        _libRestoreCategoryContent();
+        content.style.cssText = 'flex:1;min-height:0;display:flex;flex-direction:column;';
+        content.innerHTML = _saLibDualPaneHtml();
+        return;
+    }
     // 内容区：按当前 Tab 展示该分类内容
     if (_libCurTab === 'shibang') {
         // V631: 食榜双栏——左栏竖排四子榜节点（样式对齐 V628 双栏 sad-tree），右栏复用 _renderHelpMain 内容渲染（隐藏其自带横排 Tab 栏）
@@ -53945,17 +53989,11 @@ function renderLibTabView() {
         if (_sbArea) _renderHelpMain('libShibangArea', true, true);
         return;
     }
-    // V628: 文库管理态——除食养（保留 sy 双栏原样）外，主体改为「食养 sy 同款双栏」：
-    // 左栏公共分类树手风琴 + 右栏该分类全部公共文章（编辑/删除/详情 + 上传工具条）
-    if (document.body.classList.contains('kb-admin-lib') && _libCurTab !== 'shiyang') {
-        _libRestoreCategoryContent();
-        content.style.cssText = 'flex:1;min-height:0;display:flex;flex-direction:column;';
-        content.innerHTML = _saLibDualPaneHtml();
-        return;
-    }
     // 分类 Tab：把分类浏览主体嵌入文库页内，直接渲染该分类
     var _dualResidue = document.getElementById('saLibDualArea'); // V628: 清除管理双栏残留
     if (_dualResidue) _dualResidue.remove();
+    var _syBarResidue = document.getElementById('saLibSyBackBar'); // V632: 清除食养 sy 返回条残留
+    if (_syBarResidue) _syBarResidue.remove();
     _libEmbedCategoryContent();
     renderCategoryView(_libCurTab);
 }
@@ -56221,7 +56259,8 @@ function _renderSaLibAdminHeader() {
     if (!view) return;
     var box = document.getElementById('saLibAdminHeader');
     var foot = document.getElementById('saLibAdminFooter');
-    var inAdmin = document.body.classList.contains('kb-admin-lib') || document.body.classList.contains('kb-admin-mode');
+    // V632: 浏览态（kb-lib-browse）不算管理视图——工具条/日志链接随 _kbInAdminMgrView 一并移除
+    var inAdmin = _kbInAdminMgrView();
     var isSa = isSuperAdmin() || getSuperAdminSession().isLoggedIn;
     if (!inAdmin || !isSa) { if (box) box.remove(); if (foot) foot.remove(); return; }
     if (!box) {
@@ -56252,6 +56291,7 @@ function _saAdminRefreshAfterChange() {
 // 食养 Tab 仍走原 sy 双栏（renderShiyangContent 不动），食榜 Tab 原逻辑不变
 var _saLibSel = '';   // 当前选中节点 key：'ingredient' | 'ingredient|sub' | 'ingredient|sub|leaf'
 var _saLibOpen = {};  // 手风琴展开状态（多父级可同时展开）
+var _saLibSyMode = false; // V632: 管理态食养子模式——左树点「食养」切 sy 视图，返回条回双栏
 // 公共分类树（随「文库分类管理」改动实时生效）
 function _saLibTree() {
     var kc = null;
@@ -56429,6 +56469,8 @@ document.addEventListener('click', function (e) {
     if (row && area.contains(row)) {
         var key = row.getAttribute('data-key');
         if (!key) return;
+        // V632: 食养节点特殊路由——主区切食养 sy 视图（renderShiyangContent，含 V627 归档编辑胶囊），返回条回双栏
+        if (key === 'shiyang') { _saLibSyMode = true; renderLibTabView(); return; }
         var node = _saLibFindNode(key);
         if (node && node.children && node.children.length) {
             if (_saLibOpen[key]) delete _saLibOpen[key]; else _saLibOpen[key] = true;
@@ -56444,6 +56486,11 @@ document.addEventListener('click', function (e) {
         if (found) showKnowledgeDetail(found.id);
     }
 });
+// V632: 食养 sy 子模式 → 回分类编辑双栏（sy 视图顶部「↩ 返回分类编辑」条调用）
+function _saLibExitSy() {
+    _saLibSyMode = false;
+    renderLibTabView();
+}
 // V628: 「AI生成本分类」——打开 AI 批量生成弹窗并预选当前双栏分类
 // （article→shiwen 映射；cooking/dining-out 不在 _AI_BULK_CATS 中，保持弹窗默认分类打开）
 function _kbAiGenForCat() {
@@ -57773,9 +57820,10 @@ function openSuperLibraryManager() {
     setTimeout(function() {
         if (currentKnowledgeVisibility !== 'admin') return;
         _applyAdminKnowledgeChrome();
-        // V625: 直接落到「饮食文库」层级浏览视图（等效自动展开），待审核+工具条注入其顶部；
-        // 顶栏 📚 仍可在面板/浏览两态间切换（_onLibraryBtnClick 原逻辑不变）
+        // V625: 直接落到「饮食文库」层级浏览视图（等效自动展开），工具条注入其顶部；
+        // V632: 顶栏 📚 改为「管理态 ⇄ 纯浏览态」切换（_onLibraryBtnClick），进入默认=管理态双栏主视图
         _libCurTab = 'ingredient'; // V628: 进入文库管理默认落「食材」根（双栏主体）
+        _saLibSyMode = false; // V632: 重置食养 sy 子模式
         try { _kbAdminLibOpen(); } catch (e) {}
     }, 80);
 }
@@ -57785,6 +57833,8 @@ function exitKnowledgeAdmin() {
     // V591: 展开饮食文库态（kb-admin-lib）下 visibility 已是 public，switchKnowledgeVisibility 不会触发清理，这里显式移除两个管理态类
     document.body.classList.remove('kb-admin-lib');
     document.body.classList.remove('kb-admin-mode');
+    document.body.classList.remove('kb-lib-browse'); // V632: 退出清理浏览态类
+    _saLibSyMode = false; // V632: 退出清理食养 sy 子模式
     try { switchKnowledgeVisibility('public'); } catch (e) {}
     try { switchTab('family'); } catch (e) {}
 }
@@ -79171,6 +79221,8 @@ menuBtn.addEventListener('click', function(e) {
     e.stopPropagation();
     // V268: 超管「文库管理」页：左上角 < 退出返回
     // V591: 文库管理内展开饮食文库后 visibility 已切为 public（kb-admin-lib），返回同样要退出文库管理，而不是打开对话历史
+    // V632: 纯浏览态下 < = 回管理态主视图（不退出文库管理）
+    if (document.body.classList.contains('kb-lib-browse')) { _kbLibBrowseExit(); return; }
     if (currentTab === 'knowledge' && (currentKnowledgeVisibility === 'admin'
         || document.body.classList.contains('kb-admin-mode')
         || document.body.classList.contains('kb-admin-lib'))) {
