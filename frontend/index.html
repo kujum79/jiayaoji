@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V642-20261123';
+        var APP_VER = 'V643-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -48743,6 +48743,9 @@ function _syItemsForLayer(lib) {
     }
     var out = dietKnowledge.filter(function (k) {
         if (k.mainCategory !== 'shiyang' || k.auditStatus === 'rejected') return false;
+        // V643: 管理态 sy 树排除已迁移条目（sourceType==='migrated' 或带 kbSrcId，
+        // 它们已挂在 食谱 双栏树正确位置；普通浏览态/食养堂会员页行为不变）
+        if (_kbInAdminMgrView() && (k.sourceType === 'migrated' || k.kbSrcId)) return false;
         if (_kbIsHidden(k.id)) return false;
         if ((k.layer || 'family') !== lib) return false;
         try { return can('view', k); } catch (e) { return true; }
@@ -48965,7 +48968,8 @@ function _syPaneHtml(libItems, curTerm) {
         if (sec === '食养食谱') {
             var own = libItems.filter(function (k) { return k.subCategory === '食养食谱'; });
             var refs = [];
-            try { refs = dietKnowledge.filter(function (k) { return k.mainCategory === 'recipe' && (k.layer || 'family') === _syTreeLib && k.auditStatus !== 'rejected'; }); } catch (e) {}
+            // V643: 食养食谱板块折叠 recipe 条目时，管理态同样排除已迁移条目（含寻味天下16篇/节气饮食28篇）
+            try { refs = dietKnowledge.filter(function (k) { return k.mainCategory === 'recipe' && (k.layer || 'family') === _syTreeLib && k.auditStatus !== 'rejected' && !(_kbInAdminMgrView() && (k.sourceType === 'migrated' || k.kbSrcId)); }); } catch (e) {}
             items = own.concat(refs);
         } else {
             items = libItems.filter(function (k) { return k.subCategory === sec; });
@@ -56644,15 +56648,15 @@ async function _kbMigrateJieqiArticles() {
 // 全局函数，控制台/超管可调用；幂等：分类节点/细分类只补缺不重复不覆盖，文章按 kbSrcId 或同名跳过
 // 13 细分类固定中文 id；判区关键词表（全部 ≥2 字避免误命中；顺序即优先级，港澳台最先防被华南/华东抢判）
 var _KB_GDFC_REGIONS = [
-    { id: '港澳台', kw: ['港澳台', '香港', '澳门', '台湾', '港式', '澳式', '台式', '茶餐厅'] },
+    { id: '港澳台', kw: ['港澳台', '香港', '澳门', '台湾', '港式', '澳式', '台式', '茶餐厅', '台北', '台南', '高雄', '台中'] }, // V643: 补台湾城市词
     { id: '东北', kw: ['东北', '黑吉辽', '黑龙江', '吉林', '辽宁', '哈尔滨', '沈阳', '长春', '大连', '锅包肉', '地三鲜'] },
     { id: '华北', kw: ['华北', '京津冀', '北京', '天津', '河北', '山东', '鲁菜', '山西', '晋菜', '内蒙', '太原', '石家庄'] },
     { id: '西北', kw: ['西北', '陕西', '西安', '甘肃', '兰州', '宁夏', '青海', '新疆', '乌鲁木齐', '肉夹馍', '羊肉泡馍', '大盘鸡'] },
     { id: '华东', kw: ['华东', '江苏', '浙江', '上海', '安徽', '江西', '南京', '杭州', '苏州', '宁波', '无锡', '扬州', '绍兴', '徽菜', '淮扬', '本帮', '龙井'] },
     { id: '华中', kw: ['华中', '河南', '湖北', '湖南', '豫菜', '鄂菜', '湘菜', '武汉', '长沙', '郑州', '热干面', '剁椒'] },
-    { id: '华南', kw: ['华南', '广东', '广西', '福建', '海南', '粤菜', '闽菜', '广州', '深圳', '潮汕', '顺德', '桂林', '南宁', '厦门', '福州', '海口', '早茶', '烧腊'] },
+    { id: '华南', kw: ['华南', '广东', '广西', '福建', '海南', '粤菜', '闽菜', '广州', '深圳', '潮汕', '顺德', '桂林', '南宁', '厦门', '福州', '海口', '早茶', '烧腊', '汕头', '泉州', '闽南'] }, // V643: 补潮汕/闽南城市词
     { id: '西南', kw: ['西南', '四川', '重庆', '云南', '贵州', '西藏', '川菜', '渝菜', '滇菜', '黔菜', '成都', '昆明', '贵阳', '拉萨', '麻辣'] },
-    { id: '日韩', kw: ['日本', '韩国', '东京', '大阪', '京都', '北海道', '冲绳', '首尔', '釜山', '和食', '韩餐', '泡菜锅'] },
+    { id: '日韩', kw: ['日本', '韩国', '东京', '大阪', '京都', '北海道', '冲绳', '首尔', '釜山', '和食', '韩餐', '泡菜锅', '函馆', '旭川', '小樽', '横滨', '名古屋'] }, // V643: 补北海道城市/本州城市词
     { id: '东南亚', kw: ['东南亚', '泰国', '越南', '新加坡', '马来西亚', '曼谷', '河内', '胡志明', '吉隆坡', '印尼', '菲律宾', '缅甸', '柬埔寨', '老挝', '冬阴功'] },
     { id: '欧洲', kw: ['欧洲', '英国', '法国', '德国', '意大利', '西班牙', '俄罗斯', '伦敦', '巴黎', '罗马', '柏林', '莫斯科', '希腊', '葡萄牙', '荷兰', '瑞士', '瑞典', '奥地利', '匈牙利', '波兰'] },
     { id: '美洲', kw: ['美洲', '美国', '加拿大', '墨西哥', '巴西', '阿根廷', '秘鲁', '智利', '古巴', '纽约', '洛杉矶', '华盛顿', '多伦多', '夏威夷'] },
