@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V632-20261123';
+        var APP_VER = 'V633-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -57135,7 +57135,7 @@ async function kbReviewPolishContent() {
     var oldText = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = '润色中…'; }
     try {
-        var prompt = '修正错别字并整理成条目化饮食知识，保持原意，只输出正文。\n标题：' + (title || '（无）') + '\n正文：\n' + body;
+        var prompt = '修正错别字并整理成条目化饮食知识，保持原意，只输出正文。删除文中所有图片引用、图片链接与图片占位描述，保持正文原意不变。\n标题：' + (title || '（无）') + '\n正文：\n' + body;
         var result = await aiChatMultiProvider('你是家庭膳食知识编辑，擅长校对与条目化整理。', prompt, { maxTokens: 1500, temperature: 0.2, taskType: 'knowledge' });
         var reply = (result && result.choices && result.choices[0] && result.choices[0].message) ? String(result.choices[0].message.content || '') : '';
         reply = reply.trim();
@@ -60230,6 +60230,74 @@ function openAddKnowledgeModal() {
     if (_rvPolish) _rvPolish.style.display = 'none';
     // 库归属提示：本次保存将进入哪个库
     _renderKnowledgeLayerHint();
+    // V633: 三级分类自动带入（审核上下文 _kbReviewCtx 存在时跳过，交由 _kbReviewEditOpen 自行预填）
+    _kbAutoFillCategory();
+    // V633: 正文粘贴去图片残留（一次性挂载）
+    _kbAttachPasteCleaner();
+}
+// V633: 去除正文中的图片引用（Markdown 图片语法 / HTML <img> / 裸图片直链），收敛多余空白；保守不动占位文字行
+function _kbStripImageRefs(text) {
+    var s = String(text || '');
+    s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, '');                                              // ![alt](url "title")
+    s = s.replace(/<img[^>]*>/gi, '');                                                        // <img ...>
+    s = s.replace(/https?:\/\/[^\s<>"')]+?\.(?:jpg|jpeg|png|gif|webp|bmp)(?:\?[^\s<>"')]*)?/gi, ''); // 裸图片直链(可带查询串)
+    s = s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+    return s;
+}
+// V633: 给正文 textarea 挂 paste 监听，粘贴后即时清理图片残留
+function _kbAttachPasteCleaner() {
+    var el = document.getElementById('newKnowledgeContent');
+    if (!el || el.dataset.pasteCleanBound) return;
+    el.dataset.pasteCleanBound = '1';
+    el.addEventListener('paste', function () {
+        var ta = this;
+        setTimeout(function () {
+            var orig = ta.value;
+            var cleaned = _kbStripImageRefs(orig);
+            if (cleaned !== orig) { ta.value = cleaned; showToast('已自动去除粘贴内容中的图片引用'); }
+        }, 0);
+    });
+}
+// V633: 三级分类自动带入，优先级 审核ctx(跳过) > a 双栏选中 > b 分类浏览上下文 > c 上次保存 localStorage
+function _kbAutoFillCategory() {
+    if (window._kbReviewCtx) return; // 审核「编辑后入库」流程自行预填，勿覆盖
+    var segs = null, names = null;
+    // a) 文库管理双栏当前选中分类路径（_saLibSel，各级为节点 id）
+    if (typeof _saLibSel !== 'undefined' && _saLibSel && document.body.classList.contains('kb-admin-lib')) {
+        segs = String(_saLibSel).split('|').filter(Boolean);
+        names = _saLibPathNames(_saLibSel); // id → 各级显示名
+    } else if (typeof currentCategoryId !== 'undefined' && currentCategoryId) {
+        // b) 家庭文库/分类浏览上下文（currentCategoryId=主 id，currentCategorySub=子名，无细级）
+        segs = [currentCategoryId];
+        if (currentCategorySub) segs.push(currentCategorySub);
+        names = segs.slice();
+    } else {
+        // c) 兜底：上次成功保存的三级分类
+        try {
+            var last = JSON.parse(lsGet('kbLastCatCtx') || 'null');
+            if (last && last.main) {
+                segs = [last.main];
+                if (last.sub) segs.push(last.sub);
+                if (last.leaf) segs.push(last.leaf);
+                names = segs.slice();
+            }
+        } catch (e) {}
+    }
+    if (!segs || !segs.length) return;
+    var mainSel = document.getElementById('newKnowledgeMainCategory');
+    if (_kbReviewTrySetSel(mainSel, [segs[0], names[0]])) {
+        onMainCategoryChange();
+        if (segs[1] != null) {
+            var subSel = document.getElementById('newKnowledgeSubCategory');
+            if (_kbReviewTrySetSel(subSel, [names[1], segs[1]])) {
+                onSubCategoryChange();
+                if (segs[2] != null) {
+                    var leafSel = document.getElementById('newKnowledgeLeafCategory');
+                    _kbReviewTrySetSel(leafSel, [names[2], segs[2]]);
+                }
+            }
+        }
+    }
 }
 // 渲染"库归属"提示行：超管→公共文库，普通成员→家庭文库
 function _renderKnowledgeLayerHint() {
@@ -60449,7 +60517,7 @@ async function aiGenerateKnowledgeContent() {
     prompt += '标题：' + (title.trim() || '（自拟）') + '\n';
     prompt += '分类：' + (catNames[mainCat] || '饮食常识') + '\n';
     if (tags.trim()) prompt += '标签：' + tags.trim() + '\n';
-    prompt += '\n【要求】\n1. 输出150-300字正文，实用、通俗，面向家庭日常饮食；\n2. 如涉及食材/食谱，可包含要点做法或挑选/储存建议；\n3. 如涉及健康表述，须谨慎客观，不夸大疗效；\n4. 只输出正文，不要标题、序号和多余说明。';
+    prompt += '\n【要求】\n1. 输出150-300字正文，实用、通俗，面向家庭日常饮食；\n2. 如涉及食材/食谱，可包含要点做法或挑选/储存建议；\n3. 如涉及健康表述，须谨慎客观，不夸大疗效；\n4. 只输出正文，不要标题、序号和多余说明；\n5. 删除文中所有图片引用、图片链接与图片占位描述，保持正文原意不变。';
 
     var oldText = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
@@ -60589,6 +60657,8 @@ function saveNewKnowledge() {
 
     dietKnowledge.unshift(newItem);
     saveDietKnowledge();
+    // V633: 记住本次实际选择的三级分类，供下次打开添加表单兜底预填（kbLastCatCtx）
+    try { lsSet('kbLastCatCtx', JSON.stringify({ main: mainCat || '', sub: subCat || '', leaf: leafCat || '' })); } catch (e) {}
     if (asPublic) logAdminAction('添加公共条目', newItem.title || '');
     // V629: 审核「编辑后入库」——保存成功即把对应 sharedPool 待审条目置为通过（closeAddKnowledgeModal 会清上下文，先捕获）
     var _rvCtx = window._kbReviewCtx || null;
