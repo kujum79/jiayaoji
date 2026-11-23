@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V638-20261123';
+        var APP_VER = 'V639-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -53786,11 +53786,19 @@ var LIB_VIEW_TABS = [
     { id: 'shibang', label: '食榜' }  // V134：食榜自首页顶部入口迁入文库
 ];
 function _onLibraryBtnClick() {
-    // V632: 管理/浏览分离——浏览态（kb-admin-lib + kb-lib-browse）点 📚 回管理态；管理态点 📚 进纯浏览态
-    if (document.body.classList.contains('kb-lib-browse')) { _kbLibBrowseExit(); return; }
-    if (document.body.classList.contains('kb-admin-lib')) { _kbLibBrowseEnter(); return; }
+    // V632: 管理/浏览分离——浏览态点📚回管理态；管理态点📚进纯浏览态
+    // V639: 修复"食知页点🗂️无反应"——管理/浏览态切换仅在文库视图（libtab）内生效；
+    // 离开文库管理后 body 上残留的 kb-admin-lib/kb-lib-browse 陈旧类先清掉，再按普通浏览打开
+    var _inLibView = (currentKnowledgeViewMode === 'libtab');
+    if (_inLibView && document.body.classList.contains('kb-lib-browse')) { _kbLibBrowseExit(); return; }
+    if (_inLibView && document.body.classList.contains('kb-admin-lib')) { _kbLibBrowseEnter(); return; }
+    if (!_inLibView) {
+        document.body.classList.remove('kb-admin-lib');
+        document.body.classList.remove('kb-lib-browse');
+    }
+    // V639: 管理入口态（kb-admin-mode 面板）仅在食知页内才跳管理视图，其他页面残留态不再劫持普通入口
     if (currentTab === 'knowledge' && currentKnowledgeVisibility === 'admin') { _kbAdminLibOpen(); return; }
-    if (document.body.classList.contains('kb-admin-mode')) { _kbAdminLibOpen(); return; }
+    if (currentTab === 'knowledge' && document.body.classList.contains('kb-admin-mode')) { _kbAdminLibOpen(); return; }
     if (currentKnowledgeViewMode === 'chat') {
         openKnowledgeLibrary();
     } else {
@@ -53812,11 +53820,13 @@ function _kbAdminLibOpen() {
 function _kbLibBrowseEnter() {
     document.body.classList.add('kb-lib-browse');
     _saLibSyMode = false;
+    if (currentKnowledgeViewMode !== 'libtab') { switchKnowledgeView('libtab'); return; }  // V639: 兜底切到文库视图
     renderLibTabView();
 }
 // V632: 纯浏览态 → 回管理态主视图（双栏）
 function _kbLibBrowseExit() {
     document.body.classList.remove('kb-lib-browse');
+    if (currentKnowledgeViewMode !== 'libtab') { switchKnowledgeView('libtab'); return; }  // V639: 兜底切到文库视图
     renderLibTabView();
 }
 // 收回饮食文库内容，回到文库管理面板
