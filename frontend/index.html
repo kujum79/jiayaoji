@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V628-20261123';
+        var APP_VER = 'V629-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -56124,8 +56124,9 @@ function _saAdminHeaderHtml() {
                     + '<div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;color:#1E293B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(title) + '</div>'
                     + '<div style="font-size:12px;color:#6B7280;">提交者：' + escapeHtml(p.ownerName || '匿名') + note + '</div></div>'
                     + '<div style="display:flex;gap:6px;">'
-                    + '<button onclick="superAdminAuditPool(\'' + escapeHtml(String(p.itemId)) + '\', \'pass\')" style="padding:6px 12px;background:#10B981;border:none;border-radius:6px;font-size:13px;font-weight:600;color:white;cursor:pointer;">✅ 通过</button>'
-                    + '<button onclick="superAdminAuditPool(\'' + escapeHtml(String(p.itemId)) + '\', \'reject\')" style="padding:6px 12px;background:#DC2626;border:none;border-radius:6px;font-size:13px;font-weight:600;color:white;cursor:pointer;">❌ 驳回</button>'
+                    + '<button onclick="_kbReviewEditOpen(\'' + escapeHtml(String(p.itemId != null ? p.itemId : p.sourceItemId)) + '\')" style="padding:6px 12px;background:#F97316;border:none;border-radius:6px;font-size:13px;font-weight:600;color:white;cursor:pointer;">✏️ 编辑后入库</button>'
+                    + '<button onclick="superAdminAuditPool(\'' + escapeHtml(String(p.itemId != null ? p.itemId : p.sourceItemId)) + '\', \'pass\')" style="padding:6px 12px;background:#10B981;border:none;border-radius:6px;font-size:13px;font-weight:600;color:white;cursor:pointer;">✅ 通过</button>'
+                    + '<button onclick="superAdminAuditPool(\'' + escapeHtml(String(p.itemId != null ? p.itemId : p.sourceItemId)) + '\', \'reject\')" style="padding:6px 12px;background:#DC2626;border:none;border-radius:6px;font-size:13px;font-weight:600;color:white;cursor:pointer;">❌ 驳回</button>'
                     + '</div></div>';
             }).join('')}
         </div>`;
@@ -56899,7 +56900,8 @@ function _aiBulkSaveSelected() {
 function superAdminAuditPool(itemId, action) {
     touchSuperAdmin();
     var pool = JSON.parse(lsGet('sharedPool') || '[]');
-    var idx = pool.findIndex(function(p) { return String(p.itemId) === String(itemId); });
+    // V629补丁: 池条目可能只有 sourceItemId（cloneItemForPool 路径），双字段兜底匹配
+    var idx = pool.findIndex(function(p) { return String(p.itemId) === String(itemId) || String(p.sourceItemId) === String(itemId); });
     if (idx === -1) return showToast('条目不存在');
     pool[idx].auditStatus = action === 'pass' ? 'passed' : 'rejected';
     pool[idx].auditNote = action === 'pass' ? '超管手动通过' : '超管手动驳回';
@@ -56907,6 +56909,108 @@ function superAdminAuditPool(itemId, action) {
     lsSet('sharedPool', JSON.stringify(pool));
     showToast(action === 'pass' ? '✅ 已通过' : '❌ 已驳回');
     _saAdminRefreshAfterChange(); // V625: 刷新待审核区块（libtab 浏览态/面板态均适用）
+}
+
+// ============ V629: 超管审核分享文章「先编辑再入库」 ============
+// 复用现有「添加饮食知识」表单（openAddKnowledgeModal）：预填原条目 → 修正/润色/选分类 → 保存入公共文库，
+// 成功即把 sharedPool 对应待审条目置为 passed（auditNote=编辑后入库），家庭侧按既有逻辑显示 ✅已通过
+// 池条目分类字段可能是 id 或显示名，先经公共分类树换算出各级名称
+function _kbReviewResolveCat(p) {
+    var res = { mainName: '', subName: '', leafName: '' };
+    try {
+        var kc = getKnowledgeCategories();
+        var tree = sortByOrder((kc.public && kc.public.tree) || []);
+        var m = null, s = null, l = null;
+        tree.forEach(function (n) { if (!m && (String(n.id) === String(p.mainCategory) || String(n.name) === String(p.mainCategory))) m = n; });
+        if (m) (m.children || []).forEach(function (n) { if (!s && (String(n.id) === String(p.subCategory) || String(n.name) === String(p.subCategory))) s = n; });
+        if (s) (s.children || []).forEach(function (n) { if (!l && (String(n.id) === String(p.leafCategory) || String(n.name) === String(p.leafCategory))) l = n; });
+        res.mainName = m ? (m.name || '') : '';
+        res.subName = s ? (s.name || '') : '';
+        res.leafName = l ? (l.name || '') : '';
+    } catch (e) {}
+    return res;
+}
+// 下拉逐项匹配：先按候选值精确匹配 option.value，再按 option 文本（去图标）匹配
+function _kbReviewTrySetSel(sel, candidates) {
+    if (!sel) return false;
+    var wanted = (candidates || []).filter(function (v) { return v !== '' && v != null; }).map(String);
+    if (!wanted.length) return false;
+    var i, j;
+    for (i = 0; i < sel.options.length; i++) {
+        for (j = 0; j < wanted.length; j++) {
+            if (String(sel.options[i].value) === wanted[j]) { sel.value = sel.options[i].value; return true; }
+        }
+    }
+    for (i = 0; i < sel.options.length; i++) {
+        var txt = String(sel.options[i].textContent || '').replace(/^[^\u4e00-\u9fa5a-zA-Z0-9]+/, '').trim();
+        for (j = 0; j < wanted.length; j++) {
+            if (txt && (txt === wanted[j] || txt.indexOf(wanted[j]) >= 0)) { sel.value = sel.options[i].value; return true; }
+        }
+    }
+    return false;
+}
+function _kbReviewEditOpen(poolItemId) {
+    if (!requireSuperAdmin()) return;
+    var pool = getSharedPool();
+    var p = pool.find(function (x) { return String(x.itemId != null ? x.itemId : x.sourceItemId) === String(poolItemId); });
+    if (!p) return showToast('待审条目不存在');
+    window._kbUploadCtx = 'public'; // 允许存公共层（asPublic 判定同「上传文章」入口）
+    window._kbReviewCtx = { poolItemId: String(poolItemId), ownerName: p.sharerName || p.ownerName || '家庭用户', title: p.title || '' };
+    openAddKnowledgeModal();
+    // 预填标题/正文/图片（分类级联会重置标签类字段，标签放到级联之后再填）
+    var tEl = document.getElementById('newKnowledgeTitle');
+    if (tEl) tEl.value = p.title || '';
+    var cEl = document.getElementById('newKnowledgeContent');
+    if (cEl) cEl.value = (typeof p.content === 'string' ? p.content : '');
+    window._knowledgeImages = (p.images || []).slice();
+    window._knowledgeImage = window._knowledgeImages[0] || null;
+    try { updateKnowledgeImagePreview(); } catch (e) {}
+    // 主/子/细三级分类预填：id 与名称双候选逐级匹配，匹配不上保持留空由超管自选
+    var cat = _kbReviewResolveCat(p);
+    var mainSel = document.getElementById('newKnowledgeMainCategory');
+    if (_kbReviewTrySetSel(mainSel, [p.mainCategory, cat.mainName])) {
+        onMainCategoryChange();
+        var subSel = document.getElementById('newKnowledgeSubCategory');
+        if (_kbReviewTrySetSel(subSel, [cat.subName, p.subCategory])) {
+            onSubCategoryChange();
+            var leafSel = document.getElementById('newKnowledgeLeafCategory');
+            _kbReviewTrySetSel(leafSel, [cat.leafName, p.leafCategory]);
+        }
+    }
+    var tgEl = document.getElementById('newKnowledgeTags');
+    if (tgEl) tgEl.value = (p.tags || []).join('、');
+    var scEl = document.getElementById('newKnowledgeSceneTags');
+    if (scEl) scEl.value = (p.sceneTags || []).join('、');
+    // 审核提示行 + AI润色按钮（openAddKnowledgeModal 默认隐藏，此处开启）
+    var hint = document.getElementById('kbReviewHintRow');
+    if (hint) {
+        hint.style.display = 'block';
+        hint.innerHTML = '🔍 正在审核《' + escapeHtml(p.title || '(未命名)') + '》（来自 ' + escapeHtml(p.sharerName || p.ownerName || '家庭用户') + '），编辑后保存即入公共文库';
+    }
+    var polish = document.getElementById('kbReviewPolishBtn');
+    if (polish) polish.style.display = 'inline-block';
+}
+// V629: 「AI润色」——基于当前标题+正文修正错别字并条目化整理，结果回填正文；失败仅提示，不拦截手工保存
+async function kbReviewPolishContent() {
+    var cEl = document.getElementById('newKnowledgeContent');
+    if (!cEl) return;
+    var body = String(cEl.value || '').trim();
+    if (!body) { showToast('请先填写正文内容'); return; }
+    var title = ((document.getElementById('newKnowledgeTitle') || {}).value || '').trim();
+    var btn = document.getElementById('kbReviewPolishBtn');
+    var oldText = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '润色中…'; }
+    try {
+        var prompt = '修正错别字并整理成条目化饮食知识，保持原意，只输出正文。\n标题：' + (title || '（无）') + '\n正文：\n' + body;
+        var result = await aiChatMultiProvider('你是家庭膳食知识编辑，擅长校对与条目化整理。', prompt, { maxTokens: 1500, temperature: 0.2, taskType: 'knowledge' });
+        var reply = (result && result.choices && result.choices[0] && result.choices[0].message) ? String(result.choices[0].message.content || '') : '';
+        reply = reply.trim();
+        if (reply) { cEl.value = reply; showToast('✅ AI 润色完成，可继续手工修改'); }
+        else showToast('AI 未返回内容，可手工编辑');
+    } catch (e) {
+        showToast('润色失败，可手工编辑：' + (e.message || '网络错误'));
+    }
+    if (btn) { btn.disabled = false; btn.textContent = oldText; }
 }
 
 // 超管删除公共库条目
@@ -59982,6 +60086,11 @@ function openAddKnowledgeModal() {
     if (aiBtn) aiBtn.style.display = _asPublic ? 'inline-block' : 'none';
     var visRow = document.getElementById('newKnowledgeVisRow');
     if (visRow) visRow.style.display = _asPublic ? 'none' : 'block';
+    // V629: 默认隐藏审核提示行/AI润色按钮（仅「编辑后入库」上下文在 _kbReviewEditOpen 中开启）
+    var _rvHint = document.getElementById('kbReviewHintRow');
+    if (_rvHint) _rvHint.style.display = 'none';
+    var _rvPolish = document.getElementById('kbReviewPolishBtn');
+    if (_rvPolish) _rvPolish.style.display = 'none';
     // 库归属提示：本次保存将进入哪个库
     _renderKnowledgeLayerHint();
 }
@@ -60101,6 +60210,7 @@ function closeAddKnowledgeModal() {
     // V379: 清空食方结构化字段与体质选中态
     resetFangStructuredForm();
     window._kbUploadCtx = ''; // V624: 关闭弹窗清除上传入口库归属上下文
+    window._kbReviewCtx = null; // V629: 清除审核「编辑后入库」上下文，防泄漏到普通添加流程
 }
 
 // ============ 推荐搭配（食材知识，1-8 道可增删） ============
@@ -60343,13 +60453,35 @@ function saveNewKnowledge() {
     dietKnowledge.unshift(newItem);
     saveDietKnowledge();
     if (asPublic) logAdminAction('添加公共条目', newItem.title || '');
+    // V629: 审核「编辑后入库」——保存成功即把对应 sharedPool 待审条目置为通过（closeAddKnowledgeModal 会清上下文，先捕获）
+    var _rvCtx = window._kbReviewCtx || null;
+    if (_rvCtx) {
+        try {
+            var _rvPool = getSharedPool();
+            var _rvIdx = _rvPool.findIndex(function (pp) { return String(pp.itemId != null ? pp.itemId : pp.sourceItemId) === String(_rvCtx.poolItemId); });
+            if (_rvIdx !== -1) {
+                _rvPool[_rvIdx].auditStatus = 'passed';
+                _rvPool[_rvIdx].auditNote = '编辑后入库';
+                _rvPool[_rvIdx].auditedAt = Date.now();
+                _rvPool[_rvIdx].newItemId = newItem.id;
+                saveSharedPool(_rvPool);
+                logAdminAction('审核通过（编辑后入库）', (newItem.title || '') + ' ← ' + (_rvCtx.ownerName || '家庭分享'));
+            }
+        } catch (e) {}
+        window._kbReviewCtx = null;
+    }
     window._knowledgeImage = null;
     window._knowledgeImages = [];
     window._kbUploadCtx = ''; // V624: 保存成功后清除上传入口库归属上下文
     closeAddKnowledgeModal();
     renderDietKnowledge();
     updateVisibilityCounts();
-    showToast('知识已添加！');
+    if (_rvCtx) {
+        try { _saAdminRefreshAfterChange(); } catch (e) {} // V629: 刷新待审核头部/管理视图
+        showToast('✅ 已编辑入库，该分享审核通过');
+    } else {
+        showToast('知识已添加！');
+    }
 }
 
 function addToPlanFromKnowledge(id) {
@@ -87197,6 +87329,8 @@ setTimeout(function () { try { _maybeGenerateDailyLesson(); } catch (e) {} }, 80
         <div class="knowledge-modal-body">
             <!-- 内容来源选择（已合并到归属行）-->
             <div class="knowledge-source-tabs" id="knowledgeSourceTabs" style="display:none;"></div>
+            <!-- V629: 审核「编辑后入库」提示行（仅 _kbReviewEditOpen 打开时显示） -->
+            <div id="kbReviewHintRow" style="display:none;margin-bottom:8px;padding:8px 10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;font-size:12px;color:#1D4ED8;line-height:1.5;"></div>
 
             <!-- 手动录入表单 -->
             <div class="knowledge-source-form active" id="sourceManual">
@@ -87262,7 +87396,7 @@ setTimeout(function () { try { _maybeGenerateDailyLesson(); } catch (e) {} }, 80
                     <label style="white-space:nowrap;">标题 *</label>
                     <input type="text" id="newKnowledgeTitle" placeholder="例如：小暑饮食指南" style="flex:1;" />
                 </div>
-                <label id="newKnowledgeContentLabel">内容 * <span style="font-size:13px;color:#9CA3AF;font-weight:normal;">（可从网文、笔记中复制粘贴内容）</span><button type="button" id="aiGenerateBtn" onclick="aiGenerateKnowledgeContent()" style="display:none;margin-left:8px;padding:3px 12px;background:linear-gradient(135deg,#8B5CF6,#6366F1);color:white;border:none;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;vertical-align:middle;">✨ AI 生成</button></label>
+                <label id="newKnowledgeContentLabel">内容 * <span style="font-size:13px;color:#9CA3AF;font-weight:normal;">（可从网文、笔记中复制粘贴内容）</span><button type="button" id="aiGenerateBtn" onclick="aiGenerateKnowledgeContent()" style="display:none;margin-left:8px;padding:3px 12px;background:linear-gradient(135deg,#8B5CF6,#6366F1);color:white;border:none;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;vertical-align:middle;">✨ AI 生成</button><button type="button" id="kbReviewPolishBtn" onclick="kbReviewPolishContent()" style="display:none;margin-left:6px;padding:3px 12px;background:linear-gradient(135deg,#0EA5E9,#6366F1);color:white;border:none;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;vertical-align:middle;">🤖 AI润色</button></label>
                 <textarea id="newKnowledgeContent" placeholder="详细描述这条饮食知识..." onblur="autoScanContentTags()"></textarea>
                 <!-- V379: 食方结构化录入（分类=食方时显示，五项必填，保存为 content JSON） -->
                 <div id="fangStructuredFields" style="display:none;margin:8px 0 4px;padding:12px;background:#FFFBF5;border:1px solid #FDE68A;border-radius:12px;">
