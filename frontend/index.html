@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V640-20261123';
+        var APP_VER = 'V641-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -37981,8 +37981,10 @@ function _fhAutoFallback(force) {
 // 食养堂树状子分类（与生成端 category 一致）；食养收藏沿用同一套，仅内容=用户收藏
 var _FH_TREE_CATS = ['节气食养', '天气食养', '当季食材', '厨房技巧', '选材避坑', '家庭宴客', '饮食文化', '食育', '食方'];
 // V640: 管理态（_kbInAdminMgrView）隐藏已并入「食谱→节气饮食」的三个食养节点（节气食养/当季食材/饮食文化）；
+// V641: 追加「寻味天下」——已并入「食谱→各地美食」（其归档条目在 sy 树非 _FH_TREE_CATS 节点，
+// 由 _syItemsForLayer 折叠进「节气食养」板块，过滤在折叠处生效）；
 // 食养堂会员页与普通浏览态不受影响（判定仅在管理态生效）
-var _KB_MIGRATED_SY_CATS = ['节气食养', '当季食材', '饮食文化'];
+var _KB_MIGRATED_SY_CATS = ['节气食养', '当季食材', '饮食文化', '寻味天下'];
 function _fhTreeCatsVisible() {
     var cats = _FH_TREE_CATS.slice();
     try { if (_kbInAdminMgrView()) cats = cats.filter(function (c) { return _KB_MIGRATED_SY_CATS.indexOf(c) < 0; }); } catch (e) {}
@@ -48753,6 +48755,8 @@ function _syItemsForLayer(lib) {
                 try {
                     if (!a || !a.title || !_dtIsNational(a)) return;
                     var c = String(a.category || '').trim();
+                    // V641: 管理态 sy 树隐藏已迁移归档条目（寻味天下等折叠进板块的条目一并隐藏；普通浏览态不受影响）
+                    if (_kbInAdminMgrView() && _KB_MIGRATED_SY_CATS.indexOf(c) >= 0) return;
                     out.push({
                         id: 'fharc:' + a.id, _fhArc: a, mainCategory: 'shiyang',
                         subCategory: (_SY_SECTIONS.indexOf(c) >= 0 ? c : '节气食养'),
@@ -56634,6 +56638,135 @@ async function _kbMigrateJieqiArticles() {
     }
     console.log('[V640 节气文章迁移] 归档源 ' + stats.total + ' 条：迁移 ' + migrated + '（春' + stats['春季'] + '/夏' + stats['夏季'] + '/秋' + stats['秋季'] + '/冬' + stats['冬季'] + '，其中无日期归冬 ' + stats.undated + '）；跳过 ' + stats.skipped + '；失败 ' + stats.failed);
     showToast('节气文章迁移完成：迁移 ' + migrated + ' 篇，跳过 ' + stats.skipped + ' 篇');
+    return stats;
+}
+// ============ V641: 食谱→各地美食 分类建立 +「寻味天下」一次性迁移 ============
+// 全局函数，控制台/超管可调用；幂等：分类节点/细分类只补缺不重复不覆盖，文章按 kbSrcId 或同名跳过
+// 13 细分类固定中文 id；判区关键词表（全部 ≥2 字避免误命中；顺序即优先级，港澳台最先防被华南/华东抢判）
+var _KB_GDFC_REGIONS = [
+    { id: '港澳台', kw: ['港澳台', '香港', '澳门', '台湾', '港式', '澳式', '台式', '茶餐厅'] },
+    { id: '东北', kw: ['东北', '黑吉辽', '黑龙江', '吉林', '辽宁', '哈尔滨', '沈阳', '长春', '大连', '锅包肉', '地三鲜'] },
+    { id: '华北', kw: ['华北', '京津冀', '北京', '天津', '河北', '山东', '鲁菜', '山西', '晋菜', '内蒙', '太原', '石家庄'] },
+    { id: '西北', kw: ['西北', '陕西', '西安', '甘肃', '兰州', '宁夏', '青海', '新疆', '乌鲁木齐', '肉夹馍', '羊肉泡馍', '大盘鸡'] },
+    { id: '华东', kw: ['华东', '江苏', '浙江', '上海', '安徽', '江西', '南京', '杭州', '苏州', '宁波', '无锡', '扬州', '绍兴', '徽菜', '淮扬', '本帮', '龙井'] },
+    { id: '华中', kw: ['华中', '河南', '湖北', '湖南', '豫菜', '鄂菜', '湘菜', '武汉', '长沙', '郑州', '热干面', '剁椒'] },
+    { id: '华南', kw: ['华南', '广东', '广西', '福建', '海南', '粤菜', '闽菜', '广州', '深圳', '潮汕', '顺德', '桂林', '南宁', '厦门', '福州', '海口', '早茶', '烧腊'] },
+    { id: '西南', kw: ['西南', '四川', '重庆', '云南', '贵州', '西藏', '川菜', '渝菜', '滇菜', '黔菜', '成都', '昆明', '贵阳', '拉萨', '麻辣'] },
+    { id: '日韩', kw: ['日本', '韩国', '东京', '大阪', '京都', '北海道', '冲绳', '首尔', '釜山', '和食', '韩餐', '泡菜锅'] },
+    { id: '东南亚', kw: ['东南亚', '泰国', '越南', '新加坡', '马来西亚', '曼谷', '河内', '胡志明', '吉隆坡', '印尼', '菲律宾', '缅甸', '柬埔寨', '老挝', '冬阴功'] },
+    { id: '欧洲', kw: ['欧洲', '英国', '法国', '德国', '意大利', '西班牙', '俄罗斯', '伦敦', '巴黎', '罗马', '柏林', '莫斯科', '希腊', '葡萄牙', '荷兰', '瑞士', '瑞典', '奥地利', '匈牙利', '波兰'] },
+    { id: '美洲', kw: ['美洲', '美国', '加拿大', '墨西哥', '巴西', '阿根廷', '秘鲁', '智利', '古巴', '纽约', '洛杉矶', '华盛顿', '多伦多', '夏威夷'] },
+    { id: '中东非洲', kw: ['中东', '非洲', '土耳其', '迪拜', '阿联酋', '沙特', '伊朗', '以色列', '埃及', '摩洛哥', '南非', '肯尼亚', '埃塞俄比亚'] }
+];
+// 判区：先标题后正文前 200 字；「寻味天下」字样本身不参与判区
+function _kbGdfcRegionOf(a) {
+    var hit = function (text) {
+        for (var i = 0; i < _KB_GDFC_REGIONS.length; i++) {
+            var r = _KB_GDFC_REGIONS[i];
+            for (var j = 0; j < r.kw.length; j++) { if (text.indexOf(r.kw[j]) >= 0) return r.id; }
+        }
+        return '';
+    };
+    var r = hit(String((a && a.title) || ''));
+    if (r) return r;
+    return hit(String((a && a.content) || '').slice(0, 200));
+}
+async function _kbSetupGeishiCuisine() {
+    if (!requireSuperAdmin()) return null;
+    var stats = { catsCreated: false, subCatsAdded: 0, total: 0, skipped: 0, failed: 0, unmatched: [] };
+    _KB_GDFC_REGIONS.forEach(function (r) { stats[r.id] = 0; });
+    // a) recipe 子节点找/建「各地美食」(id:'gdfc'，order 排末位) + 13 细分类（已存在则补缺失，不重复不覆盖）
+    try {
+        var kc = getKnowledgeCategories();
+        var tree = (kc && kc.public && kc.public.tree) || [];
+        var recipe = null;
+        tree.forEach(function (t) { if (t && t.id === 'recipe') recipe = t; });
+        if (!recipe) { showToast('未找到「食谱」主分类，终止迁移'); return null; }
+        recipe.children = recipe.children || [];
+        var node = null;
+        recipe.children.forEach(function (c) { if (c && (c.id === 'gdfc' || c.name === '各地美食')) node = c; });
+        var changed = false;
+        if (!node) {
+            var maxOrder = 0;
+            recipe.children.forEach(function (c) { var o = (c && c.order) || 0; if (o > maxOrder) maxOrder = o; });
+            node = { id: 'gdfc', name: '各地美食', icon: '🌍', order: maxOrder + 1, children: [] };
+            recipe.children.push(node);
+            stats.catsCreated = true; changed = true;
+        }
+        node.children = node.children || [];
+        _KB_GDFC_REGIONS.forEach(function (r, i) {
+            var exists = node.children.some(function (c) { return c && (c.id === r.id || c.name === r.id); });
+            if (!exists) { node.children.push({ id: r.id, name: r.id, order: i + 1 }); stats.subCatsAdded++; changed = true; }
+        });
+        // b) 既有分类树持久化路径（saveKnowledgeCategories → lsSet → cloudBackupSchedule 云备份同步）
+        if (changed) {
+            saveKnowledgeCategories(kc);
+            try { renderCategoryTree(); } catch (e) {}
+            try { renderCatalogManager(); } catch (e) {}
+        }
+    } catch (e) { showToast('各地美食分类建立失败：' + (e.message || e)); return null; }
+    // c) 迁移「寻味天下」归档（复用 sy 视图同一数据加载链路，不自行定 days）
+    try { await _fhLoadServerArchive(); } catch (e) {}
+    var pool = [];
+    try {
+        pool = _fhArchiveAll().filter(function (a) {
+            return a && a.title && String(a.category || '').trim() === '寻味天下';
+        });
+    } catch (e) { showToast('归档数据读取失败：' + (e.message || e)); return null; }
+    stats.total = pool.length;
+    var migrated = 0;
+    var _ctx = getCurrentUserContext();
+    for (var i = 0; i < pool.length; i++) {
+        var a = pool[i];
+        try {
+            // 幂等：已存在同 kbSrcId 或同 title 的条目则跳过
+            var dup = dietKnowledge.some(function (k) {
+                return k && (String(k.kbSrcId || '') === String(a.id) || String(k.title || '') === String(a.title || ''));
+            });
+            if (dup) { stats.skipped++; continue; }
+            // 判区：标题→正文前 200 字；仍无法判定归「华东」并列出标题
+            var region = _kbGdfcRegionOf(a);
+            if (!region) { region = '华东'; stats.unmatched.push(a.title); }
+            var content = _kbStripImageRefs(String(a.content || ''));
+            dietKnowledge.unshift({
+                id: nextKnowledgeId++,
+                type: 'recipe',
+                title: a.title,
+                source: '用户添加',
+                content: content || '[图片]',
+                image: '',
+                images: [],
+                categoryId: 'recipe',
+                subCategoryId: 'gdfc',
+                leafCategoryId: region,
+                mainCategory: 'recipe',
+                subCategory: 'gdfc',
+                leafCategory: region,
+                createdAt: Date.now(),
+                sourceType: 'migrated',
+                tags: ['寻味天下', String(a.date || '')],
+                kbSrcId: a.id,
+                sceneTags: [],
+                auditStatus: '',
+                visibility: 'family',
+                scope: 'family',
+                layer: 'public',
+                createdBy: _ctx.id || 'unknown',
+                shareScope: 'none'
+            });
+            stats[region]++;
+            migrated++;
+        } catch (e) { stats.failed++; }
+    }
+    // d) 公共层入库机制同 V640（saveDietKnowledge + 操作日志 + 管理视图刷新）
+    if (migrated > 0) {
+        saveDietKnowledge();
+        logAdminAction('寻味天下迁移', '迁移 ' + migrated + ' 篇至 食谱→各地美食，跳过 ' + stats.skipped + '，失败 ' + stats.failed + '，无法判定归华东 ' + stats.unmatched.length);
+        try { if (document.body.classList.contains('kb-admin-lib')) renderLibTabView(); } catch (e) {}
+    }
+    var _regTxt = _KB_GDFC_REGIONS.map(function (r) { return r.id + stats[r.id]; }).join('/');
+    console.log('[V641 各地美食迁移] 分类: ' + (stats.catsCreated ? '新建「各地美食」' : '已存在') + '（补细分类 ' + stats.subCatsAdded + '）；归档源 ' + stats.total + ' 条：迁移 ' + migrated + '（' + _regTxt + '）；跳过 ' + stats.skipped + '；失败 ' + stats.failed + '；无法判定归华东 ' + JSON.stringify(stats.unmatched));
+    showToast('各地美食迁移完成：迁移 ' + migrated + ' 篇，跳过 ' + stats.skipped + ' 篇，无法判定 ' + stats.unmatched.length + ' 篇');
     return stats;
 }
 // V628: 「AI生成本分类」——打开 AI 批量生成弹窗并预选当前双栏分类
