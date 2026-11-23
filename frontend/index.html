@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V623-20261123';
+        var APP_VER = 'V624-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -8605,6 +8605,13 @@ function getCurrentUserContext() {
     };
 }
 
+// V624: 当前是否处于「文库管理」面板视图（kb-admin-mode）
+// —— 普通食知 Tab 与文库管理内展开的「饮食文库」（kb-admin-lib）均为只读浏览；
+// 公共层编辑入口只存在于管理面板主体 renderSaPublicLibraryTree（其按钮不经 can() 短路）
+function _kbInAdminMgrView() {
+    return document.body.classList.contains('kb-admin-mode');
+}
+
 // 统一权限判定（两层模型：public / family）
 // action: 'view' | 'ref' | 'clone' | 'edit' | 'delete' | 'share' | 'download' | 'report'
 // item:   条目对象（含 layer/createdBy/ownerId/visibility/familyId 等）
@@ -8620,8 +8627,8 @@ function can(action, item, user) {
     var isSuper = !!user.isSuperAdmin || isSuperAdmin(); // 密码超管会话 或 账号型超管
     var isPrivate = item.visibility === 'private';
 
-    // === 超管短路：公共层 edit/delete 超管可绕过 ===
-    if (layer === 'public' && isSuper && (action === 'edit' || action === 'delete')) return true;
+    // === 超管短路：公共层 edit/delete 超管可绕过（V624: 仅文库管理视图生效，普通食知 Tab 公共层只读）===
+    if (layer === 'public' && isSuper && (action === 'edit' || action === 'delete') && _kbInAdminMgrView()) return true;
 
     // === public 层：所有人可看，仅超管可编辑 ===
     if (layer === 'public') {
@@ -9351,6 +9358,23 @@ function buildKnowledgeCardHtml(item) {
     const timeStr = item.createdAt ? formatDateShort(new Date(item.createdAt)) : '';
     const thumbHtml = getKnowledgeImageHtml(item, 'small');
 
+    // === V624: 已分享入池的家庭条目状态徽标（放标题旁）——仅当条目在共享池中时显示 ===
+    var shareStatusHtml = '';
+    if ((item.layer || 'family') === 'family') {
+        var _spPool = getSharedPool();
+        var _sp = _spPool.find(function(p) { return String(p.itemId || p.sourceItemId) === String(item.id); });
+        if (_sp) {
+            var _spStyle = 'font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;flex-shrink:0;';
+            if (_sp.auditStatus === 'pending') {
+                shareStatusHtml = '<span style="' + _spStyle + 'background:#FEF3C7;color:#B45309;">⏳ 审核中</span>';
+            } else if (_sp.auditStatus === 'passed') {
+                shareStatusHtml = '<span style="' + _spStyle + 'background:#DCFCE7;color:#15803D;">✅ 已通过（入公共库）</span>';
+            } else if (_sp.auditStatus === 'rejected') {
+                shareStatusHtml = '<span style="' + _spStyle + 'background:#FEE2E2;color:#B91C1C;">❌ 已驳回' + escapeHtml(_sp.auditNote || _sp.auditReason ? '：' + (_sp.auditNote || _sp.auditReason) : '') + '</span>';
+            }
+        }
+    }
+
     // === 来源徽标（右上） ===
     const bt = getBadgeType(item);
     const badgeHtml = `<span class="source-badge ${bt}">${BADGE_LABELS[bt] || bt}</span>`;
@@ -9377,6 +9401,7 @@ function buildKnowledgeCardHtml(item) {
                 <div style="flex:1;min-width:0;">
                     <div style="display:flex;align-items:flex-start;gap:8px;">
                         <div class="knowledge-card-title">${escapeHtml(item.title)}</div>
+                        ${shareStatusHtml}
                         <span class="knowledge-type-badge ${badgeClass}">${typeLabel}</span>
                     </div>
                     <div class="knowledge-card-summary">${escapeHtml(summary)}</div>
@@ -55959,11 +55984,7 @@ function renderAdminPanel() {
     var publicItems = dietData.filter(function(k) { return (k.layer || 'family') === 'public'; });
     var pendingPool = sharedPool.filter(function(p) { return p.auditStatus === 'pending'; });
 
-    // 操作按钮（V274：文库分类管理在左，AI 批量生成在右）
-    var statsHtml = `<div style="margin-bottom:12px;display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;">
-        <div id="saCatalogBox"></div>
-        <button onclick="openAiBulkKnowledgeModal()" style="padding:7px 14px;border:none;border-radius:8px;font-size:13px;font-weight:700;color:white;cursor:pointer;white-space:nowrap;background:linear-gradient(135deg,#8B5CF6 0%,#EC4899 55%,#F97316 100%);box-shadow:0 3px 10px rgba(139,92,246,0.35);">🤖 AI 批量生成</button>
-    </div>`;
+    // V624: 顶部独立「AI 批量生成」按钮与 saCatalogBox 分类入口移除，主体改为公共文库容器（renderSaPublicLibraryTree）
 
     // 共享池待审核
     var pendingHtml = '';
@@ -55984,15 +56005,97 @@ function renderAdminPanel() {
         </div>`;
     } 
 
-    // 公共库条目区块（V274：用户要求从文库管理页移除「公共库（超管可编辑）」列表）
-    var publicHtml = '';
-
-    container.innerHTML = statsHtml
-        + pendingHtml + publicHtml
-        + '<div id="saAuditLogBox" style="margin-top:20px;"></div>';
-    renderCatalogManager();
-    renderSaAuditLog();
+    // V624: 主体 = 待审核区块 + 公共文库容器（目录树 + 文章列表 + 操作入口按钮行 + 底部「📋 操作日志」小链接）
+    container.innerHTML = pendingHtml + '<div id="saPublicLibBox"></div>';
+    renderSaPublicLibraryTree();
     touchSuperAdmin();
+}
+
+// V624: 公共文库管理主体——三层目录树（复用分类管理弹窗 catMgr* 操作函数）+ 公共文章列表 + 操作入口按钮行 + 底部「📋 操作日志」小链接
+function renderSaPublicLibraryTree() {
+    var box = document.getElementById('saPublicLibBox');
+    if (!box) return;
+    // API 级防护：仅账号型超管 或 密码超管会话可渲染
+    if (!isSuperAdmin() && !getSuperAdminSession().isLoggedIn) { box.innerHTML = ''; return; }
+    var kc = getKnowledgeCategories();
+    var tree = sortByOrder((kc.public && kc.public.tree) || []);
+    var dietData = JSON.parse(lsGet('dietKnowledge') || '[]');
+    var publicItems = dietData.filter(function(k) { return (k.layer || 'family') === 'public'; });
+    publicItems.sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+
+    // 三层目录树节点行：复用 renderCatNodeRow（调用前置 catMgrLayer='public'，✏️/🗑️/＋子/＋细 均作用于公共文库）
+    catMgrLayer = 'public';
+    var treeHtml = '';
+    tree.forEach(function(m) {
+        treeHtml += renderCatNodeRow(m, 'main', 0, publicItems);
+        if (catMgrExpand[m.id]) {
+            var subs = sortByOrder(m.children);
+            if (!subs.length) treeHtml += '<div style="padding:4px 0 4px 44px;font-size:12px;color:#94A3B8;">暂无子分类</div>';
+            subs.forEach(function(s) {
+                treeHtml += renderCatNodeRow(s, 'sub', 1, publicItems, m);
+                if (catMgrExpand[s.id]) {
+                    var fs = sortByOrder(s.children);
+                    if (!fs.length) treeHtml += '<div style="padding:4px 0 4px 68px;font-size:12px;color:#94A3B8;">暂无细分类</div>';
+                    fs.forEach(function(f) { treeHtml += renderCatNodeRow(f, 'leaf', 2, publicItems, m, s); });
+                }
+            });
+        }
+    });
+
+    // 文章列表：每行 标题 + 分类路径 + ✏️ 编辑 / 🗑️ 删除（按 createdAt 倒序）
+    var _saCatPathLabel = function(k) {
+        var parts = [];
+        var mainId = k.categoryId || k.mainCategory;
+        var main = tree.find(function(t) { return t.id === mainId || t.name === mainId; });
+        if (!main) return parts.join(' › ');
+        parts.push((main.icon ? main.icon + ' ' : '') + main.name);
+        var subId = k.subCategoryId || k.subCategory;
+        var sub = subId ? (main.children || []).find(function(c) { return c.id === subId || c.name === subId; }) : null;
+        if (sub) {
+            parts.push((sub.icon ? sub.icon + ' ' : '') + sub.name);
+            var leafId = k.leafCategoryId || k.leafCategory;
+            var leaf = leafId ? (sub.children || []).find(function(f) { return f.id === leafId || f.name === leafId; }) : null;
+            if (leaf) parts.push((leaf.icon ? leaf.icon + ' ' : '') + leaf.name);
+        }
+        return parts.join(' › ');
+    };
+    var artHtml = publicItems.map(function(k) {
+        return '<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;background:white;border:1px solid #E5E7EB;border-radius:10px;margin-bottom:6px;">'
+            + '<div style="flex:1;min-width:0;font-size:13.5px;font-weight:600;color:#1E293B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(k.title || '(未命名)') + '</div>'
+            + '<span style="flex-shrink:0;font-size:11px;color:#94A3B8;max-width:42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(_saCatPathLabel(k)) + '</span>'
+            + '<button onclick="openSuperAdminItemEditor(\'' + escapeHtml(String(k.id)) + '\')" title="编辑" style="' + _catBtnStyle('#1D4ED8') + '">✏️</button>'
+            + '<button onclick="superAdminDeletePublic(\'' + escapeHtml(String(k.id)) + '\')" title="删除" style="' + _catBtnStyle('#DC2626') + '">🗑️</button>'
+            + '</div>';
+    }).join('');
+
+    // 操作入口按钮行 + 底部「📋 操作日志」小链接
+    var _btn = 'padding:7px 14px;border:none;border-radius:8px;font-size:13px;font-weight:700;color:white;cursor:pointer;white-space:nowrap;';
+    box.innerHTML = '<div style="font-size:14px;font-weight:700;color:#1E293B;margin-bottom:10px;">🌍 公共文库（' + publicItems.length + ' 篇）</div>'
+        + treeHtml
+        + '<div style="margin-top:4px;">' + (artHtml || '<div style="font-size:12px;color:#94A3B8;padding:6px 0;">暂无公共文章</div>') + '</div>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 8px;">'
+        + '<button onclick="window._kbUploadCtx=\'public\';openAddKnowledgeModal();" style="' + _btn + 'background:#F97316;">＋ 上传文章</button>'
+        + '<button onclick="openAiBulkKnowledgeModal()" style="' + _btn + 'background:linear-gradient(135deg,#8B5CF6 0%,#EC4899 55%,#F97316 100%);box-shadow:0 3px 10px rgba(139,92,246,0.35);">🤖 AI 批量生成</button>'
+        + '<button onclick="openCategoryManager(\'public\')" style="' + _btn + 'background:#F59E0B;">📚 文库分类管理</button>'
+        + '</div>'
+        + '<div style="text-align:center;"><a href="javascript:void(0);" onclick="openSaAuditLogModal()" style="font-size:12px;color:#64748B;text-decoration:underline;cursor:pointer;">📋 操作日志</a></div>';
+}
+
+// V624: 操作日志弹窗——#saAuditLogBox 放入弹窗 overlay 内，由 renderSaAuditLog() 填充
+function openSaAuditLogModal() {
+    var old = document.getElementById('saAuditLogModalOverlay');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'saAuditLogModalOverlay';
+    ov.style.cssText = 'position:fixed;top:0;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;z-index:100002;background:rgba(31,41,55,0.55);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    ov.addEventListener('click', function(e) { if (e.target === this) this.remove(); });
+    ov.innerHTML = '<div style="background:#FDF8F3;border-radius:16px;width:100%;max-width:420px;height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.25);">'
+        + '<div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:white;border-bottom:1px solid #F3F4F6;">'
+        + '<div style="font-size:16px;font-weight:700;color:#1E293B;">📋 操作日志</div>'
+        + '<button onclick="document.getElementById(\'saAuditLogModalOverlay\').remove()" style="width:30px;height:30px;border:none;background:#F3F4F6;border-radius:8px;font-size:16px;color:#6B7280;cursor:pointer;">✕</button></div>'
+        + '<div id="saAuditLogBox" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 14px;"></div></div>';
+    document.body.appendChild(ov);
+    renderSaAuditLog();
 }
 
 // ============ V266/V268: 超管「文库管理」精简视图（隐藏搜索框 / 层级 Tab / 分类胶囊 / 顶栏历史与重新对话） ============
@@ -56373,7 +56476,12 @@ var catMgrLayer = 'public';
 // 管理面板入口区块：两个入口（家庭库锁定后入口隐藏）
 function renderCatalogManager() {
     var box = document.getElementById('saCatalogBox');
-    if (!box) return;
+    if (!box) {
+        // V624: saCatalogBox 入口已从管理面板移除——box 不存在时改调公共文库主体刷新（若 #saPublicLibBox 存在且超管/密码超管会话）
+        var _libBox = document.getElementById('saPublicLibBox');
+        if (_libBox && (isSuperAdmin() || getSuperAdminSession().isLoggedIn)) renderSaPublicLibraryTree();
+        return;
+    }
     // API 级防护：非超管不渲染任何入口（UI 层入口在"我家→设置"，由 refreshAdminTabVisibility 把关）
     if (!isSuperAdmin()) { box.innerHTML = ''; return; }
     var locked = isFamilyCategoryLocked();
@@ -56447,7 +56555,8 @@ function catMgrSwitchLayer(layer) {
     renderCategoryTree();
 }
 
-function toggleCatMgr(id) { catMgrExpand[id] = !catMgrExpand[id]; renderCategoryTree(); }
+// V624: 弹窗不在时（主体公共文库树视图）同步刷新主体
+function toggleCatMgr(id) { catMgrExpand[id] = !catMgrExpand[id]; renderCategoryTree(); renderCatalogManager(); }
 
 // 三级递归渲染：主分类 → 子分类 → 细分类，每项 [↑][↓][编辑][删除]
 function renderCategoryTree() {
@@ -56796,6 +56905,7 @@ function catMgrMove(id, dir) {
     saveKnowledgeCategories(kc);
     logAdminAction('调整分类排序', id + (dir > 0 ? ' ↓下移' : ' ↑上移'));
     renderCategoryTree();
+    renderCatalogManager(); // V624: 弹窗不在时（主体公共文库树视图）同步刷新主体
 }
 // ==================== 条目编辑（仅超管）：标题/内容/标签/图片/分类 ====================
 var saEdImages = [];   // 编辑器暂存图片（dataURL 数组）
@@ -59397,12 +59507,14 @@ function openAddKnowledgeModal() {
     // 重置可见范围开关（默认家人可见）
     var privToggle = document.getElementById('newKnowledgePrivateToggle');
     if (privToggle) privToggle.checked = false;
-    // 账号型超管：显示"AI 生成"按钮；隐藏底部"仅自己可见"开关行（录入内容一律进公共文库）
-    var _isSa = isSuperAdmin();
+    // V624: 库归属按 asPublic 同规则判定——仅「上传文章」入口（_kbUploadCtx='public'）才进公共文库；
+    // 默认锁定家庭层：显示底部"仅自己可见"开关行，隐藏超管特殊处理（AI 生成按钮）
+    var _ctx = getCurrentUserContext();
+    var _asPublic = window._kbUploadCtx === 'public' && (isSuperAdmin() || (!!_ctx.isSuperAdmin && currentKnowledgeVisibility === 'admin'));
     var aiBtn = document.getElementById('aiGenerateBtn');
-    if (aiBtn) aiBtn.style.display = _isSa ? 'inline-block' : 'none';
+    if (aiBtn) aiBtn.style.display = _asPublic ? 'inline-block' : 'none';
     var visRow = document.getElementById('newKnowledgeVisRow');
-    if (visRow) visRow.style.display = _isSa ? 'none' : 'block';
+    if (visRow) visRow.style.display = _asPublic ? 'none' : 'block';
     // 库归属提示：本次保存将进入哪个库
     _renderKnowledgeLayerHint();
 }
@@ -59410,7 +59522,8 @@ function openAddKnowledgeModal() {
 function _renderKnowledgeLayerHint() {
     var row = document.getElementById('newKnowledgeLayerRow');
     if (!row) return;
-    var asPublic = isSuperAdmin() || (!!getCurrentUserContext().isSuperAdmin && currentKnowledgeVisibility === 'admin');
+    // V624: 与 saveNewKnowledge 同规则——仅「上传文章」入口（_kbUploadCtx='public'）才进公共文库
+    var asPublic = window._kbUploadCtx === 'public' && (isSuperAdmin() || (!!getCurrentUserContext().isSuperAdmin && currentKnowledgeVisibility === 'admin'));
     if (asPublic) {
         row.innerHTML = '<span style="color:#6B7280;">📚 本次将保存到：</span><span style="color:#1D4ED8;font-weight:700;">公共文库</span><span style="color:#9CA3AF;font-size:11px;">（全家共享 · 账号型超管权限）</span>';
     } else {
@@ -59520,6 +59633,7 @@ function closeAddKnowledgeModal() {
     if (commonTagsEl) commonTagsEl.innerHTML = '';
     // V379: 清空食方结构化字段与体质选中态
     resetFangStructuredForm();
+    window._kbUploadCtx = ''; // V624: 关闭弹窗清除上传入口库归属上下文
 }
 
 // ============ 推荐搭配（食材知识，1-8 道可增删） ============
@@ -59704,9 +59818,9 @@ function saveNewKnowledge() {
             _shiyangAudit = { status: (_audT.status === 'transformed' || _audC.status === 'transformed') ? 'transformed' : 'ok', title: _audT.text, content: _audC.text };
         }
     }
-    // 两层模型：层级由身份与入口决定 —— 账号型超管录入 → 公共库；密码超管在「管理」Tab 录入 → 公共库；其余 → 家庭库
+    // V624: 两层模型——层级由入口决定：仅「上传文章」入口（_kbUploadCtx='public'）且超管/管理态才录入公共文库，其余一律默认家庭层
     var _ctx = getCurrentUserContext();
-    var asPublic = isSuperAdmin() || (!!_ctx.isSuperAdmin && currentKnowledgeVisibility === 'admin');
+    var asPublic = window._kbUploadCtx === 'public' && (isSuperAdmin() || (!!_ctx.isSuperAdmin && currentKnowledgeVisibility === 'admin'));
     var _privToggle = document.getElementById('newKnowledgePrivateToggle');
     var saveVisibility = (!asPublic && _privToggle && _privToggle.checked) ? 'private' : 'family';
     const newItem = {
@@ -59764,6 +59878,7 @@ function saveNewKnowledge() {
     if (asPublic) logAdminAction('添加公共条目', newItem.title || '');
     window._knowledgeImage = null;
     window._knowledgeImages = [];
+    window._kbUploadCtx = ''; // V624: 保存成功后清除上传入口库归属上下文
     closeAddKnowledgeModal();
     renderDietKnowledge();
     updateVisibilityCounts();
