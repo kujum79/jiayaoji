@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V630-20261123';
+        var APP_VER = 'V631-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -39609,9 +39609,10 @@ function _helpSwitchTab(key) {
 // V134：支持指定容器 id（默认 helpPageBody），供食知文库「食榜」Tab 复用；
 // _helpRenderContainer 记住当前容器，子 Tab 切换（_helpSwitchTab）时渲染回同一容器；
 // fit 状态一并记忆（文库容器无 padding，负边距会溢出）
+// V631：skipTabBar=true 时不渲染自带横排 Tab 栏（文库食榜双栏改用左栏竖排节点切换）
 var _helpRenderContainer = '';
 var _helpRenderFit = false;
-function _renderHelpMain(containerId, fit) {
+function _renderHelpMain(containerId, fit, skipTabBar) {
     _helpRenderContainer = containerId || 'helpPageBody';
     _helpRenderFit = !!fit;
     var body = document.getElementById(_helpRenderContainer);
@@ -39632,13 +39633,15 @@ function _renderHelpMain(containerId, fit) {
     }
     if (visibleTabs.findIndex(function(t) { return t.key === _helpActiveTab; }) < 0) _helpActiveTab = visibleTabs[0].key;
 
-    // Tab 栏
-    html += '<div style="flex-shrink:0;display:flex;gap:6px;padding:10px 12px;background:#FFF7ED;overflow-x:auto;">';
-    visibleTabs.forEach(function(t) {
-        var active = (t.key === _helpActiveTab);
-        html += '<button onclick="_helpSwitchTab(\'' + t.key + '\')" style="flex-shrink:0;padding:8px 14px;border:1px solid ' + (active ? '#F97316' : '#FED7AA') + ';background:' + (active ? '#F97316' : 'white') + ';color:' + (active ? 'white' : '#C2410C') + ';border-radius:20px;font-size:13px;font-weight:' + (active ? '700' : '500') + ';cursor:pointer;white-space:nowrap;">' + t.label + '</button>';
-    });
-    html += '</div>';
+    // Tab 栏（V631：双栏模式 skipTabBar 时隐藏，由左栏节点承担切换）
+    if (!skipTabBar) {
+        html += '<div style="flex-shrink:0;display:flex;gap:6px;padding:10px 12px;background:#FFF7ED;overflow-x:auto;">';
+        visibleTabs.forEach(function(t) {
+            var active = (t.key === _helpActiveTab);
+            html += '<button onclick="_helpSwitchTab(\'' + t.key + '\')" style="flex-shrink:0;padding:8px 14px;border:1px solid ' + (active ? '#F97316' : '#FED7AA') + ';background:' + (active ? '#F97316' : 'white') + ';color:' + (active ? 'white' : '#C2410C') + ';border-radius:20px;font-size:13px;font-weight:' + (active ? '700' : '500') + ';cursor:pointer;white-space:nowrap;">' + t.label + '</button>';
+        });
+        html += '</div>';
+    }
 
     // 内容区
     html += '<div id="helpContentArea" style="padding:12px;"></div>';
@@ -53820,6 +53823,33 @@ function _libSelectShibang() {
     if (currentKnowledgeViewMode !== 'libtab') switchKnowledgeView('libtab');
     else renderLibTabView();
 }
+// V631: 食榜双栏左栏节点定义（与 _renderHelpMain 的 allTabs 保持一致）
+var _SB_LIB_TABS = [
+    { key: '食榜.计划榜', label: '计划榜', icon: '📅' },
+    { key: '食榜.菜品榜', label: '菜品榜', icon: '🍲' },
+    { key: '食榜.达人榜', label: '达人榜', icon: '👨‍🍳' },
+    { key: '食榜.内容榜', label: '内容榜', icon: '📖' }
+];
+// V631: 食榜双栏结构（普通食知态与文库管理态共用；管理态下榜单为系统数据只读，无编辑入口）
+function _sbLibDualPaneHtml() {
+    _saLibEnsureStyle();
+    var visible = _SB_LIB_TABS.filter(function (t) { return isModuleEnabled(t.key); });
+    if (!visible.length) return '<div style="text-align:center;padding:60px 20px;color:#D97706;font-size:14px;">请在设置中开启食榜模块</div>';
+    if (!visible.some(function (t) { return t.key === _helpActiveTab; })) _helpActiveTab = visible[0].key;
+    var rows = visible.map(function (t) {
+        var sel = t.key === _helpActiveTab;
+        return '<div class="sad-row' + (sel ? ' sel' : '') + '" onclick="_sbLibSelect(\'' + t.key + '\')"><span>' + t.icon + '</span><span>' + t.label + '</span></div>';
+    }).join('');
+    return '<div style="display:flex;gap:10px;align-items:stretch;flex:1;min-height:0;">'
+        + '<div class="sad-tree" style="max-width:120px;align-self:flex-start;"><div class="sad-tree-head"><span>食榜</span></div>' + rows + '</div>'
+        + '<div style="flex:1;min-width:0;overflow-y:auto;"><div id="libShibangArea"></div></div>'
+        + '</div>';
+}
+// V631: 左栏点选子榜——切换 _helpActiveTab 并整体重渲食榜分支（左栏高亮随重渲染同步）
+function _sbLibSelect(key) {
+    _helpActiveTab = key;
+    renderLibTabView();
+}
 // V134：文库 Tab 页内渲染分类——把分类浏览主体（.category-browse-body：左树+内容区）
 // 整体移入文库内容容器（同一 DOM 节点，子渲染函数 getElementById 照常工作，无 id 冲突）；
 // 页内不显示 两层文库Tab/返回按钮/分类标题/搜索框（保留在 category 视图中，归还后可用）
@@ -53907,10 +53937,12 @@ function renderLibTabView() {
     }).join('');
     // 内容区：按当前 Tab 展示该分类内容
     if (_libCurTab === 'shibang') {
-        // 食榜：先归还分类主体，再渲染四子榜（复用食榜页渲染）
+        // V631: 食榜双栏——左栏竖排四子榜节点（样式对齐 V628 双栏 sad-tree），右栏复用 _renderHelpMain 内容渲染（隐藏其自带横排 Tab 栏）
         _libRestoreCategoryContent();
-        content.innerHTML = '<div id="libShibangArea"></div>';
-        _renderHelpMain('libShibangArea', true);
+        content.style.cssText = 'flex:1;min-height:0;display:flex;flex-direction:column;';
+        content.innerHTML = _sbLibDualPaneHtml();
+        var _sbArea = document.getElementById('libShibangArea');
+        if (_sbArea) _renderHelpMain('libShibangArea', true, true);
         return;
     }
     // V628: 文库管理态——除食养（保留 sy 双栏原样）外，主体改为「食养 sy 同款双栏」：
@@ -56105,11 +56137,12 @@ function renderAdminPanel() {
     // V625: 文库管理主体改为 libtab 层级浏览视图（openSuperLibraryManager 自动展开）；
     // V630: 本面板仅保留工具条头部（待审核改由「📝审核分享文章」弹窗承载），点顶栏 📚 收回饮食文库时可见
     container.innerHTML = _saAdminHeaderHtml()
-        + '<div style="text-align:center;font-size:13px;color:#9A3412;margin-top:10px;">👆 点顶栏 📚 进入「饮食文库」按分类浏览与编辑</div>';
+        + '<div style="text-align:center;font-size:13px;color:#9A3412;margin-top:10px;">👆 点顶栏 📚 进入「饮食文库」按分类浏览与编辑</div>'
+        + '<div style="text-align:center;padding:14px 0 10px;">' + _saAdminFooterHtml() + '</div>'; // V631: 操作日志小链接移至面板底部
     touchSuperAdmin();
 }
 // V625: 文库管理公共头部；V630: 待审核区块不再常驻头部，工具条改为
-// 「＋上传文章 / 🤖AI批量生成 / 📝审核分享文章(红角标,开弹窗) / 📋操作日志」，📚文库分类管理移入日志弹窗标题行
+// 「＋上传文章 / 🤖AI批量生成 / 📝审核分享文章(红角标,开弹窗)」；V631: 📋操作日志降级为小号文字链接移至页面底部（#saLibAdminFooter）
 function _saAdminHeaderHtml() {
     var pendingCount = _saPendingPool().length;
     var _btn = 'position:relative;padding:7px 14px;border:none;border-radius:8px;font-size:13px;font-weight:700;color:white;cursor:pointer;white-space:nowrap;';
@@ -56120,8 +56153,11 @@ function _saAdminHeaderHtml() {
         + '<button onclick="window._kbUploadCtx=\'public\';openAddKnowledgeModal();" style="' + _btn + 'background:#F97316;">＋ 上传文章</button>'
         + '<button onclick="openAiBulkKnowledgeModal()" style="' + _btn + 'background:linear-gradient(135deg,#8B5CF6 0%,#EC4899 55%,#F97316 100%);box-shadow:0 3px 10px rgba(139,92,246,0.35);">🤖 AI 批量生成</button>'
         + '<button onclick="_kbAuditModalOpen()" style="' + _btn + 'background:#3B82F6;">📝 审核分享文章' + _badge + '</button>'
-        + '<button onclick="openSaAuditLogModal()" style="' + _btn + 'background:#64748B;">📋 操作日志</button>'
         + '</div>';
+}
+// V631: 底部「📋 操作日志」小号文字链接（libtab 各 Tab 视图根节点末尾统一注入）
+function _saAdminFooterHtml() {
+    return '<a href="javascript:void(0);" onclick="openSaAuditLogModal()" style="font-size:12px;color:#64748B;text-decoration:underline;cursor:pointer;">📋 操作日志</a>';
 }
 // V630: 待审分享池条目（sharedPool 中 auditStatus==='pending'）
 function _saPendingPool() {
@@ -56179,13 +56215,15 @@ function _kbAuditModalRefresh() {
         : '<div style="padding:36px 10px;text-align:center;font-size:13px;color:#A18A6D;background:#FBF6EF;border:1px dashed #EADFD0;border-radius:12px;">暂无待审分享</div>';
 }
 // V625: 待审核+工具条注入 libtab 层级浏览视图顶部（#knowledgeLibTabView 首子，固定 id #saLibAdminHeader，随视图刷新）
+// V631: 同时在视图根节点末尾注入 #saLibAdminFooter「📋操作日志」小链接（flex 纵向布局最末子，食养/食榜/双栏各 Tab 均可见；非管理态移除）
 function _renderSaLibAdminHeader() {
     var view = document.getElementById('knowledgeLibTabView');
     if (!view) return;
     var box = document.getElementById('saLibAdminHeader');
+    var foot = document.getElementById('saLibAdminFooter');
     var inAdmin = document.body.classList.contains('kb-admin-lib') || document.body.classList.contains('kb-admin-mode');
     var isSa = isSuperAdmin() || getSuperAdminSession().isLoggedIn;
-    if (!inAdmin || !isSa) { if (box) box.remove(); return; }
+    if (!inAdmin || !isSa) { if (box) box.remove(); if (foot) foot.remove(); return; }
     if (!box) {
         box = document.createElement('div');
         box.id = 'saLibAdminHeader';
@@ -56193,6 +56231,13 @@ function _renderSaLibAdminHeader() {
         view.insertBefore(box, view.firstChild);
     }
     box.innerHTML = _saAdminHeaderHtml();
+    if (!foot) {
+        foot = document.createElement('div');
+        foot.id = 'saLibAdminFooter';
+        foot.style.cssText = 'flex-shrink:0;text-align:center;padding:8px 0 10px;';
+    }
+    foot.innerHTML = _saAdminFooterHtml();
+    if (foot.parentElement !== view || view.lastElementChild !== foot) view.appendChild(foot);
 }
 // V625: 管理操作（审核/编辑/删除/AI批量）后的视图刷新——层级浏览态刷新 libtab，否则刷新管理面板
 function _saAdminRefreshAfterChange() {
