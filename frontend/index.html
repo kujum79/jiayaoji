@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V635-20261123';
+        var APP_VER = 'V636-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -60522,12 +60522,14 @@ async function aiGenerateKnowledgeContent() {
         var srcText = bodyText;
         var _truncated = false;
         if (srcText.length > 12000) { srcText = srcText.slice(0, 12000); _truncated = true; }
-        prompt = '请整理以下原文：\n'
-            + '1)保持原意与全部细节，不得缩写、不得改写观点、不得替换做法；\n'
+        // V636: 整理模式改为「重新组织编辑」——提取原文主要内容、不限字数
+        prompt = '请基于以下原文重新组织编辑一篇文章：\n'
+            + '1)提取并保留原文的主要内容（核心观点、做法步骤、关键细节、经验提示），不得替换做法、不得虚构原文没有的信息；\n'
             + '2)删除图片引用、图片链接、图片占位与重复出现的图注行；\n'
-            + '3)修正错别字与明显标点；\n'
-            + '4)保留小标题与条目结构，输出整理后全文（字数与原文相当）；\n'
-            + '5)只输出正文。\n'
+            + '3)重新组织结构与文字，使其通顺、条理清晰，可保留或优化小标题与条目结构；\n'
+            + '4)不限制字数，篇幅以完整覆盖原文主要内容为准；\n'
+            + '5)修正错别字与明显标点；\n'
+            + '6)只输出正文。\n'
             + '标题：' + (title.trim() || '（无）') + '\n'
             + '原文：\n' + srcText;
         if (_truncated) showToast('原文超过 12000 字，已截断后整理');
@@ -60548,12 +60550,14 @@ async function aiGenerateKnowledgeContent() {
     try {
         // V130: 改走统一入口（/plan 优先，失败回退直连）
         var opts = isOrganize
-            ? { maxTokens: 4000, temperature: 0.2, taskType: 'knowledge' }
+            ? { maxTokens: 6000, temperature: 0.3, taskType: 'knowledge' }  /* V636: 不限字数→提高输出上限 */
             : { maxTokens: 800, temperature: 0.7, taskType: 'knowledge' };
-        var result = await aiChatMultiProvider('你是家庭膳食知识编辑，擅长撰写简洁实用的家庭饮食知识。', prompt, opts);
+        var result = await aiChatMultiProvider(isOrganize
+            ? '你是家庭膳食知识编辑，擅长在忠实原文信息的基础上重新组织、润色长文。'   /* V636: 整理模式系统提示，避免"简洁"倾向导致缩写 */
+            : '你是家庭膳食知识编辑，擅长撰写简洁实用的家庭饮食知识。', prompt, opts);
         var reply = (result.choices && result.choices[0] && result.choices[0].message) ? result.choices[0].message.content : '';
         if (!reply.trim()) { showToast('AI 未返回内容，请重试'); }
-        else { contentEl.value = reply.trim(); showToast(isOrganize ? '✅ AI 已整理原文（保留原意）' : '✅ AI 已生成内容'); }
+        else { contentEl.value = reply.trim(); showToast(isOrganize ? '✅ AI 已重新组织原文（提取主要内容）' : '✅ AI 已生成内容'); }
     } catch (e) {
         showToast((isOrganize ? '整理失败：' : '生成失败：') + (e.message || '网络错误'));
     }
