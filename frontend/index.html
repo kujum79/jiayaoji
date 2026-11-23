@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V633-20261123';
+        var APP_VER = 'V634-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -56423,9 +56423,9 @@ function _saLibInnerHtml() {
     html += '<div class="sad-main">';
     html += '<div class="sad-crumb">📂 ' + (names.length ? escapeHtml(names.join(' / ')) : '全部公共条目') + ' <span style="color:#C2410C;font-weight:700;">(' + items.length + ')</span></div>';
     html += '<div class="sad-bar">'
-        + '<button class="sad-btn" style="background:#0EA5E9;" onclick="_kbUploadScanModal()">📄 上传扫描件</button>'
-        + '<button class="sad-btn" style="background:#F97316;" onclick="window._kbUploadCtx=\'public\';openAddKnowledgeModal();">＋ 上传文章</button>'
-        + '<button class="sad-btn" style="background:linear-gradient(135deg,#8B5CF6,#EC4899);" onclick="_kbAiGenForCat()">🤖 AI生成本分类</button>'
+        + '<button class="sad-btn" style="background:#0EA5E9;" onclick="_kbUploadScanModal()">上传扫描件</button>'  /* V634: 去图标+改名，三按钮尽量一行 */
+        + '<button class="sad-btn" style="background:#F97316;" onclick="window._kbUploadCtx=\'public\';openAddKnowledgeModal();">上传文件</button>'
+        + '<button class="sad-btn" style="background:linear-gradient(135deg,#8B5CF6,#EC4899);" onclick="_kbAiGenForCat()">AI生成</button>'
         + '</div>';
     if (!items.length) {
         html += '<div style="padding:26px 10px;text-align:center;font-size:13px;color:#A18A6D;background:#FBF6EF;border:1px dashed #EADFD0;border-radius:12px;">该分类暂无公共条目，可用上方按钮添加</div>';
