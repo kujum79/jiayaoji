@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V637-20261123';
+        var APP_VER = 'V638-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -56440,7 +56440,7 @@ function _saLibInnerHtml() {
     html += '</div></div>';
     return html;
 }
-// 双栏整体（renderLibTabView 管理态分支调用）；默认落「食材」根并展开
+// 双栏整体（renderLibTabView 管理态分支调用）；默认落「食材」根、不展开子分类（V638）
 function _saLibDualPaneHtml() {
     _saLibEnsureStyle();
     if (!_saLibSel || !_saLibFindNode(_saLibSel)) {
@@ -56449,7 +56449,7 @@ function _saLibDualPaneHtml() {
         for (var i = 0; i < tree.length; i++) { if (tree[i].id === 'ingredient') { root = tree[i]; break; } }
         if (!root) root = tree[0] || null;
         _saLibSel = root ? root.id : '';
-        if (_saLibSel) _saLibOpen[_saLibSel] = true;
+        /* V638: 默认不展开任何子分类——左树初始只显示大分类（点父级再展开/收起） */
     }
     return '<div id="saLibDualArea" style="flex:1;min-height:0;overflow-y:auto;padding-bottom:12px;">' + _saLibInnerHtml() + '</div>';
 }
