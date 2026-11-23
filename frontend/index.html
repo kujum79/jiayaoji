@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V641-20261123';
+        var APP_VER = 'V642-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -56716,17 +56716,31 @@ async function _kbSetupGeishiCuisine() {
     stats.total = pool.length;
     var migrated = 0;
     var _ctx = getCurrentUserContext();
+    stats.fixed = 0;
     for (var i = 0; i < pool.length; i++) {
         var a = pool[i];
         try {
-            // 幂等：已存在同 kbSrcId 或同 title 的条目则跳过
-            var dup = dietKnowledge.some(function (k) {
-                return k && (String(k.kbSrcId || '') === String(a.id) || String(k.title || '') === String(a.title || ''));
-            });
-            if (dup) { stats.skipped++; continue; }
             // 判区：标题→正文前 200 字；仍无法判定归「华东」并列出标题
             var region = _kbGdfcRegionOf(a);
             if (!region) { region = '华东'; stats.unmatched.push(a.title); }
+            // 幂等：已存在同 kbSrcId 或同 title 的条目——V642 自愈：重打分类字段
+            // （修复 V641 把 subCategory 写成字面量 'gdfc'、而实际节点是用户手建 cat_* 导致条目挂不上树的问题）
+            var dup = null;
+            dietKnowledge.some(function (k) {
+                if (k && (String(k.kbSrcId || '') === String(a.id) || String(k.title || '') === String(a.title || ''))) { dup = k; return true; }
+                return false;
+            });
+            if (dup) {
+                if (dup.mainCategory !== 'recipe' || dup.subCategory !== node.id || dup.leafCategory !== region || dup.layer !== 'public') {
+                    dup.layer = 'public';
+                    dup.mainCategory = 'recipe'; dup.categoryId = 'recipe';
+                    dup.subCategory = node.id; dup.subCategoryId = node.id;
+                    dup.leafCategory = region; dup.leafCategoryId = region;
+                    stats.fixed++; migrated++;
+                } else { stats.skipped++; }
+                stats[region]++;
+                continue;
+            }
             var content = _kbStripImageRefs(String(a.content || ''));
             dietKnowledge.unshift({
                 id: nextKnowledgeId++,
@@ -56737,10 +56751,10 @@ async function _kbSetupGeishiCuisine() {
                 image: '',
                 images: [],
                 categoryId: 'recipe',
-                subCategoryId: 'gdfc',
+                subCategoryId: node.id,   /* V642: 用实际节点 id（用户手建为 cat_*），不再写死 'gdfc' */
                 leafCategoryId: region,
                 mainCategory: 'recipe',
-                subCategory: 'gdfc',
+                subCategory: node.id,
                 leafCategory: region,
                 createdAt: Date.now(),
                 sourceType: 'migrated',
@@ -56766,7 +56780,7 @@ async function _kbSetupGeishiCuisine() {
     }
     var _regTxt = _KB_GDFC_REGIONS.map(function (r) { return r.id + stats[r.id]; }).join('/');
     console.log('[V641 各地美食迁移] 分类: ' + (stats.catsCreated ? '新建「各地美食」' : '已存在') + '（补细分类 ' + stats.subCatsAdded + '）；归档源 ' + stats.total + ' 条：迁移 ' + migrated + '（' + _regTxt + '）；跳过 ' + stats.skipped + '；失败 ' + stats.failed + '；无法判定归华东 ' + JSON.stringify(stats.unmatched));
-    showToast('各地美食迁移完成：迁移 ' + migrated + ' 篇，跳过 ' + stats.skipped + ' 篇，无法判定 ' + stats.unmatched.length + ' 篇');
+    showToast('各地美食迁移完成：迁移 ' + (migrated - stats.fixed) + ' 篇，修复归位 ' + stats.fixed + ' 篇，跳过 ' + stats.skipped + ' 篇，无法判定 ' + stats.unmatched.length + ' 篇');
     return stats;
 }
 // V628: 「AI生成本分类」——打开 AI 批量生成弹窗并预选当前双栏分类
