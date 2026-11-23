@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V636-20261123';
+        var APP_VER = 'V637-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -60522,14 +60522,14 @@ async function aiGenerateKnowledgeContent() {
         var srcText = bodyText;
         var _truncated = false;
         if (srcText.length > 12000) { srcText = srcText.slice(0, 12000); _truncated = true; }
-        // V636: 整理模式改为「重新组织编辑」——提取原文主要内容、不限字数
-        prompt = '请基于以下原文重新组织编辑一篇文章：\n'
-            + '1)提取并保留原文的主要内容（核心观点、做法步骤、关键细节、经验提示），不得替换做法、不得虚构原文没有的信息；\n'
-            + '2)删除图片引用、图片链接、图片占位与重复出现的图注行；\n'
-            + '3)重新组织结构与文字，使其通顺、条理清晰，可保留或优化小标题与条目结构；\n'
-            + '4)不限制字数，篇幅以完整覆盖原文主要内容为准；\n'
-            + '5)修正错别字与明显标点；\n'
-            + '6)只输出正文。\n'
+        // V637: 整理模式加大力度——精炼重组，只保留实质性内容
+        prompt = '请对以下原文做精炼的重新组织编辑，产出一篇条理清晰的知识文章：\n'
+            + '1)只提取实质性内容：核心观点、食材/用料要点、做法步骤（含火候、时间等关键参数）、变化做法、经验提示与问答要点，一项都不能丢；\n'
+            + '2)删除闲聊段子、与主题无关的人物故事、情绪化铺垫、重复导语和引流话术（如"评论区说说"）；\n'
+            + '3)删除图片引用、图片链接、图片占位与重复出现的图注行；\n'
+            + '4)按主题重新分节组织，用简明小标题+条目化表述，语言精炼客观，不得虚构原文没有的信息、不得替换做法；\n'
+            + '5)篇幅以信息完整为准、宁短勿长，不限制字数上限；\n'
+            + '6)修正错别字与明显标点，只输出正文。\n'
             + '标题：' + (title.trim() || '（无）') + '\n'
             + '原文：\n' + srcText;
         if (_truncated) showToast('原文超过 12000 字，已截断后整理');
@@ -60553,7 +60553,7 @@ async function aiGenerateKnowledgeContent() {
             ? { maxTokens: 6000, temperature: 0.3, taskType: 'knowledge' }  /* V636: 不限字数→提高输出上限 */
             : { maxTokens: 800, temperature: 0.7, taskType: 'knowledge' };
         var result = await aiChatMultiProvider(isOrganize
-            ? '你是家庭膳食知识编辑，擅长在忠实原文信息的基础上重新组织、润色长文。'   /* V636: 整理模式系统提示，避免"简洁"倾向导致缩写 */
+            ? '你是家庭膳食知识编辑，擅长把网文长文精炼重组为条目清晰的知识文章，只留干货、不丢要点、不虚构。'   /* V637: 整理模式系统提示——强化精炼取向 */
             : '你是家庭膳食知识编辑，擅长撰写简洁实用的家庭饮食知识。', prompt, opts);
         var reply = (result.choices && result.choices[0] && result.choices[0].message) ? result.choices[0].message.content : '';
         if (!reply.trim()) { showToast('AI 未返回内容，请重试'); }
