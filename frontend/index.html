@@ -8612,6 +8612,18 @@ function _kbInAdminMgrView() {
 }
 
 // 统一权限判定（两层模型：public / family）
+// V625: 公共层兼容判定口径——部分系统预置条目（如节气食养）无 layer 标记（历史数据不能动），
+// 无标记且无家庭归属（ownerId/createdBy/familyId 均空）且当前从公共数据源视图展示时，按公共层处理；
+// 有家庭归属的条目一律维持原口径，避免把家庭私有条目误开放给超管编辑
+function _kbTreatAsPublic(item) {
+    if (!item || typeof item !== 'object') return false;
+    var layer = item.layer || item.sourceLayer || '';
+    if (layer) return layer === 'public';
+    if ((item.ownerId && item.ownerId !== 'system') || item.createdBy || item.familyId) return false;
+    if (typeof currentKnowledgeVisibility !== 'undefined' && currentKnowledgeVisibility === 'public') return true;
+    if (typeof _syTreeLib !== 'undefined' && _syTreeLib === 'public') return true;
+    return false;
+}
 // action: 'view' | 'ref' | 'clone' | 'edit' | 'delete' | 'share' | 'download' | 'report'
 // item:   条目对象（含 layer/createdBy/ownerId/visibility/familyId 等）
 // user:   用户上下文（缺省自动调用 getCurrentUserContext()）
@@ -8626,8 +8638,9 @@ function can(action, item, user) {
     var isSuper = !!user.isSuperAdmin || isSuperAdmin(); // 密码超管会话 或 账号型超管
     var isPrivate = item.visibility === 'private';
 
-    // === 超管短路：公共层 edit/delete 超管可绕过（V625: 文库管理面板/层级浏览视图内生效，普通食知 Tab 公共层只读）===
-    if (layer === 'public' && isSuper && (action === 'edit' || action === 'delete') && _kbInAdminMgrView()) return true;
+    // === 超管短路：公共层 edit/delete 超管可绕过（V625: 文库管理面板/层级浏览视图内生效，普通食知 Tab 公共层只读；
+    //     公共层判定用 _kbTreatAsPublic 兼容无 layer 标记的系统预置条目）===
+    if (isSuper && (action === 'edit' || action === 'delete') && _kbInAdminMgrView() && _kbTreatAsPublic(item)) return true;
 
     // === public 层：所有人可看，仅超管可编辑 ===
     if (layer === 'public') {
@@ -48513,7 +48526,11 @@ function _shiyangCardHtml(k, editCall) {
     // V592: 超管在食方列表可直接编辑（editCall 仅接受函数名字符串，map 传入的索引忽略）
     var editBtn = (typeof editCall === 'string' && editCall)
         ? '<div style="text-align:right;margin-top:5px;"><button type="button" onclick="event.stopPropagation();' + editCall + '(' + k.id + ')" style="border:1px solid #FDBA74;background:#FFF3E2;color:#9A3412;font-size:11px;font-weight:600;border-radius:999px;padding:3px 10px;cursor:pointer;">✏️ 编辑</button></div>'
-        : '';
+        // V625: 食养 sy-tree 通用列表（items.map(_shiyangCardHtml)，editCall 为 map 下标）——文库管理态下
+        // 公共条目（含无 layer 标记的系统预置，经 _kbTreatAsPublic 兼容）加行内✏️编辑，复用「编辑公共条目」弹窗
+        : (_kbInAdminMgrView() && can('edit', k)
+            ? '<div style="text-align:right;margin-top:5px;"><button type="button" onclick="event.stopPropagation();openSuperAdminItemEditor(\'' + k.id + '\')" style="border:1px solid #FDBA74;background:#FFF3E2;color:#9A3412;font-size:11px;font-weight:600;border-radius:999px;padding:3px 10px;cursor:pointer;">✏️ 编辑</button></div>'
+            : '');
     return '<div class="cat-search-item" onclick="showKnowledgeDetail(' + k.id + ')">'
         + '<div class="cat-search-item-title">' + escapeHtml(k.title || '无标题') + _lock2 + '</div>'
         + '<div class="cat-search-item-summary">' + escapeHtml(brief) + '</div>'
@@ -49826,7 +49843,7 @@ function handleSubCategoryClick(catId, sub) {
             const summary = fangSummaryText(item.content, 60) || ((item.content || '').substring(0, 60) + ((item.content || '').length > 60 ? '...' : ''));
             // V625: 文库管理态下文章行内 ✏️ 编辑走 can('edit') 短路，复用「编辑公共条目」弹窗
             const _rowEditBtn = (_kbInAdminMgrView() && can('edit', item))
-                ? '<div style="text-align:right;margin-top:5px;"><button type="button" onclick="event.stopPropagation();openSuperAdminItemEditor(' + item.id + ')" style="border:1px solid #FDBA74;background:#FFF3E2;color:#9A3412;font-size:11px;font-weight:600;border-radius:999px;padding:3px 10px;cursor:pointer;">✏️ 编辑</button></div>'
+                ? '<div style="text-align:right;margin-top:5px;"><button type="button" onclick="event.stopPropagation();openSuperAdminItemEditor(\'' + item.id + '\')" style="border:1px solid #FDBA74;background:#FFF3E2;color:#9A3412;font-size:11px;font-weight:600;border-radius:999px;padding:3px 10px;cursor:pointer;">✏️ 编辑</button></div>'
                 : '';
             html += `<div class="cat-search-item" onclick="showKnowledgeDetail(${item.id})">
                 <div class="cat-search-item-title">${escapeHtml(item.title)}</div>
@@ -50011,7 +50028,7 @@ function handleCatTagClick(catId, sub, leaf) {
             const summary = fangSummaryText(item.content, 60) || ((item.content || '').substring(0, 60) + ((item.content || '').length > 60 ? '...' : ''));
             // V625: 文库管理态下文章行内 ✏️ 编辑走 can('edit') 短路，复用「编辑公共条目」弹窗
             const _rowEditBtn = (_kbInAdminMgrView() && can('edit', item))
-                ? '<div style="text-align:right;margin-top:5px;"><button type="button" onclick="event.stopPropagation();openSuperAdminItemEditor(' + item.id + ')" style="border:1px solid #FDBA74;background:#FFF3E2;color:#9A3412;font-size:11px;font-weight:600;border-radius:999px;padding:3px 10px;cursor:pointer;">✏️ 编辑</button></div>'
+                ? '<div style="text-align:right;margin-top:5px;"><button type="button" onclick="event.stopPropagation();openSuperAdminItemEditor(\'' + item.id + '\')" style="border:1px solid #FDBA74;background:#FFF3E2;color:#9A3412;font-size:11px;font-weight:600;border-radius:999px;padding:3px 10px;cursor:pointer;">✏️ 编辑</button></div>'
                 : '';
             html += `<div class="cat-search-item" onclick="showKnowledgeDetail(${item.id})">
                 <div class="cat-search-item-title">${escapeHtml(item.title)}</div>
@@ -57758,7 +57775,7 @@ function showKnowledgeDetail(id) {
     if (editBtn) {
         var canEdit = can('edit', item);
         var _isDiningItem = (item.mainCategory === 'dining-out' || item.type === 'dining-out');
-        var _isPublicItem = (item.layer || item.sourceLayer || 'family') === 'public';
+        var _isPublicItem = _kbTreatAsPublic(item); // V625: 兼容无 layer 标记的系统预置公共条目（与 can() 短路同口径）
         editBtn.style.display = (canEdit && (_isDiningItem || _isPublicItem)) ? 'block' : 'none';
         editBtn.onclick = function () {
             if (!can('edit', item)) { showToast('无权编辑'); return; }
