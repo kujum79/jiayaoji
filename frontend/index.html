@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V622-20261122';
+        var APP_VER = 'V623-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -5923,6 +5923,15 @@ function isSuperAdmin() {
     if (!u) return false;
     // V296: 显式超管标记（预置账号 / 超管家庭继承）优先，避免邮箱缺失时被判为非超管
     if (u.superAdmin === true) return true;
+    // V623: 家庭会话兜底——云端登录落定的会话邮箱是家庭虚拟邮箱（与 SUPER_ADMIN.email 不一致），
+    // 旧会话对象又不带 superAdmin 标记；家庭名唯一且登录已验证家庭密码 → 按家庭名补判
+    try {
+        if (!u.demo && !window.__demoMode) {
+            var _fam623 = getLoginFamily();
+            var _fname623 = (_fam623 && _fam623.name) || u.familyName || '';
+            if (_fname623 && String(_fname623).replace(/\s/g, '').indexOf(String(SUPER_ADMIN.username).trim()) >= 0) return true;
+        }
+    } catch (e) {}
     if (!u.email) return false;
     // 第一道门：邮箱精确匹配
     if (String(u.email).trim().toLowerCase() !== String(SUPER_ADMIN.email).toLowerCase()) return false;
@@ -6705,6 +6714,11 @@ function _applyFamilySession(rec) {
     if (ownerRec && ownerRec.superAdmin) {
         lu.superAdmin = true;
         if (ownerRec.email) lu.email = ownerRec.email;
+    } else if (!ownerRec && fname && String(fname).replace(/\s/g, '').indexOf(SUPER_ADMIN.username) >= 0) {
+        // V622: 新设备/清缓存后 registeredUsers 为空，ownerRec 找不到——
+        // 但家庭密码已验证通过，家庭名精确匹配超管用户名 → 补上超管身份
+        lu.superAdmin = true;
+        lu.email = SUPER_ADMIN.email;
     }
     setLoginUser(lu);
     setFamilyId(fid);
@@ -7954,7 +7968,30 @@ async function doFamilyLogin(aName, aPass, aQuiet) {
         var famName = fam.family_name || name;
         var ownerEmail = fam.owner_email || null;
         var isOwner = !!(u && u.email && ownerEmail && u.email.toLowerCase() === ownerEmail.toLowerCase());
-        setLoginUser({ id: u.id, email: u.email || ownerEmail, aud: u.aud, familySession: isOwner });
+        var _lu623 = { id: u.id, email: u.email || ownerEmail, aud: u.aud, familySession: isOwner };
+        // V623: 云端家庭登录已验证 owner 邮箱+密码——继承超管身份（三条件任一满足）：
+        // 1) 家庭名匹配 SUPER_ADMIN.username
+        // 2) 登录邮箱或 owner_email 匹配 SUPER_ADMIN.email
+        // 3) registeredUsers 中同家庭码/家庭名有 superAdmin 标记
+        var _isSuper623 = false;
+        if (String(famName || '').replace(/\s/g, '').indexOf(SUPER_ADMIN.username) >= 0) _isSuper623 = true;
+        if (!_isSuper623 && ownerEmail && String(ownerEmail).trim().toLowerCase() === String(SUPER_ADMIN.email).toLowerCase()) _isSuper623 = true;
+        if (!_isSuper623 && u && u.email && String(u.email).trim().toLowerCase() === String(SUPER_ADMIN.email).toLowerCase()) _isSuper623 = true;
+        if (!_isSuper623) {
+            try {
+                var _us623 = getRegisteredUsers();
+                for (var _i623 = 0; _i623 < _us623.length; _i623++) {
+                    var _r623 = _us623[_i623];
+                    if (_r623 && _r623.superAdmin && (String(_r623.familyId) === String(fam.family_code || '') || String(_r623.familyName) === String(famName))) {
+                        _isSuper623 = true;
+                        if (_r623.email) _lu623.email = _r623.email;
+                        break;
+                    }
+                }
+            } catch (e) {}
+        }
+        if (_isSuper623) _lu623.superAdmin = true;
+        setLoginUser(_lu623);
         setLoginFamily({ id: fam.id, name: famName, owner_id: fam.owner_id, ownerEmail: ownerEmail });
         // 登录只读取数据库家庭码，绝不重新生成/回写（否则每次登录换码，家人手中旧码失效）
         var code = fam.family_code;
