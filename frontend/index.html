@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V629-20261123';
+        var APP_VER = 'V630-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -56103,43 +56103,80 @@ function renderAdminPanel() {
     _applyAdminKnowledgeChrome();
 
     // V625: 文库管理主体改为 libtab 层级浏览视图（openSuperLibraryManager 自动展开）；
-    // 本面板仅保留「待审核 + 工具条」公共头部（点顶栏 📚 收回饮食文库时可见）
+    // V630: 本面板仅保留工具条头部（待审核改由「📝审核分享文章」弹窗承载），点顶栏 📚 收回饮食文库时可见
     container.innerHTML = _saAdminHeaderHtml()
         + '<div style="text-align:center;font-size:13px;color:#9A3412;margin-top:10px;">👆 点顶栏 📚 进入「饮食文库」按分类浏览与编辑</div>';
     touchSuperAdmin();
 }
-// V625: 文库管理公共头部——「📝 待审核（有则显示）」区块 + 「＋上传文章 / 🤖AI批量生成 / 📚文库分类管理 / 📋操作日志(小链接弹窗)」工具条，
-// 供管理面板（renderAdminPanel）与 libtab 层级浏览视图顶部（_renderSaLibAdminHeader）复用
+// V625: 文库管理公共头部；V630: 待审核区块不再常驻头部，工具条改为
+// 「＋上传文章 / 🤖AI批量生成 / 📝审核分享文章(红角标,开弹窗) / 📋操作日志」，📚文库分类管理移入日志弹窗标题行
 function _saAdminHeaderHtml() {
-    var sharedPool = JSON.parse(lsGet('sharedPool') || '[]');
-    var pendingPool = sharedPool.filter(function(p) { return p.auditStatus === 'pending'; });
-    var pendingHtml = '';
-    if (pendingPool.length > 0) {
-        pendingHtml = `<div style="margin-bottom:20px;">
-            <div style="font-size:14px;font-weight:700;color:#1E293B;margin-bottom:10px;">📝 待审核（${pendingPool.length}）</div>
-            ${pendingPool.map(function(p) {
-                var title = p.title || '(未命名)';
-                var note = p.auditNote ? '<div style="font-size:12px;color:#DC2626;margin-top:2px;">⚠️ ' + p.auditNote + '</div>' : '';
-                return '<div style="padding:10px;background:white;border:1px solid #E5E7EB;border-radius:10px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">'
-                    + '<div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;color:#1E293B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(title) + '</div>'
-                    + '<div style="font-size:12px;color:#6B7280;">提交者：' + escapeHtml(p.ownerName || '匿名') + note + '</div></div>'
-                    + '<div style="display:flex;gap:6px;">'
-                    + '<button onclick="_kbReviewEditOpen(\'' + escapeHtml(String(p.itemId != null ? p.itemId : p.sourceItemId)) + '\')" style="padding:6px 12px;background:#F97316;border:none;border-radius:6px;font-size:13px;font-weight:600;color:white;cursor:pointer;">✏️ 编辑后入库</button>'
-                    + '<button onclick="superAdminAuditPool(\'' + escapeHtml(String(p.itemId != null ? p.itemId : p.sourceItemId)) + '\', \'pass\')" style="padding:6px 12px;background:#10B981;border:none;border-radius:6px;font-size:13px;font-weight:600;color:white;cursor:pointer;">✅ 通过</button>'
-                    + '<button onclick="superAdminAuditPool(\'' + escapeHtml(String(p.itemId != null ? p.itemId : p.sourceItemId)) + '\', \'reject\')" style="padding:6px 12px;background:#DC2626;border:none;border-radius:6px;font-size:13px;font-weight:600;color:white;cursor:pointer;">❌ 驳回</button>'
-                    + '</div></div>';
-            }).join('')}
-        </div>`;
-    } 
-
-    var _btn = 'padding:7px 14px;border:none;border-radius:8px;font-size:13px;font-weight:700;color:white;cursor:pointer;white-space:nowrap;';
-    return pendingHtml
-        + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 8px;">'
+    var pendingCount = _saPendingPool().length;
+    var _btn = 'position:relative;padding:7px 14px;border:none;border-radius:8px;font-size:13px;font-weight:700;color:white;cursor:pointer;white-space:nowrap;';
+    var _badge = pendingCount > 0
+        ? '<span style="position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;background:#DC2626;color:white;border-radius:9px;font-size:11px;font-weight:700;line-height:17px;text-align:center;">' + pendingCount + '</span>'
+        : '';
+    return '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 8px;">'
         + '<button onclick="window._kbUploadCtx=\'public\';openAddKnowledgeModal();" style="' + _btn + 'background:#F97316;">＋ 上传文章</button>'
         + '<button onclick="openAiBulkKnowledgeModal()" style="' + _btn + 'background:linear-gradient(135deg,#8B5CF6 0%,#EC4899 55%,#F97316 100%);box-shadow:0 3px 10px rgba(139,92,246,0.35);">🤖 AI 批量生成</button>'
-        + '<button onclick="openCategoryManager(\'public\')" style="' + _btn + 'background:#F59E0B;">📚 文库分类管理</button>'
-        + '</div>'
-        + '<div style="text-align:center;"><a href="javascript:void(0);" onclick="openSaAuditLogModal()" style="font-size:12px;color:#64748B;text-decoration:underline;cursor:pointer;">📋 操作日志</a></div>';
+        + '<button onclick="_kbAuditModalOpen()" style="' + _btn + 'background:#3B82F6;">📝 审核分享文章' + _badge + '</button>'
+        + '<button onclick="openSaAuditLogModal()" style="' + _btn + 'background:#64748B;">📋 操作日志</button>'
+        + '</div>';
+}
+// V630: 待审分享池条目（sharedPool 中 auditStatus==='pending'）
+function _saPendingPool() {
+    var sharedPool = [];
+    try { sharedPool = JSON.parse(lsGet('sharedPool') || '[]'); } catch (e) {}
+    return sharedPool.filter(function(p) { return p.auditStatus === 'pending'; });
+}
+// V630: 待审卡片列表（原头部 pendingHtml 卡片原样抽出，供审核弹窗复用；三按钮逻辑不动，含 itemId||sourceItemId 兜底）
+function _saPendingCardsHtml() {
+    var pendingPool = _saPendingPool();
+    if (!pendingPool.length) return '';
+    return pendingPool.map(function(p) {
+        var title = p.title || '(未命名)';
+        var note = p.auditNote ? '<div style="font-size:12px;color:#DC2626;margin-top:2px;">⚠️ ' + p.auditNote + '</div>' : '';
+        return '<div style="padding:10px;background:white;border:1px solid #E5E7EB;border-radius:10px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">'
+            + '<div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;color:#1E293B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(title) + '</div>'
+            + '<div style="font-size:12px;color:#6B7280;">提交者：' + escapeHtml(p.ownerName || '匿名') + note + '</div></div>'
+            + '<div style="display:flex;gap:6px;">'
+            + '<button onclick="_kbReviewEditOpen(\'' + escapeHtml(String(p.itemId != null ? p.itemId : p.sourceItemId)) + '\')" style="padding:6px 12px;background:#F97316;border:none;border-radius:6px;font-size:13px;font-weight:600;color:white;cursor:pointer;">✏️ 编辑后入库</button>'
+            + '<button onclick="superAdminAuditPool(\'' + escapeHtml(String(p.itemId != null ? p.itemId : p.sourceItemId)) + '\', \'pass\')" style="padding:6px 12px;background:#10B981;border:none;border-radius:6px;font-size:13px;font-weight:600;color:white;cursor:pointer;">✅ 通过</button>'
+            + '<button onclick="superAdminAuditPool(\'' + escapeHtml(String(p.itemId != null ? p.itemId : p.sourceItemId)) + '\', \'reject\')" style="padding:6px 12px;background:#DC2626;border:none;border-radius:6px;font-size:13px;font-weight:600;color:white;cursor:pointer;">❌ 驳回</button>'
+            + '</div></div>';
+    }).join('');
+}
+// V630: 「审核分享文章」弹窗——原待审卡片列表迁入此处；审核动作后经 _saAdminRefreshAfterChange 就地刷新
+// （最后一件审完显示空态、不自动关闭，由用户手动关）
+function _kbAuditModalOpen() {
+    var old = document.getElementById('kbAuditModalOverlay');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'kbAuditModalOverlay';
+    ov.style.cssText = 'position:fixed;top:0;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;z-index:100004;background:rgba(31,41,55,0.55);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    ov.addEventListener('click', function(e) { if (e.target === this) _kbAuditModalClose(); });
+    ov.innerHTML = '<div style="background:#FDF8F3;border-radius:16px;width:100%;max-width:420px;height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.25);">'
+        + '<div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:white;border-bottom:1px solid #F3F4F6;">'
+        + '<div id="kbAuditModalTitle" style="font-size:16px;font-weight:700;color:#1E293B;"></div>'
+        + '<button onclick="_kbAuditModalClose()" style="width:30px;height:30px;border:none;background:#F3F4F6;border-radius:8px;font-size:16px;color:#6B7280;cursor:pointer;">✕</button></div>'
+        + '<div id="kbAuditModalBody" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 14px;"></div></div>';
+    document.body.appendChild(ov);
+    _kbAuditModalRefresh();
+}
+function _kbAuditModalClose() {
+    var ov = document.getElementById('kbAuditModalOverlay');
+    if (ov) ov.remove();
+}
+// 弹窗开着时刷新标题计数与卡片列表；审完显示空态
+function _kbAuditModalRefresh() {
+    var body = document.getElementById('kbAuditModalBody');
+    if (!body) return;
+    var pendingPool = _saPendingPool();
+    var titleEl = document.getElementById('kbAuditModalTitle');
+    if (titleEl) titleEl.textContent = '📝 审核分享文章（' + pendingPool.length + '）';
+    body.innerHTML = pendingPool.length
+        ? _saPendingCardsHtml()
+        : '<div style="padding:36px 10px;text-align:center;font-size:13px;color:#A18A6D;background:#FBF6EF;border:1px dashed #EADFD0;border-radius:12px;">暂无待审分享</div>';
 }
 // V625: 待审核+工具条注入 libtab 层级浏览视图顶部（#knowledgeLibTabView 首子，固定 id #saLibAdminHeader，随视图刷新）
 function _renderSaLibAdminHeader() {
@@ -56160,6 +56197,7 @@ function _renderSaLibAdminHeader() {
 // V625: 管理操作（审核/编辑/删除/AI批量）后的视图刷新——层级浏览态刷新 libtab，否则刷新管理面板
 function _saAdminRefreshAfterChange() {
     try { updateVisibilityCounts(); } catch (e) {}
+    try { _kbAuditModalRefresh(); } catch (e) {} // V630: 审核弹窗开着时就地刷新卡片与标题计数（头部角标随视图重渲染同步）
     if (document.body.classList.contains('kb-admin-lib')) { try { renderLibTabView(); return; } catch (e) {} }
     try { renderAdminPanel(); } catch (e) {}
 }
@@ -56549,7 +56587,11 @@ function openSaAuditLogModal() {
     ov.addEventListener('click', function(e) { if (e.target === this) this.remove(); });
     ov.innerHTML = '<div style="background:#FDF8F3;border-radius:16px;width:100%;max-width:420px;height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.25);">'
         + '<div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:white;border-bottom:1px solid #F3F4F6;">'
+        + '<div style="display:flex;align-items:center;gap:8px;">'
         + '<div style="font-size:16px;font-weight:700;color:#1E293B;">📋 操作日志</div>'
+        // V630: 原工具条「📚文库分类管理」按钮移入日志弹窗标题行（catMgrOverlay 同层后插、叠在日志之上）
+        + '<button onclick="openCategoryManager(\'public\')" style="padding:4px 10px;background:#F59E0B;border:none;border-radius:8px;font-size:12px;font-weight:600;color:white;cursor:pointer;white-space:nowrap;">📚 文库分类管理</button>'
+        + '</div>'
         + '<button onclick="document.getElementById(\'saAuditLogModalOverlay\').remove()" style="width:30px;height:30px;border:none;background:#F3F4F6;border-radius:8px;font-size:16px;color:#6B7280;cursor:pointer;">✕</button></div>'
         + '<div id="saAuditLogBox" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 14px;"></div></div>';
     document.body.appendChild(ov);
