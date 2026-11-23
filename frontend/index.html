@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V626-20261123';
+        var APP_VER = 'V627-20261123';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -37401,6 +37401,10 @@ function _openDailyTipFull(tip) {
         + '<button type="button" onclick="_closeDtFull()" style="border:none;background:none;font-size:18px;color:#6B7280;cursor:pointer;padding:2px 6px;line-height:1;">←</button>'
         + '<span style="font-size:15px;font-weight:700;color:#1F2937;">食养堂</span>'
         + '<button type="button" id="dtFullSpeakBtn" onclick="_dtSpeakTip()" title="语音播报" style="margin-left:auto;border:none;background:none;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1;color:#6B7280;">🔊</button>'
+        // V627: 文库管理态超管打开归档详情时，顶栏加✏️编辑（收藏/今日缓存等非归档条目不显示）
+        + ((isSuperAdmin() || getSuperAdminSession().isLoggedIn) && _kbInAdminMgrView() && tip.id && _fhArchiveById(tip.id)
+            ? '<button type="button" onclick="_fhEditArchive(\'' + String(tip.id).replace(/'/g, '') + '\')" title="编辑" style="border:none;background:none;font-size:16px;cursor:pointer;padding:2px 6px;line-height:1;color:#6B7280;">✏️</button>'
+            : '')
         + '</div>';
     var body = document.createElement('div');
     body.style.cssText = 'flex:1;overflow-y:auto;padding:16px 20px 12px;';
@@ -38010,6 +38014,12 @@ function _fhArchiveAll() {
     };
     _fhRead().filter(function (x) { return x && x.status === 'published' && x.title; }).forEach(function (a) { push(Object.assign({}, a, { category: _fhNormCategory(a.category) })); });
     (_fhServerArchive || []).forEach(function (a) { push(Object.assign({}, a, { category: _fhNormCategory(a.category) })); });
+    // V627: 超管编辑归档持久化覆盖（服务端自动发布条目无写回 API，编辑结果按 id 存 fhArcOverrides 并在合并后应用）
+    var _ovMap = {};
+    try { _ovMap = JSON.parse(lsGet('fhArcOverrides') || '{}') || {}; } catch (e) {}
+    if (Object.keys(_ovMap).length) {
+        out = out.map(function (a) { var o = _ovMap[String(a.id)]; return o ? Object.assign({}, a, o) : a; });
+    }
     out.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
     return out;
 }
@@ -38027,6 +38037,76 @@ function _fhArchiveById(id) {
 function _fhOpenArchiveId(id) {
     var a = _fhArchiveById(id);
     if (a) _openDailyTipFull(a);
+}
+// ====== V627: 食养堂归档文章编辑（仅文库管理态超管，入口：食养 sy-tree 归档卡行内✏️ / 阅读器顶栏✏️）======
+// 既有食养堂管理页（fhMgr）只管草稿/待审流程，无已发布归档编辑能力；服务端自动发布条目（autotip_*）无写回 API，
+// 故新建轻量弹窗：本地 foodHallArticles 条目就地更新，服务端条目更新会话内存 _fhServerArchive + 持久化 fhArcOverrides（_fhArchiveAll 合并后应用）
+function _fhEditArchive(id) {
+    var a = _fhArchiveById(id);
+    if (!a) { showToast('未找到归档文章'); return; }
+    var old = document.getElementById('fhArcEditOv');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'fhArcEditOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100010;background:rgba(31,41,55,0.6);display:flex;align-items:center;justify-content:center;padding:20px;';
+    var _fld = 'width:100%;box-sizing:border-box;border:1px solid #E5E7EB;border-radius:10px;padding:9px 12px;font-size:14px;color:#1F2937;background:#FAFAFA;outline:none;';
+    ov.innerHTML = '<div style="background:white;border-radius:16px;padding:18px;max-width:460px;width:100%;max-height:86vh;display:flex;flex-direction:column;gap:10px;box-shadow:0 20px 40px rgba(0,0,0,0.25);">'
+        + '<div style="font-size:15px;font-weight:700;color:#1F2937;">✏️ 编辑食养堂文章'
+        + (a.date ? ' <span style="font-weight:400;font-size:12px;color:#9CA3AF;">' + escapeHtml(a.date) + ' · ' + escapeHtml(_fhNormCategory(a.category)) + '</span>' : '') + '</div>'
+        + '<input id="fhArcEditTitle" type="text" value="' + escapeHtml(a.title || '') + '" placeholder="标题" style="' + _fld + '"/>'
+        + '<textarea id="fhArcEditContent" placeholder="正文" style="' + _fld + 'flex:1;min-height:220px;line-height:1.7;resize:vertical;font-family:inherit;">' + escapeHtml(String(a.content || a.summary || '')) + '</textarea>'
+        + '<div style="display:flex;gap:10px;">'
+        + '<button type="button" onclick="_fhCloseEditArchive()" style="flex:1;padding:10px;border:1px solid #E5E7EB;border-radius:10px;background:#F9FAFB;color:#6B7280;font-size:14px;cursor:pointer;">取消</button>'
+        + '<button type="button" onclick="_fhSaveEditArchive(\'' + String(id).replace(/'/g, '') + '\')" style="flex:1;padding:10px;border:none;border-radius:10px;background:#F97316;color:white;font-size:14px;font-weight:600;cursor:pointer;">保存修改</button>'
+        + '</div></div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) _fhCloseEditArchive(); });
+    document.body.appendChild(ov);
+}
+function _fhCloseEditArchive() {
+    var o = document.getElementById('fhArcEditOv');
+    if (o) o.remove();
+}
+function _fhSaveEditArchive(id) {
+    var tEl = document.getElementById('fhArcEditTitle'), cEl = document.getElementById('fhArcEditContent');
+    if (!tEl || !cEl) return;
+    var title = tEl.value.trim(), content = cEl.value.trim();
+    if (!title) { showToast('请填写标题'); return; }
+    // 食养内容审核（与 saveNewKnowledge 同口径）：医疗治疗表述拦截；疾病名/软化词自动转化
+    var aT = auditShiyangText(title);
+    if (aT.status === 'rejected') { showToast('标题含医疗治疗表述，食养内容不允许（如"治疗/根治"等）'); return; }
+    var aC = auditShiyangText(content);
+    if (aC.status === 'rejected') { showToast('正文含医疗治疗表述，食养内容不允许（如"治疗/根治"等）'); return; }
+    title = aT.text; content = aC.text;
+    // 1) 本地手动发布归档（foodHallArticles）→ 就地更新写回
+    var hit = false;
+    try {
+        var list = _fhRead();
+        list.forEach(function (x) {
+            if (x && String(x.id) === String(id)) { x.title = title; x.content = content; x.summary = content.substring(0, 80); x.updatedAt = Date.now(); hit = true; }
+        });
+        if (hit) _fhWrite(list);
+    } catch (e) {}
+    // 2) 服务端自动发布条目 → 更新会话内存缓存 + 持久化覆盖（刷新/缓存过期后由 _fhArchiveAll 重新应用）
+    if (!hit) {
+        try {
+            (_fhServerArchive || []).forEach(function (x) {
+                if (x && String(x.id) === String(id)) { x.title = title; x.content = content; x.summary = content.substring(0, 80); }
+            });
+            var ovMap = {};
+            try { ovMap = JSON.parse(lsGet('fhArcOverrides') || '{}') || {}; } catch (e2) {}
+            ovMap[String(id)] = { title: title, content: content, summary: content.substring(0, 80) };
+            lsSet('fhArcOverrides', JSON.stringify(ovMap));
+        } catch (e) {}
+    }
+    _fhCloseEditArchive();
+    showToast('✅ 已保存');
+    // 阅读器若开着先关闭（避免展示旧内容），再刷新当前列表视图
+    try { if (document.getElementById('dtFullOv')) _closeDtFull(); } catch (e) {}
+    try {
+        var listEl = document.getElementById('categoryContentList');
+        if (listEl && listEl.querySelector('.sy-layout')) renderShiyangContent();
+    } catch (e) {}
+    try { if (document.body.classList.contains('kb-admin-lib')) renderLibTabView(); } catch (e) {}
 }
 function _fhOpenFavId(id) {
     var l = _fhFavAll();
@@ -48515,9 +48595,14 @@ function _shiyangCardHtml(k, editCall) {
         var fs = String(fa.summary || fa.content || '').replace(/\[图片[^\]]*\]/g, '').replace(/<[^>]+>/g, '').trim();
         var fb = fs.substring(0, 60) + (fs.length > 60 ? '...' : '');
         var _lock1 = _premiumLocked(_fhNormCategory(fa.category)) ? ' <span style="font-size:11px;color:#B45309;background:#FEF3C7;border-radius:4px;padding:1px 6px;">🔒 食养会员</span>' : '';
+        // V627: 文库管理态下食养堂归档卡（多为服务端自动发布 autotip_* 条目）加行内✏️编辑，打开 _fhEditArchive 轻量弹窗
+        var _arcEdit = (_kbInAdminMgrView() && (isSuperAdmin() || getSuperAdminSession().isLoggedIn))
+            ? '<div style="text-align:right;margin-top:5px;"><button type="button" onclick="event.stopPropagation();_fhEditArchive(\'' + String(fa.id || '').replace(/'/g, '') + '\')" style="border:1px solid #FDBA74;background:#FFF3E2;color:#9A3412;font-size:11px;font-weight:600;border-radius:999px;padding:3px 10px;cursor:pointer;">✏️ 编辑</button></div>'
+            : '';
         return '<div class="cat-search-item" onclick="_fhOpenArchiveId(\'' + fa.id + '\')">'
             + '<div class="cat-search-item-title">' + escapeHtml(fa.title || '无标题') + _lock1 + '</div>'
             + '<div class="cat-search-item-summary">' + escapeHtml(fb) + '</div>'
+            + _arcEdit
             + '</div>';
     }
     var summary = String(k.content || '').replace(/\[图片[^\]]*\]/g, '').replace(/<[^>]+>/g, '').trim();
