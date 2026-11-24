@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V649-20261124';
+        var APP_VER = 'V650-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -11445,11 +11445,12 @@ async function _syncDailyLessonFromServer(force) {
     }
 }
 
-function _renderDailyLessonCard() {
-    var box = document.getElementById('dailyLessonBox');
-    if (!box) return;
+function _renderDailyLessonCard(boxId) {
+    // V650: 支持指定目标容器（食养堂「今日一课」区块传 fhHallLessonBox）；无参调用时同时刷新专属课堂与食养堂两个容器
+    var _dlIds = boxId ? [boxId] : ['dailyLessonBox', 'fhHallLessonBox'];
     // V557: 非订阅用户同样展示今日微课（订阅转化钩子）
     var lesson = _todayLesson();
+    var _dlHtml = '';
     if (lesson) {
         _CLASSROOM_CACHE[lesson.id] = {
             course: { id: lesson.id, title: lesson.title, content: lesson.content, category: 'daily', duration: 2 },
@@ -11458,7 +11459,7 @@ function _renderDailyLessonCard() {
         var meta = [];
         if (lesson.solarTerm) meta.push('🌿 ' + lesson.solarTerm);
         if (lesson.weather) meta.push('🌤 ' + lesson.weather);
-        box.innerHTML =
+        _dlHtml =
             '<div style="background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FDBA74;border-radius:14px;padding:14px;margin-bottom:14px;">' +
             '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
             '<span style="font-size:11px;background:#F97316;color:#fff;border-radius:999px;padding:2px 9px;">今日微课</span>' +
@@ -11470,16 +11471,19 @@ function _renderDailyLessonCard() {
             '<button type="button" onclick="_openClassroomCourse(\'' + escapeAttr(lesson.id) + '\',\'daily\')" style="width:100%;padding:9px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">阅读全文</button>' +
             (typeof isSubscribed === 'function' && !isSubscribed() ? '<div style="font-size:11px;color:#B45309;text-align:center;margin-top:8px;">今日微课每日免费，更多系列课程请订阅食养会员</div>' : '') +
             '</div>';
-        return;
+    } else if (_dailyLessonBusy) {
+        _dlHtml = '<div style="background:#fff;border:1px dashed #FDBA74;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#9A3412;">正在获取今日微课…</div>';
+    } else {
+        _dlHtml = '<div style="background:#fff;border:1px dashed #FDBA74;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;">' +
+            '<div style="font-size:13px;color:#9A3412;line-height:1.7;margin-bottom:10px;">今日微课由服务端每天 05:20 自动生成<br>将结合今天的节气与家人情况撰写</div>' +
+            '<button type="button" onclick="_generateDailyLesson(true)" style="padding:9px 18px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">刷新获取</button>' +
+            '</div>';
     }
-    if (_dailyLessonBusy) {
-        box.innerHTML = '<div style="background:#fff;border:1px dashed #FDBA74;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;font-size:13px;color:#9A3412;">正在获取今日微课…</div>';
-        return;
-    }
-    box.innerHTML = '<div style="background:#fff;border:1px dashed #FDBA74;border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;">' +
-        '<div style="font-size:13px;color:#9A3412;line-height:1.7;margin-bottom:10px;">今日微课由服务端每天 05:20 自动生成<br>将结合今天的节气与家人情况撰写</div>' +
-        '<button type="button" onclick="_generateDailyLesson(true)" style="padding:9px 18px;border:none;background:#F97316;border-radius:10px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">刷新获取</button>' +
-        '</div>';
+    // V650: 写入目标容器（可能同时存在专属课堂与食养堂两个卡片容器）
+    _dlIds.forEach(function (bid) {
+        var box = document.getElementById(bid);
+        if (box) box.innerHTML = _dlHtml;
+    });
 }
 
 async function _maybeGenerateDailyLesson() {
@@ -27123,6 +27127,8 @@ function showDishDetail(dishName, dateKey, mealType) {
         overlay.onclick = function(e) { if (e.target === overlay) closeDishDetail(); };
         document.body.appendChild(overlay);
     }
+    // V650: 从食养堂/食养教育等高层浮层打开时抬升层级，避免菜谱详情被浮层遮挡
+    overlay.style.zIndex = (document.getElementById('fhHallOv') || document.getElementById('fhEduOv')) ? '100011' : '';
     overlay.classList.add('show');
     overlay.innerHTML = `
         <div class="dish-detail-panel">
@@ -35942,6 +35948,9 @@ function _fhOpenHomeArticle() {
 function _fhOpenHomeRecipe() {
     _fhOpenRecipeDetail(_fhRecipeOfDay());
 }
+// V650: 食养堂页改版——自上而下恰好 6 块：会员横幅 / 我家专属微课(折叠) / 推荐食养课·全部(折叠) /
+// 今日一课(折叠) / 寻味天下(折叠) / 〔当前节气〕节气食养指南(默认展开)；
+// 原「📖 今日饮食文章」区块与头部「🎓 食养教育」胶囊入口移除，食养教育浮层内容全部内联至本页
 function _fhOpenHall() {
     var old = document.getElementById('fhHallOv');
     if (old) old.remove();
@@ -35949,13 +35958,7 @@ function _fhOpenHall() {
     if (oldEdu) oldEdu.remove();
     _FH_HALL_ARTICLES = _fhArticleList(_fhCachedTip());
     var isMember = isFoodMember();
-    var artHtml = '';
-    _FH_HALL_ARTICLES.slice(0, 6).forEach(function (a, i) {
-        artHtml += '<div onclick="_fhHallOpenArticle(' + i + ')" style="background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:12px 14px;margin-bottom:9px;cursor:pointer;">'
-            + '<div style="font-size:14px;font-weight:700;color:#374151;line-height:1.5;">' + escapeHtml(a.title) + '</div>'
-            + '<div style="font-size:12px;color:#9CA3AF;line-height:1.6;margin-top:4px;">' + escapeHtml(a.summary || '') + '</div>'
-            + '</div>';
-    });
+    // V650: 区块5「寻味天下」每日文章卡片——原样复用，仅包上折叠
     var recHtml = '';
     _fhHallRecipes().slice(0, 6).forEach(function (r) {
         recHtml += '<div onclick="_fhHallOpenRecipe(\'' + escapeAttr(r.id) + '\')" style="display:flex;gap:10px;align-items:center;background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:9px 10px;margin-bottom:9px;cursor:pointer;">'
@@ -35969,6 +35972,28 @@ function _fhOpenHall() {
             + '<span style="flex:0 0 auto;color:#D1D5DB;">›</span>'
             + '</div>';
     });
+    // V650: 区块2「我家专属微课」——食养教育浮层「我的专属课堂」入口内联（每日专属微课读取逻辑与入口，会员点击仍走原校验）
+    var myClassHtml = '<div onclick="_openMyClassroomFromEdu()" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:12px 14px;cursor:pointer;">'
+        + '<span style="font-size:19px;flex:0 0 auto;line-height:1;">🎓</span>'
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:14px;font-weight:700;color:#374151;line-height:1.4;">我的专属课堂 '
+        + '<span style="font-size:10px;font-weight:600;color:#B45309;background:#FEF3C7;border-radius:6px;padding:1px 5px;">会员</span></div>'
+        + '<div style="font-size:11px;color:#9CA3AF;margin-top:3px;line-height:1.5;">每日专属微课 · 按家庭档案匹配课程系列</div>'
+        + '</div>'
+        + '<span style="color:#D1D5DB;flex:0 0 auto;font-size:16px;">›</span>'
+        + '</div>';
+    // V650: 区块6「节气食养指南」——复用节气整版指南渲染（宜食五分类+注意事项等），不含文章列表，标题随当前节气动态
+    var curTerm = null;
+    try { curTerm = getSolarTermForDate(new Date()); } catch (e) {}
+    var termName = (curTerm && curTerm.name) || '';
+    var termInfo = null;
+    try { termInfo = termName ? getSolarTermByName(termName) : null; } catch (e) {}
+    var guideHtml = termName
+        ? _syTermGuideHtml(termName, termInfo, [], true)
+        : '<div style="font-size:12px;color:#9CA3AF;">暂无节气信息</div>';
+    // V650: 每次进入重置区块3课程列表状态（推荐/全部 Tab、文件夹下钻），与浮层 _fhOpenEdu 口径一致
+    _fhHallEduTab = 'reco';
+    _fhHallEduFolderId = null;
     var ov = document.createElement('div');
     ov.id = 'fhHallOv';
     ov.style.cssText = 'position:fixed;inset:0;z-index:100006;background:#FFF7ED;display:flex;flex-direction:column;max-width:430px;margin:0 auto;';
@@ -35976,18 +36001,126 @@ function _fhOpenHall() {
         + '<div style="display:flex;align-items:center;gap:8px;">'
         + '<button type="button" onclick="_fhCloseHall()" style="border:none;background:none;font-size:17px;color:#6B7280;cursor:pointer;padding:2px 4px;line-height:1;">←</button>'
         + '<div style="font-size:17px;font-weight:800;color:#EA580C;">食养堂</div>'
-        + '<button type="button" onclick="_fhOpenEdu()" style="border:none;border-radius:999px;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:12px;font-weight:700;padding:7px 12px;cursor:pointer;box-shadow:0 3px 10px rgba(249,115,22,.28);">🎓 食养教育</button>'
         + '</div>'
         + '</div>'
         + '<div style="flex:1;overflow-y:auto;padding:14px 14px 28px;">'
+        // V650: 区块1 会员提示横幅（保留现有那条，非会员才显示）
         + (isMember ? '' : '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.6;">🎓 食养会员可解锁全部食养教育课程（图文阅读已免费开放）</div>')
-        + '<div style="font-size:13px;font-weight:700;color:#EA580C;margin:2px 2px 8px;">📖 今日饮食文章</div>'
-        + artHtml
-        + '<div style="font-size:13px;font-weight:700;color:#EA580C;margin:16px 2px 8px;">🌍 寻味天下</div>'
-        + recHtml
+        // V650: 区块2-5 默认折叠，区块6 默认展开
+        + _kbSecHtml('fhHallSecClass', '🎓 我家专属微课', myClassHtml, false)
+        + _kbSecHtml('fhHallSecCourses', '📚 推荐食养课 · 全部', '<div id="fhHallEduBody"></div>', false)
+        + _kbSecHtml('fhHallSecLesson', '📖 今日一课', '<div id="fhHallLessonBox"></div>', false)
+        + _kbSecHtml('fhHallSecXunwei', '🌍 寻味天下', recHtml, false)
+        + _kbSecHtml('fhHallSecGuide', '🍂 ' + (termName || '今日') + '节气食养指南', guideHtml, true)
         + '</div>';
     document.body.appendChild(ov);
     document.body.style.overflow = 'hidden';
+    // V650: 区块3 课程列表初始渲染；区块4 今日一课卡片（无今日微课则自动拉取后刷新）
+    _fhHallRenderEduBlock();
+    _renderDailyLessonCard('fhHallLessonBox');
+    if (!_todayLesson()) {
+        _maybeGenerateDailyLesson().then(function () { _renderDailyLessonCard('fhHallLessonBox'); });
+    }
+}
+// V650: 食养堂折叠区块通用交互——点标题条展开/收起（chevron 旋转），同页各区块独立
+function _kbSecToggle(id) {
+    var body = document.getElementById(id);
+    if (!body) return;
+    var open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : 'block';
+    var chev = document.getElementById(id + 'Chev');
+    if (chev) chev.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
+}
+function _kbSecHtml(id, title, inner, open) {
+    return '<div style="background:#fff;border:1px solid #FED7AA;border-radius:14px;margin-bottom:12px;overflow:hidden;">'
+        + '<div onclick="_kbSecToggle(\'' + id + '\')" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;">'
+        + '<span id="' + id + 'Chev" style="flex:0 0 auto;font-size:10px;color:#EA580C;transition:transform .15s;display:inline-block;transform:rotate(' + (open ? 90 : 0) + 'deg);">▶</span>'
+        + '<span style="flex:1;min-width:0;font-size:14px;font-weight:800;color:#EA580C;line-height:1.4;">' + title + '</span>'
+        + '</div>'
+        + '<div id="' + id + '" style="display:' + (open ? 'block' : 'none') + ';padding:2px 14px 12px;">' + inner + '</div>'
+        + '</div>';
+}
+// V650: 食养堂区块3——推荐食养课/全部课程内联渲染（口径同食养教育浮层 _fhEduRender；会员校验、课程详情打开逻辑不变）
+var _fhHallEduTab = 'reco';
+var _fhHallEduFolderId = null;
+function _fhHallEduSetTab(t) { _fhHallEduTab = (t === 'all') ? 'all' : 'reco'; _fhHallRenderEduBlock(); }
+function _fhHallEduOpenFolder(fid) {
+    if (!isFoodMember()) { _fhShowPaywall(); return; }
+    _fhHallEduFolderId = fid;
+    _fhHallRenderEduBlock();
+}
+function _fhHallEduBackList() { _fhHallEduFolderId = null; _fhHallRenderEduBlock(); }
+function _fhHallRenderEduBlock() {
+    var el = document.getElementById('fhHallEduBody');
+    if (el) el.innerHTML = _fhHallEduBlockHtml();
+}
+function _fhHallEduBlockHtml() {
+    var folders = [], arts = [];
+    try { folders = getCourseFolders() || []; } catch (e) { folders = []; }
+    try { arts = getCourseArticles() || []; } catch (e) { arts = []; }
+    if (_fhHallEduFolderId) {
+        var f0 = null;
+        for (var i = 0; i < folders.length; i++) { if (folders[i] && folders[i].folderId === _fhHallEduFolderId) { f0 = folders[i]; break; } }
+        var back = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">'
+            + '<button type="button" onclick="_fhHallEduBackList()" style="border:1px solid #FED7AA;background:#FFF7ED;color:#EA580C;font-size:12px;font-weight:600;border-radius:999px;padding:4px 12px;cursor:pointer;">← 返回课程列表</button>'
+            + '<span style="flex:1;min-width:0;font-size:13px;font-weight:700;color:#374151;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">📁 ' + escapeHtml((f0 && f0.folderName) || '课程列表') + '</span>'
+            + '</div>';
+        var list = arts.filter(function (a) { return a && a.folderId === _fhHallEduFolderId; });
+        if (!list.length) {
+            return back + '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:20px;text-align:center;font-size:13px;color:#6B7280;">该课程文件夹下暂无内容</div>';
+        }
+        return back + list.map(function (a, idx) {
+            return '<div onclick="_fhEduOpenArticle(\'' + escapeAttr(a.folderId) + '\',\'' + escapeAttr(a.articleId) + '\')" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:12px 14px;margin-bottom:9px;cursor:pointer;">'
+                + '<span style="flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:#FFF7ED;color:#F97316;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;">' + (idx + 1) + '</span>'
+                + '<div style="flex:1;min-width:0;font-size:13px;font-weight:600;color:#374151;line-height:1.5;">' + escapeHtml(a.title || '未命名课程') + '</div>'
+                + '<span style="flex:0 0 auto;font-size:11px;color:#9CA3AF;">⏱ ' + (Number(a.duration) || 5) + ' 分钟</span>'
+                + '<span style="flex:0 0 auto;color:#D1D5DB;">›</span>'
+                + '</div>';
+        }).join('');
+    }
+    // V650: 「少年食趣」学习入口保留在本区块（全员可用，点击仍打开探索页）
+    var exploreHtml = '<div onclick="openExplorePageFromEdu()" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #EDE9E3;border-radius:14px;padding:12px 14px;margin-bottom:9px;cursor:pointer;">'
+        + '<span style="font-size:19px;flex:0 0 auto;line-height:1;">🌱</span>'
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:14px;font-weight:700;color:#374151;line-height:1.4;">少年食趣</div>'
+        + '<div style="font-size:11px;color:#9CA3AF;margin-top:3px;line-height:1.5;">亲子探索 · 食育任务（全员可用）</div>'
+        + '</div>'
+        + '<span style="color:#D1D5DB;flex:0 0 auto;font-size:16px;">›</span>'
+        + '</div>';
+    // V584: 默认「推荐」过滤——只列 targetTags 与家庭标签有交集的系列；「全部」为原全量列表
+    var recoIds = {};
+    try {
+        var reco = getRecommendedCourses();
+        ((reco && reco.list) || []).forEach(function (g) { if (g && g.folder && g.folder.folderId) recoIds[g.folder.folderId] = true; });
+    } catch (e) {}
+    var shown = _fhHallEduTab === 'all' ? folders : folders.filter(function (fx) { return fx && recoIds[fx.folderId]; });
+    var _tabChip = function (key, label) {
+        var on = _fhHallEduTab === key;
+        return '<button type="button" onclick="_fhHallEduSetTab(\'' + key + '\')" style="border:1px solid ' + (on ? '#EA580C' : '#E5E7EB') + ';background:' + (on ? '#EA580C' : '#fff') + ';color:' + (on ? '#fff' : '#6B7280') + ';font-size:12px;font-weight:600;border-radius:999px;padding:4px 16px;cursor:pointer;">' + label + '</button>';
+    };
+    var tabHtml = '<div style="display:flex;gap:8px;margin:2px 2px 10px;">' + _tabChip('reco', '推荐') + _tabChip('all', '全部') + '</div>';
+    var listHtml;
+    if (!folders.length) {
+        listHtml = '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:22px 16px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">课程正在上架中<br>稍后再来看看，或先从上方「我家专属微课」进入我的专属课堂学习</div>';
+    } else if (!shown.length) {
+        listHtml = '<div style="background:#fff;border:1px dashed #D1D5DB;border-radius:14px;padding:18px 16px;text-align:center;font-size:13px;color:#6B7280;line-height:1.7;">暂无匹配你家庭标签的系列，点『全部』浏览完整课程库</div>';
+    } else {
+        listHtml = shown.map(function (f3) {
+            var cnt = arts.filter(function (a) { return a && a.folderId === f3.folderId; }).length;
+            return '<div onclick="_fhHallEduOpenFolder(\'' + escapeAttr(f3.folderId) + '\')" style="background:#fff;border:1px solid #EDE9E3;border-radius:16px;padding:14px 16px;margin-bottom:10px;cursor:pointer;">'
+                + '<div style="display:flex;align-items:center;gap:9px;">'
+                + '<span style="font-size:20px;">📁</span>'
+                + '<div style="flex:1;min-width:0;font-size:15px;font-weight:700;color:#374151;line-height:1.45;">' + escapeHtml(f3.folderName || '未命名课程') + '</div>'
+                + '<span style="flex:0 0 auto;font-size:11px;color:#9CA3AF;">' + cnt + ' 讲</span>'
+                + '<span style="flex:0 0 auto;color:#D1D5DB;">›</span>'
+                + '</div>'
+                + (f3.description ? '<div style="font-size:12px;color:#9CA3AF;line-height:1.6;margin-top:6px;">' + escapeHtml(f3.description) + '</div>' : '')
+                + '</div>';
+        }).join('');
+    }
+    return exploreHtml + tabHtml
+        + '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.6;">按课程文件夹学习，点击进入课程列表</div>'
+        + listHtml;
 }
 function _fhCloseHall() {
     var ov = document.getElementById('fhHallOv');
@@ -48861,7 +48994,7 @@ function _syFoodKind(f) {
     return '其他食材';
 }
 // 节气整版指南：标题两行 + 宜食五分类 + 注意事项 + 文章列表
-function _syTermGuideHtml(termName, info, items) {
+function _syTermGuideHtml(termName, info, items, skipArticles) {
     var name = termName || '今日';
     var ext = _SY_TERM_DIET[name] || null;
     var foods = (info && info.foods) || [];
@@ -48908,8 +49041,11 @@ function _syTermGuideHtml(termName, info, items) {
         html += '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#92400E;line-height:1.8;">'
             + '<b>其他饮食注意事项：</b>' + escapeHtml(((info.tip || '') + ' ' + (info.diet || '')).trim()) + '</div>';
     }
-    html += '<div style="font-size:14px;font-weight:700;color:#9A3412;margin:0 0 8px;">食养文章</div>';
-    html += items.length ? items.map(_shiyangCardHtml).join('') : _shiyangEmptyHtml('暂无「' + name + '」食养文章，可通过右上角 ＋ 添加');
+    // V650: skipArticles=true 时不渲染文章列表（食养堂「节气食养指南」区块仅需指南正文）
+    if (!skipArticles) {
+        html += '<div style="font-size:14px;font-weight:700;color:#9A3412;margin:0 0 8px;">食养文章</div>';
+        html += items.length ? items.map(_shiyangCardHtml).join('') : _shiyangEmptyHtml('暂无「' + name + '」食养文章，可通过右上角 ＋ 添加');
+    }
     return html;
 }
 // 右侧内容：按选中节点渲染
@@ -48932,12 +49068,12 @@ function _syPaneHtml(libItems, curTerm) {
         return _premiumLockPageHtml(_lockSec) + dietDisclaimerFooterHtml(_shiyangDisclaimerKind(segs));
     }
     if (_syTreeSel === 'now' || segs.length === 4) {
-        // 节气节点（含置顶动态节点直达）：整版节气饮食指南（无面包屑）
+        // 节气节点（含置顶动态节点直达）
         var termName = _syTreeSel === 'now' ? ((curTerm && curTerm.name) || '') : segs[3];
-        var info = null;
-        try { info = getSolarTermByName(termName); } catch (e) { info = null; }
         items = libItems.filter(function (k) { return k.subCategory === '节气食养' && k.solarTerm === termName; });
-        html += _syTermGuideHtml(termName, info, items);
+        // V650: 节气指南整版内容已迁至食养堂页与「食谱→食养→节气指南」条目，此处不再渲染指南，仅保留该节气文章列表
+        html += '<div style="font-size:14px;font-weight:700;color:#9A3412;margin:0 0 8px;">🍂 ' + escapeHtml(termName || '今日') + ' · 节气食养文章</div>';
+        html += items.length ? items.map(_shiyangCardHtml).join('') : _shiyangEmptyHtml('暂无「' + termName + '」食养文章');
     } else if (segs[1] === '食养堂' || segs[1] === '食养收藏') {
         // V144: 食养堂（公共·全部已发布归档）/ 食养收藏（家庭·仅收藏）
         var isFavSec = segs[1] === '食养收藏';
@@ -49048,6 +49184,7 @@ function _kbAutoMigrateArchivesOnce() {
             .then(function () { return _kbMigrateJieqiArticles(); })
             .then(function () { return _kbSetupGeishiCuisine(); })
             .then(function () { return _kbMigrateKitchenArticles(); })
+            .then(function () { return _kbMigrateSolarGuides(); }) // V650: 节气食养指南入库（迁移完再 renderShiyangContent）
             .then(function () { try { renderShiyangContent(); } catch (e) {} })
             .catch(function (e) { console.warn('[V649 自动归档迁移]', e); });
     } catch (e) {}
@@ -56789,6 +56926,99 @@ async function _kbMigrateKitchenArticles() {
     }
     console.log('[V647 厨房技巧迁移] 归档源 ' + stats.total + ' 条：迁移 ' + migrated + '（秋' + stats['秋季'] + '/冬' + stats['冬季'] + '/无日期归冬 ' + stats.undated + '）；跳过 ' + stats.skipped + '；失败 ' + stats.failed);
     showToast('厨房技巧迁移完成：迁移 ' + migrated + ' 篇，跳过 ' + stats.skipped + ' 篇');
+    return stats;
+}
+// ============ V650: 节气食养指南入库（24 节气 → 食谱→食养→节气指南） ============
+// 全局函数，控制台/超管可调用；幂等：按标题去重（存在同名则跳过），分类节点只补缺不重复不覆盖
+function _kbMigrateSolarGuides() {
+    if (!requireSuperAdmin()) return null;
+    var stats = { total: 0, migrated: 0, skipped: 0, failed: 0 };
+    // a) public 树 recipe→食养 节点下幂等创建 children 节点「节气指南」（icon 🧭，order 排最后）
+    try {
+        var kc = getKnowledgeCategories();
+        var tree = (kc && kc.public && kc.public.tree) || [];
+        var recipe = null;
+        tree.forEach(function (t) { if (t && t.id === 'recipe') recipe = t; });
+        if (!recipe) { showToast('未找到「食谱」主分类，终止迁移'); return null; }
+        recipe.children = recipe.children || [];
+        var syNode = null;
+        recipe.children.forEach(function (c) { if (c && (c.id === '食养' || c.name === '食养')) syNode = c; });
+        if (!syNode) {
+            var maxO = 0;
+            recipe.children.forEach(function (c) { var o = (c && c.order) || 0; if (o > maxO) maxO = o; });
+            syNode = { id: '食养', name: '食养', type: 'knowledge', order: maxO + 1, children: [] };
+            recipe.children.push(syNode);
+        }
+        syNode.children = syNode.children || [];
+        var leafExists = syNode.children.some(function (c) { return c && (c.id === '节气指南' || c.name === '节气指南'); });
+        if (!leafExists) {
+            var maxLO = 0;
+            syNode.children.forEach(function (c) { var o = (c && c.order) || 0; if (o > maxLO) maxLO = o; });
+            syNode.children.push({ id: '节气指南', name: '节气指南', icon: '🧭', order: maxLO + 1 });
+            saveKnowledgeCategories(kc);
+            try { renderCategoryTree(); } catch (e) {}
+            try { renderCatalogManager(); } catch (e) {}
+        }
+    } catch (e) { showToast('节气指南分类建立失败：' + (e.message || e)); return null; }
+    // b) 24 节气各建 1 条：title="XX节气食养指南"，正文=宜食五分类+注意事项纯文本（数据源同节气整版指南 _SY_TERM_DIET + 节气信息表）
+    var terms = Object.keys(_SY_TERM_DIET);
+    stats.total = terms.length;
+    var migrated = 0;
+    var _ctx = getCurrentUserContext();
+    terms.forEach(function (tn) {
+        try {
+            var title = tn + '节气食养指南';
+            var dup = dietKnowledge.some(function (k) { return k && String(k.title || '') === title; });
+            if (dup) { stats.skipped++; return; }
+            var ext = _SY_TERM_DIET[tn] || {};
+            var info = null;
+            try { info = getSolarTermByName(tn); } catch (e) {}
+            var lines = ['【宜食】'];
+            ['主食', '蔬菜', '肉类', '水果', '其他'].forEach(function (cat) {
+                var arr = ext[cat] || [];
+                if (arr.length) lines.push(cat + '：' + arr.join('、'));
+            });
+            var caution = (((info && info.tip) || '') + ' ' + ((info && info.diet) || '')).trim();
+            if (caution) lines.push('【注意事项】' + caution);
+            dietKnowledge.unshift({
+                id: nextKnowledgeId++,
+                type: 'recipe',
+                title: title,
+                source: '用户添加',
+                content: lines.join('\n'),
+                image: '',
+                images: [],
+                categoryId: 'recipe',
+                subCategoryId: '食养',
+                leafCategoryId: '节气指南',
+                mainCategory: 'recipe',
+                subCategory: '食养',
+                leafCategory: '节气指南',
+                createdAt: Date.now(),
+                sourceType: 'guide',
+                tags: ['节气食养', tn],
+                kbSrcId: 'solar_guide_' + tn,
+                sceneTags: [],
+                auditStatus: '',
+                visibility: 'family',
+                scope: 'family',
+                layer: 'public',
+                createdBy: _ctx.id || 'unknown',
+                shareScope: 'none'
+            });
+            migrated++;
+            stats.migrated++;
+        } catch (e) { stats.failed++; }
+    });
+    // c) 收尾：走既有公共层持久化路径（与 V640/V647 迁移函数同构：saveDietKnowledge + 操作日志 + 文库视图刷新）
+    if (migrated > 0) {
+        nextKnowledgeId = dietKnowledge.reduce(function (mx, k) { return Math.max(mx, Number(k.id) + 1 || 0); }, nextKnowledgeId);
+        saveDietKnowledge();
+        logAdminAction('节气食养指南入库', '新增 ' + migrated + ' 条节气指南（食谱→食养→节气指南），跳过 ' + stats.skipped + '，失败 ' + stats.failed);
+        try { if (document.body.classList.contains('kb-admin-lib')) renderLibTabView(); } catch (e) {}
+        showToast('节气食养指南入库完成：新增 ' + migrated + ' 条，跳过 ' + stats.skipped + ' 条');
+    }
+    console.log('[V650 节气食养指南入库] 24 节气：新增 ' + migrated + '；跳过 ' + stats.skipped + '；失败 ' + stats.failed);
     return stats;
 }
 // ============ V641: 食谱→各地美食 分类建立 +「寻味天下」一次性迁移 ============
