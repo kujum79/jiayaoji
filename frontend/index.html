@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V657-20261124';
+        var APP_VER = 'V658-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -48398,17 +48398,7 @@ const KNOWLEDGE_TREE = {
         '欧美': ['意餐', '法餐', '美式', '德式']
     },
     '食养': {
-        '节气食养': ['春季', '夏季', '秋季', '冬季'],
         '特殊人群配餐': ['孕妇营养', '婴儿辅食', '青少年营养', '健身餐', '职场营养', '老年食养'],
-        '体质食养': ['平和质', '气虚质', '血虚质', '阳虚质', '阴虚质', '痰湿质', '湿热质', '血瘀质', '气郁质'],
-        '日常食养': ['茶饮', '汤羹', '粥品', '水果搭配', '轻食'],
-        '食养原则': ['低盐', '低糖', '低脂', '高纤维', '易消化'],
-        '食养食谱': ['家常', '家宴', '中式'],
-        '当季食材': [],
-        '厨房技巧': [],
-        '选材避坑': [],
-        '家庭宴客': [],
-        '饮食文化': [],
         '食育': [],
         '食方': []
     },
@@ -49188,6 +49178,7 @@ function _kbAutoMigrateArchivesOnce() {
             .then(function () { return _kbMigrateKitchenArticles(); })
             .then(function () { try { _kbRemoveSolarGuides(); } catch (e) {} }) // V656: 节气指南不再入文库（食养堂保留展示），清理历史条目与节点
             .then(function () { try { _kbFixRenqunSub(); } catch (e) {} }) // V657: 修复被改写的「人群配餐」子分类名
+            .then(function () { try { _kbPruneShiyangSubs(); } catch (e) {} }) // V658: 食养下旧子分类节点清理
             .then(function () { var _tl = _todayLesson(); if (_tl) _kbArchiveDailyLesson(_tl); }) // V654: 今日一课补入档（幂等）
             .then(function () { try { renderShiyangContent(); } catch (e) {} })
             .catch(function (e) { console.warn('[V649 自动归档迁移]', e); });
@@ -54719,15 +54710,8 @@ var DEFAULT_CATEGORY_TREE = [
         { id: '食养', name: '食养', type: 'knowledge', order: 4, children: [{ id: '春季', name: '春季', order: 1 }, { id: '夏季', name: '夏季', order: 2 }, { id: '秋季', name: '秋季', order: 3 }, { id: '冬季', name: '冬季', order: 4 }, { id: '人群食养', name: '人群食养', order: 5 }] }
     ] },
     { id: 'shiyang', name: '食养', icon: '🍵', order: 3, type: 'knowledge', children: [
+        // V658: 节气食养/体质食养/日常食养/食养原则/食养食谱/当季食材/厨房技巧/选材避坑/家庭宴客/饮食文化 等已迁往 食谱→食养，食养下仅保留特殊人群配餐/食育/食方
         { id: '特殊人群配餐', name: '特殊人群配餐', type: 'knowledge', order: 1, children: [{ id: '孕妇营养', name: '孕妇营养', order: 1 }, { id: '婴儿辅食', name: '婴儿辅食', order: 2 }, { id: '青少年营养', name: '青少年营养', order: 3 }, { id: '健身餐', name: '健身餐', order: 4 }, { id: '职场营养', name: '职场营养', order: 5 }, { id: '老年食养', name: '老年食养', order: 6 }] },
-        { id: '节气食养', name: '节气食养', type: 'knowledge', order: 2, children: [{ id: '春季', name: '春季', order: 1 }, { id: '夏季', name: '夏季', order: 2 }, { id: '秋季', name: '秋季', order: 3 }, { id: '冬季', name: '冬季', order: 4 }] },
-        { id: '体质食养', name: '体质食养', type: 'knowledge', order: 3, children: [{ id: '平和质', name: '平和质', order: 1 }, { id: '气虚质', name: '气虚质', order: 2 }, { id: '血虚质', name: '血虚质', order: 9 }, { id: '阳虚质', name: '阳虚质', order: 3 }, { id: '阴虚质', name: '阴虚质', order: 4 }, { id: '痰湿质', name: '痰湿质', order: 5 }, { id: '湿热质', name: '湿热质', order: 6 }, { id: '血瘀质', name: '血瘀质', order: 7 }, { id: '气郁质', name: '气郁质', order: 8 }] },
-        { id: '日常食养', name: '日常食养', type: 'knowledge', order: 4, children: [{ id: '茶饮', name: '茶饮', order: 1 }, { id: '汤羹', name: '汤羹', order: 2 }, { id: '粥品', name: '粥品', order: 3 }, { id: '水果搭配', name: '水果搭配', order: 4 }, { id: '轻食', name: '轻食', order: 5 }] },
-        { id: '食养原则', name: '食养原则', type: 'knowledge', order: 5, children: [{ id: '低盐', name: '低盐', order: 1 }, { id: '低糖', name: '低糖', order: 2 }, { id: '低脂', name: '低脂', order: 3 }, { id: '高纤维', name: '高纤维', order: 4 }, { id: '易消化', name: '易消化', order: 5 }] },
-        { id: '食养食谱', name: '食养食谱', type: 'knowledge', order: 6, children: [{ id: '家常', name: '家常', order: 1 }, { id: '家宴', name: '家宴', order: 2 }, { id: '中式', name: '中式', order: 3 }] },
-        { id: '当季食材', name: '当季食材', type: 'knowledge', order: 7, children: [] },
-        { id: '烹饪技巧', name: '烹饪技巧', type: 'knowledge', order: 8, children: [] },
-        { id: '饮食文化', name: '饮食文化', type: 'knowledge', order: 9, children: [] },
         { id: '食育', name: '食育', type: 'knowledge', order: 10, icon: '📚', children: [] },
         { id: '食方', name: '食方', type: 'knowledge', order: 11, icon: '📜', children: [] }
     ] },
@@ -57125,6 +57109,32 @@ function _kbFixRenqunSub() {
         });
         if (n > 0) { saveDietKnowledge(); console.log('[V657 人群配餐子分类修复] 重打 ' + n + ' 条'); }
         return n;
+    } catch (e) { return 0; }
+}
+// V658: 食养顶级分类瘦身——移除已迁往 食谱→食养 的旧子分类节点（浏览态与文库管理共用 knowledgeCategories 树）
+function _kbPruneShiyangSubs() {
+    try {
+        if (typeof isSuperAdmin !== 'function' || !isSuperAdmin()) return 0;
+        var DROP = ['节气食养', '体质食养', '日常食养', '食养原则', '食养食谱', '当季食材', '厨房技巧', '选材避坑', '家庭宴客', '饮食文化', '烹饪技巧'];
+        var kc = getKnowledgeCategories();
+        var removed = 0;
+        ['public', 'family'].forEach(function (layer) {
+            var tree = (kc && kc[layer] && kc[layer].tree) || [];
+            tree.forEach(function (m) {
+                if (!m || (m.id !== 'shiyang' && m.name !== '食养') || !m.children) return;
+                var before = m.children.length;
+                m.children = m.children.filter(function (c) { return c && DROP.indexOf(String(c.id || '')) < 0 && DROP.indexOf(String(c.name || '')) < 0; });
+                removed += before - m.children.length;
+            });
+        });
+        if (removed > 0) {
+            lsSet('knowledgeCategories', JSON.stringify(kc));
+            try { renderCategoryTree(); } catch (e) {}
+            try { renderCatalogManager(); } catch (e) {}
+            try { if (document.body.classList.contains('kb-admin-lib')) renderLibTabView(); } catch (e) {}
+            console.log('[V658 食养子分类瘦身] 移除 ' + removed + ' 个节点');
+        }
+        return removed;
     } catch (e) { return 0; }
 }
 // ============ V641: 食谱→各地美食 分类建立 +「寻味天下」一次性迁移 ============
