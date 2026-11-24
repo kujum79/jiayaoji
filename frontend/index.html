@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V665-20261124';
+        var APP_VER = 'V666-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -48393,7 +48393,15 @@ const KNOWLEDGE_TREE = {
     },
     '食方': {
         '特殊人群': ['孕妇营养', '婴儿辅食', '青少年营养', '健身餐', '职场营养', '老年食养'],
-        '内科食方': [],
+        '内科食方': ['感冒发热', '咳嗽哮喘', '脾胃消化', '心血管', '肝胆', '肾与水湿', '血糖血脂尿酸', '安神助眠'],
+        '外科食方': ['骨折创伤', '颈椎腰椎', '关节与骨退变', '术后恢复', '疮疡肛肠'],
+        '小儿食方': ['小儿感冒发热', '小儿咳喘', '脾胃疳积', '生长发育', '小儿湿疮', '多动注意力'],
+        '妇科食方': ['月经不调与痛经', '孕产调理', '催乳', '更年期'],
+        '五官皮肤食方': ['眼疾', '鼻渊鼻炎', '口咽牙齿', '皮肤脱发'],
+        '肿瘤食方': ['肿瘤饮食', '放化疗调理', '防癌养生'],
+        '体质食方': ['气虚', '阳虚', '阴虚', '血虚', '痰湿', '湿热', '气郁', '特禀'],
+        '药膳制品': ['药粥', '药饭', '药汤', '药酒', '药茶', '药点', '药糖药果'],
+        '药膳菜': ['鸡鸭', '鱼虾', '猪肉', '牛羊', '蛋豆其他'],
         '食育': []
     },
     '烹饪': {
@@ -49197,6 +49205,7 @@ function _kbAutoMigrateArchivesOnce() {
             .then(function () { try { _kbPruneShiyangSubs(); } catch (e) {} }) // V658: 食养下旧子分类节点清理
             .then(function () { try { _kbFixShiyangSub(); } catch (e) {} }) // V661: 季节条目被误标食方→改回食养
             .then(function () { try { _kbRenameShiyangToShifang(); } catch (e) {} }) // V663: 顶级食养→食方改名同步
+            .then(function () { try { _kbSetupShifangCats(); } catch (e) {} }) // V666: 食方子分类扩充
             .then(function () { var _tl = _todayLesson(); if (_tl) _kbArchiveDailyLesson(_tl); }) // V654: 今日一课补入档（幂等）
             .then(function () { try { renderShiyangContent(); } catch (e) {} })
             .catch(function (e) { console.warn('[V649 自动归档迁移]', e); });
@@ -57219,6 +57228,59 @@ function _kbRenameShiyangToShifang() {
             console.log('[V663 食方改名同步] ' + n + ' 处');
         }
         return n;
+    } catch (e) { return 0; }
+}
+// V666: 食方子分类扩充（科室食方 + 药膳制品/药膳菜）
+var _KB_SHIFANG_CATS = [
+    { id: '外科食方', icon: '🦴', kids: ['骨折创伤', '颈椎腰椎', '关节与骨退变', '术后恢复', '疮疡肛肠'] },
+    { id: '小儿食方', icon: '🧒', kids: ['小儿感冒发热', '小儿咳喘', '脾胃疳积', '生长发育', '小儿湿疮', '多动注意力'] },
+    { id: '妇科食方', icon: '🌸', kids: ['月经不调与痛经', '孕产调理', '催乳', '更年期'] },
+    { id: '五官皮肤食方', icon: '👁️', kids: ['眼疾', '鼻渊鼻炎', '口咽牙齿', '皮肤脱发'] },
+    { id: '肿瘤食方', icon: '🎗️', kids: ['肿瘤饮食', '放化疗调理', '防癌养生'] },
+    { id: '体质食方', icon: '⚖️', kids: ['气虚', '阳虚', '阴虚', '血虚', '痰湿', '湿热', '气郁', '特禀'] },
+    { id: '药膳制品', icon: '🍲', kids: ['药粥', '药饭', '药汤', '药酒', '药茶', '药点', '药糖药果'] },
+    { id: '药膳菜', icon: '🥘', kids: ['鸡鸭', '鱼虾', '猪肉', '牛羊', '蛋豆其他'] }
+];
+var _KB_NEIKE_LEAVES = ['感冒发热', '咳嗽哮喘', '脾胃消化', '心血管', '肝胆', '肾与水湿', '血糖血脂尿酸', '安神助眠'];
+function _kbSetupShifangCats() {
+    try {
+        if (typeof isSuperAdmin !== 'function' || !isSuperAdmin()) return 0;
+        var kc = getKnowledgeCategories();
+        var node = null;
+        ((kc && kc.public && kc.public.tree) || []).forEach(function (m) { if (m && m.id === 'shiyang') node = m; });
+        if (!node) return 0;
+        node.children = node.children || [];
+        var n = 0;
+        function ensure(parentNode, name, icon) {
+            var c = null;
+            (parentNode.children || []).forEach(function (x) { if (!c && x && (x.id === name || x.name === name)) c = x; });
+            if (!c) { c = { id: name, name: name, type: 'knowledge', order: (parentNode.children || []).length + 1, icon: icon || '', children: [] }; parentNode.children.push(c); n++; }
+            return c;
+        }
+        var nk = null;
+        node.children.forEach(function (c) { if (c && (c.id === '食方' || c.name === '内科食方')) nk = c; });
+        if (nk) _KB_NEIKE_LEAVES.forEach(function (k) { ensure(nk, k, ''); });
+        _KB_SHIFANG_CATS.forEach(function (g) {
+            var c = ensure(node, g.id, g.icon);
+            g.kids.forEach(function (k) { ensure(c, k, ''); });
+        });
+        // 现有内科食方文章按标题重挂细分类
+        var hit = 0;
+        (dietKnowledge || []).forEach(function (k) {
+            if (!k || k.mainCategory !== 'shiyang') return;
+            var s = String(k.subCategory || '');
+            if (s !== '内科食方' && s !== '食方') return;
+            if (k.leafCategory) return;
+            var t = String(k.title || '');
+            var leaf = t.indexOf('失眠') >= 0 ? '安神助眠' : ((t.indexOf('发烧') >= 0 || t.indexOf('发热') >= 0) ? '感冒发热' : (t.indexOf('咳嗽') >= 0 ? '咳嗽哮喘' : ''));
+            if (leaf) { k.leafCategory = leaf; k.leafCategoryId = leaf; hit++; }
+        });
+        if (n > 0 || hit > 0) {
+            lsSet('knowledgeCategories', JSON.stringify(kc));
+            if (hit > 0) saveDietKnowledge();
+            console.log('[V666 食方扩充] 新增节点 ' + n + '，重挂文章 ' + hit);
+        }
+        return n + hit;
     } catch (e) { return 0; }
 }
 // ============ V641: 食谱→各地美食 分类建立 +「寻味天下」一次性迁移 ============
