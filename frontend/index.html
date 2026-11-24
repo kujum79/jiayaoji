@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V659-20261124';
+        var APP_VER = 'V660-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -56711,8 +56711,8 @@ function _saLibInnerHtml() {
         + '<button class="sad-btn" style="background:#0EA5E9;" onclick="_kbUploadScanModal()">上传扫描件</button>'  /* V634: 去图标+改名，三按钮尽量一行 */
         + '<button class="sad-btn" style="background:#F97316;" onclick="window._kbUploadCtx=\'public\';openAddKnowledgeModal();">上传文件</button>'
         + '<button class="sad-btn" style="background:linear-gradient(135deg,#8B5CF6,#EC4899);" onclick="_kbAiGenForCat()">AI生成</button>';
-    // V659: 食方专属工具（批量导入JSON/上传扫描食方）原挂在旧食养文库专属视图（V656 已撤），现对「食养」及其所有子分类开放
-    if (names.length && names.indexOf('食养') >= 0) {
+    // V659: 食方专属工具按钮；V660: 仅顶级「食养」分类及其子分类保留，食谱→食养下不显示
+    if (names.length && names[0] === '食养') {
         html += '<button class="sad-btn" style="background:#FFF3E2;color:#9A3412;border:1px solid #FDBA74;" onclick="openFangBatchImport()">批量导入JSON</button>'
             + '<button class="sad-btn" style="background:#FFF3E2;color:#9A3412;border:1px solid #FDBA74;" onclick="openShifangScanUpload()">上传扫描食方</button>';
     }
