@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V651-20261124';
+        var APP_VER = 'V652-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -243,8 +243,8 @@
         .home-hero { display: none; } /* V40: 品牌名并入顶部导航行，原 hero 弃用 */
         .home-topnav-logo {
             width: 48px; height: 48px;
-            border-radius: 50%;
-            background: white;
+            border-radius: 12px; /* V652: 新标志为方形图标（橙底白图自带"家肴记"字样），改圆角方形避免裁掉设计 */
+            background: none;
             box-shadow: 0 2px 8px rgba(249, 115, 22, 0.28);
             object-fit: cover;
             display: block;
@@ -4389,7 +4389,7 @@ async function _submitFeedback() {
         <div id="homeTopNav" style="display:flex;align-items:flex-start;padding:8px 4px 0;width:100%;max-width:430px;margin:0 auto;">
             <!-- 左列：LOGO + 品牌名 -->
             <div class="home-brand-col">
-                <img src="images/logo.png?v=3"
+                <img src="images/logo_home.jpg?v=1"
                      class="home-topnav-logo"
                      id="homeLogo"
                      alt="家肴记"
@@ -4400,7 +4400,7 @@ async function _submitFeedback() {
                      onerror="this.style.visibility='hidden';"
                      onclick="switchHomePage()"
                      title="点击回到首页">
-                <div class="home-brand-sm">家肴记</div>
+                <!-- V652: 新标志图自带"家肴记"字样，右侧文字移除 -->
             </div>
             <div class="home-topnav-right">
                 <!-- 行1：图标行（V134 首页精简：食帮/食榜入口已移入食知文库，📚👤 margin-left:auto 靠最右） -->
