@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V662-20261124';
+        var APP_VER = 'V663-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -48165,7 +48165,7 @@ if (familyGroupPanelEl) familyGroupPanelEl.addEventListener('click', e => e.stop
 
 // 保留旧数据以兼容 category 浏览模式
 const CATEGORY_LABELS = {
-    ingredient: '食材', recipe: '食谱', shiyang: '食养',
+    ingredient: '食材', recipe: '食谱', shiyang: '食方', // V663: 食养→食方
     // 旧主分类标签保留（历史条目兜底显示）
     solar: '节气', 'food-therapy': '食疗', symptom: '对症', tea: '茶饮', nutrition: '营养',
     cooking: '烹饪', 'dining-out': '在外就餐', article: '食文'
@@ -48341,10 +48341,10 @@ const CATEGORY_TREE_DATA = {
         { icon: '🌍', label: '欧美', sub: '欧美' }
     ],
     shiyang: [
-        // V658: 旧子分类已迁往 食谱→食养/各地美食，仅保留三项
-        { icon: '👨‍👩‍👧‍👦', label: '特殊人群配餐', sub: '特殊人群配餐' },
+        // V658: 旧子分类已迁往 食谱→食养/各地美食；V663: 改名 特殊人群/内科食方
+        { icon: '👨‍👩‍👧‍👦', label: '特殊人群', sub: '特殊人群' },
         { icon: '📚', label: '食育', sub: '食育' },
-        { icon: '📜', label: '食方', sub: '食方' }
+        { icon: '🥣', label: '内科食方', sub: '内科食方' }
     ],
     cooking: [
         { icon: '🥢', label: '烹饪技巧', sub: '烹饪技巧' },
@@ -48390,10 +48390,10 @@ const KNOWLEDGE_TREE = {
         '韩流': ['烤肉', '泡菜', '拌饭', '韩式汤'],
         '欧美': ['意餐', '法餐', '美式', '德式']
     },
-    '食养': {
-        '特殊人群配餐': ['孕妇营养', '婴儿辅食', '青少年营养', '健身餐', '职场营养', '老年食养'],
-        '食育': [],
-        '食方': []
+    '食方': {
+        '特殊人群': ['孕妇营养', '婴儿辅食', '青少年营养', '健身餐', '职场营养', '老年食养'],
+        '内科食方': [],
+        '食育': []
     },
     '烹饪': {
         '烹饪技巧': ['刀工', '火候', '调味', '炒', '蒸', '炖', '煮', '炸'],
@@ -48422,7 +48422,7 @@ const KNOWLEDGE_TREE = {
 const KNOWLEDGE_NAV_CATEGORIES = [
     { id: 'ingredient', icon: '🥬', label: '食材' },
     { id: 'recipe', icon: '📖', label: '食谱' },
-    { id: 'shiyang', icon: '🍵', label: '食养' },
+    { id: 'shiyang', icon: '🥣', label: '食方' }, // V663: 食养→食方，仅超管可见
     { id: 'cooking', icon: '🍳', label: '烹饪' },
     { id: 'dining-out', icon: '🍽️', label: '在外就餐' },
     { id: 'article', icon: '📖', label: '食文' }
@@ -48434,6 +48434,7 @@ function renderKnowledgeNavPanel() {
 
     let html = '<div class="knav-cat-list">';
     KNOWLEDGE_NAV_CATEGORIES.forEach(cat => {
+        if (cat.id === 'shiyang' && (typeof isSuperAdmin !== 'function' || !isSuperAdmin())) return; // V663
         html += `<button class="knav-cat-btn" onclick="handleCategorySelect('${cat.id}')">
             <span class="knav-cat-btn-icon">${cat.icon}</span>${cat.label}
         </button>`;
@@ -48466,6 +48467,8 @@ function renderKnowledgeCategorySide(activeId) {
     side.innerHTML = '';
 }
 function renderCategoryView(catId) {
+    // V663: 「食方」主分类（原食养）仅超管可见
+    if (catId === 'shiyang' && (typeof isSuperAdmin !== 'function' || !isSuperAdmin())) catId = 'ingredient';
     window._lastCatId = catId;
     currentCategoryId = catId;
     currentCategorySub = null;
@@ -49173,6 +49176,7 @@ function _kbAutoMigrateArchivesOnce() {
             .then(function () { try { _kbFixRenqunSub(); } catch (e) {} }) // V657: 修复被改写的「人群配餐」子分类名
             .then(function () { try { _kbPruneShiyangSubs(); } catch (e) {} }) // V658: 食养下旧子分类节点清理
             .then(function () { try { _kbFixShiyangSub(); } catch (e) {} }) // V661: 季节条目被误标食方→改回食养
+            .then(function () { try { _kbRenameShiyangToShifang(); } catch (e) {} }) // V663: 顶级食养→食方改名同步
             .then(function () { var _tl = _todayLesson(); if (_tl) _kbArchiveDailyLesson(_tl); }) // V654: 今日一课补入档（幂等）
             .then(function () { try { renderShiyangContent(); } catch (e) {} })
             .catch(function (e) { console.warn('[V649 自动归档迁移]', e); });
@@ -50222,9 +50226,12 @@ function _kbSubAliasSet(catId, sub) {
             });
         });
     } catch (e) {}
-    // V657: 历史别名兼容——「特殊人群配餐」旧条目曾被子视图归一化改写为「人群配餐」
-    if (set.indexOf('特殊人群配餐') >= 0 && set.indexOf('人群配餐') < 0) set.push('人群配餐');
-    if (set.indexOf('人群配餐') >= 0 && set.indexOf('特殊人群配餐') < 0) set.push('特殊人群配餐');
+    // V657: 历史别名兼容——「特殊人群配餐」旧条目曾被子视图归一化改写为「人群配餐」；V663: 再兼容新名「特殊人群」
+    if (set.indexOf('特殊人群配餐') >= 0 || set.indexOf('特殊人群') >= 0 || set.indexOf('人群配餐') >= 0) {
+        if (set.indexOf('特殊人群配餐') < 0) set.push('特殊人群配餐');
+        if (set.indexOf('人群配餐') < 0) set.push('人群配餐');
+        if (set.indexOf('特殊人群') < 0) set.push('特殊人群');
+    }
     return set;
 }
 function _kbSubMatch(k, aliases) {
@@ -52572,7 +52579,7 @@ function flushPendingPlanQueue() {
 // 食知模块：渲染和交互函数
 // ============================================================
 const KNOWLEDGE_TYPE_LABELS = {
-    'shiyang': { label: '食养', css: 'food-therapy', icon: '🍵' },
+    'shiyang': { label: '食方', css: 'food-therapy', icon: '🥣' }, // V663: 食养→食方
     'solar': { label: '节气', css: 'solar', icon: '🍃' },
     'food-therapy': { label: '食疗', css: 'food-therapy', icon: '🍎' },
     'article': { label: '网文', css: 'article', icon: '📄' },
@@ -52996,6 +53003,8 @@ function getKnowledgeFiltered() {
     let list = [...dietKnowledge];
     // 按层级筛选
     list = filterByVisibility(list);
+    // V663: 「食方」主分类条目仅超管可见
+    if (typeof isSuperAdmin === 'function' && !isSuperAdmin()) list = list.filter(function (k) { return k.mainCategory !== 'shiyang'; });
     // 按主分类筛选（V138: tab 可映射多个 mainCategory）
     if (currentKnowledgeFilter && FILTER_TO_MAIN_CATS[currentKnowledgeFilter]) {
         var allowed = FILTER_TO_MAIN_CATS[currentKnowledgeFilter];
@@ -54043,7 +54052,7 @@ var LIB_VIEW_TABS = [
     { id: 'ingredient', label: '食材' },
     { id: 'recipe', label: '食谱' },
     { id: 'cooking', label: '烹饪' },
-    { id: 'shiyang', label: '食养' },
+    { id: 'shiyang', label: '食方' }, // V663: 食养→食方，仅超管可见
     { id: 'article', label: '食文' },
     { id: 'dining-out', label: '就餐' },
     { id: 'shibang', label: '食榜' }  // V134：食榜自首页顶部入口迁入文库
@@ -54231,7 +54240,7 @@ function renderLibTabView() {
     var _inMgr = document.body.classList.contains('kb-admin-lib') && !document.body.classList.contains('kb-lib-browse');
     row.style.display = _inMgr ? 'none' : '';
     // 分类 Tab 行：点击在文库页内直接渲染该分类内容（食榜 Tab 页内渲染四子榜）
-    row.innerHTML = LIB_VIEW_TABS.map(function (t) {
+    row.innerHTML = LIB_VIEW_TABS.filter(function (t) { return t.id !== 'shiyang' || (typeof isSuperAdmin === 'function' && isSuperAdmin()); }).map(function (t) { // V663: 食方 Tab 仅超管可见
         const act = t.id === _libCurTab;
         const handler = t.id === 'shibang' ? '_libSelectShibang()' : '_libGoCategory(\'' + t.id + '\')';
         return '<button onclick="' + handler + '" style="flex-shrink:0;border:none;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:' + (act ? '700' : '500') + ';cursor:pointer;background:' + (act ? '#C2410C' : '#FFF7ED') + ';color:' + (act ? 'white' : '#9A3412') + ';">' + t.label + '</button>';
@@ -54663,7 +54672,7 @@ function viewChatSessionDetail(source, archiveIndex) {
 const KNOWLEDGE_MAIN_CATEGORIES = [
     { id: 'ingredient', label: '食材' },
     { id: 'recipe', label: '食谱' },
-    { id: 'shiyang', label: '食养' },
+    { id: 'shiyang', label: '食方' }, // V663: 食养→食方
     { id: 'cooking', label: '烹饪' },
     { id: 'dining-out', label: '在外就餐' }
 ];
@@ -54703,11 +54712,10 @@ var DEFAULT_CATEGORY_TREE = [
         { id: '中式', name: '中式', order: 3, children: [{ id: '中式家常', name: '中式家常', order: 1 }, { id: '粤菜', name: '粤菜', order: 2 }, { id: '川菜', name: '川菜', order: 3 }, { id: '北方菜', name: '北方菜', order: 4 }, { id: '江南菜', name: '江南菜', order: 5 }, { id: '汤羹粥品', name: '汤羹粥品', order: 6 }, { id: '中式甜品', name: '中式甜品', order: 7 }] },
         { id: '食养', name: '食养', type: 'knowledge', order: 4, children: [{ id: '春季', name: '春季', order: 1 }, { id: '夏季', name: '夏季', order: 2 }, { id: '秋季', name: '秋季', order: 3 }, { id: '冬季', name: '冬季', order: 4 }, { id: '人群食养', name: '人群食养', order: 5 }] }
     ] },
-    { id: 'shiyang', name: '食养', icon: '🍵', order: 3, type: 'knowledge', children: [
-        // V658: 节气食养/体质食养/日常食养/食养原则/食养食谱/当季食材/厨房技巧/选材避坑/家庭宴客/饮食文化 等已迁往 食谱→食养，食养下仅保留特殊人群配餐/食育/食方
-        { id: '特殊人群配餐', name: '特殊人群配餐', type: 'knowledge', order: 1, children: [{ id: '孕妇营养', name: '孕妇营养', order: 1 }, { id: '婴儿辅食', name: '婴儿辅食', order: 2 }, { id: '青少年营养', name: '青少年营养', order: 3 }, { id: '健身餐', name: '健身餐', order: 4 }, { id: '职场营养', name: '职场营养', order: 5 }, { id: '老年食养', name: '老年食养', order: 6 }] },
+    { id: 'shiyang', name: '食方', icon: '🥣', order: 3, type: 'knowledge', children: [ // V663: 食养→食方，仅超管可见；家庭层不含此主分类
+        { id: '特殊人群配餐', name: '特殊人群', type: 'knowledge', order: 1, children: [{ id: '孕妇营养', name: '孕妇营养', order: 1 }, { id: '婴儿辅食', name: '婴儿辅食', order: 2 }, { id: '青少年营养', name: '青少年营养', order: 3 }, { id: '健身餐', name: '健身餐', order: 4 }, { id: '职场营养', name: '职场营养', order: 5 }, { id: '老年食养', name: '老年食养', order: 6 }] },
         { id: '食育', name: '食育', type: 'knowledge', order: 10, icon: '📚', children: [] },
-        { id: '食方', name: '食方', type: 'knowledge', order: 11, icon: '📜', children: [] }
+        { id: '食方', name: '内科食方', type: 'knowledge', order: 11, icon: '🥣', children: [] }
     ] },
     { id: 'cooking', name: '烹饪', icon: '🍳', order: 4, children: [
         { id: '烹饪技巧', name: '烹饪技巧', order: 1, children: [] },
@@ -56134,7 +56142,7 @@ function renderDietKnowledgeGrouped(list, container) {
     const GROUP_CATEGORIES = [
         { id: 'ingredient', icon: '🥬', label: '食材' },
         { id: 'recipe', icon: '📖', label: '食谱' },
-        { id: 'shiyang', icon: '🍵', label: '食养' },
+        { id: 'shiyang', icon: '🥣', label: '食方' }, // V663: 食养→食方
         { id: 'cooking', icon: '🍳', label: '烹饪' },
         { id: 'dining-out', icon: '🍽️', label: '在外就餐' }
     ];
@@ -56143,6 +56151,7 @@ function renderDietKnowledgeGrouped(list, container) {
     let hasAnyGroup = false;
 
     GROUP_CATEGORIES.forEach(cat => {
+        if (cat.id === 'shiyang' && (typeof isSuperAdmin !== 'function' || !isSuperAdmin())) return; // V663: 食方分组仅超管可见
         const groupItems = list.filter(k => k.mainCategory === cat.id);
         if (groupItems.length === 0) return;
         hasAnyGroup = true;
@@ -57153,6 +57162,43 @@ function _kbFixShiyangSub() {
         return n;
     } catch (e) { return 0; }
 }
+// V663: 顶级「食养」→「食方」改名同步（公共树节点名、条目子分类、家庭树删除该主分类），幂等
+function _kbRenameShiyangToShifang() {
+    try {
+        if (typeof isSuperAdmin !== 'function' || !isSuperAdmin()) return 0;
+        var n = 0;
+        var kc = getKnowledgeCategories();
+        if (kc && kc.public && Array.isArray(kc.public.tree)) {
+            kc.public.tree.forEach(function (m) {
+                if (!m || m.id !== 'shiyang') return;
+                if (m.name !== '食方') { m.name = '食方'; n++; }
+                (m.children || []).forEach(function (c) {
+                    if (!c) return;
+                    if (c.id === '特殊人群配餐' && c.name !== '特殊人群') { c.name = '特殊人群'; n++; }
+                    if (c.id === '食方' && c.name !== '内科食方') { c.name = '内科食方'; n++; }
+                });
+            });
+        }
+        if (kc && kc.family && Array.isArray(kc.family.tree)) {
+            var before = kc.family.tree.length;
+            kc.family.tree = kc.family.tree.filter(function (m) { return !(m && (m.id === 'shiyang' || m.name === '食养')); });
+            n += before - kc.family.tree.length;
+        }
+        var SUBMAP = { '特殊人群配餐': '特殊人群', '人群配餐': '特殊人群' };
+        (dietKnowledge || []).forEach(function (k) {
+            if (k && k.mainCategory === 'shiyang') {
+                var v = String(k.subCategory || '');
+                if (SUBMAP[v]) { k.subCategory = SUBMAP[v]; if (k.subCategoryId) k.subCategoryId = SUBMAP[v]; n++; }
+            }
+        });
+        if (n > 0) {
+            lsSet('knowledgeCategories', JSON.stringify(kc));
+            saveDietKnowledge();
+            console.log('[V663 食方改名同步] ' + n + ' 处');
+        }
+        return n;
+    } catch (e) { return 0; }
+}
 // ============ V641: 食谱→各地美食 分类建立 +「寻味天下」一次性迁移 ============
 // 全局函数，控制台/超管可调用；幂等：分类节点/细分类只补缺不重复不覆盖，文章按 kbSrcId 或同名跳过
 // 13 细分类固定中文 id；判区关键词表（全部 ≥2 字避免误命中；顺序即优先级，港澳台最先防被华南/华东抢判）
@@ -57549,7 +57595,7 @@ function _restoreKnowledgeChrome() {
 var _AI_BULK_CATS = [
     { id: 'recipe', label: '📖 食谱' },
     { id: 'ingredient', label: '🥬 食材' },
-    { id: 'shiyang', label: '🍵 食养' },
+    { id: 'shiyang', label: '🥣 食方' }, // V663: 食养→食方
     { id: 'shiwen', label: '📜 食文' }
 ];
 function _aiBulkCatLabel(id) {
