@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V652-20261124';
+        var APP_VER = 'V653-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -97,7 +97,7 @@
     })();
     </script>
     <!-- 首页 LOGO 预加载 & 兼容修复：?v=2 绕开微信 WebView 可能残留的旧大图/坏响应磁盘缓存 -->
-    <link rel="preload" as="image" href="images/logo.png?v=3" imagesrcset="images/logo.png?v=3 1x" />
+    <link rel="preload" as="image" href="images/logo_home.jpg?v=1" imagesrcset="images/logo_home.jpg?v=1 1x" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -3999,7 +3999,7 @@ body.demo-mode .phone-frame { height: 100%; }
 <!-- ====== 启动闪屏：文件较大，弱网下加载期间统一显示此页，就绪后自动切换到 APP/登录页 ====== -->
 <div id="bootSplash" style="position:fixed;inset:0;z-index:100006;background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 40%,#FED7AA 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;">
     <style>@keyframes bootPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.18);opacity:.65}}</style>
-    <div style="font-size:58px;animation:bootPulse 1.2s ease-in-out infinite;">🍳</div>
+    <img src="images/logo_home.jpg?v=1" alt="家肴记" style="width:72px;height:72px;border-radius:18px;box-shadow:0 6px 20px rgba(234,88,12,.25);animation:bootPulse 1.2s ease-in-out infinite;" /><!-- V653: 闪屏品牌标志统一换新图 -->
     <div style="margin-top:14px;font-size:16px;font-weight:800;color:#9A3412;">家肴记</div>
     <div style="margin-top:8px;font-size:14px;color:#B45309;">正在加载，请稍候…</div>
 </div>
@@ -4010,7 +4010,7 @@ body.demo-mode .phone-frame { height: 100%; }
     <div id="loginPageCloseBtn" onclick="closeLoginOverlay()" style="position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:16px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:20px;color:#9A3412;background:rgba(255,255,255,0.85);border:1px solid #FED7AA;border-radius:50%;cursor:pointer;box-shadow:0 2px 8px rgba(234,88,12,0.12);z-index:20;" title="返回浏览">✕</div>
     <!-- 卡片 margin:auto 居中：内容不足时居中，超出屏幕时可正常滚到顶部（避免 flex center 溢出裁剪） -->
     <div style="background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:340px;text-align:center;box-shadow:0 12px 40px rgba(234,88,12,0.15);box-sizing:border-box;margin-top:auto;margin-bottom:auto;">
-        <div style="font-size:48px;margin-bottom:8px;">🍳</div>
+        <img src="images/logo_home.jpg?v=1" alt="家肴记" style="width:56px;height:56px;border-radius:14px;margin-bottom:8px;box-shadow:0 4px 14px rgba(234,88,12,.2);" /><!-- V653: 登录页品牌标志统一换新图 -->
         <div style="font-size:22px;font-weight:800;color:#9A3412;margin-bottom:4px;">家肴记</div>
         <div style="font-size:14px;color:#9CA3AF;margin-bottom:18px;">AI 家庭膳食助理</div>
         <!-- V580 过渡方案：主面板改为「家庭名称+家庭密码」；手机号登录因短信网关未开通降为备用 -->
@@ -4358,7 +4358,7 @@ async function _submitFeedback() {
 </style>
 <div class="family-select-overlay" id="familySelectOverlay">
     <div class="family-select-card">
-        <div class="family-select-logo">🍳</div>
+        <img class="family-select-logo" src="images/logo_home.jpg?v=1" alt="家肴记" style="width:52px;height:52px;border-radius:13px;object-fit:cover;" /><!-- V653: 选择家庭弹窗品牌标志统一换新图 -->
         <div class="family-select-title">家肴记</div>
         <div class="family-select-sub">明天吃啥？今天做甚？<br>创建或加入家庭，开启智能饮食管理</div>
         <div class="family-select-tabs">
@@ -51181,7 +51181,7 @@ function _mrRenderPoster(record) {
     var saved = _mrSavedAmount(record);
     var qr = _mrFakeQrDataUrl(160);
     return Promise.all([
-        _mrLoadImg('images/logo.png', 2000),
+        _mrLoadImg('images/logo_home.jpg?v=1', 2000), // V653: 分享卡片角标统一换新标志
         record.imageBase64 ? _mrLoadImg(record.imageBase64, 3000) : Promise.resolve(null),
         qr ? _mrLoadImg(qr, 1500) : Promise.resolve(null)
     ]).then(function (imgs) {
