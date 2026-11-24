@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V653-20261124';
+        var APP_VER = 'V654-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -11435,6 +11435,7 @@ async function _syncDailyLessonFromServer(force) {
         var list = _getDailyLessons().filter(function (x) { return x && x.date !== rec.date; });
         list.unshift(rec);
         _saveDailyLessons(list);
+        try { _kbArchiveDailyLesson(rec); } catch (e) {} // V654: 生成即入档饮食文库（食谱→食养→季节，幂等）
         return rec;
     } catch (e) {
         if (force) showToast('获取今日微课失败：' + (e.message || e));
@@ -49186,9 +49187,62 @@ function _kbAutoMigrateArchivesOnce() {
             .then(function () { return _kbSetupGeishiCuisine(); })
             .then(function () { return _kbMigrateKitchenArticles(); })
             .then(function () { return _kbMigrateSolarGuides(); }) // V650: 节气食养指南入库（迁移完再 renderShiyangContent）
+            .then(function () { var _tl = _todayLesson(); if (_tl) _kbArchiveDailyLesson(_tl); }) // V654: 今日一课补入档（幂等）
             .then(function () { try { renderShiyangContent(); } catch (e) {} })
             .catch(function (e) { console.warn('[V649 自动归档迁移]', e); });
     } catch (e) {}
+}
+
+// ============ V654: 食养堂「今日一课」自动入档饮食文库（食谱→食养→对应季节） ============
+// 幂等：同名或同 kbSrcId 条目跳过；仅超管设备执行；微课拉取成功与每日收编链两处触发
+function _kbArchiveDailyLesson(rec) {
+    try {
+        if (typeof isSuperAdmin !== 'function' || !isSuperAdmin()) return false;
+        if (!rec || !rec.title || !rec.content) return false;
+        if (typeof dietKnowledge === 'undefined' || !Array.isArray(dietKnowledge)) return false;
+        var srcId = 'daily_lesson:' + (rec.date || '');
+        var dup = dietKnowledge.some(function (k) {
+            return k && (String(k.kbSrcId || '') === srcId || String(k.title || '') === String(rec.title));
+        });
+        if (dup) return false;
+        // 季节判定：当日节气 → 标题词 → 月份兜底
+        var season = null;
+        try { season = _kbSeasonByJieqiDate(rec.date) || _kbSeasonByTitleWords(rec.title); } catch (e) {}
+        if (!season) {
+            var m = parseInt(String(rec.date || '').slice(5, 7), 10) || (new Date().getMonth() + 1);
+            season = (m >= 3 && m <= 5) ? '春季' : (m >= 6 && m <= 8) ? '夏季' : (m >= 9 && m <= 11) ? '秋季' : '冬季';
+        }
+        var _ctx = (typeof getCurrentUserContext === 'function') ? getCurrentUserContext() : { id: 'unknown' };
+        dietKnowledge.unshift({
+            id: nextKnowledgeId++,
+            type: 'recipe',
+            title: rec.title,
+            source: 'AI生成',
+            content: String(rec.content),
+            image: '',
+            images: [],
+            categoryId: 'recipe',
+            subCategoryId: '食养',
+            leafCategoryId: season,
+            mainCategory: 'recipe',
+            subCategory: '食养',
+            leafCategory: season,
+            createdAt: Date.now(),
+            sourceType: 'daily_lesson',
+            tags: ['今日一课', String(rec.date || ''), String(rec.solarTerm || '')].filter(Boolean),
+            kbSrcId: srcId,
+            sceneTags: [],
+            auditStatus: '',
+            visibility: 'family',
+            scope: 'family',
+            layer: 'public',
+            createdBy: _ctx.id || 'unknown',
+            shareScope: 'none'
+        });
+        saveDietKnowledge();
+        console.log('[V654 今日一课入档] ' + rec.title + ' → 食谱/食养/' + season);
+        return true;
+    } catch (e) { console.warn('[V654 今日一课入档]', e); return false; }
 }
 function renderShiyangContent() {
     const emptyEl = document.getElementById('categoryContentEmpty');
