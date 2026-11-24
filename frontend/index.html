@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V647-20261124';
+        var APP_VER = 'V648-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -48754,10 +48754,19 @@ function _syItemsForLayer(lib) {
     // V296 铁律：面向全国，含城市名的旧内容不进文库
     if (lib === 'public') {
         try {
+            // V648: 已迁移归档（kbSrcId 或同名命中 dietKnowledge 迁移条目）在所有视图不再折叠进食养板块——
+            // 这些内容已挂到 食谱→食养/各地美食，食养页只显示仍留在食养体系的文章
+            var _migKeys = {};
+            (dietKnowledge || []).forEach(function (k) {
+                if (!k || (k.sourceType !== 'migrated' && !k.kbSrcId)) return;
+                if (k.kbSrcId) _migKeys['i:' + k.kbSrcId] = 1;
+                if (k.title) _migKeys['t:' + String(k.title)] = 1;
+            });
             _fhArchiveAll().forEach(function (a) {
                 try {
                     if (!a || !a.title || !_dtIsNational(a)) return;
                     var c = String(a.category || '').trim();
+                    if (_migKeys['i:' + a.id] || _migKeys['t:' + String(a.title)]) return; // V648
                     // V641: 管理态 sy 树隐藏已迁移归档条目（寻味天下等折叠进板块的条目一并隐藏；普通浏览态不受影响）
                     if (_kbInAdminMgrView() && _KB_MIGRATED_SY_CATS.indexOf(c) >= 0) return;
                     out.push({
