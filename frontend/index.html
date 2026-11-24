@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V650-20261124';
+        var APP_VER = 'V651-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -36118,7 +36118,8 @@ function _fhHallEduBlockHtml() {
                 + '</div>';
         }).join('');
     }
-    return exploreHtml + tabHtml
+    // V651: 「少年食趣」入口移入「全部」页签内显示（「推荐」页签不再出现）
+    return tabHtml + (_fhHallEduTab === 'all' ? exploreHtml : '')
         + '<div style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.6;">按课程文件夹学习，点击进入课程列表</div>'
         + listHtml;
 }
