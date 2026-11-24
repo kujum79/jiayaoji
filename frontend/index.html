@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V667-20261124';
+        var APP_VER = 'V668-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -54252,8 +54252,8 @@ function _libRestoreCategoryContent() {
         if (titleEl) titleEl.style.display = '';
         if (searchEl) searchEl.style.display = '';
     }
-    // 归还 body
-    if (body && body.parentElement === content) {
+    // 归还 body（V668: 放宽为 contains——浏览态双栏右栏 #kbBrMain 内嵌入的 body 也要能归还）
+    if (body && content && content.contains(body)) {
         var headerInsertAnchor = view.querySelector('.category-browse-header');
         if (headerInsertAnchor) headerInsertAnchor.insertAdjacentElement('afterend', body);
         else view.appendChild(body);
@@ -54268,7 +54268,7 @@ function renderLibTabView() {
     try { _renderSaLibAdminHeader(); } catch (e) {}
     // V632: 管理/浏览分离——管理态隐藏横排 Tab 行（主体=双栏，分类切换走左树）；浏览态/普通食知恢复显示
     var _inMgr = document.body.classList.contains('kb-admin-lib') && !document.body.classList.contains('kb-lib-browse');
-    row.style.display = _inMgr ? 'none' : '';
+    row.style.display = 'none'; // V668: 浏览态改左树右内容双栏，横排 Tab 行隐藏（管理态本就隐藏，行为不变；Tab 构建保留供兜底）
     // 分类 Tab 行：点击在文库页内直接渲染该分类内容（食榜 Tab 页内渲染四子榜）
     row.innerHTML = LIB_VIEW_TABS.filter(function (t) { return t.id !== 'shiyang' || (typeof isSuperAdmin === 'function' && isSuperAdmin()); }).map(function (t) { // V663: 食方 Tab 仅超管可见
         const act = t.id === _libCurTab;
@@ -54300,23 +54300,12 @@ function renderLibTabView() {
         content.innerHTML = _saLibDualPaneHtml();
         return;
     }
-    // 内容区：按当前 Tab 展示该分类内容
-    if (_libCurTab === 'shibang') {
-        // V631: 食榜双栏——左栏竖排四子榜节点（样式对齐 V628 双栏 sad-tree），右栏复用 _renderHelpMain 内容渲染（隐藏其自带横排 Tab 栏）
-        _libRestoreCategoryContent();
-        content.style.cssText = 'flex:1;min-height:0;display:flex;flex-direction:column;';
-        content.innerHTML = _sbLibDualPaneHtml();
-        var _sbArea = document.getElementById('libShibangArea');
-        if (_sbArea) _renderHelpMain('libShibangArea', true, true);
-        return;
-    }
-    // 分类 Tab：把分类浏览主体嵌入文库页内，直接渲染该分类
+    // V668: 浏览态主体——左树（公共分类树+食榜特殊节点）右内容双栏，完全只读；管理态分支不受影响
     var _dualResidue = document.getElementById('saLibDualArea'); // V628: 清除管理双栏残留
     if (_dualResidue) _dualResidue.remove();
     var _syBarResidue = document.getElementById('saLibSyBackBar'); // V632: 清除食养 sy 返回条残留
     if (_syBarResidue) _syBarResidue.remove();
-    _libEmbedCategoryContent();
-    renderCategoryView(_libCurTab);
+    _kbBrRenderView();
 }
 
 // 选择分类，进入分类浏览
@@ -56645,9 +56634,9 @@ function _saLibLeafOf(k) { return String(k.leafCategory || k.leafCategoryId || '
 // 当前节点下全部公共条目：父节点=含全部后代；叶子匹配兼容二层（父即叶子）与三层树数据
 // V635: 条目 sub/leaf 字段存的可能是名称（添加表单/审核流程按名称存），而自定义分类节点 id 是 cat_<时间戳>——
 // 各级同时接受 id 与显示名两种值比对（id/名称双兼容），否则自定义分类恒显示 0 篇
-function _saLibItemsForPath(key) {
+function _saLibItemsForPath(key, poolOverride) { // V668: poolOverride=浏览态可见条目池（缺省仍为管理态公共层口径）
     var segs = String(key || '').split('|').filter(Boolean);
-    var all = (typeof dietKnowledge !== 'undefined' && dietKnowledge ? dietKnowledge : []).filter(function (k) { return k && (k.layer === 'public' || _kbTreatAsPublic(k)); });
+    var all = poolOverride || (typeof dietKnowledge !== 'undefined' && dietKnowledge ? dietKnowledge : []).filter(function (k) { return k && (k.layer === 'public' || _kbTreatAsPublic(k)); });
     if (!segs.length) return all;
     var names = _saLibPathNames(key); // 各级显示名（节点缺失时可能短于 segs）
     var mainId = segs[0], subId = segs[1] || '', leafId = segs[2] || '';
@@ -56696,9 +56685,9 @@ function _saLibEnsureStyle() {
 }
 // 左栏递归行：父节点点击展开/再点收起（同时选中），叶子点击选中
 // V644: 节点徽标=该节点及全部子孙的条目总数（文件夹惯例），与右栏直属列表口径分离
-function _saLibNodeTotal(n, key) {
-    var total = _saLibItemsForPath(key).length;
-    (n.children || []).forEach(function (c) { total += _saLibNodeTotal(c, key + '|' + c.id); });
+function _saLibNodeTotal(n, key, poolOverride) { // V668: poolOverride 透传给 _saLibItemsForPath（浏览态计数）
+    var total = _saLibItemsForPath(key, poolOverride).length;
+    (n.children || []).forEach(function (c) { total += _saLibNodeTotal(c, key + '|' + c.id, poolOverride); });
     return total;
 }
 function _saLibRowsHtml(nodes, parentKey, depth) {
@@ -56822,6 +56811,221 @@ function _saLibExitSy() {
     _saLibSyMode = false;
     renderLibTabView();
 }
+// ============ V668: 文库浏览态主体——左树右内容双栏（完全只读；管理态 _saLib* 双栏不动） ============
+// 布局复用 .sad-tree/.sad-row 样式；树=公共分类树全部主分类（食方仅超管，顺序按 order）+末尾「🏆 食榜」特殊节点；
+// 右栏随选中节点变化：普通节点=只读卡片列表（文件夹语义+直属为空时子孙兜底）、食文主分类树=现有食文卡片视图、食榜=现有榜单
+var _KB_BR_SB = '__shibang__'; // 食榜特殊节点 key（不在分类树内）
+var _kbBrSel = '';             // 当前选中节点 key：'ingredient' | 'ingredient|sub' | 'ingredient|sub|leaf' | '__shibang__'
+var _kbBrOpen = null;          // 手风琴展开状态（null=未初始化；window 级，不持久化）
+var _kbBrTab = '';             // 上次同步的 _libCurTab（外部切 Tab/联动跳转时同步树选中）
+// 浏览态可见条目池：公共 + 本家庭 + 有权浏览条目（与 filterByVisibility 权限口径一致；游客种子数据为 public 层）
+function _kbBrPool() {
+    var all = (typeof dietKnowledge !== 'undefined' && dietKnowledge ? dietKnowledge : []);
+    try {
+        return all.filter(function (k) { return k && can('view', k) && !_kbIsHidden(k.id); });
+    } catch (e) {
+        return all.filter(function (k) { return k && (k.layer === 'public' || _kbTreatAsPublic(k)); });
+    }
+}
+function _kbBrIsSuper() { return (typeof isSuperAdmin === 'function' && isSuperAdmin()); }
+// 树根：公共分类树全部主分类（食方 id='shiyang' 仅超管显示；order 排序由 sortByOrder 负责）
+function _kbBrRoots() {
+    var sup = _kbBrIsSuper();
+    return _saLibTree().filter(function (m) { return m && (sup || m.id !== 'shiyang'); });
+}
+function _kbBrIsArticleNode(key) { return key === 'article' || String(key || '').indexOf('article|') === 0; }
+// 食文节点徽标：数据源 foodArticles（非 dietKnowledge），子级按 subCategoryId/leafCategoryId 计数；名家食话细分类按 authorType
+function _kbBrArticleCount(key) {
+    var names = _saLibPathNames(key);
+    var arts = [];
+    try { arts = (typeof getVisibleFoodArticles === 'function') ? getVisibleFoodArticles() : []; } catch (e) {}
+    var sub = names[1] || '', leaf = names[2] || '';
+    return arts.filter(function (a) {
+        if (sub && String(a.subCategoryId || '') !== sub) return false;
+        if (leaf) {
+            if (sub === '名家食话') { if (_MINGJIA_LEAF_BY_TYPE[a.authorType || ''] !== leaf) return false; }
+            else if (String(a.leafCategoryId || '') !== leaf) return false;
+        }
+        return true;
+    }).length;
+}
+// 选中节点条目：直属优先（文件夹语义）；直属为 0 且非食榜/食文时自动兜底显示子孙全部条目
+function _kbBrItemsForNode(key) {
+    var pool = _kbBrPool();
+    var direct = _saLibItemsForPath(key, pool);
+    if (direct.length) return { items: direct, fellBack: false };
+    var node = _saLibFindNode(key);
+    if (!node) return { items: [], fellBack: false };
+    var out = [], seen = {};
+    (function walk(n, k) {
+        _saLibItemsForPath(k, pool).forEach(function (it) { if (!seen[it.id]) { seen[it.id] = true; out.push(it); } });
+        (n.children || []).forEach(function (c) { walk(c, k + '|' + c.id); });
+    })(node, key);
+    return { items: out, fellBack: out.length > 0 };
+}
+// 只读条目卡片：📎+标题+摘要+标签，无编辑/上传/AI按钮；点击进详情（与现有浏览态一致 showKnowledgeDetail）
+function _kbBrItemHtml(k) {
+    var idStr = escapeHtml(String(k.id));
+    var hasAtt = !!(k.attachments && k.attachments.length > 0);
+    var sum = String(k.content || '').replace(/\[图片[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (sum.length > 50) sum = sum.slice(0, 50) + '…';
+    var tags = (k.tags || []).slice(0, 3).map(function (t) {
+        return '<span style="display:inline-block;font-size:10.5px;color:#9A3412;background:#FFF7ED;border:1px solid #FED7AA;border-radius:6px;padding:0 5px;margin-right:4px;">' + escapeHtml(String(t)) + '</span>';
+    }).join('');
+    return '<div class="sad-item" data-kid="' + idStr + '">'
+        + '<div class="sad-item-main">'
+        + '<div class="sad-item-title">' + (hasAtt ? '📎 ' : '') + escapeHtml(k.title || '(未命名)') + '</div>'
+        + (sum ? '<div class="sad-item-sum">' + escapeHtml(sum) + '</div>' : '')
+        + (tags ? '<div style="margin-top:4px;">' + tags + '</div>' : '')
+        + '</div></div>';
+}
+// 左树递归行：徽标=含子孙条目总数（浏览态过滤数据，复用 _saLibNodeTotal 同款统计）
+function _kbBrRowsHtml(nodes, parentKey, depth, pool) {
+    var html = '';
+    sortByOrder(nodes || []).forEach(function (n) {
+        var key = parentKey ? parentKey + '|' + n.id : n.id;
+        var kids = n.children || [];
+        var branch = kids.length > 0;
+        var open = !!(_kbBrOpen && _kbBrOpen[key]);
+        var sel = _kbBrSel === key;
+        var cnt = _kbBrIsArticleNode(key) ? _kbBrArticleCount(key) : _saLibNodeTotal(n, key, pool);
+        html += '<div class="sad-row' + (sel ? ' sel' : '') + '" data-key="' + escapeHtml(key) + '" style="padding-left:' + (7 + depth * 12) + 'px">'
+            + (branch ? '<span class="sad-chev' + (open ? ' open' : '') + '">&#9656;</span>' : '<span style="width:9px;flex:0 0 9px;"></span>')
+            + '<span>' + escapeHtml(n.name || n.id) + '</span>'
+            + '<span class="sad-cnt">' + cnt + '</span>'
+            + '</div>';
+        if (branch && open) html += _kbBrRowsHtml(kids, key, depth + 1, pool);
+    });
+    return html;
+}
+// 左栏（约 148px 可滚动）+ 末尾「🏆 食榜」特殊节点（无子节点、无徽标）
+function _kbBrTreeHtml(pool) {
+    return '<div class="sad-tree" id="kbBrTree" style="width:148px;max-width:148px;align-self:stretch;overflow-y:auto;">'
+        + '<div class="sad-tree-head"><span>🗂️ 目录</span></div>'
+        + _kbBrRowsHtml(_kbBrRoots(), '', 0, pool)
+        + '<div class="sad-row' + (_kbBrSel === _KB_BR_SB ? ' sel' : '') + '" data-key="' + _KB_BR_SB + '" style="padding-left:7px"><span style="width:9px;flex:0 0 9px;"></span><span>🏆 食榜</span></div>'
+        + '</div>';
+}
+// 双栏整体结构
+function _kbBrPaneHtml() {
+    _saLibEnsureStyle();
+    return '<div id="kbBrArea" style="display:flex;gap:10px;align-items:stretch;flex:1;min-height:0;">'
+        + _kbBrTreeHtml(_kbBrPool())
+        + '<div id="kbBrMain" style="flex:1;min-width:0;overflow-y:auto;padding-bottom:12px;"></div>'
+        + '</div>';
+}
+// 把嵌入右栏的分类浏览主体（食文特例）归还 category 视图——innerHTML 重渲染前必须调用，防止 body 被销毁
+function _kbBrRestoreBody() {
+    var body = document.querySelector('.category-browse-body');
+    var view = document.getElementById('knowledgeCategoryView');
+    var content = document.getElementById('libTabContent');
+    if (!body || !view || !content || !content.contains(body)) return;
+    var header = view.querySelector('.category-browse-header');
+    if (header) header.insertAdjacentElement('afterend', body);
+    else view.appendChild(body);
+}
+// 右栏渲染：食榜→现有榜单（#libShibangArea + _renderHelpMain，带自带子榜 Tab 栏）；
+// 食文树→现有食文卡片视图（body 搬入右栏后走 renderCategoryView('article')）；普通节点→只读卡片列表
+function _kbBrRenderMain() {
+    var main = document.getElementById('kbBrMain');
+    if (!main) return;
+    _kbBrRestoreBody();
+    if (_kbBrSel === _KB_BR_SB) {
+        main.innerHTML = '<div id="libShibangArea"></div>';
+        try { _renderHelpMain('libShibangArea', true, false); } catch (e) {}
+        return;
+    }
+    if (_kbBrIsArticleNode(_kbBrSel)) {
+        main.innerHTML = '';
+        var body = document.querySelector('.category-browse-body');
+        if (body) main.appendChild(body);
+        var _an = _saLibPathNames(_kbBrSel); // 树选中映射食文筛选（子分类/细分类）
+        try {
+            _articleFilter.sub = _an[1] || '';
+            _articleFilter.leaf = _an[2] || '';
+            _articleFilter.author = '';
+            _articleFilter.era = '';
+        } catch (e) {}
+        try { renderCategoryView('article'); } catch (e) {}
+        return;
+    }
+    var names = _saLibPathNames(_kbBrSel);
+    var res = _kbBrItemsForNode(_kbBrSel);
+    var html = '<div class="sad-crumb">📂 ' + (names.length ? escapeHtml(names.join(' / ')) : '全部条目') + ' <span style="color:#C2410C;font-weight:700;">(' + res.items.length + ')</span></div>';
+    if (res.fellBack) html += '<div style="font-size:11.5px;color:#A18A6D;margin:-2px 0 8px;">该级暂无直属条目，已汇总其子分类内容</div>';
+    if (!res.items.length) {
+        html += '<div style="padding:26px 10px;text-align:center;font-size:13px;color:#A18A6D;background:#FBF6EF;border:1px dashed #EADFD0;border-radius:12px;">该分类暂无内容</div>';
+    } else {
+        html += res.items.map(_kbBrItemHtml).join('');
+    }
+    main.innerHTML = html;
+}
+// 状态初始化与兜底：默认选中「食材」；主分类默认展开一级子分类（细分类收起）；失效 key 回落
+function _kbBrEnsureState() {
+    if (!_kbBrOpen) {
+        _kbBrOpen = {};
+        _kbBrRoots().forEach(function (m) { _kbBrOpen[m.id] = true; });
+    }
+    if (_libCurTab !== _kbBrTab) { // 外部切 Tab（_libGoCategory/_libSelectShibang/联动跳转）同步树选中
+        _kbBrTab = _libCurTab;
+        _kbBrSel = (_libCurTab === 'shibang') ? _KB_BR_SB : (_libCurTab || 'ingredient');
+    }
+    if (_kbBrSel !== _KB_BR_SB && String(_kbBrSel).indexOf('shiyang') === 0 && !_kbBrIsSuper()) _kbBrSel = ''; // 非超管不可选食方
+    if (_kbBrSel !== _KB_BR_SB && !_saLibFindNode(_kbBrSel)) _kbBrSel = '';
+    if (!_kbBrSel) {
+        var roots = _kbBrRoots();
+        var def = null;
+        for (var i = 0; i < roots.length; i++) { if (roots[i].id === 'ingredient') { def = roots[i]; break; } }
+        if (!def) def = roots[0] || null;
+        _kbBrSel = def ? def.id : _KB_BR_SB;
+    }
+    if (_kbBrSel !== _KB_BR_SB) _kbBrOpen[String(_kbBrSel).split('|')[0]] = true; // 选中节点所在主分类保持展开
+}
+// 视图入口（renderLibTabView 浏览态分支调用）
+function _kbBrRenderView() {
+    var content = document.getElementById('libTabContent');
+    if (!content) return;
+    _kbBrEnsureState();
+    _libRestoreCategoryContent(); // 归还此前嵌入 libTabContent 的 header/层Tab/body（含旧 Tab 嵌入与管理 sy 残留）
+    _kbBrRestoreBody();
+    content.style.cssText = 'flex:1;min-height:0;display:flex;flex-direction:column;';
+    content.innerHTML = _kbBrPaneHtml();
+    _kbBrRenderMain();
+}
+// 局部刷新（树点选后）：重渲左树（高亮/展开态）+ 右栏
+function _kbBrRender() {
+    var area = document.getElementById('kbBrArea');
+    if (!area) { try { renderLibTabView(); } catch (e) {} return; }
+    _kbBrRestoreBody();
+    var tree = document.getElementById('kbBrTree');
+    if (tree) tree.outerHTML = _kbBrTreeHtml(_kbBrPool());
+    _kbBrRenderMain();
+}
+// 双栏点击事件委托（重渲染后仍生效，仿管理态 _saLibDualArea 委托）
+document.addEventListener('click', function (e) {
+    var area = document.getElementById('kbBrArea');
+    if (!area || !e.target || !e.target.closest) return;
+    var row = e.target.closest('.sad-row');
+    if (row && area.contains(row)) {
+        var key = row.getAttribute('data-key');
+        if (!key) return;
+        if (key !== _KB_BR_SB) {
+            var node = _saLibFindNode(key);
+            if (node && node.children && node.children.length) {
+                if (_kbBrOpen[key]) delete _kbBrOpen[key]; else _kbBrOpen[key] = true;
+            }
+        }
+        _kbBrSel = key;
+        _kbBrRender();
+        return;
+    }
+    var item = e.target.closest('.sad-item');
+    if (item && area.contains(item)) {
+        var kid = item.getAttribute('data-kid');
+        var found = _kbBrPool().find(function (k) { return String(k.id) === kid; });
+        if (found) showKnowledgeDetail(found.id);
+    }
+});
 // ============ V640: 节气文章一次性迁移（食养堂归档 → 公共文库 食谱→节气饮食→四季） ============
 // 全局函数，控制台/超管可调用；幂等：已存在同 kbSrcId 或同 title 的条目则跳过
 // 廿四节气近似表（固定月日，取 date 之前最近的一个节气 → 节气归季）
