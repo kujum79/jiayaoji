@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V663-20261124';
+        var APP_VER = 'V664-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -48466,6 +48466,26 @@ function renderKnowledgeCategorySide(activeId) {
     side.style.display = 'none';
     side.innerHTML = '';
 }
+// V664: 浏览态分类单一数据源——读取文库管理现行公共分类树
+function _kbLiveCatNode(catId) {
+    try {
+        var kc = getKnowledgeCategories();
+        var tree = (kc && kc.public && kc.public.tree) || [];
+        var name = CATEGORY_LABELS[catId];
+        var node = null;
+        tree.forEach(function (m) { if (!node && m && (m.id === catId || (name && m.name === name))) node = m; });
+        return node;
+    } catch (e) { return null; }
+}
+function _kbLiveTreeRows(catId) {
+    var node = _kbLiveCatNode(catId);
+    if (!node || !(node.children || []).length) return null;
+    return (node.children || []).map(function (c) {
+        if (!c) return null;
+        var nm = c.name || c.id;
+        return { icon: c.icon || '', label: nm, sub: nm, subId: c.id, leaves: (c.children || []).map(function (f) { return f && (f.name || f.id); }).filter(Boolean) };
+    }).filter(Boolean);
+}
 function renderCategoryView(catId) {
     // V663: 「食方」主分类（原食养）仅超管可见
     if (catId === 'shiyang' && (typeof isSuperAdmin !== 'function' || !isSuperAdmin())) catId = 'ingredient';
@@ -48473,7 +48493,8 @@ function renderCategoryView(catId) {
     currentCategoryId = catId;
     currentCategorySub = null;
     try { renderKnowledgeCategorySide(catId); } catch(e) { console.warn('renderKnowledgeCategorySide', e); }
-    const label = CATEGORY_LABELS[catId] || '知识';
+    var _liveNode = _kbLiveCatNode(catId); // V664: 标题跟随活树
+    const label = (_liveNode && _liveNode.name) || CATEGORY_LABELS[catId] || '知识';
     document.getElementById('categoryBrowseTitle').textContent = (catId === 'dining-out') ? label : (label + '分类');
     // 食养分类页：标题文字替换为"食养分类 ▼"下拉选择按钮；其他分类恢复标题文字
     const syTitleEl = document.getElementById('categoryBrowseTitle');
@@ -48511,16 +48532,14 @@ function renderCategoryView(catId) {
     }
 
     let treeData = CATEGORY_TREE_DATA[catId] || [];
-    if (catId === 'recipe') {
-        // V139: 食谱行 = 现行分类树子分类（家常/家宴/中式+自定义）在前，旧静态树独有子分类（外食/日式/韩流/欧美）兜底在后
-        var _liveSubs = _getLiveTreeLeaves('recipe');
-        if (_liveSubs) {
-            var _seenSub = {};
-            var _mergedRows = [];
-            Object.keys(_liveSubs).forEach(function(s){ _seenSub[s] = true; _mergedRows.push({ icon: '', label: s, sub: s }); });
-            (CATEGORY_TREE_DATA.recipe || []).forEach(function(r){ if (!_seenSub[r.sub]) _mergedRows.push(r); });
-            if (_mergedRows.length) treeData = _mergedRows;
-        }
+    // V664: 现行分类树（文库管理）优先——活树子分类在前，静态目录独有行兜底，全部分类生效
+    var _liveRows = _kbLiveTreeRows(catId);
+    if (_liveRows) {
+        var _seenSub = {};
+        var _mergedRows = [];
+        _liveRows.forEach(function (r) { _seenSub[r.sub] = true; _mergedRows.push(r); });
+        (CATEGORY_TREE_DATA[catId] || []).forEach(function (r) { if (!_seenSub[r.sub]) _mergedRows.push(r); });
+        if (_mergedRows.length) treeData = _mergedRows;
     }
     renderCategoryAllContent(catId, treeData);
 
@@ -54242,8 +54261,10 @@ function renderLibTabView() {
     // 分类 Tab 行：点击在文库页内直接渲染该分类内容（食榜 Tab 页内渲染四子榜）
     row.innerHTML = LIB_VIEW_TABS.filter(function (t) { return t.id !== 'shiyang' || (typeof isSuperAdmin === 'function' && isSuperAdmin()); }).map(function (t) { // V663: 食方 Tab 仅超管可见
         const act = t.id === _libCurTab;
+        var _tl = t.label; // V664: Tab 名跟随文库管理活树
+        try { var _nd = _kbLiveCatNode(t.id); if (_nd && _nd.name) _tl = _nd.name; } catch (e) {}
         const handler = t.id === 'shibang' ? '_libSelectShibang()' : '_libGoCategory(\'' + t.id + '\')';
-        return '<button onclick="' + handler + '" style="flex-shrink:0;border:none;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:' + (act ? '700' : '500') + ';cursor:pointer;background:' + (act ? '#C2410C' : '#FFF7ED') + ';color:' + (act ? 'white' : '#9A3412') + ';">' + t.label + '</button>';
+        return '<button onclick="' + handler + '" style="flex-shrink:0;border:none;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:' + (act ? '700' : '500') + ';cursor:pointer;background:' + (act ? '#C2410C' : '#FFF7ED') + ';color:' + (act ? 'white' : '#9A3412') + ';">' + _tl + '</button>';
     }).join('');
     // V632: 管理态主视图——食养 sy 子模式（左树点「食养」进入，含 V627 归档编辑胶囊）或分类编辑双栏；食榜不可达
     if (_inMgr) {
