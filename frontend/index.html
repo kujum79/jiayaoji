@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V666-20261124';
+        var APP_VER = 'V667-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -48397,7 +48397,7 @@ const KNOWLEDGE_TREE = {
         '外科食方': ['骨折创伤', '颈椎腰椎', '关节与骨退变', '术后恢复', '疮疡肛肠'],
         '小儿食方': ['小儿感冒发热', '小儿咳喘', '脾胃疳积', '生长发育', '小儿湿疮', '多动注意力'],
         '妇科食方': ['月经不调与痛经', '孕产调理', '催乳', '更年期'],
-        '五官皮肤食方': ['眼疾', '鼻渊鼻炎', '口咽牙齿', '皮肤脱发'],
+        '五官食方': ['眼疾', '鼻渊鼻炎', '口咽牙齿', '皮肤脱发'], // V667: 采纳改名
         '肿瘤食方': ['肿瘤饮食', '放化疗调理', '防癌养生'],
         '体质食方': ['气虚', '阳虚', '阴虚', '血虚', '痰湿', '湿热', '气郁', '特禀'],
         '药膳制品': ['药粥', '药饭', '药汤', '药酒', '药茶', '药点', '药糖药果'],
@@ -50275,7 +50275,7 @@ function _kbSubMatch(k, aliases) {
 // 再追加条目实际用过的细分类（cuisine）——保证每条条目都能在自己的细分类上被计数
 function _getMergedKnowledgeTree(catId, catLabel) {
     var staticTree = KNOWLEDGE_TREE[catLabel] || {};
-    if (catId !== 'recipe') return staticTree;
+    // V667: 全部分类都合并活树细分类（文库管理改名/新增节点后浏览端自动跟随），食谱再追加 cuisine
     var merged = {};
     Object.keys(staticTree).forEach(function(k){ merged[k] = staticTree[k].slice(); });
     var live = _getLiveTreeLeaves(catId);
@@ -50285,6 +50285,7 @@ function _getMergedKnowledgeTree(catId, catLabel) {
             merged[k] = _old.concat(live[k].filter(function(l){ return _old.indexOf(l) < 0; }));
         });
     }
+    if (catId !== 'recipe') return merged;
     try {
         (dietKnowledge || []).forEach(function(k) {
             if (k.mainCategory !== 'recipe') return;
@@ -57235,7 +57236,7 @@ var _KB_SHIFANG_CATS = [
     { id: '外科食方', icon: '🦴', kids: ['骨折创伤', '颈椎腰椎', '关节与骨退变', '术后恢复', '疮疡肛肠'] },
     { id: '小儿食方', icon: '🧒', kids: ['小儿感冒发热', '小儿咳喘', '脾胃疳积', '生长发育', '小儿湿疮', '多动注意力'] },
     { id: '妇科食方', icon: '🌸', kids: ['月经不调与痛经', '孕产调理', '催乳', '更年期'] },
-    { id: '五官皮肤食方', icon: '👁️', kids: ['眼疾', '鼻渊鼻炎', '口咽牙齿', '皮肤脱发'] },
+    { id: '五官食方', icon: '👁️', kids: ['眼疾', '鼻渊鼻炎', '口咽牙齿', '皮肤脱发'] }, // V667: 采纳用户改名「五官食方」
     { id: '肿瘤食方', icon: '🎗️', kids: ['肿瘤饮食', '放化疗调理', '防癌养生'] },
     { id: '体质食方', icon: '⚖️', kids: ['气虚', '阳虚', '阴虚', '血虚', '痰湿', '湿热', '气郁', '特禀'] },
     { id: '药膳制品', icon: '🍲', kids: ['药粥', '药饭', '药汤', '药酒', '药茶', '药点', '药糖药果'] },
