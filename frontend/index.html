@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V655-20261124';
+        var APP_VER = 'V656-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -49186,7 +49186,7 @@ function _kbAutoMigrateArchivesOnce() {
             .then(function () { return _kbMigrateJieqiArticles(); })
             .then(function () { return _kbSetupGeishiCuisine(); })
             .then(function () { return _kbMigrateKitchenArticles(); })
-            .then(function () { return _kbMigrateSolarGuides(); }) // V650: 节气食养指南入库（迁移完再 renderShiyangContent）
+            .then(function () { try { _kbRemoveSolarGuides(); } catch (e) {} }) // V656: 节气指南不再入文库（食养堂保留展示），清理历史条目与节点
             .then(function () { var _tl = _todayLesson(); if (_tl) _kbArchiveDailyLesson(_tl); }) // V654: 今日一课补入档（幂等）
             .then(function () { try { renderShiyangContent(); } catch (e) {} })
             .catch(function (e) { console.warn('[V649 自动归档迁移]', e); });
@@ -50275,8 +50275,7 @@ function _getMergedKnowledgeTree(catId, catLabel) {
 function renderCategoryAllContent(catId, treeData) {
     // 食文（文章型分类）：从 foodArticles 渲染文章卡片，不走知识卡片
     if (catId === 'article') { renderArticleCategoryContent(treeData); return; }
-    // 食养：六 Tab 专属页面（节气四季/人群/体质/日常/原则/食养食谱）
-    if (catId === 'shiyang') { renderShiyangContent(); return; }
+    // V656: 食养解除独立"食养文库"专属视图，回归普通分类渲染（内容主线在 食谱→食养）
     const emptyEl = document.getElementById('categoryContentEmpty');
     const listEl = document.getElementById('categoryContentList');
 
@@ -56774,8 +56773,7 @@ document.addEventListener('click', function (e) {
     if (row && area.contains(row)) {
         var key = row.getAttribute('data-key');
         if (!key) return;
-        // V632: 食养节点特殊路由——主区切食养 sy 视图（renderShiyangContent，含 V627 归档编辑胶囊），返回条回双栏
-        if (key === 'shiyang') { _saLibSyMode = true; renderLibTabView(); return; }
+        // V656: 食养不再切 sy 专属视图，按普通分类节点走双栏树
         var node = _saLibFindNode(key);
         if (node && node.children && node.children.length) {
             if (_saLibOpen[key]) delete _saLibOpen[key]; else _saLibOpen[key] = true;
@@ -57076,6 +57074,38 @@ function _kbMigrateSolarGuides() {
     }
     console.log('[V650 节气食养指南入库] 24 节气：新增 ' + migrated + '；跳过 ' + stats.skipped + '；失败 ' + stats.failed);
     return stats;
+}
+// ============ V656: 节气指南撤出饮食文库（食养堂保留展示） ============
+// 幂等：删除 食谱→食养→节气指南 的 24 条指南条目并移除「节气指南」节点；仅超管设备执行
+function _kbRemoveSolarGuides() {
+    try {
+        if (typeof isSuperAdmin !== 'function' || !isSuperAdmin()) return null;
+        var removed = 0;
+        for (var i = dietKnowledge.length - 1; i >= 0; i--) {
+            var k = dietKnowledge[i];
+            if (k && String(k.title || '').slice(-6) === '节气食养指南' &&
+                (k.leafCategory === '节气指南' || k.leafCategoryId === '节气指南')) { dietKnowledge.splice(i, 1); removed++; }
+        }
+        if (removed > 0) saveDietKnowledge();
+        var kc = getKnowledgeCategories();
+        var tree = (kc && kc.public && kc.public.tree) || [];
+        var recipe = null;
+        tree.forEach(function (t) { if (t && t.id === 'recipe') recipe = t; });
+        var syNode = null;
+        if (recipe && recipe.children) recipe.children.forEach(function (c) { if (c && (c.id === '食养' || c.name === '食养')) syNode = c; });
+        if (syNode && syNode.children) {
+            var before = syNode.children.length;
+            syNode.children = syNode.children.filter(function (c) { return c && c.id !== '节气指南' && c.name !== '节气指南'; });
+            if (syNode.children.length !== before) saveKnowledgeCategories(kc);
+        }
+        if (removed > 0 || (syNode && syNode.children.length !== (syNode.children.length + 1))) {
+            try { renderCategoryTree(); } catch (e) {}
+            try { renderCatalogManager(); } catch (e) {}
+            try { if (document.body.classList.contains('kb-admin-lib')) renderLibTabView(); } catch (e) {}
+        }
+        if (removed > 0) console.log('[V656 节气指南撤出文库] 删除 ' + removed + ' 条，移除「节气指南」节点');
+        return removed;
+    } catch (e) { console.warn('[V656 节气指南撤出文库]', e); return null; }
 }
 // ============ V641: 食谱→各地美食 分类建立 +「寻味天下」一次性迁移 ============
 // 全局函数，控制台/超管可调用；幂等：分类节点/细分类只补缺不重复不覆盖，文章按 kbSrcId 或同名跳过
