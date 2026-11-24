@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V644-20261124';
+        var APP_VER = 'V646-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -49923,10 +49923,18 @@ function handleSubCategoryClick(catId, sub) {
             !leafItems.some(leaf => k.title.includes(leaf) || (k.tags && k.tags.includes(leaf)) || (k.ingredient && k.ingredient.includes(leaf)))
         );
     } else {
+        const _subAlias = _kbSubAliasSet(catId, sub); // V646: id/名称双兼容
         matched = filterByVisibility(dietKnowledge).filter(k =>
-            k.mainCategory === catId && k.subCategory === sub &&
+            k.mainCategory === catId && _kbSubMatch(k, _subAlias) &&
             !leafItems.some(leaf => k.title.includes(leaf) || (k.tags && k.tags.includes(leaf)) || (k.ingredient && k.ingredient.includes(leaf)) || k.leafCategory === leaf || (k.cuisine && k.cuisine.includes(leaf)))
         );
+        // V646: 该子分类条目全部归属细分类（文件夹语义，如「各地美食」「节气饮食」）时，
+        // 直属列表为空则回退显示其下全部条目，避免点击行显示空白
+        if (!matched.length) {
+            matched = filterByVisibility(dietKnowledge).filter(k =>
+                k.mainCategory === catId && _kbSubMatch(k, _subAlias)
+            );
+        }
     }
 
     const listEl = document.getElementById('categoryContentList');
@@ -49989,6 +49997,34 @@ function _getLiveTreeLeaves(catId) {
     } catch (e) { return null; }
 }
 
+// V646: 浏览态子分类匹配 id/名称双兼容——迁移条目 subCategory 存节点 id（如 'gdfc'/'食养'），
+// 手建条目存名称（如 '肉食'），而分类页行/标签显示用名称，需按现行分类树把名称↔id 互为别名
+function _kbSubAliasSet(catId, sub) {
+    var set = [sub];
+    try {
+        var kc = getKnowledgeCategories();
+        ['public', 'family'].forEach(function (layer) {
+            ((kc && kc[layer] && kc[layer].tree) || []).forEach(function (m) {
+                if (!m || m.id !== catId) return;
+                (m.children || []).forEach(function (s) {
+                    if (!s) return;
+                    var nm = s.name || s.id || '';
+                    if (nm === sub && s.id && set.indexOf(s.id) < 0) set.push(s.id);
+                    if (s.id === sub && nm && set.indexOf(nm) < 0) set.push(nm);
+                });
+            });
+        });
+    } catch (e) {}
+    return set;
+}
+function _kbSubMatch(k, aliases) {
+    var v1 = k.subCategory, v2 = k.subCategoryId;
+    for (var i = 0; i < aliases.length; i++) {
+        if ((v1 && v1 === aliases[i]) || (v2 && v2 === aliases[i])) return true;
+    }
+    return false;
+}
+
 // V139: 分类页叶子映射 = 静态树打底，食谱分类用现行分类树覆盖（家常/家宴/中式+默认细分类+用户自定义），
 // 再追加条目实际用过的细分类（cuisine）——保证每条条目都能在自己的细分类上被计数
 function _getMergedKnowledgeTree(catId, catLabel) {
@@ -50045,10 +50081,11 @@ function renderCategoryAllContent(catId, treeData) {
         // V138: 在外就餐用全量数据计数——家庭层数据在公共层视图下子分类也要显示（点进条目列表仍按层过滤）
         const isSolar = catId === 'solar';
         const countSource = isDiningOut ? dietKnowledge : filterByVisibility(dietKnowledge);
+        const _subAlias = _kbSubAliasSet(catId, sub); // V646: id/名称双兼容
         const leafData = leafItems.map(leaf => {
             const leafCount = countSource.filter(k =>
                 k.mainCategory === catId &&
-                (isSolar ? k.subCategory === leaf : k.subCategory === sub) &&
+                (isSolar ? k.subCategory === leaf : _kbSubMatch(k, _subAlias)) &&
                 (k.title.includes(leaf) || (k.tags && k.tags.includes(leaf)) || (k.ingredient && k.ingredient.includes(leaf)) || k.leafCategory === leaf || (k.cuisine && k.cuisine.includes(leaf)))
             ).length;
             return { leaf, leafCount };
@@ -50101,9 +50138,10 @@ function handleCatTagClick(catId, sub, leaf) {
         );
         matched = [...bySub, ...others];
     } else {
+        const _subAlias = _kbSubAliasSet(catId, sub); // V646: id/名称双兼容
         matched = visFiltered.filter(k =>
             k.mainCategory === catId &&
-            k.subCategory === sub &&
+            _kbSubMatch(k, _subAlias) &&
             ((k.title && k.title.includes(leaf)) ||
              (k.tags && k.tags.includes(leaf)) ||
              (k.ingredient && k.ingredient.includes(leaf)) ||
@@ -53904,9 +53942,16 @@ function _libEmbedCategoryContent() {
     var header = document.querySelector('.category-browse-header');
     var content = document.getElementById('libTabContent');
     if (!body || !content) return;
-    // 清除食榜残留容器
+    // 清除食榜残留容器（V646: 连同双栏包裹层一起移除——此前只删 #libShibangArea，
+    // 包裹层里的 .sad-tree 食榜左树残留到其他 Tab 左侧）
     var sa = document.getElementById('libShibangArea');
     if (sa) sa.remove();
+    var _sbTree = content.querySelector('.sad-tree');
+    if (_sbTree) {
+        var _sbWrap = _sbTree.parentElement;
+        if (_sbWrap && _sbWrap.parentElement === content) _sbWrap.remove();
+        else _sbTree.remove();
+    }
     // V138: 层切换 tab（公共/家庭/分享）+ 家庭筛选 一起嵌入——否则 libtab 里无法切到家庭层看家庭数据
     var layerTabs = document.getElementById('categoryLayerTabs');
     var famFilter = document.getElementById('familyFilterCat');
