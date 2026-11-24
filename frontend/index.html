@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V643-20261123';
+        var APP_VER = 'V644-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -56367,8 +56367,9 @@ function _saLibItemsForPath(key) {
     var m = function (val, id, name) { return val === id || (!!name && val === name); };
     return all.filter(function (k) {
         if (!m(_saLibMainOf(k), mainId, mainName)) return false;
-        if (!subId) return true;
-        if (!leafId) return m(_saLibSubOf(k), subId, subName) || m(_saLibLeafOf(k), subId, subName);
+        // V644: 文件夹语义——点某级只显示该级直属条目，子分类内容只在点子分类时才显示
+        if (!subId) return !_saLibSubOf(k);
+        if (!leafId) return (m(_saLibSubOf(k), subId, subName) && !_saLibLeafOf(k)) || m(_saLibLeafOf(k), subId, subName);
         return m(_saLibSubOf(k), leafId, leafName) || (m(_saLibSubOf(k), subId, subName) && m(_saLibLeafOf(k), leafId, leafName));
     });
 }
@@ -56406,6 +56407,12 @@ function _saLibEnsureStyle() {
     document.head.appendChild(st);
 }
 // 左栏递归行：父节点点击展开/再点收起（同时选中），叶子点击选中
+// V644: 节点徽标=该节点及全部子孙的条目总数（文件夹惯例），与右栏直属列表口径分离
+function _saLibNodeTotal(n, key) {
+    var total = _saLibItemsForPath(key).length;
+    (n.children || []).forEach(function (c) { total += _saLibNodeTotal(c, key + '|' + c.id); });
+    return total;
+}
 function _saLibRowsHtml(nodes, parentKey, depth) {
     var html = '';
     sortByOrder(nodes || []).forEach(function (n) {
@@ -56414,7 +56421,8 @@ function _saLibRowsHtml(nodes, parentKey, depth) {
         var branch = kids.length > 0;
         var open = !!_saLibOpen[key];
         var sel = _saLibSel === key;
-        var cnt = _saLibItemsForPath(key).length;
+        // V644: 徽标计数=含子分类的总数（文件夹惯例）；右栏只显示直属条目
+        var cnt = _saLibNodeTotal(n, key);
         html += '<div class="sad-row' + (sel ? ' sel' : '') + '" data-key="' + escapeHtml(key) + '" style="padding-left:' + (7 + depth * 12) + 'px">'
             + (branch ? '<span class="sad-chev' + (open ? ' open' : '') + '">&#9656;</span>' : '<span style="width:9px;flex:0 0 9px;"></span>')
             + '<span>' + escapeHtml(n.name || n.id) + '</span>'
