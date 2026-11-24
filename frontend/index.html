@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V646-20261124';
+        var APP_VER = 'V647-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -56695,6 +56695,71 @@ async function _kbMigrateJieqiArticles() {
     }
     console.log('[V640 节气文章迁移] 归档源 ' + stats.total + ' 条：迁移 ' + migrated + '（春' + stats['春季'] + '/夏' + stats['夏季'] + '/秋' + stats['秋季'] + '/冬' + stats['冬季'] + '，其中无日期归冬 ' + stats.undated + '）；跳过 ' + stats.skipped + '；失败 ' + stats.failed);
     showToast('节气文章迁移完成：迁移 ' + migrated + ' 篇，跳过 ' + stats.skipped + ' 篇');
+    return stats;
+}
+// ============ V647: 「厨房技巧」归档迁移（食养›节气食养板块折叠显示中剩余未迁的 7 篇） ============
+// 全局函数，控制台/超管可调用；幂等：按 kbSrcId 或同名跳过。目标：食谱→食养→对应季节（与 V640 同构）
+async function _kbMigrateKitchenArticles() {
+    if (!requireSuperAdmin()) return null;
+    var stats = { total: 0, 春季: 0, 夏季: 0, 秋季: 0, 冬季: 0, skipped: 0, failed: 0, undated: 0 };
+    try { await _fhLoadServerArchive(); } catch (e) {}
+    var pool = [];
+    try {
+        pool = _fhArchiveAll().filter(function (a) {
+            return a && a.title && String(a.category || '').trim() === '厨房技巧';
+        });
+    } catch (e) { showToast('归档数据读取失败：' + (e.message || e)); return null; }
+    stats.total = pool.length;
+    var migrated = 0;
+    var _ctx = getCurrentUserContext();
+    for (var i = 0; i < pool.length; i++) {
+        var a = pool[i];
+        try {
+            var dup = dietKnowledge.some(function (k) {
+                return k && (String(k.kbSrcId || '') === String(a.id) || String(k.title || '') === String(a.title || ''));
+            });
+            if (dup) { stats.skipped++; continue; }
+            var season = _kbSeasonByJieqiDate(a.date) || _kbSeasonByTitleWords(a.title);
+            if (!season) { season = '冬季'; stats.undated++; }
+            var content = _kbStripImageRefs(String(a.content || ''));
+            dietKnowledge.unshift({
+                id: nextKnowledgeId++,
+                type: 'recipe',
+                title: a.title,
+                source: '用户添加',
+                content: content || '[图片]',
+                image: '',
+                images: [],
+                categoryId: 'recipe',
+                subCategoryId: '食养',
+                leafCategoryId: season,
+                mainCategory: 'recipe',
+                subCategory: '食养',
+                leafCategory: season,
+                createdAt: Date.now(),
+                sourceType: 'migrated',
+                tags: ['厨房技巧', String(a.date || '')],
+                kbSrcId: a.id,
+                sceneTags: [],
+                auditStatus: '',
+                visibility: 'family',
+                scope: 'family',
+                layer: 'public',
+                createdBy: _ctx.id || 'unknown',
+                shareScope: 'none'
+            });
+            stats[season]++;
+            migrated++;
+        } catch (e) { stats.failed++; }
+    }
+    if (migrated) {
+        nextKnowledgeId = dietKnowledge.reduce(function (mx, k) { return Math.max(mx, Number(k.id) + 1 || 0); }, nextKnowledgeId);
+        saveDietKnowledge();
+        logAdminAction('厨房技巧归档迁移', '迁移 ' + migrated + ' 篇（秋' + stats['秋季'] + '/冬' + stats['冬季'] + '），跳过 ' + stats.skipped + '，失败 ' + stats.failed);
+        try { if (document.body.classList.contains('kb-admin-lib')) renderLibTabView(); } catch (e) {}
+    }
+    console.log('[V647 厨房技巧迁移] 归档源 ' + stats.total + ' 条：迁移 ' + migrated + '（秋' + stats['秋季'] + '/冬' + stats['冬季'] + '/无日期归冬 ' + stats.undated + '）；跳过 ' + stats.skipped + '；失败 ' + stats.failed);
+    showToast('厨房技巧迁移完成：迁移 ' + migrated + ' 篇，跳过 ' + stats.skipped + ' 篇');
     return stats;
 }
 // ============ V641: 食谱→各地美食 分类建立 +「寻味天下」一次性迁移 ============
