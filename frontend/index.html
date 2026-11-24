@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V648-20261124';
+        var APP_VER = 'V649-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -49033,10 +49033,30 @@ function _syPaneHtml(libItems, curTerm) {
     html += dietDisclaimerFooterHtml(_shiyangDisclaimerKind(segs));
     return html;
 }
+// V649: 超管设备每日自动收编归档迁移（三个迁移函数均幂等，重复执行只跳过不重复建条目）——
+// 解决"迁移只在某台设备跑过、其他设备本地文库没有迁移条目、食养板块仍显示归档原文"的跨端不一致问题
+var _KB_AUTOMIG_DONE = '';
+function _kbAutoMigrateArchivesOnce() {
+    try {
+        if (typeof isSuperAdmin !== 'function' || !isSuperAdmin()) return;
+        var d = new Date().toISOString().slice(0, 10);
+        if (_KB_AUTOMIG_DONE === d) return;
+        if (lsGet('kbAutoMigDay') === d) { _KB_AUTOMIG_DONE = d; return; }
+        _KB_AUTOMIG_DONE = d;
+        lsSet('kbAutoMigDay', d);
+        Promise.resolve()
+            .then(function () { return _kbMigrateJieqiArticles(); })
+            .then(function () { return _kbSetupGeishiCuisine(); })
+            .then(function () { return _kbMigrateKitchenArticles(); })
+            .then(function () { try { renderShiyangContent(); } catch (e) {} })
+            .catch(function (e) { console.warn('[V649 自动归档迁移]', e); });
+    } catch (e) {}
+}
 function renderShiyangContent() {
     const emptyEl = document.getElementById('categoryContentEmpty');
     const listEl = document.getElementById('categoryContentList');
     if (!listEl) return;
+    _kbAutoMigrateArchivesOnce(); // V649: 打开食养页即触发每日一次自动收编（异步，不阻塞本次渲染）
     emptyEl.style.display = 'none';
     listEl.style.display = 'block';
 
