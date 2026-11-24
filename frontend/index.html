@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V660-20261124';
+        var APP_VER = 'V661-20261124';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -49172,6 +49172,7 @@ function _kbAutoMigrateArchivesOnce() {
             .then(function () { try { _kbRemoveSolarGuides(); } catch (e) {} }) // V656: 节气指南不再入文库（食养堂保留展示），清理历史条目与节点
             .then(function () { try { _kbFixRenqunSub(); } catch (e) {} }) // V657: 修复被改写的「人群配餐」子分类名
             .then(function () { try { _kbPruneShiyangSubs(); } catch (e) {} }) // V658: 食养下旧子分类节点清理
+            .then(function () { try { _kbFixShiyangSub(); } catch (e) {} }) // V661: 季节条目被误标食方→改回食养
             .then(function () { var _tl = _todayLesson(); if (_tl) _kbArchiveDailyLesson(_tl); }) // V654: 今日一课补入档（幂等）
             .then(function () { try { renderShiyangContent(); } catch (e) {} })
             .catch(function (e) { console.warn('[V649 自动归档迁移]', e); });
@@ -57135,6 +57136,23 @@ function _kbPruneShiyangSubs() {
         return removed;
     } catch (e) { return 0; }
 }
+// V661: 数据修复——食谱下季节条目曾被误重打为 subCategory='食方'（食方仅允许 leaf 为症状/无季节），改回「食养」
+function _kbFixShiyangSub() {
+    try {
+        if (typeof isSuperAdmin !== 'function' || !isSuperAdmin()) return 0;
+        var SEASONS = ['春季', '夏季', '秋季', '冬季'];
+        var n = 0;
+        (dietKnowledge || []).forEach(function (k) {
+            if (k && k.mainCategory === 'recipe' && String(k.subCategory || '') === '食方' && SEASONS.indexOf(String(k.leafCategory || '')) >= 0) {
+                k.subCategory = '食养';
+                k.subCategoryId = '食养';
+                n++;
+            }
+        });
+        if (n > 0) { saveDietKnowledge(); console.log('[V661 食养子分类修复] 重打 ' + n + ' 条'); }
+        return n;
+    } catch (e) { return 0; }
+}
 // ============ V641: 食谱→各地美食 分类建立 +「寻味天下」一次性迁移 ============
 // 全局函数，控制台/超管可调用；幂等：分类节点/细分类只补缺不重复不覆盖，文章按 kbSrcId 或同名跳过
 // 13 细分类固定中文 id；判区关键词表（全部 ≥2 字避免误命中；顺序即优先级，港澳台最先防被华南/华东抢判）
@@ -58177,9 +58195,19 @@ function _healOrphanSubCategories() {
         var main = null;
         for (var i = 0; i < tree.length; i++) { if (tree[i].id === k.mainCategory || tree[i].name === k.category) { main = tree[i]; break; } }
         if (!main) return;
-        var names = (main.children || []).map(function (c) { return c.name; });
         var val = String(k.subCategory || '');
-        if (!val || names.indexOf(val) >= 0) return;
+        if (!val) return;
+        // V661: 防跨类误伤——该值只要是任一层级现行节点（任意主分类下 id/名称）就不算孤儿，不回填
+        var known = false;
+        tree.forEach(function (mm) {
+            (mm.children || []).forEach(function (s) {
+                if (s && (s.id === val || s.name === val)) known = true;
+                (s && s.children || []).forEach(function (f) { if (f && (f.id === val || f.name === val)) known = true; });
+            });
+        });
+        if (known) return;
+        var names = (main.children || []).map(function (c) { return c.name; });
+        if (names.indexOf(val) >= 0) return;
         var best = '', bestLen = 1, tie = false;
         names.forEach(function (nm) {
             var l = cpLen(val, String(nm || ''));
