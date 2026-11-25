@@ -147,7 +147,7 @@
             position: absolute;
             inset: 0;
             /* V44: 顶部橙色渐变缩到 100px，下方过渡到米白 */
-            background: linear-gradient(180deg, #FF7F00 0%, #FFB347 70px, #FFF7ED 130px) #FFF7ED; /* V677: 顶部渐变加深(橘红→浅橙)，白色图标文字对比更强 */
+            background: linear-gradient(180deg, #FF6A00 0%, #FFA236 70px, #FFF7ED 130px) #FFF7ED; /* V678: 还原t2图标并将顶部渐变再适度加深 */
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -4390,7 +4390,7 @@ async function _submitFeedback() {
             <!-- 左列：LOGO + 品牌名 -->
             <div class="home-brand-col" onclick="switchHomePage()" title="点击回到首页" style="cursor:pointer;">
                 <!-- V675: 做减法——去掉图标与文字的圆角背景方块，透明底锅图形+纯白"家肴记"大字直接浮在橙色渐变上；副标题随文字图一并移除 -->
-                <img id="homeLogo" src="images/logo_icon_t3.png?v=1" alt="家肴记" loading="eager" decoding="async" onerror="window._logoFallback && _logoFallback('onerror');"
+                <img id="homeLogo" src="images/logo_icon_t2.png?v=1" alt="家肴记" loading="eager" decoding="async" onerror="window._logoFallback && _logoFallback('onerror');"
                      style="display:block;width:34px;height:34px;flex-shrink:0;">
                 <!-- V676: "家肴记"恢复原字形——取文字标示图裁掉副标题并抠透明底，替代系统字体文字 -->
                 <img src="images/logo_text_jz.png?v=1" alt="家肴记" loading="eager" decoding="async"
