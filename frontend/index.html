@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V671-20261125';
+        var APP_VER = 'V672-20261125';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4389,12 +4389,14 @@ async function _submitFeedback() {
         <div id="homeTopNav" style="display:flex;align-items:flex-start;padding:8px 4px 0;width:100%;max-width:430px;margin:0 auto;">
             <!-- 左列：LOGO + 品牌名 -->
             <div class="home-brand-col" onclick="switchHomePage()" title="点击回到首页" style="cursor:pointer;">
-                <!-- V671: 裁掉图内"家肴记/记录家的味道"文字（原图上方64%为锅图形），图形放大显示52px；文字移到图标右侧 -->
+                <!-- V672: 换用新图标（白锅+筷子+爱心，橙底）；112% 微缩放并上移取景，裁掉右下角"百度AI生成"水印 -->
                 <div id="homeLogo" style="width:52px;height:52px;border-radius:14px;overflow:hidden;flex-shrink:0;background:#F97316;box-shadow:0 2px 8px rgba(217,119,6,0.25);">
-                    <img src="images/logo_home.jpg?v=1" alt="家肴记" loading="eager" decoding="async" onerror="window._logoFallback && _logoFallback('onerror');"
-                         style="display:block;width:100%;height:162%;object-fit:cover;object-position:50% 30%;">
+                    <img src="images/logo_icon_v2.jpg?v=1" alt="家肴记" loading="eager" decoding="async" onerror="window._logoFallback && _logoFallback('onerror');"
+                         style="display:block;width:112%;height:112%;object-fit:cover;object-position:50% 33%;">
                 </div>
-                <span style="font-size:20px;font-weight:800;color:#FFFFFF;letter-spacing:1.5px;line-height:1;white-space:nowrap;font-family:'PingFang SC','HarmonyOS Sans SC','Microsoft YaHei',sans-serif;text-shadow:0 1px 3px rgba(154,52,18,0.25);">家肴记</span>
+                <!-- V672: "家肴记"文字改用用户提供的文字标示图（含"记录家的味道"），高34px -->
+                <img src="images/logo_text_v2.jpg?v=1" alt="家肴记 记录家的味道" loading="eager" decoding="async"
+                     style="display:block;height:34px;width:auto;border-radius:8px;flex-shrink:0;">
             </div>
             <div class="home-topnav-right">
                 <!-- 行1：图标行（V134 首页精简：食帮/食榜入口已移入食知文库，📚👤 margin-left:auto 靠最右） -->
