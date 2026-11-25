@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V680-20261125';
+        var APP_VER = 'V681-20261125';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -277,12 +277,12 @@
             background: white;
             border-radius: 16px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-            padding: 16px;
+            padding: 12px; /* V681: 首页卡片内边距 16→12px 统一收紧 */
             width: 100%;
-            margin: 10px 0 0 0; /* V140: 卡片间距 16→10px，为食养堂与输入框之间让出间隙 */
+            margin: 8px 0 0 0; /* V681: 卡片间距 10→8px 统一收紧 */
             box-sizing: border-box;
         }
-        .home-card-title { font-size: 16px; font-weight: 700; color: #EA580C; margin-bottom: 10px; } /* V45: 与"晚餐"字号统一 16px; V679: 字重统一 700 */
+        .home-card-title { font-size: 16px; font-weight: 700; color: #EA580C; margin-bottom: 8px; } /* V681: 标题与内容间距 10→8px */
         /* V405: 傍晚「寻味天下」改为左图右文（V413：废弃 200px 大图背景叠加文字；V414：缩略图 80×80，「寻味天下」改为图片左上角角标） */
         .daily-tip-card { min-height: 110px; overflow: hidden; }
         .dt-recipe-row { display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: #fff; border: 1px solid #FDE7C8; border-radius: 14px; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
@@ -297,12 +297,12 @@
         .dt-recipe-more { align-self: flex-end; margin-top: auto; border: 1px solid #FDE7C8; background: #FFF7ED; color: #F97316; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 2px 8px; line-height: 1.6; cursor: pointer; }
         .dt-recipe-more:hover { background: #FFEDD5; }
         /* V246: 食邦邻聚·首页公告栏 */
-        .community-bar-card { padding: 12px 14px; cursor: pointer; }
+        .community-bar-card { padding: 12px; cursor: pointer; } /* V681: 与首页卡片内边距统一 12px */
         .community-bar-text { flex: 1; min-width: 0; font-size: 12px; color: #4B5563; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         /* V240: 订阅按钮三态（V242 起并入标题行右侧，原 .dt-sub-row 已移除） */
         /* V242: 订阅按钮位置：小喇叭右侧 */
         /* V140: 标题行 flex——左侧标题、右侧"读完整/收藏"按钮贴右边框；换一条已移除 */
-        .dt-head { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; color: #EA580C; padding-bottom: 8px; border-bottom: 1px solid #F3F4F6; margin-bottom: 8px; } /* V679: 14→16px 与首页卡片标题统一 */
+        .dt-head { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; color: #EA580C; padding-bottom: 6px; border-bottom: 1px solid #F3F4F6; margin-bottom: 6px; } /* V681: 食养堂标题行下间距 8+8→6+6px */
         .dt-head-btns { margin-left: auto; display: flex; gap: 6px; flex: 0 0 auto; }
         /* V385: 食养堂标题栏「食神盲盒」入口 */
         .dt-quiz-btn { border: none; cursor: pointer; flex: 0 0 auto; font-size: 11px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #FB923C, #F97316); border-radius: 999px; padding: 3px 9px; line-height: 1.4; white-space: nowrap; box-shadow: 0 2px 6px rgba(249, 115, 22, 0.35); animation: dtQuizFloat 2.4s ease-in-out infinite; }
@@ -4422,7 +4422,7 @@ async function _submitFeedback() {
         <!-- 内容滚动区（V38）：食材卡/食记卡，固定高度内滚动，不与输入框/底部导航重叠 -->
         <div class="home-scroll" id="homeScroll">
         <!-- 食材卡片（V45）：标题+食谱推荐下拉（替代三按钮）+ 纯文本食材列表（数据源 fridgeItems） -->
-        <div class="home-card" id="homeFridgeCard" style="margin-top:6px;">
+        <div class="home-card" id="homeFridgeCard" style="margin-top:8px;">
             <div class="home-card-title" style="display:flex;align-items:center;gap:4px;">
                 <span>家中食材</span>
                 <!-- V463: ＋ 移到「家中食材」标题右侧 -->
@@ -4459,7 +4459,7 @@ async function _submitFeedback() {
             <div class="hd-body" id="hdBody"></div>
         </div>
         <!-- V464: 健康管家入口（食记卡下方、食养堂上方） -->
-        <div class="home-card" id="homeHealthButlerCard" onclick="openSpecialPlanBoard()" style="background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FDBA74;border-radius:14px;padding:12px;margin:10px 0;display:flex;gap:10px;align-items:center;cursor:pointer;"></div>
+        <div class="home-card" id="homeHealthButlerCard" onclick="openSpecialPlanBoard()" style="background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1px solid #FDBA74;border-radius:14px;padding:12px;margin:8px 0 0;display:flex;gap:10px;align-items:center;cursor:pointer;"></div>
         <!-- V139: 食养堂·今日一课卡片（食记卡片下方、试问 chips 上方） -->
         <div class="home-card daily-tip-card" id="homeDailyTipCard"></div>
         <!-- V246: 食邦邻聚·公告栏（食养堂卡片下方） -->
