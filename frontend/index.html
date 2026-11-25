@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V685-20261126';
+        var APP_VER = 'V685b-20261126';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -3471,6 +3471,11 @@
     /* 日期行右侧动作按钮组：窄屏自动紧凑，保证日期区不被挤压成竖排 */
     .diary-top-actions { margin-left:auto; display:flex; align-items:center; gap:6px; flex-shrink:0; }
     .diary-top-actions button { background:#FFF7ED; color:#F97316; border:1px solid #FED7AA; border-radius:8px; padding:4px 10px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; }
+    /* V685: 适老化档三餐计划日期导航保险——箭头/按钮顶对齐第1行，避免与第2行「今天」贴挤；提示条宽度收紧 */
+    html[data-ef] .diary-date-nav { align-items:flex-start; }
+    html[data-ef] .diary-nav-btn { margin-top:2px; }
+    html[data-ef] .diary-top-actions { margin-top:2px; }
+    html[data-ef] .diary-weather-bar { max-width:128px; }
     @media (max-width: 430px) {
         .diary-date-nav { flex-wrap: nowrap; gap:5px; padding-bottom:2px; }
         .diary-nav-btn { padding:3px 5px; font-size:13px; }
