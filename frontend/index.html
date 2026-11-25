@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V673-20261125';
+        var APP_VER = 'V674-20261125';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4389,10 +4389,10 @@ async function _submitFeedback() {
         <div id="homeTopNav" style="display:flex;align-items:flex-start;padding:8px 4px 0;width:100%;max-width:430px;margin:0 auto;">
             <!-- 左列：LOGO + 品牌名 -->
             <div class="home-brand-col" onclick="switchHomePage()" title="点击回到首页" style="cursor:pointer;">
-                <!-- V673: 图标高度与右侧文字标示平齐(34px)；仍微缩放取景裁掉右下角"百度AI生成"水印 -->
+                <!-- V674: 换用去水印后的 v3 图标，按原图完整显示（不再放大裁切） -->
                 <div id="homeLogo" style="width:34px;height:34px;border-radius:9px;overflow:hidden;flex-shrink:0;background:#F97316;box-shadow:0 2px 6px rgba(217,119,6,0.25);">
-                    <img src="images/logo_icon_v2.jpg?v=1" alt="家肴记" loading="eager" decoding="async" onerror="window._logoFallback && _logoFallback('onerror');"
-                         style="display:block;width:112%;height:112%;object-fit:cover;object-position:50% 33%;">
+                    <img src="images/logo_icon_v3.jpg?v=1" alt="家肴记" loading="eager" decoding="async" onerror="window._logoFallback && _logoFallback('onerror');"
+                         style="display:block;width:100%;height:100%;object-fit:cover;">
                 </div>
                 <!-- V672: "家肴记"文字改用用户提供的文字标示图（含"记录家的味道"），高34px -->
                 <img src="images/logo_text_v2.jpg?v=1" alt="家肴记 记录家的味道" loading="eager" decoding="async"
