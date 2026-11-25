@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V675-20261125';
+        var APP_VER = 'V676-20261125';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4392,7 +4392,9 @@ async function _submitFeedback() {
                 <!-- V675: 做减法——去掉图标与文字的圆角背景方块，透明底锅图形+纯白"家肴记"大字直接浮在橙色渐变上；副标题随文字图一并移除 -->
                 <img id="homeLogo" src="images/logo_icon_t2.png?v=1" alt="家肴记" loading="eager" decoding="async" onerror="window._logoFallback && _logoFallback('onerror');"
                      style="display:block;width:34px;height:34px;flex-shrink:0;">
-                <span style="font-size:20px;font-weight:800;color:#FFFFFF;letter-spacing:1.5px;line-height:1;white-space:nowrap;font-family:'PingFang SC','HarmonyOS Sans SC','Microsoft YaHei',sans-serif;text-shadow:0 1px 3px rgba(154,52,18,0.25);">家肴记</span>
+                <!-- V676: "家肴记"恢复原字形——取文字标示图裁掉副标题并抠透明底，替代系统字体文字 -->
+                <img src="images/logo_text_jz.png?v=1" alt="家肴记" loading="eager" decoding="async"
+                     style="display:block;height:24px;width:auto;flex-shrink:0;">
             </div>
             <div class="home-topnav-right">
                 <!-- 行1：图标行（V134 首页精简：食帮/食榜入口已移入食知文库，📚👤 margin-left:auto 靠最右） -->
