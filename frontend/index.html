@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V683-20261125';
+        var APP_VER = 'V684-20261125';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -35611,7 +35611,7 @@ function _dtRenderCard(tip) {
     var subBtnHtml = '<button class="dt-btn" data-substate="' + _subState + '" style="white-space:nowrap;line-height:1.3;font-size:11px;padding:3px 9px;border-radius:9px;margin-left:4px;' + _subMeta.style + '"'
         + ' onclick="event.stopPropagation(); openSubscriptionModal(\'' + _subState + '\')">' + _subMeta.text + '</button>';
     var isMember = (typeof isFoodMember === 'function') ? isFoodMember() : false;
-    var headHtml = '<div class="dt-head"><span onclick="_fhOpenHall()" style="cursor:pointer;">📚 食养堂</span>'
+    var headHtml = '<div class="dt-head"><span onclick="_fhOpenHall()" style="cursor:pointer;">📚 食养堂<span style="color:#9CA3AF;font-weight:600;margin-left:3px;">›</span></span>' /* V684: 标题可点+灰色小箭头，跳食养堂专属页；右侧按钮区 stopPropagation 互不冲突 */
         + '<span class="dt-head-btns" onclick="event.stopPropagation()">'
         + adminCtl
         + '<button class="dt-quiz-btn" onclick="openFoodGodQuiz()" title="每日食神问答">🎮 食神盲盒</button>'
@@ -35689,7 +35689,7 @@ function _dtRenderDegraded(latestDate) {
         var d = String(latestDate).slice(5).replace('-', ' 月 ') + ' 日';
         sub = '今日内容暂未更新 · 最近更新 ' + d;
     }
-    el.innerHTML = '<div class="dt-head"><span>📚 食养堂</span></div>'
+    el.innerHTML = '<div class="dt-head"><span onclick="_fhOpenHall()" style="cursor:pointer;">📚 食养堂<span style="color:#9CA3AF;font-weight:600;margin-left:3px;">›</span></span></div>' /* V684: 降级态标题同样可点 */
         + '<div style="cursor:default;">'
         + '<div class="dt-degraded">' + sub + '</div>'
         + '</div>';
