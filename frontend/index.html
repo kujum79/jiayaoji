@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V668-20261124';
+        var APP_VER = 'V669-20261125';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4388,19 +4388,17 @@ async function _submitFeedback() {
         <!-- 顶部（V134）：LOGO+家肴记 横排左列；右侧=[📚][👤/家庭名] 靠右（📚 紧贴家庭名左侧） -->
         <div id="homeTopNav" style="display:flex;align-items:flex-start;padding:8px 4px 0;width:100%;max-width:430px;margin:0 auto;">
             <!-- 左列：LOGO + 品牌名 -->
-            <div class="home-brand-col">
-                <img src="images/logo_home.jpg?v=1"
-                     class="home-topnav-logo"
-                     id="homeLogo"
-                     alt="家肴记"
-                     width="48"
-                     height="48"
-                     loading="eager"
-                     decoding="async"
-                     onerror="this.style.visibility='hidden';"
-                     onclick="switchHomePage()"
-                     title="点击回到首页">
-                <!-- V652: 新标志图自带"家肴记"字样，右侧文字移除 -->
+            <div class="home-brand-col" onclick="switchHomePage()" title="点击回到首页" style="cursor:pointer;">
+                <!-- V669: 去掉白底方框——纯白炒锅图标(高30px) + 右侧"家肴记"白字(20px 加粗圆润)，垂直居中、间距8px -->
+                <svg width="36" height="30" viewBox="0 0 44 34" fill="#fff" style="display:block;flex-shrink:0;" aria-hidden="true">
+                    <path d="M6 15h30c0 9-6.7 15-15 15S6 24 6 15z"/>
+                    <rect x="20.6" y="10.4" width="2.8" height="4.8" rx="1.4"/>
+                    <circle cx="22" cy="8.2" r="3.2"/>
+                    <rect x="36.2" y="13.2" width="7.2" height="3.4" rx="1.7" transform="rotate(-8 36.2 13.2)"/>
+                </svg>
+                <span style="font-size:20px;font-weight:800;color:#FFFFFF;letter-spacing:1.5px;line-height:1;white-space:nowrap;font-family:'PingFang SC','HarmonyOS Sans SC','Microsoft YaHei',sans-serif;text-shadow:0 1px 3px rgba(154,52,18,0.25);">家肴记</span>
+                <img id="homeLogo" src="images/logo_home.jpg?v=1" alt="家肴记" style="display:none;" loading="eager" decoding="async">
+                <!-- V652: 新标志图自带"家肴记"字样，右侧文字移除 → V669: 图标与文字分离重排，img 隐藏仅保留给 LOGO 自愈脚本引用 -->
             </div>
             <div class="home-topnav-right">
                 <!-- 行1：图标行（V134 首页精简：食帮/食榜入口已移入食知文库，📚👤 margin-left:auto 靠最右） -->
