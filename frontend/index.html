@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V682-20261125';
+        var APP_VER = 'V683-20261125';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -292,10 +292,9 @@
         @media (hover: hover) { .dt-recipe-row:hover .dt-recipe-thumb { transform: scale(1.05); } }
         .dt-recipe-tag { position: absolute; left: 4px; top: 4px; z-index: 2; font-size: 9px; font-weight: 700; color: #4B5563; background: rgba(255, 255, 255, 0.92); border-radius: 6px; padding: 1px 5px; line-height: 1.5; white-space: nowrap; }
         .dt-recipe-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-        .dt-recipe-title { font-size: 13px; font-weight: 700; color: #1F2937; /* V682: 15→13px 首页主正文统一 */ line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .dt-recipe-summary { font-size: 13px; color: #9CA3AF; /* V682: 12→13px */ line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .dt-recipe-more { align-self: flex-end; margin-top: auto; border: 1px solid #FDE7C8; background: #FFF7ED; color: #F97316; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 2px 8px; line-height: 1.6; cursor: pointer; }
-        .dt-recipe-more:hover { background: #FFEDD5; }
+        .dt-recipe-title { font-size: 13px; font-weight: 700; color: #1F2937; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; } /* V683: 标题限 1 行 */
+        .dt-recipe-summary { font-size: 13px; color: #9CA3AF; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; } /* V683: 摘要限 3 行，行尾内联「往期寻味」 */
+        .dt-recipe-more { display: inline; margin-left: 6px; color: #F97316; font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; } /* V683: 去边框胶囊，纯文字内联在摘要第 3 行末尾 */
         /* V246: 食邦邻聚·首页公告栏 */
         .community-bar-card { padding: 12px; cursor: pointer; } /* V681: 与首页卡片内边距统一 12px */
         .community-bar-text { flex: 1; min-width: 0; font-size: 13px; color: #4B5563; /* V682: 12→13px */ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -35656,7 +35655,10 @@ function _dtRenderCard(tip) {
         if (recipe.ingredients && recipe.ingredients.length) {
             rIntro += ' 主料：' + recipe.ingredients.slice(0, 3).join('、') + '。';
         }
-        // V413: 左图右文——左侧缩略图，右侧「标题 / 摘要」；V414：图片 80×80，标签贴图片左上角，右下角加「往期寻味」入口
+        // V683: 摘要按 3 行容量截断（约 50 字），保证行内「往期寻味」始终显示在第 3 行末尾不被裁掉
+        rIntro = String(rIntro || '').replace(/\s+/g, ' ').trim();
+        if (rIntro.length > 50) rIntro = rIntro.slice(0, 50) + '…';
+        // V413: 左图右文——左侧缩略图，右侧「标题 / 摘要」；V414：图片 80×80，标签贴图片左上角；V683：「往期寻味」纯文字内联摘要第 3 行末尾
         recipeCard = '<div class="dt-recipe-row" onclick="_fhOpenCardRecipe()">'
             + '<div class="dt-recipe-thumb-box">'
             + (recipe.coverImage
@@ -35666,8 +35668,7 @@ function _dtRenderCard(tip) {
             + '</div>'
             + '<div class="dt-recipe-info">'
             + '<div class="dt-recipe-title">' + escapeHtml(recipe.title) + '</div>'
-            + '<div class="dt-recipe-summary">' + escapeHtml(rIntro) + '</div>'
-            + '<button type="button" class="dt-recipe-more" onclick="event.stopPropagation();_fhOpenRecipeArchive()">往期寻味 ›</button>'
+            + '<div class="dt-recipe-summary">' + escapeHtml(rIntro) + '<span class="dt-recipe-more" onclick="event.stopPropagation();_fhOpenRecipeArchive()">往期寻味 ›</span></div>'
             + '</div></div>';
     } else {
         recipeCard = '<div style="border-radius:14px;padding:11px 12px;background:#FFFBF3;border:1px dashed #FDE7C8;">'
