@@ -16674,7 +16674,19 @@ DEFAULT_DIET_KNOWLEDGE = DEFAULT_DIET_KNOWLEDGE.map(function(k) {
     });
 });
 
-let dietKnowledge = JSON.parse(lsGet('dietKnowledge')) || [...DEFAULT_DIET_KNOWLEDGE];
+// V698: 种子合并守卫——确保每个家庭都有 DEFAULT_DIET_KNOWLEDGE 的 32 条 public 种子
+// 之前的 bug：新家庭（如 MS2BQ9XG）lsGet 返回 9 条（营养配餐迁移 shiyang）→ || 跳过 fallback
+// → DEFAULT 32 条永远缺失；三仁佳欢因为早期历史原因 lsGet 直接返回完整种子所以没问题
+let dietKnowledge = JSON.parse(lsGet('dietKnowledge')) || [];
+if (typeof DEFAULT_DIET_KNOWLEDGE !== 'undefined' && DEFAULT_DIET_KNOWLEDGE.length > 0) {
+    var _existingIds = new Set(dietKnowledge.map(function(k) { return k && k.id; }));
+    var _missing = DEFAULT_DIET_KNOWLEDGE.filter(function(k) { return k && k.id && !_existingIds.has(k.id); });
+    if (_missing.length > 0) {
+        dietKnowledge = dietKnowledge.concat(_missing);
+        console.log('[文库种子] 补充 ' + _missing.length + ' 条缺失的 public 种子（当前共 ' + dietKnowledge.length + ' 条）');
+        try { lsSet('dietKnowledge', JSON.stringify(dietKnowledge)); } catch(e) {}
+    }
+}
 // 迁移：给已有 dietKnowledge 条目补 nutrition/suitableFor（必须在 dietKnowledge 初始化后执行）
 migrateNutritionToKnowledge();
 // 迁移：食材条目数据结构 V1（aliases/knowledge/funFact/nutrition/pairings/imagePrompt，只执行一次）
