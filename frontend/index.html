@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V696-20261126';
+        var APP_VER = 'V697-20261126';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -13932,6 +13932,24 @@ async function cloudBackupPush() {
                 var v = lsGet(dirty[i]);
                 if (v === null || typeof v === 'undefined') continue;
                 rows.push({ family_id: uuid, key: dirty[i], value: v, updated_at: new Date().toISOString() });
+            }
+            // V697: 文库缩水守卫——dietKnowledge 本地条目不足云端一半时拒绝推送该键（防污染空库覆盖云端完整库，D4-05）
+            for (var _di = rows.length - 1; _di >= 0; _di--) {
+                if (rows[_di].key !== 'dietKnowledge') continue;
+                try {
+                    var _dkr = await sb.from('family_data').select('value').eq('family_id', uuid).eq('key', 'dietKnowledge');
+                    if (!_dkr.error && _dkr.data && _dkr.data.length) {
+                        var _dkCloudN = (JSON.parse(_dkr.data[0].value) || []).length;
+                        var _dkLocalN = (JSON.parse(rows[_di].value) || []).length;
+                        if (_dkCloudN > 50 && _dkLocalN < _dkCloudN * 0.5) {
+                            rows.splice(_di, 1);
+                            delete _sbDirtyKeys['dietKnowledge'];
+                            window.__dkShrinkBlocked = { local: _dkLocalN, cloud: _dkCloudN, at: Date.now() };
+                            console.warn('[文库缩水守卫] 本地 ' + _dkLocalN + ' 条 / 云端 ' + _dkCloudN + ' 条，已拒绝推送 dietKnowledge');
+                            if (typeof isSuperAdmin === 'function' && isSuperAdmin() && typeof showToast === 'function') showToast('⚠️ 文库数据异常（本地远少于云端），已阻止覆盖云端');
+                        }
+                    }
+                } catch (e) {}
             }
             if (rows.length) {
                 var r = await sb.from('family_data').upsert(rows, { onConflict: 'family_id,key' });

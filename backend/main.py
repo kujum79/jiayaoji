@@ -271,6 +271,85 @@ def health() -> Dict[str, str]:
     return {"ping": "pong"}
 
 
+# ========== V695: 讯飞实时语音听写（IAT）转写接口 ==========
+# 密钥从 backend/.env 读取：XFYUN_APPID / XFYUN_API_KEY / XFYUN_API_SECRET（禁止写进源码）
+XFYUN_APPID = os.getenv("XFYUN_APPID", "").strip()
+XFYUN_API_KEY = os.getenv("XFYUN_API_KEY", "").strip()
+XFYUN_API_SECRET = os.getenv("XFYUN_API_SECRET", "").strip()
+_asr_last_ts: Dict[str, float] = {}  # 简单 IP 限速，防刷
+
+
+def _xfyun_iat_url() -> str:
+    """按讯飞规范生成带签名的 wss 地址（host/date/request-line 做 hmac-sha256）"""
+    import hmac
+    import hashlib
+    from email.utils import formatdate
+    from urllib.parse import urlencode
+    host = "iat-api.xfyun.cn"
+    path = "/v2/iat"
+    date = formatdate(usegmt=True)
+    origin = f"host: {host}\ndate: {date}\nGET {path} HTTP/1.1"
+    signature = base64.b64encode(
+        hmac.new(XFYUN_API_SECRET.encode(), origin.encode(), hashlib.sha256).digest()
+    ).decode()
+    auth = (f'api_key="{XFYUN_API_KEY}", algorithm="hmac-sha256", '
+            f'headers="host date request-line", signature="{signature}"')
+    return f"wss://{host}{path}?" + urlencode({"authorization": auth, "host": host, "date": date})
+
+
+@app.post("/api/asr")
+async def api_asr(request: Request) -> JSONResponse:
+    """V695: 语音转文字。请求体=16kHz/16bit/单声道 PCM 原始字节；返回 {ok, text|error}
+    微信内置浏览器无法用浏览器语音（依赖 Google 服务），前端改录音送这里走讯飞。"""
+    if not (XFYUN_APPID and XFYUN_API_KEY and XFYUN_API_SECRET):
+        return JSONResponse({"ok": False, "error": "语音服务未配置"}, status_code=503)
+    ip = request.client.host if request.client else "?"
+    now = time.time()
+    if now - _asr_last_ts.get(ip, 0) < 2:
+        return JSONResponse({"ok": False, "error": "请缓一缓再说一次"}, status_code=429)
+    _asr_last_ts[ip] = now
+    pcm = await request.body()
+    if len(pcm) < 6400:  # <0.2s
+        return JSONResponse({"ok": False, "error": "说话太短了，请按住多说几个字"})
+    pcm = pcm[: 16000 * 2 * 60]  # 上限 60 秒
+    try:
+        import websockets
+        frame = 320  # 20ms/帧
+        total = (len(pcm) + frame - 1) // frame
+        text_parts: List[str] = []
+        async with websockets.connect(_xfyun_iat_url(), max_size=10 * 1024 * 1024) as ws:
+            for i in range(total):
+                chunk = pcm[i * frame:(i + 1) * frame]
+                status = 0 if i == 0 else (2 if i == total - 1 else 1)
+                await ws.send(json.dumps({
+                    "common": {"app_id": XFYUN_APPID},
+                    "business": {"language": "zh_cn", "domain": "iat", "accent": "mandarin", "ptt": 1},
+                    "data": {"status": status, "format": "audio/L16;rate=16000",
+                             "encoding": "raw", "audio": base64.b64encode(chunk).decode()},
+                }))
+                if i < total - 1:
+                    await asyncio.sleep(0.02)  # 约 2 倍速发送，正常语句几秒内完成
+            while True:
+                try:
+                    msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=15))
+                except Exception:
+                    break
+                if msg.get("code") != 0:
+                    return JSONResponse({"ok": False, "error": f"语音服务返回异常（{msg.get('code')}）"})
+                data = msg.get("data", {}) or {}
+                for ws_item in (data.get("result", {}) or {}).get("ws", []):
+                    for cw in ws_item.get("cw", []):
+                        text_parts.append(cw.get("w", ""))
+                if data.get("status") == 2:
+                    break
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"语音服务连接失败：{str(e)[:80]}"}, status_code=502)
+    text = "".join(text_parts).strip()
+    if not text:
+        return JSONResponse({"ok": False, "error": "没听清，请再说一次"})
+    return JSONResponse({"ok": True, "text": text})
+
+
 # ========== 语音指令解析接口 ==========
 @app.post("/parse_voice", dependencies=[Depends(check_ai_quota)])
 async def parse_voice(req: ParseVoiceRequest) -> Dict[str, Any]:
@@ -5746,6 +5825,17 @@ def _backup_calendar_dates(data: Dict[str, str]) -> int:
         return 0
 
 
+def _backup_kb_count(data: Dict[str, str]) -> int:
+    raw = data.get("dietKnowledge")
+    if not raw:
+        return 0
+    try:
+        arr = json.loads(raw)
+        return len(arr) if isinstance(arr, list) else 0
+    except (json.JSONDecodeError, TypeError):
+        return 0
+
+
 def _backup_shrink_guard(old_data: Dict[str, str], new_data: Dict[str, str], force: bool) -> Optional[str]:
     """V367: 拒绝会让云端数据"降级"的覆盖；返回错误文案，None 表示放行。
 
@@ -5768,6 +5858,11 @@ def _backup_shrink_guard(old_data: Dict[str, str], new_data: Dict[str, str], for
     new_dates = _backup_calendar_dates(new_data)
     if old_dates >= 4 and new_dates < max(1, old_dates // 2):
         return f"饮食日历由 {old_dates} 天降为 {new_dates} 天，疑似默认数据覆盖"
+    # V697: 文库缩水防护（D4-05 事故：清缓存后种子库覆盖云端数百条文库）
+    old_kb = _backup_kb_count(old_data)
+    new_kb = _backup_kb_count(new_data)
+    if old_kb > 50 and new_kb < old_kb * 0.5:
+        return f"饮食文库由 {old_kb} 条降为 {new_kb} 条，疑似默认数据覆盖"
     return None
 
 
