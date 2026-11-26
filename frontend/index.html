@@ -13972,12 +13972,15 @@ async function cloudBackupPush() {
                     if (!_dkr.error && _dkr.data && _dkr.data.length) {
                         var _dkCloudN = (JSON.parse(_dkr.data[0].value) || []).length;
                         var _dkLocalN = (JSON.parse(rows[_di].value) || []).length;
-                        if (_dkCloudN > 50 && _dkLocalN < _dkCloudN * 0.5) {
+                        // V698f: 守卫方向彻底反转——之前只拦"缩水到云端一半以下"（云端72本地41=41>36就放行→丢数据）
+                        // 现在改成"云端比本地多 5 条以上就拦"——任何设备都不能用自己的本地数据覆盖云端更多的内容
+                        // 容差 +5 防止微扰（云端41本地40 这种正常波动不拦）
+                        if (_dkCloudN > _dkLocalN + 5) {
                             rows.splice(_di, 1);
                             delete _sbDirtyKeys['dietKnowledge'];
                             window.__dkShrinkBlocked = { local: _dkLocalN, cloud: _dkCloudN, at: Date.now() };
                             console.warn('[文库缩水守卫] 本地 ' + _dkLocalN + ' 条 / 云端 ' + _dkCloudN + ' 条，已拒绝推送 dietKnowledge');
-                            if (typeof isSuperAdmin === 'function' && isSuperAdmin() && typeof showToast === 'function') showToast('⚠️ 文库数据异常（本地远少于云端），已阻止覆盖云端');
+                            if (typeof isSuperAdmin === 'function' && isSuperAdmin() && typeof showToast === 'function') showToast('⚠️ 文库数据异常（本地少于云端），已阻止覆盖云端');
                         }
                     }
                 } catch (e) {}
