@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V697-20261126';
+        var APP_VER = 'V698-20261126';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -5934,7 +5934,34 @@ const SUPABASE_URL = 'https://tjpjcmmcaortvubtnykm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_hnSosJoSD9SNMnNrT_G9XQ_VAqtcmBy';
 // 注意：SDK 加载后 window.supabase 已占用该名称，这里用 sb 引用 createClient 实例
 var sb = null;
-try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch(e) { console.warn('Supabase init failed:', e); }
+try {
+    // V698: 显式配置 auth 持久化与自动刷新——微信 webview 前后台切换会让默认自动 refresh 失效
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+    });
+} catch(e) { console.warn('Supabase init failed:', e); }
+
+// V698: 强制刷新 auth session 的前置守卫——任何云端读写前调用，确保 access token 有效
+// 微信 webview 会因前后台切换/锁屏/网络波动让 SDK 内置的自动 refresh 静默失败，
+// 导致所有 upsert 被 RLS 42501 拒绝（表现为"数据一直推不上云端"）
+async function _sbEnsureAuth() {
+    if (!sb || !sb.auth) return false;
+    try {
+        var { data } = await sb.auth.getSession();
+        if (data && data.session && data.session.access_token) return true;  // 会话完好
+        // session 为空：尝试用 refresh_token 换一个新的 access_token
+        var r = await sb.auth.refreshSession();
+        if (r && r.data && r.data.session) {
+            console.log('[云端数据] auth session 已自动刷新');
+            return true;
+        }
+    } catch (e) {
+        console.warn('[云端数据] auth refresh 异常：' + ((e && e.message) || e));
+    }
+    // 彻底没会话：让用户重新登录
+    console.warn('[云端数据] auth session 已失效，请在"我家→退出登录"后重新登录');
+    return false;
+}
 
 // 给 Supabase/网络调用加超时保护，防止弱网/被墙时按钮永久卡在"登录中…"
 function withTimeout(promise, ms, label) {
@@ -13835,6 +13862,8 @@ function _sbMigrateFamilyKeys(oldCode, newCode) {
 }
 // 家庭码 → Supabase families.id（本地缓存 → 登录会话 → 查库，查不到明确告警）
 async function _sbResolveFamilyUuid() {
+    // V698: 强制刷新 auth session——微信 webview 会静默丢 token，导致 family_data 全部 RLS 42501
+    if (!await _sbEnsureAuth()) return '';
     var code = _sbFamCode();
     if (!code) { console.warn('[云端数据] 未取到家庭码，已跳过云端同步'); return ''; }
     try {
@@ -13919,6 +13948,8 @@ async function cloudBackupPush() {
     if (_sbPushing) { _sbPushTimer = setTimeout(cloudBackupPush, 1500); return; } // 上一轮未完成：稍后重试，避免丢脏键
     if (!window.__cloudBackupReady) { window.__pendingBackup = true; return; }
     if (!sb) return;
+    // V698: 强制刷新 auth session——push 前确保 token 有效，否则整个 upsert 会被 RLS 42501 静默拒绝
+    if (!await _sbEnsureAuth()) return;
     var dirty = Object.keys(_sbDirtyKeys);
     var gone = Object.keys(_sbDeletedKeys);
     if (!dirty.length && !gone.length) return;
