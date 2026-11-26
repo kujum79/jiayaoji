@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V687-20261126';
+        var APP_VER = 'V688-20261126';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -42544,7 +42544,7 @@ function renderFamily() {
         function card(icon, title, sub, onclick) {
             return '<div onclick="' + onclick + '" style="' + cardStyle + '">'
                 + '<div style="display:flex;align-items:center;gap:5px;">'
-                + '<span style="font-size:17px;flex:0 0 auto;line-height:1;">' + icon + '</span>'
+                + (icon ? '<span style="font-size:17px;flex:0 0 auto;line-height:1;">' + icon + '</span>' : '') /* V688: 传空图标则不渲染占位 */
                 + '<span style="font-size:13px;color:#1F2937;font-weight:600;flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + title + '</span>'
                 + '<span style="color:#D1D5DB;font-size:14px;flex:0 0 auto;line-height:1;">›</span>'
                 + '</div>'
@@ -42554,9 +42554,9 @@ function renderFamily() {
         // V445: 「我的专属课堂」「少年食趣」已迁入食养堂 → 食养教育；此处只留三个一层入口并排一行
         familyList.insertAdjacentHTML('beforeend', `
             <div style="display:flex;gap:8px;margin-bottom:12px;">
-                ${card('📔', '膳食日记', '本周已记 ' + weekCnt + ' 篇', 'openDiaryTimeline()')}
-                ${card('💰', '我的积分', (function(){ var t = 0; try { t = _pointsGetTotal(); } catch(e) {} return t ? ('当前 ' + t + ' 积分' + (_pointsCheckedToday() ? ' · 今日已打卡' : ' · 打卡 +2')) : '每日打卡 +2 积分'; })(), 'openPointsCenter()')}
-                ${card('👨‍🍳', '我的创作', worksCnt ? worksCnt + ' 个作品' : '记录你的私房创作', 'openMyWorksPage()')}
+                ${card('', '膳食日记', '本周已记 ' + weekCnt + ' 篇', 'openDiaryTimeline()')}
+                ${card('', '我的积分', (function(){ var t = 0; try { t = _pointsGetTotal(); } catch(e) {} return t ? ('当前 ' + t + ' 积分' + (_pointsCheckedToday() ? ' · 今日已打卡' : ' · 打卡 +2')) : '+2 积分'; })(), 'openPointsCenter()')}
+                ${card('', '我的创作', worksCnt ? worksCnt + ' 个作品' : '记录私房创作', 'openMyWorksPage()')}
             </div>
         `);
         // V163: 超管专属快捷条（仅超管可见）—— 食养管理/文库管理/课程汇总/系统监控，一级直达
@@ -85202,10 +85202,10 @@ window._renderSavedMoneyCard = function () {
     box.insertAdjacentHTML('beforeend',
         '<div style="background:linear-gradient(135deg,#ECFDF5,#FFFFFF);border:1px solid #A7F3D0;border-radius:16px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">'
         + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
-        + '<div style="font-size:15px;font-weight:800;color:#065F46;min-width:0;">💰 为您家累计省下 <span style="font-size:21px;color:#047857;">¥' + total + '</span> 元</div>'
-        + '<button type="button" onclick="_ybOpen()" style="flex-shrink:0;border:1px solid #6EE7B7;background:#fff;color:#047857;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;">📅 年度账单</button>'
+        + '<div style="font-size:15px;font-weight:800;color:#065F46;min-width:0;">为您家累计省下 <span style="font-size:21px;color:#047857;">¥' + total + '</span> 元</div>'
+        + '<button type="button" onclick="_ybOpen()" style="flex-shrink:0;border:1px solid #6EE7B7;background:#fff;color:#047857;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;">年度账单</button>'
         + '</div>'
-        + '<div style="font-size:11px;color:#6B7280;line-height:1.8;margin-top:6px;">替代外卖 ¥' + takeout + ' · 冰箱残局 ¥' + fridge + '（按每次实际记录自动累计）</div>'
+        + '<div style="font-size:11px;color:#6B7280;line-height:1.8;margin-top:6px;">替代外卖 ¥' + takeout + ' · 冰箱残局 ¥' + fridge + '（实际记录自动累计）</div>'
         + '</div>');
 };
 
