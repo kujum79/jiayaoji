@@ -50197,6 +50197,7 @@ function showArticleDetail(id) {
                     <div style="display:flex;gap:6px;flex-shrink:0;">
                         <button onclick="speakArticle()" title="朗读" style="${btnStyle}">🔊</button>
                         <button onclick="favArticleBtn(this,'${escapeHtml(String(a.id))}')" title="收藏" style="${btnStyle}">${isFav ? '⭐' : '☆'}</button>
+                        <button onclick="submitArticleCorrection('${escapeHtml(String(a.id))}','${escapeHtml(String(a.title || ''))}')" title="纠错反馈" style="${btnStyle}">📝</button>
                         <button onclick="closeArticleDetail()" title="关闭" style="${btnStyle}">✕</button>
                     </div>
                 </div>
@@ -50228,6 +50229,79 @@ function closeArticleDetail() {
     try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch(e) {}
     var ov = document.getElementById('articleDetailOverlay');
     if (ov) ov.remove();
+}
+
+// V701: 食文纠错反馈——弹出反馈弹窗，提交后存入本地队列+尝试推送服务器
+function submitArticleCorrection(articleId, articleTitle) {
+    // 先关闭文章详情页（避免弹窗叠加）
+    closeArticleDetail();
+    
+    var old = document.getElementById('articleCorrectionOverlay');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'articleCorrectionOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100010;background:rgba(31,41,55,0.5);display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.addEventListener('click', function(e) { if (e.target === this) ov.remove(); });
+    
+    ov.innerHTML = `
+        <div style="background:white;border-radius:16px;width:100%;max-width:360px;overflow:hidden;">
+            <div style="padding:14px 16px;background:linear-gradient(135deg,#EA580C,#F97316);color:white;font-size:15px;font-weight:700;">
+                📝 纠错反馈
+                <div style="font-size:12px;opacity:0.9;margin-top:2px;font-weight:400;">文章：${escapeHtml(articleTitle || '未知')}</div>
+            </div>
+            <div style="padding:16px;">
+                <div style="font-size:13px;color:#6B7280;margin-bottom:8px;">请问这篇文章有什么问题？</div>
+                <select id="corrType" style="width:100%;padding:8px 12px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;margin-bottom:12px;">
+                    <option value="content">内容错误（事实/数据/做法有误）</option>
+                    <option value="typo">文字错漏（错别字/语句不通）</option>
+                    <option value="outdated">内容过时</option>
+                    <option value="inappropriate">内容不当/不适宜</option>
+                    <option value="other">其他问题</option>
+                </select>
+                <textarea id="corrDetail" placeholder="请具体描述问题，比如：第2段说'大火炖1小时'，应该是小火..." style="width:100%;height:90px;padding:8px 12px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;resize:none;"></textarea>
+                <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
+                    <button onclick="document.getElementById('articleCorrectionOverlay').remove()" style="padding:7px 16px;border:1px solid #E5E7EB;border-radius:8px;background:white;color:#6B7280;font-size:14px;cursor:pointer;">取消</button>
+                    <button onclick="_doSubmitCorrection('${escapeHtml(String(articleId))}','${escapeHtml(String(articleTitle || ''))}')" style="padding:7px 16px;border:none;border-radius:8px;background:#EA580C;color:white;font-size:14px;cursor:pointer;">提交反馈</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(ov);
+}
+
+function _doSubmitCorrection(articleId, articleTitle) {
+    var type = document.getElementById('corrType').value;
+    var detail = (document.getElementById('corrDetail').value || '').trim();
+    if (!detail) { showToast('请填写具体问题描述', 'error', 2000); return; }
+    
+    var item = {
+        id: 'corr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        articleId: articleId,
+        articleTitle: articleTitle,
+        type: type,
+        detail: detail,
+        familyId: (typeof getFamilyId === 'function' ? getFamilyId() : ''),
+        createdAt: new Date().toISOString(),
+        resolved: false
+    };
+    
+    // 1. 存入本地队列（确保断网也不丢）
+    var queue = JSON.parse(localStorage.getItem('__articleCorrections') || '[]');
+    queue.push(item);
+    localStorage.setItem('__articleCorrections', JSON.stringify(queue));
+    
+    // 2. 尝试推送到服务器（如果有对应API）
+    try {
+        fetch('/api/article-correction', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(item)
+        }).catch(function() { /* 网络失败时静默，已存本地 */ });
+    } catch(e) {}
+    
+    // 3. 关闭弹窗+提示
+    var ov = document.getElementById('articleCorrectionOverlay');
+    if (ov) ov.remove();
+    showToast('✅ 感谢反馈，超管会尽快处理！', 'success', 2500);
 }
 function favArticleBtn(btn, id) {
     var fav = toggleArticleFav(id);
