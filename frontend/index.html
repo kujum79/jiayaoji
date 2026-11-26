@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V689b-20261126';
+        var APP_VER = 'V690-20261126';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -31,22 +31,22 @@
     </script>
     <script>
     /* V685: 适老化字体引擎——运行时全站放大字号（样式表+内联+动态渲染内容）
-       三档 elderFontMode：normal 标准 / large 大 / xlarge 特大（V689 起默认）
-       V689: 分级映射表（特大档主正文 13→16、卡片标题 16→19、页面标题封顶 20，≥19 展示字不动）；
-       升级机制：仅 elderFontUserSet（手动选过档）者按其档位，其余一律"特大"；引擎不再回写默认值
+       V690 重定档：normal 标准 / large 大（默认：正文16/卡片标题19）/ xlarge 特大（正文17/卡片标题20）
+       分级映射表，页面标题封顶 20/21，≥19px 展示字/图标不动；正则兼容小数号
+       升级机制：仅 elderFontUserSet（手动选过档）者按其档位，其余一律默认"大"；引擎不回写默认值
        幂等保护：已处理元素打 data-ef 标记，MutationObserver 跳过，业务改 style 不会二次放大 */
     (function () {
-        var mode = 'xlarge';
+        var mode = 'large';
         try {
             var saved = localStorage.getItem('elderFontMode');
-            mode = (localStorage.getItem('elderFontUserSet') && saved) ? saved : 'xlarge';
+            mode = (localStorage.getItem('elderFontUserSet') && saved) ? saved : 'large';
         } catch (e) {}
-        if (mode !== 'normal' && mode !== 'large') mode = 'xlarge';
+        if (mode !== 'normal' && mode !== 'xlarge') mode = 'large';
         if (mode === 'normal') return;
         var EF_MAP = mode === 'xlarge'
-            ? { 9: 12, 10: 13, 11: 14, 12: 15, 13: 16, 14: 17, 15: 18, 16: 19, 17: 19, 18: 20 }
-            : { 9: 11, 10: 12, 11: 13, 12: 14, 13: 15, 14: 16, 15: 17, 16: 18, 17: 19, 18: 20 };
-        function mapFs(v) { v = parseInt(v, 10); if (isNaN(v)) return v; if (v >= 19) return v; if (v <= 9) return mode === 'xlarge' ? 12 : 11; return EF_MAP[v]; }
+            ? { 9: 13, 10: 14, 11: 15, 12: 16, 13: 17, 14: 18, 15: 19, 16: 20, 17: 20, 18: 21 }
+            : { 9: 12, 10: 13, 11: 14, 12: 15, 13: 16, 14: 17, 15: 18, 16: 19, 17: 19, 18: 20 };
+        function mapFs(v) { v = parseInt(v, 10); if (isNaN(v)) return v; if (v >= 19) return v; if (v <= 9) return mode === 'xlarge' ? 13 : 12; return EF_MAP[v]; }
         function mapLh(v) { return mapFs(v); }
         function scaleText(css) {
             /* V689b: 正则兼容小数号（12.5px×28 处等 57 处此前漏网），parseInt 向下取整查表 */
@@ -95,7 +95,7 @@
     /* V685: 字体档位切换（「我家→设置与权限」调用），写档后刷新生效；V689: 记录手动选档标记 */
     window._setElderFontMode = function (m) {
         try {
-            var cur = (localStorage.getItem('elderFontUserSet') && localStorage.getItem('elderFontMode')) || 'xlarge';
+            var cur = (localStorage.getItem('elderFontUserSet') && localStorage.getItem('elderFontMode')) || 'large';
             if (cur === m) return;
             localStorage.setItem('elderFontUserSet', '1');
             localStorage.setItem('elderFontMode', m);
@@ -269,8 +269,8 @@
             transition: color 0.2s;
         }
         .home-tab-item .ht-icon { font-size: 20px; line-height: 1.2; }
-        html[data-ef="large"] .home-tabbar { height: 60px; }
-        html[data-ef="xlarge"] .home-tabbar { height: 64px; }
+        html[data-ef="large"] .home-tabbar { height: 64px; } /* V690: 大档=V689特大映射，底栏 64 */
+        html[data-ef="xlarge"] .home-tabbar { height: 68px; }
         .home-tab-item:active { color: #F97316; }
 
         /* ====== 首页顶部（V40）：LOGO+品牌名居左上，右侧上=导航按钮行 下=品牌名+广告语（底对齐） ====== */
@@ -43059,7 +43059,7 @@ window.editMemberCard = function(id) {
     // ============ V70 组4：设置与权限（原设置面板重组为子项） ============
     const notifEnabled = lsGet('notifEnabled') !== 'false'; // 默认开启
     // V685: 适老化字体档位（标准/大/特大），切换后刷新生效
-    var efMode = 'xlarge'; try { var _efs = localStorage.getItem('elderFontUserSet'), _efm = localStorage.getItem('elderFontMode'); efMode = (_efs && _efm) ? _efm : 'xlarge'; } catch (e) {} /* V689: 与引擎同款档位判定，未手动选档显示"特大" */
+    var efMode = 'large'; try { var _efs = localStorage.getItem('elderFontUserSet'), _efm = localStorage.getItem('elderFontMode'); efMode = (_efs && _efm) ? _efm : 'large'; } catch (e) {} /* V690: 与引擎同款档位判定，未手动选档显示"大" */
     var efSegHtml = [['normal', '标准'], ['large', '大'], ['xlarge', '特大']].map(function (o) {
         var on = efMode === o[0];
         return '<button onclick="event.stopPropagation();_setElderFontMode(\'' + o[0] + '\')" style="padding:4px 12px;font-size:13px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ' + (on ? '#F97316' : '#FED7AA') + ';background:' + (on ? '#F97316' : '#FFF7ED') + ';color:' + (on ? '#fff' : '#C2410C') + ';">' + o[1] + '</button>';
