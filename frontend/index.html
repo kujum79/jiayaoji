@@ -55139,9 +55139,34 @@ var DEFAULT_CATEGORY_TREE = [
         { id: '食养', name: '食养', type: 'knowledge', order: 4, children: [{ id: '春季', name: '春季', order: 1 }, { id: '夏季', name: '夏季', order: 2 }, { id: '秋季', name: '秋季', order: 3 }, { id: '冬季', name: '冬季', order: 4 }, { id: '人群食养', name: '人群食养', order: 5 }] }
     ] },
     { id: 'shiyang', name: '食方', icon: '🥣', order: 3, type: 'knowledge', children: [ // V663: 食养→食方，仅超管可见；家庭层不含此主分类
-        { id: '特殊人群配餐', name: '特殊人群', type: 'knowledge', order: 1, children: [{ id: '孕妇营养', name: '孕妇营养', order: 1 }, { id: '婴儿辅食', name: '婴儿辅食', order: 2 }, { id: '青少年营养', name: '青少年营养', order: 3 }, { id: '健身餐', name: '健身餐', order: 4 }, { id: '职场营养', name: '职场营养', order: 5 }, { id: '老年食养', name: '老年食养', order: 6 }] },
-        { id: '食育', name: '食育', type: 'knowledge', order: 10, icon: '📚', children: [] },
-        { id: '食方', name: '内科食方', type: 'knowledge', order: 11, icon: '🥣', children: [] }
+        { id: '特殊人群配餐', name: '特殊人群', type: 'knowledge', order: 1, children: [
+            { id: '孕妇营养', name: '孕妇营养', order: 1 }, { id: '婴儿辅食', name: '婴儿辅食', order: 2 },
+            { id: '青少年营养', name: '青少年营养', order: 3 }, { id: '健身餐', name: '健身餐', order: 4 },
+            { id: '职场营养', name: '职场营养', order: 5 }, { id: '老年食养', name: '老年食养', order: 6 }
+        ] },
+        { id: '内科食方', name: '内科食方', type: 'knowledge', order: 2, icon: '🩺', children: [
+            { id: '脾胃调理', name: '脾胃调理', order: 1 }, { id: '润肺养阴', name: '润肺养阴', order: 2 },
+            { id: '失眠安神', name: '失眠安神', order: 3 }, { id: '养心安神', name: '养心安神', order: 4 },
+            { id: '疏肝理气', name: '疏肝理气', order: 5 }, { id: '补肾温阳', name: '补肾温阳', order: 6 },
+            { id: '止咳化痰', name: '止咳化痰', order: 7 }, { id: '解表散寒', name: '解表散寒', order: 8 }
+        ] },
+        { id: '慢病调理', name: '慢病调理', type: 'knowledge', order: 3, icon: '💊', children: [
+            { id: '糖尿病饮食', name: '糖尿病饮食', order: 1 }, { id: '高血压饮食', name: '高血压饮食', order: 2 },
+            { id: '高血脂饮食', name: '高血脂饮食', order: 3 }, { id: '痛风饮食', name: '痛风饮食', order: 4 },
+            { id: '肾病饮食', name: '肾病饮食', order: 5 }, { id: '肝病饮食', name: '肝病饮食', order: 6 }
+        ] },
+        { id: '产后调理', name: '产后调理', type: 'knowledge', order: 4, icon: '🤱', children: [
+            { id: '催乳下奶', name: '催乳下奶', order: 1 }, { id: '补气血', name: '补气血', order: 2 },
+            { id: '优质蛋白恢复', name: '优质蛋白恢复', order: 3 }, { id: '产后脾胃', name: '产后脾胃', order: 4 }
+        ] },
+        { id: '季节食养', name: '季节食养', type: 'knowledge', order: 5, icon: '🍂', children: [
+            { id: '春季养阳', name: '春季养阳', order: 1 }, { id: '夏季养心', name: '夏季养心', order: 2 },
+            { id: '秋季润肺', name: '秋季润肺', order: 3 }, { id: '冬季进补', name: '冬季进补', order: 4 }
+        ] },
+        { id: '食育', name: '食育', type: 'knowledge', order: 10, icon: '📚', children: [
+            { id: '儿童食育', name: '儿童食育', order: 1 }, { id: '家庭餐桌礼仪', name: '家庭餐桌礼仪', order: 2 },
+            { id: '节气食育', name: '节气食育', order: 3 }
+        ] }
     ] },
     { id: 'cooking', name: '烹饪', icon: '🍳', order: 4, children: [
         { id: '烹饪技巧', name: '烹饪技巧', order: 1, children: [] },
