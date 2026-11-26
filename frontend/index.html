@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V694-20261126';
+        var APP_VER = 'V696-20261126';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -12933,7 +12933,9 @@ function _monitorBodyHtml(d) {
         '<div style="display:flex;gap:8px;margin-bottom:14px;">' +
         '<button type="button" onclick="_openAnnounceSheet()" style="flex:1;border:none;border-radius:12px;background:#DC2626;color:#fff;font-size:12px;font-weight:700;padding:10px 6px;cursor:pointer;box-shadow:0 2px 8px rgba(220,38,38,0.25);">📢 全局安抚公告</button>' +
         '<button type="button" onclick="openAiUsagePanel()" style="flex:1;border:1px solid #FED7AA;border-radius:12px;background:#FFF7ED;color:#9A3412;font-size:12px;font-weight:700;padding:10px 6px;cursor:pointer;">🤖 AI 用量</button>' +
+        '<button type="button" onclick="_monitorAiDiagnose()" style="flex:1;border:1px solid #BFDBFE;border-radius:12px;background:#EFF6FF;color:#1D4ED8;font-size:12px;font-weight:700;padding:10px 6px;cursor:pointer;">🔍 AI 链路诊断</button>' + // V696: 独立诊断入口（D1-02），不再依赖报警弹窗
         '</div>' +
+        '<div id="adminAiDiagResult" style="display:none;font-size:11px;line-height:1.7;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:10px 12px;margin:0 0 14px;"></div>' +
         // V426: 用户纠错反馈（内容有误？→ feedbackList → 红点）
         ((d && Number(d.feedbackCount) > 0) ? '<div style="margin-bottom:14px;">' +
             '<div style="display:flex;align-items:center;margin-bottom:8px;">' +
@@ -13127,7 +13129,7 @@ function _openMonitorFix(errorId) {
 }
 
 async function _monitorAiDiagnose() {
-    var box = document.getElementById('aiDiagResult');
+    var box = document.getElementById('aiDiagResult') || document.getElementById('adminAiDiagResult'); // V696: 支持管理面板独立入口
     if (!box || box._busy) return;
     box._busy = true;
     box.style.display = 'block';
@@ -65641,6 +65643,13 @@ function tryParseMealPlanCommand(text) {
         }
     }
 
+    // V696: 过滤份量/描述性短语——"清淡的两人餐""点好吃的"等不是菜名，放行给 AI 对话推荐（修复 D1-01 误路由）
+    if (dishName) {
+        var _v696Portion = /(?:[一二两三四五六七八九十\d]+\s*)?(?:人|位|口)(?:餐|食|饭|量|份|的菜|的饭)$/.test(dishName);
+        var _v696DescOnly = /^(?:的|点|些|一点|一些|清淡|爽口|好吃|美味|健康|养生|油腻|随便|美食|东西|好的|的)+$/.test(dishName.replace(/[\s，。]/g, ''));
+        if (_v696Portion || _v696DescOnly) dishName = null;
+    }
+
     // 必须同时识别到餐次和菜品才算加菜指令
     if (!mealType || !dishName) return null;
 
@@ -80314,8 +80323,78 @@ function openVoiceTextFallback(scope, reason) {
     try { if (c && c.input) c.input.focus(); } catch (e) {}
 }
 
+/* ========== V695: 讯飞录音转写通道 ==========
+   浏览器自带语音（Web Speech）依赖 Google 语音服务器，微信/国内浏览器连不上（error=network）。
+   改为：点🎤直接录音（getUserMedia→16k PCM）→ 再点🎤停止 → 送后端 /api/asr 走讯飞 IAT 转文字 → 自动发送 */
+var _iatRec = null;
+function _iatVoiceBtn(scope) { try { return getInputControls(scope).voiceBtn; } catch (e) { return null; } }
+function _iatResample16k(float32, srcRate) {
+    var ratio = srcRate / 16000;
+    var outLen = Math.floor(float32.length / ratio);
+    var out = new Int16Array(outLen);
+    for (var i = 0; i < outLen; i++) {
+        var pos = i * ratio, i0 = Math.floor(pos), i1 = Math.min(i0 + 1, float32.length - 1);
+        var s = float32[i0] + (float32[i1] - float32[i0]) * (pos - i0);
+        out[i] = Math.max(-1, Math.min(1, s)) * 0x7FFF;
+    }
+    return out;
+}
+function startIatVoice(scope) {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } }).then(function (stream) {
+        var ctx = new AC();
+        var src = ctx.createMediaStreamSource(stream);
+        var proc = ctx.createScriptProcessor(4096, 1, 1);
+        var parts = [];
+        proc.onaudioprocess = function (e) { try { parts.push(_iatResample16k(e.inputBuffer.getChannelData(0), ctx.sampleRate)); } catch (err) {} };
+        src.connect(proc); proc.connect(ctx.destination);
+        _iatRec = { ctx: ctx, stream: stream, proc: proc, parts: parts, scope: scope };
+        _iatRec.timer = setTimeout(function () { if (_iatRec) stopIatVoice(); }, 30000); /* 30s 自动截断防忘停 */
+        var btn = _iatVoiceBtn(scope); if (btn) btn.textContent = '⏹️';
+        showVoiceTip('🎙️ 正在录音…说完再点一下 ⏹️ 发送');
+    }).catch(function (err) {
+        showVoiceTip('❌ 麦克风用不了（' + (err && err.name === 'NotAllowedError' ? '未授权，请在浏览器设置里允许麦克风' : '设备不可用') + '），请直接在输入框打字');
+        var c = getInputControls(scope);
+        try { if (c && c.input) c.input.focus(); } catch (e) {}
+    });
+}
+function stopIatVoice() {
+    var r = _iatRec; if (!r) return; _iatRec = null;
+    clearTimeout(r.timer);
+    try { r.proc.disconnect(); r.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+    var total = 0; r.parts.forEach(function (p) { total += p.length; });
+    var pcm = new Int16Array(total), off = 0;
+    r.parts.forEach(function (p) { pcm.set(p, off); off += p.length; });
+    try { r.ctx.close(); } catch (e) {}
+    var c = getInputControls(r.scope);
+    var btn = _iatVoiceBtn(r.scope); if (btn) btn.textContent = '🎤';
+    if (total < 3200) { showVoiceTip('⏱️ 说话太短了，再点 🎤 多说几个字'); return; }
+    showVoiceTip('🔍 识别中…');
+    fetch(API_BASE + '/api/asr', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: pcm.buffer })
+        .then(function (res) { return res.json(); })
+        .then(function (j) {
+            if (j && j.ok && j.text) {
+                showVoiceTip('✅ 听到：' + j.text);
+                if (c && c.input) c.input.value = j.text.replace(/\s+/g, '');
+                sendFromInput(r.scope);
+            } else {
+                showVoiceTip('❌ ' + ((j && j.error) || '识别失败') + '，请直接在输入框打字');
+                try { if (c && c.input) c.input.focus(); } catch (e) {}
+            }
+        })
+        .catch(function () {
+            showVoiceTip('❌ 语音服务连不上，请直接在输入框打字');
+            try { if (c && c.input) c.input.focus(); } catch (e) {}
+        });
+}
+
 async function startVoiceRecognition(scope) {
     const { input, state, voicePanel } = getInputControls(scope);
+    /* V695: 优先走讯飞录音通道（HTTPS 下麦克风可用即走它，微信内同样有效）；再点一次 = 停止并发送 */
+    if (_iatRec) { stopIatVoice(); return; }
+    const _iatEnvReady = (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+        && navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext);
+    if (_iatEnvReady) { startIatVoice(scope); return; }
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const isSecureSpeechEnv = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     /* V694: 本会话已发生过 network 失败（微信内置浏览器常见——浏览器语音服务连不上）则不再反复重试，直接引导键盘输入 */
