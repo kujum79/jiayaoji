@@ -6740,7 +6740,22 @@ function _loginFamErr(msg) {
     var e = document.getElementById('loginFamErr');
     if (e) { e.textContent = msg; e.style.display = 'block'; }
 }
+// V700: 清除登录失败计数（登录成功后调用）
+function _clearLoginFailCount() {
+    localStorage.setItem('__loginFailCount', '0');
+    localStorage.removeItem('__loginLockUntil');
+}
 async function doFamilyPassLogin() {
+    // V700: 登录锁定检查——5次错误后锁定10分钟
+    var _lockUntil = parseInt(localStorage.getItem('__loginLockUntil') || '0');
+    if (_lockUntil > Date.now()) {
+        var _left = Math.ceil((_lockUntil - Date.now()) / 1000);
+        var _min = Math.floor(_left / 60), _sec = _left % 60;
+        _loginFamErr('🔒 登录已锁定，请 ' + _min + ' 分 ' + _sec + ' 秒后再试（连续5次密码错误）');
+        if (typeof showToast === 'function') showToast('🔒 登录已锁定，剩余 ' + _min + '分' + _sec + '秒', 'error', 3000);
+        return;
+    }
+    
     if (!_legalRequireConsent()) return;
     var e0 = document.getElementById('loginFamErr');
     if (e0) { e0.textContent = ''; e0.style.display = 'none'; }
@@ -6779,7 +6794,7 @@ async function doFamilyPassLogin() {
             }
             if (!_wantEmail || _sessEmail !== _wantEmail) _hasSess = false;
         }
-        if (_hasSess) { _applyFamilySession(rec); return; }
+        if (_hasSess) { _clearLoginFailCount(); _applyFamilySession(rec); return; }
     }
     // V597 P0 修复：本机无凭据（新设备/清缓存）或本机密码已过期（他端改过密）或会话已失效（V602）
     // → 自动回退云端登录（get_family_email RPC + owner 邮箱密码认证），不再误导航去手机号登录（短信网关未开通，等于死路）
@@ -6792,13 +6807,27 @@ async function doFamilyPassLogin() {
         if (okCloud) {
             // 回写本机凭据：下次登录免走云端；familyId 用云端会话落定的家庭码
             try { setFamilyPassword(getFamilyId(), name, pwd); } catch (e) {}
+            _clearLoginFailCount();
             return;
         }
     }
     // V602: 云端不可达但本机凭据匹配 → 退回离线本机登录（不让弱网锁死老设备）
-    if (_localMatch) { _applyFamilySession(rec); return; }
-    if (rec) { _loginFamErr('家庭密码错误'); return; }
-    _loginFamErr('未找到该家庭或密码不正确：请核对家庭名称，或用下方「忘记家庭密码？点此用家庭码重置」');
+    if (_localMatch) { _clearLoginFailCount(); _applyFamilySession(rec); return; }
+    
+    // V700: 登录失败计数+锁定
+    var _failCount = parseInt(localStorage.getItem('__loginFailCount') || '0') + 1;
+    localStorage.setItem('__loginFailCount', String(_failCount));
+    
+    if (_failCount >= 5) {
+        var _lockMs = 10 * 60 * 1000; // 锁定10分钟
+        localStorage.setItem('__loginLockUntil', String(Date.now() + _lockMs));
+        _loginFamErr('🔒 连续5次密码错误，登录已锁定10分钟');
+        if (typeof showToast === 'function') showToast('🔒 登录已锁定10分钟，请稍后再试', 'error', 5000);
+        return;
+    }
+    
+    if (rec) { _loginFamErr('家庭密码错误（已错' + _failCount + '/5次）'); return; }
+    _loginFamErr('未找到该家庭或密码不正确（已错' + _failCount + '/5次）：请核对家庭名称，或用下方「忘记家庭密码？点此用家庭码重置」');
 }
 function _applyFamilySession(rec) {
     var fid = String(rec.familyId || '');
