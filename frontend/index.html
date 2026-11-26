@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V691-20261126';
+        var APP_VER = 'V692-20261126';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -57049,12 +57049,9 @@ function _kbBrRenderMain() {
     }
     main.innerHTML = html;
 }
-// 状态初始化与兜底：默认选中「食材」；主分类默认展开一级子分类（细分类收起）；失效 key 回落
+// 状态初始化与兜底：V692 默认全部收起、只显示主分类行（点三角手动展开子分类）；默认选中「食材」；失效 key 回落
 function _kbBrEnsureState() {
-    if (!_kbBrOpen) {
-        _kbBrOpen = {};
-        _kbBrRoots().forEach(function (m) { _kbBrOpen[m.id] = true; });
-    }
+    if (!_kbBrOpen) _kbBrOpen = {};
     if (_libCurTab !== _kbBrTab) { // 外部切 Tab（_libGoCategory/_libSelectShibang/联动跳转）同步树选中
         _kbBrTab = _libCurTab;
         _kbBrSel = (_libCurTab === 'shibang') ? _KB_BR_SB : (_libCurTab || 'ingredient');
@@ -57068,7 +57065,7 @@ function _kbBrEnsureState() {
         if (!def) def = roots[0] || null;
         _kbBrSel = def ? def.id : _KB_BR_SB;
     }
-    if (_kbBrSel !== _KB_BR_SB) _kbBrOpen[String(_kbBrSel).split('|')[0]] = true; // 选中节点所在主分类保持展开
+    if (_kbBrSel !== _KB_BR_SB && String(_kbBrSel).indexOf('|') >= 0) _kbBrOpen[String(_kbBrSel).split('|')[0]] = true; // V692: 仅深节点（外部联动跳转）才展开所在主分类，默认选中主分类不展开
 }
 // 视图入口（renderLibTabView 浏览态分支调用）
 function _kbBrRenderView() {
