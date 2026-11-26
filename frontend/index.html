@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V689-20261126';
+        var APP_VER = 'V689b-20261126';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -49,10 +49,11 @@
         function mapFs(v) { v = parseInt(v, 10); if (isNaN(v)) return v; if (v >= 19) return v; if (v <= 9) return mode === 'xlarge' ? 12 : 11; return EF_MAP[v]; }
         function mapLh(v) { return mapFs(v); }
         function scaleText(css) {
+            /* V689b: 正则兼容小数号（12.5px×28 处等 57 处此前漏网），parseInt 向下取整查表 */
             return css
-                .replace(/(font-size\s*:\s*)(\d+)px/gi, function (m, p, v) { return p + mapFs(v) + 'px'; })
-                .replace(/(font\s*:\s*)(\d+)px/gi, function (m, p, v) { return p + mapFs(v) + 'px'; })
-                .replace(/(line-height\s*:\s*)(\d+)px/gi, function (m, p, v) { return p + mapLh(v) + 'px'; });
+                .replace(/(font-size\s*:\s*)(\d+(?:\.\d+)?)px/gi, function (m, p, v) { return p + mapFs(v) + 'px'; })
+                .replace(/(font\s*:\s*)(\d+(?:\.\d+)?)px/gi, function (m, p, v) { return p + mapFs(v) + 'px'; })
+                .replace(/(line-height\s*:\s*)(\d+(?:\.\d+)?)px/gi, function (m, p, v) { return p + mapLh(v) + 'px'; });
         }
         function scaleStyleEl(st) {
             if (st.getAttribute('data-ef') === mode) return;
