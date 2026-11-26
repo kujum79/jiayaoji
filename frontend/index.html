@@ -29680,9 +29680,29 @@ function showFridgeInput() {
     sendFridgeQuickMsg();
 }
 function startFridgeVoice() {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        showToast('您的浏览器不支持语音输入');
+    var _iatEnvReady = (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+        && navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext);
+    if (_iatEnvReady) {
+        if (_iatRecorder && _iatRecorder.opts && _iatRecorder.opts._quickInput) { stopIatRecorder(_iatRecorder.opts); return; }
+        startIatRecorder({
+            tipMsg: '🎤 说食材名...',
+            _quickInput: true,
+            onResult: function (text, err) {
+                if (text) {
+                    var inp = document.getElementById('fridgeQuickInput');
+                    if (inp) inp.value = text;
+                    showToast('已听到：' + text);
+                } else {
+                    showToast('语音识别失败，请直接输入');
+                }
+            },
+            onMicFail: function () { showToast('浏览器不支持语音'); }
+        });
         return;
+    }
+    // 旧兜底
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        showToast('您的浏览器不支持语音输入'); return;
     }
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
@@ -30247,19 +30267,92 @@ function getDefaultExpiryDate(category, name) {
     return now.toISOString().split('T')[0];
 }
 
-// 启动/停止语音管理
-function startFridgeVoiceManagement() {
-    // 如果正在录音，点击则停止
-    if (_fridgeVoiceRecording && _fridgeVoiceRecognition) {
-        _fridgeVoiceRecognition.stop();
+// ========== V695 扩展：通用讯飞录音 helper（食材/日记/聊天共用） ==========
+// 调用 startIatRecorder({onResult, recordingFabId, tipMsg, onMicFail}) 开始录音
+// 自动 stop → POST /api/asr → 回调 onResult(text)；30s 自动截断
+var _iatRecorder = null;
+function startIatRecorder(opts) {
+    opts = opts || {};
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showVoiceTip('❌ 当前环境不支持录音');
+        if (opts.onMicFail) opts.onMicFail('浏览器不支持');
         return;
     }
+    if (_iatRecorder) { stopIatRecorder(opts); return; }
+    navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } }).then(function (stream) {
+        var ctx = new AC();
+        var src = ctx.createMediaStreamSource(stream);
+        var proc = ctx.createScriptProcessor(4096, 1, 1);
+        var parts = [];
+        proc.onaudioprocess = function (e) { try { parts.push(_iatResample16k(e.inputBuffer.getChannelData(0), ctx.sampleRate)); } catch (err) {} };
+        src.connect(proc); proc.connect(ctx.destination);
+        _iatRecorder = { ctx: ctx, stream: stream, proc: proc, parts: parts, opts: opts };
+        _iatRecorder.timer = setTimeout(function () { if (_iatRecorder) stopIatRecorder(opts); }, 30000);
+        var fab = opts.recordingFabId ? document.getElementById(opts.recordingFabId) : null;
+        if (fab) fab.classList.add('recording');
+        showVoiceTip(opts.tipMsg || '🎙️ 正在录音…说完再点一下 ⏹️');
+    }).catch(function (err) {
+        showVoiceTip('❌ 麦克风用不了（' + (err && err.name === 'NotAllowedError' ? '未授权' : '设备不可用') + '）');
+        if (opts.onMicFail) opts.onMicFail(err && err.message || String(err));
+    });
+}
+function stopIatRecorder(opts) {
+    var r = _iatRecorder; if (!r) return; _iatRecorder = null;
+    clearTimeout(r.timer);
+    try { r.proc.disconnect(); r.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+    var total = 0; r.parts.forEach(function (p) { total += p.length; });
+    var pcm = new Int16Array(total), off = 0;
+    r.parts.forEach(function (p) { pcm.set(p, off); off += p.length; });
+    try { r.ctx.close(); } catch (e) {}
+    var fab = (opts && opts.recordingFabId) ? document.getElementById(opts.recordingFabId) : null;
+    if (fab) fab.classList.remove('recording');
+    if (total < 3200) { showVoiceTip('⏱️ 说话太短了，再点 🎤 多说几个字'); return; }
+    showVoiceTip('🔍 识别中…');
+    var cb = (opts && opts.onResult) || function () {};
+    fetch((window.__API_BASE || '/api') + '/asr', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: pcm.buffer })
+        .then(function (res) { return res.json(); })
+        .then(function (j) {
+            if (j && j.ok && j.text) {
+                showVoiceTip('✅ 听到：' + j.text);
+                cb(j.text.replace(/\s+/g, ''), null);
+            } else {
+                showVoiceTip('❌ ' + ((j && j.error) || '识别失败'));
+                cb(null, (j && j.error) || '识别失败');
+            }
+        })
+        .catch(function (e) {
+            showVoiceTip('❌ 语音服务连不上，请直接打字');
+            cb(null, '网络异常');
+        });
+}
 
-    const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+// 启动/停止语音管理 —— V695：优先走讯飞录音通道
+function startFridgeVoiceManagement() {
+    // 如果正在录音，点击则停止
+    if (_iatRecorder && _iatRecorder.opts && _iatRecorder.opts._fridge) { stopIatRecorder(_iatRecorder.opts); return; }
+    if (_fridgeVoiceRecording) { /* 老状态兜底 */ return; }
+
+    var _iatEnvReady = (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+        && navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext);
+    if (_iatEnvReady) {
+        startIatRecorder({
+            recordingFabId: 'fridgeVoiceFab',
+            tipMsg: '🎤 正在听，请说出食材指令...\n如：番茄加2个 / 鸡蛋用掉3个 / 牛肉改成500克',
+            _fridge: true,
+            onResult: function (text, err) {
+                if (text) handleFridgeVoiceResult(text);
+                else { showVoiceTip('语音识别失败，请直接输入'); setTimeout(function () { openVoiceTextModal('fridge', '语音识别不可用', '请直接输入食材指令：\n如：番茄加2个 / 鸡蛋用掉3个 / 牛肉改成500克'); }, 1500); }
+            },
+            onMicFail: function (err) { openVoiceTextModal('fridge', '语音识别不可用', '当前环境不支持语音识别，请直接输入食材指令：\n如：番茄加2个 / 鸡蛋用掉3个 / 牛肉改成500克'); }
+        });
+        return;
+    }
+    // 旧浏览器语音兜底（Chrome 桌面端可用，微信内会走失败弹窗）
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!isSecure || !SpeechRecognition) {
+    if (!SpeechRecognition) {
         showVoiceTip('当前环境不支持语音识别');
-        openVoiceTextModal('fridge', '语音识别不可用', '当前环境不支持语音识别，请直接输入食材指令：\n如：番茄加2个 / 鸡蛋用掉3个 / 牛肉改成500克');
+        openVoiceTextModal('fridge', '语音识别不可用', '请直接输入食材指令：\n如：番茄加2个 / 鸡蛋用掉3个 / 牛肉改成500克');
         return;
     }
 
@@ -30275,66 +30368,31 @@ function startFridgeVoiceManagement() {
         if (fab) fab.classList.add('recording');
         showVoiceTip('🎤 正在听，请说出食材指令...\n如：番茄加2个 / 鸡蛋用掉3个 / 牛肉改成500克');
     };
-
-    _fridgeVoiceRecognition.onspeechstart = () => {
-        showVoiceTip('🎤 已检测到语音，正在识别...');
-    };
-
     _fridgeVoiceRecognition.onresult = (event) => {
         let finalText = '';
-        let interimText = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript || '';
-            if (event.results[i].isFinal) {
-                finalText += transcript;
-            } else {
-                interimText += transcript;
-            }
+            if (event.results[i].isFinal) finalText += event.results[i][0].transcript || '';
         }
-        if (interimText) {
-            showVoiceTip(`🎤 ${interimText}`);
-        }
-        if (finalText) {
-            showVoiceTip(`✅ 识别完成：${finalText}`);
-            handleFridgeVoiceResult(finalText.trim());
-        }
+        if (finalText) showVoiceTip(`✅ 识别完成：${finalText}`);
+        handleFridgeVoiceResult(finalText.trim());
     };
-
     _fridgeVoiceRecognition.onerror = (event) => {
         _fridgeVoiceRecording = false;
         if (fab) fab.classList.remove('recording');
         let errMsg = '语音识别失败';
         if (event.error === 'no-speech') errMsg = '未检测到语音，请重试';
         else if (event.error === 'not-allowed') errMsg = '麦克风权限被拒绝';
-        else if (event.error === 'aborted') errMsg = '';
-        if (errMsg) {
-            showVoiceTip(errMsg);
-            if (event.error === 'not-allowed' || event.error === 'network' || event.error === 'audio-capture') {
-                setTimeout(() => {
-                    hideVoiceTip();
-                    openVoiceTextModal('fridge', '语音识别不可用', errMsg + '，请直接输入食材指令：');
-                }, 1500);
-            }
-        } else {
-            hideVoiceTip();
+        if (errMsg) showVoiceTip(errMsg);
+        if (event.error === 'network' || event.error === 'audio-capture') {
+            setTimeout(() => hideVoiceTip(), 1500);
         }
     };
-
     _fridgeVoiceRecognition.onend = () => {
         _fridgeVoiceRecording = false;
         if (fab) fab.classList.remove('recording');
         setTimeout(() => hideVoiceTip(), 2000);
     };
-
-    try {
-        _fridgeVoiceRecognition.start();
-    } catch (e) {
-        showVoiceTip('语音识别启动失败，请重试');
-        setTimeout(() => {
-            hideVoiceTip();
-            openVoiceTextModal('fridge', '语音识别不可用', '语音识别启动失败，请直接输入食材指令：');
-        }, 1500);
-    }
+    try { _fridgeVoiceRecognition.start(); } catch (e) { showVoiceTip('语音识别启动失败'); setTimeout(() => openVoiceTextModal('fridge', '语音识别不可用', '请直接输入食材指令'), 1500); }
 }
 
 // 处理食材语音识别结果
@@ -30629,19 +30687,31 @@ function executeDiaryVoiceCommand(command) {
     }
 }
 
-// 启动/停止食记语音管理
+// 启动/停止食记语音管理 —— V695：优先走讯飞录音通道
 function startDiaryVoiceManagement() {
-    // 如果正在录音，点击则停止
-    if (_diaryVoiceRecording && _diaryVoiceRecognition) {
-        _diaryVoiceRecognition.stop();
+    if (_iatRecorder && _iatRecorder.opts && _iatRecorder.opts._diary) { stopIatRecorder(_iatRecorder.opts); return; }
+    if (_diaryVoiceRecording) { return; }
+
+    var _iatEnvReady = (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+        && navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext);
+    if (_iatEnvReady) {
+        startIatRecorder({
+            recordingFabId: 'diaryVoiceFab',
+            tipMsg: '🎤 正在听，请说出食记指令...\n如：今天午餐加红烧肉 / 明天早餐改成粥 / 确认午餐计划',
+            _diary: true,
+            onResult: function (text, err) {
+                if (text) handleDiaryVoiceResult(text);
+                else { showVoiceTip('语音识别失败，请直接输入'); setTimeout(function () { openVoiceTextModal('diary', '语音识别不可用', '请直接输入食记指令：\n如：今天午餐加红烧肉 / 明天早餐改成粥 / 删除午餐的炒饭'); }, 1500); }
+            },
+            onMicFail: function (err) { openVoiceTextModal('diary', '语音识别不可用', '当前环境不支持语音识别，请直接输入食记指令：\n如：今天午餐加红烧肉 / 明天早餐改成粥 / 删除午餐的炒饭'); }
+        });
         return;
     }
-
-    const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    // 旧浏览器语音兜底
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!isSecure || !SpeechRecognition) {
+    if (!SpeechRecognition) {
         showVoiceTip('当前环境不支持语音识别');
-        openVoiceTextModal('diary', '语音识别不可用', '当前环境不支持语音识别，请直接输入食记指令：\n如：今天午餐加红烧肉 / 明天早餐改成粥 / 删除午餐的炒饭');
+        openVoiceTextModal('diary', '语音识别不可用', '请直接输入食记指令：\n如：今天午餐加红烧肉 / 明天早餐改成粥 / 删除午餐的炒饭');
         return;
     }
 
@@ -30657,66 +30727,29 @@ function startDiaryVoiceManagement() {
         if (fab) fab.classList.add('recording');
         showVoiceTip('🎤 正在听，请说出食记指令...\n如：今天午餐加红烧肉 / 明天早餐改成粥 / 确认午餐计划');
     };
-
-    _diaryVoiceRecognition.onspeechstart = () => {
-        showVoiceTip('🎤 已检测到语音，正在识别...');
-    };
-
     _diaryVoiceRecognition.onresult = (event) => {
         let finalText = '';
-        let interimText = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript || '';
-            if (event.results[i].isFinal) {
-                finalText += transcript;
-            } else {
-                interimText += transcript;
-            }
+            if (event.results[i].isFinal) finalText += event.results[i][0].transcript || '';
         }
-        if (interimText) {
-            showVoiceTip(`🎤 ${interimText}`);
-        }
-        if (finalText) {
-            showVoiceTip(`✅ 识别完成：${finalText}`);
-            handleDiaryVoiceResult(finalText.trim());
-        }
+        if (finalText) showVoiceTip(`✅ 识别完成：${finalText}`);
+        handleDiaryVoiceResult(finalText.trim());
     };
-
     _diaryVoiceRecognition.onerror = (event) => {
         _diaryVoiceRecording = false;
         if (fab) fab.classList.remove('recording');
         let errMsg = '语音识别失败';
         if (event.error === 'no-speech') errMsg = '未检测到语音，请重试';
         else if (event.error === 'not-allowed') errMsg = '麦克风权限被拒绝';
-        else if (event.error === 'aborted') errMsg = '';
-        if (errMsg) {
-            showVoiceTip(errMsg);
-            if (event.error === 'not-allowed' || event.error === 'network' || event.error === 'audio-capture') {
-                setTimeout(() => {
-                    hideVoiceTip();
-                    openVoiceTextModal('diary', '语音识别不可用', errMsg + '，请直接输入食记指令：');
-                }, 1500);
-            }
-        } else {
-            hideVoiceTip();
-        }
+        if (errMsg) showVoiceTip(errMsg);
+        if (event.error === 'network' || event.error === 'audio-capture') setTimeout(() => hideVoiceTip(), 1500);
     };
-
     _diaryVoiceRecognition.onend = () => {
         _diaryVoiceRecording = false;
         if (fab) fab.classList.remove('recording');
         setTimeout(() => hideVoiceTip(), 2000);
     };
-
-    try {
-        _diaryVoiceRecognition.start();
-    } catch (e) {
-        showVoiceTip('语音识别启动失败，请重试');
-        setTimeout(() => {
-            hideVoiceTip();
-            openVoiceTextModal('diary', '语音识别不可用', '语音识别启动失败，请直接输入食记指令：');
-        }, 1500);
-    }
+    try { _diaryVoiceRecognition.start(); } catch (e) { showVoiceTip('语音识别启动失败'); setTimeout(() => openVoiceTextModal('diary', '语音识别不可用', '请直接输入食记指令'), 1500); }
 }
 
 // 处理食记语音识别结果
