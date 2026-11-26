@@ -13943,8 +13943,31 @@ function cloudBackupSchedule(key) {
     if (_sbPushTimer) clearTimeout(_sbPushTimer);
     _sbPushTimer = setTimeout(cloudBackupPush, 2500);
 }
+// V699: 离线暂存队列（断网时保存未同步的脏键，网络恢复后自动推送）
+var __offlinePendingQueue = null;
+
 async function cloudBackupPush() {
     if (window.__demoMode) return;
+    
+    // V699: 断网前置检测——离线时暂存本地队列，等恢复自动重试
+    if (!navigator.onLine) {
+        var dirty = Object.keys(_sbDirtyKeys);
+        var gone = Object.keys(_sbDeletedKeys);
+        if (dirty.length || gone.length) {
+            var queue = JSON.parse(lsGet('__offlinePendingQueue') || '{}');
+            dirty.forEach(function(k) { queue[k] = lsGet(k); });
+            gone.forEach(function(k) { queue['__del_' + k] = true; });
+            lsSet('__offlinePendingQueue', JSON.stringify(queue));
+            console.warn('[离线模式] ' + (dirty.length + gone.length) + ' 个键暂存本地，等待网络恢复同步');
+            if (typeof showToast === 'function' && !window.__offlineToastShown) {
+                showToast('📶 当前离线，数据暂存本地，恢复网络后自动同步', 'info', 3000);
+                window.__offlineToastShown = true;
+            }
+        }
+        return;
+    }
+    window.__offlineToastShown = false;
+    
     if (_sbPushing) { _sbPushTimer = setTimeout(cloudBackupPush, 1500); return; } // 上一轮未完成：稍后重试，避免丢脏键
     if (!window.__cloudBackupReady) { window.__pendingBackup = true; return; }
     if (!sb) return;
@@ -34921,6 +34944,42 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('fridgeConfirmOverlay').classList.remove('show');
         if (_no) _no();
     };
+});
+
+// V699: 离线状态横幅 + 网络恢复自动同步
+window.addEventListener('online', function() {
+    console.log('[网络恢复] 触发待同步队列推送');
+    setTimeout(function() {
+        var queue = JSON.parse(lsGet('__offlinePendingQueue') || '{}');
+        var keys = Object.keys(queue);
+        if (keys.length) {
+            keys.forEach(function(k) {
+                if (k.startsWith('__del_')) {
+                    _sbDeletedKeys[k.replace('__del_', '')] = true;
+                } else {
+                    _sbDirtyKeys[k] = true;
+                }
+            });
+            lsSet('__offlinePendingQueue', '{}');
+            cloudBackupPush();
+            if (typeof showToast === 'function') showToast('✅ 网络已恢复，正在同步离线数据...', 'success', 2000);
+        }
+    }, 1000);
+    var banner = document.getElementById('__offlineBanner');
+    if (banner) banner.style.display = 'none';
+});
+
+window.addEventListener('offline', function() {
+    console.log('[网络断开] 显示离线横幅');
+    if (!document.getElementById('__offlineBanner')) {
+        var banner = document.createElement('div');
+        banner.id = '__offlineBanner';
+        banner.textContent = '📶 当前离线 · 数据暂存本地 · 恢复后自动同步';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#F59E0B;color:#fff;text-align:center;padding:8px 0;font-size:14px;font-weight:600;z-index:999999;box-shadow:0 2px 8px rgba(0,0,0,0.15);';
+        document.body.appendChild(banner);
+    } else {
+        document.getElementById('__offlineBanner').style.display = 'block';
+    }
 });
 
 // ==================== 采购计划：输入弹窗事件绑定 ====================
@@ -70228,6 +70287,12 @@ function removeAIRecommendation(idx) {
 
 // AI从知识库推荐（在外就餐+烹饪）
 async function aiRecommendFromKnowledge() {
+    // V699: 断网前置提示——AI推荐需要网络连接
+    if (!navigator.onLine) {
+        if (typeof showToast === 'function') showToast('📶 当前离线，AI推荐暂不可用，请检查网络后重试', 'info', 3000);
+        return;
+    }
+    
     var btn = document.getElementById('knAiRecommendBtn');
     var list = document.getElementById('knowledgeRestaurantList');
     if (!list) return;
