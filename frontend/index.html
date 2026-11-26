@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V688-20261126';
+        var APP_VER = 'V689-20261126';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -31,19 +31,23 @@
     </script>
     <script>
     /* V685: 适老化字体引擎——运行时全站放大字号（样式表+内联+动态渲染内容）
-       三档 elderFontMode：normal 标准（现状）/ large 大（+2px，默认）/ xlarge 特大（+4px）
-       映射：原 ≥19px（展示字/图标）不变；正文 +d 且下限 11（特大 12）；px 行高同步 +d
+       三档 elderFontMode：normal 标准 / large 大 / xlarge 特大（V689 起默认）
+       V689: 分级映射表（特大档主正文 13→16、卡片标题 16→19、页面标题封顶 20，≥19 展示字不动）；
+       升级机制：仅 elderFontUserSet（手动选过档）者按其档位，其余一律"特大"；引擎不再回写默认值
        幂等保护：已处理元素打 data-ef 标记，MutationObserver 跳过，业务改 style 不会二次放大 */
     (function () {
-        var mode = 'large';
-        try { mode = localStorage.getItem('elderFontMode') || 'large'; } catch (e) {}
-        if (mode !== 'normal' && mode !== 'xlarge') mode = 'large';
-        try { localStorage.setItem('elderFontMode', mode); } catch (e) {}
+        var mode = 'xlarge';
+        try {
+            var saved = localStorage.getItem('elderFontMode');
+            mode = (localStorage.getItem('elderFontUserSet') && saved) ? saved : 'xlarge';
+        } catch (e) {}
+        if (mode !== 'normal' && mode !== 'large') mode = 'xlarge';
         if (mode === 'normal') return;
-        var d = mode === 'xlarge' ? 4 : 2;
-        var floor = mode === 'xlarge' ? 12 : 11;
-        function mapFs(v) { v = parseInt(v, 10); if (isNaN(v)) return v; if (v >= 19) return v; var r = v + d; return r < floor ? floor : r; }
-        function mapLh(v) { v = parseInt(v, 10); return isNaN(v) ? v : v + d; }
+        var EF_MAP = mode === 'xlarge'
+            ? { 9: 12, 10: 13, 11: 14, 12: 15, 13: 16, 14: 17, 15: 18, 16: 19, 17: 19, 18: 20 }
+            : { 9: 11, 10: 12, 11: 13, 12: 14, 13: 15, 14: 16, 15: 17, 16: 18, 17: 19, 18: 20 };
+        function mapFs(v) { v = parseInt(v, 10); if (isNaN(v)) return v; if (v >= 19) return v; if (v <= 9) return mode === 'xlarge' ? 12 : 11; return EF_MAP[v]; }
+        function mapLh(v) { return mapFs(v); }
         function scaleText(css) {
             return css
                 .replace(/(font-size\s*:\s*)(\d+)px/gi, function (m, p, v) { return p + mapFs(v) + 'px'; })
@@ -87,10 +91,12 @@
         });
         mo.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
     })();
-    /* V685: 字体档位切换（「我家→设置与权限」调用），写档后刷新生效 */
+    /* V685: 字体档位切换（「我家→设置与权限」调用），写档后刷新生效；V689: 记录手动选档标记 */
     window._setElderFontMode = function (m) {
         try {
-            if ((localStorage.getItem('elderFontMode') || 'large') === m) return;
+            var cur = (localStorage.getItem('elderFontUserSet') && localStorage.getItem('elderFontMode')) || 'xlarge';
+            if (cur === m) return;
+            localStorage.setItem('elderFontUserSet', '1');
             localStorage.setItem('elderFontMode', m);
         } catch (e) { return; }
         location.reload();
@@ -43052,7 +43058,7 @@ window.editMemberCard = function(id) {
     // ============ V70 组4：设置与权限（原设置面板重组为子项） ============
     const notifEnabled = lsGet('notifEnabled') !== 'false'; // 默认开启
     // V685: 适老化字体档位（标准/大/特大），切换后刷新生效
-    var efMode = 'large'; try { efMode = localStorage.getItem('elderFontMode') || 'large'; } catch (e) {}
+    var efMode = 'xlarge'; try { var _efs = localStorage.getItem('elderFontUserSet'), _efm = localStorage.getItem('elderFontMode'); efMode = (_efs && _efm) ? _efm : 'xlarge'; } catch (e) {} /* V689: 与引擎同款档位判定，未手动选档显示"特大" */
     var efSegHtml = [['normal', '标准'], ['large', '大'], ['xlarge', '特大']].map(function (o) {
         var on = efMode === o[0];
         return '<button onclick="event.stopPropagation();_setElderFontMode(\'' + o[0] + '\')" style="padding:4px 12px;font-size:13px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ' + (on ? '#F97316' : '#FED7AA') + ';background:' + (on ? '#F97316' : '#FFF7ED') + ';color:' + (on ? '#fff' : '#C2410C') + ';">' + o[1] + '</button>';
