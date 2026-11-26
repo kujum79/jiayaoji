@@ -14006,8 +14006,64 @@ async function cloudBackupPush() {
     } catch (e) {
         console.warn('[云端数据] 推送异常（本地数据不受影响）', e);
     }
+    // V698: 自动触发服务器备份通道——解决 Nov 13 后备份断更根因（之前前端从未调过 /api/family-backup save）
+    // 触发条件：本次 push 有实质性内容（清除了脏键）+ 距上次成功备份 ≥ 30 分钟
+    try { _tryServerBackup(); } catch(e) {}
     _sbPushing = false;
 }
+
+// V698: 自动触发服务器备份通道（D4-06 根因修复：之前前端从未调过 /api/family-backup save）
+// 触发时机：cloudBackupPush 成功后（≥ 30 分钟间隔）+ 定时器兜底（每 6 小时）
+async function _tryServerBackup() {
+    try {
+        var code = localStorage.getItem('currentFamilyCode');
+        if (!code || window.__demoMode) return;
+        var now = Date.now();
+        var last = parseInt(localStorage.getItem('_lastServerBackupAt') || '0', 10);
+        if (now - last < 30 * 60 * 1000) return;  // 30 分钟内不重复
+        // 构造备份数据（按 _FAMILY_BACKUP_KEYS 过滤，value 为 JSON.stringify 后的字符串）
+        var keys = (window._FAMILY_BACKUP_KEYS || []);
+        var data = {};
+        var bytes = 0;
+        for (var i = 0; i < keys.length; i++) {
+            var k = keys[i];
+            var v = null;
+            try {
+                // familyKey 加家庭码前缀再查；同时兼容无前缀的公共键
+                var famPrefixed = code + '_' + k;
+                var raw = localStorage.getItem(famPrefixed) || localStorage.getItem(k);
+                if (!raw) continue;
+                v = raw;  // 已经是字符串（JSON.stringify 后存的）
+            } catch(e) { continue; }
+            if (typeof v === 'string' && v.length > 0) {
+                data[k] = v;
+                bytes += v.length;
+            }
+        }
+        if (Object.keys(data).length === 0) return;
+        // POST 给后端 save 端点
+        var resp = await fetch('/api/family-backup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ familyId: code, data: data })
+        });
+        var j = await resp.json();
+        if (j && j.ok) {
+            localStorage.setItem('_lastServerBackupAt', String(now));
+            console.log('[服务器备份] ✓ ' + code + ' 已保存 ' + Object.keys(data).length + ' 键 ' + bytes + ' 字节');
+        } else {
+            console.warn('[服务器备份] 后端拒绝：', j && j.error);
+        }
+    } catch (e) {
+        console.warn('[服务器备份] 异常（不影响本地数据）', e && e.message);
+    }
+}
+
+// V698: 6 小时兜底定时器——无论用户是否操作都触发一次
+setInterval(function () { try { _tryServerBackup(); } catch(e) {} }, 6 * 60 * 60 * 1000);
+// 页面加载 2 分钟后也触发一次（首次启动兜底）
+setTimeout(function () { try { _tryServerBackup(); } catch(e) {} }, 2 * 60 * 1000);
+
 async function cloudBackupRestoreIfNeeded() {
     try {
         if (window.__demoMode) return false; // V195: 演示数据由引导脚本单独灌入，不走恢复链路
