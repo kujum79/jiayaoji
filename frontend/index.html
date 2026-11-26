@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V693-20261126';
+        var APP_VER = 'V694-20261126';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -80308,18 +80308,19 @@ function submitVoiceTextModal() {
 }
 
 function openVoiceTextFallback(scope, reason) {
-    const text = prompt(`${reason}\n\n如果暂时无法使用麦克风，可以先在这里输入要发送的话：`);
-    if (text && text.trim()) {
-        const { input } = getInputControls(scope);
-        input.value = text.trim();
-        sendFromInput(scope);
-    }
+    /* V694: 兜底由 prompt 弹窗改为主输入框聚焦+引导（prompt 对中老年难用；手机键盘自带🎤语音键可继续说话） */
+    var c = getInputControls(scope);
+    showVoiceTip('📝 ' + reason + '，请在下方输入框直接打字，或点键盘上的🎤说话');
+    try { if (c && c.input) c.input.focus(); } catch (e) {}
 }
 
 async function startVoiceRecognition(scope) {
     const { input, state, voicePanel } = getInputControls(scope);
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const isSecureSpeechEnv = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    /* V694: 本会话已发生过 network 失败（微信内置浏览器常见——浏览器语音服务连不上）则不再反复重试，直接引导键盘输入 */
+    var _wsrNetFail = false; try { _wsrNetFail = sessionStorage.getItem('_wsrNetFail') === '1'; } catch (e) {}
+    if (_wsrNetFail) { openVoiceTextFallback(scope, '语音服务连不上（网络限制）'); return; }
     if (!isSecureSpeechEnv) {
         showVoiceTip('语音识别需要 HTTPS 或 localhost 环境');
         alert('语音识别需要 HTTPS 或 localhost 环境');
@@ -80388,7 +80389,7 @@ async function startVoiceRecognition(scope) {
                 clearTimeout(state.timer);
                 state.timer = null;
             }
-            input.value = finalText.trim();
+            input.value = finalText.replace(/\s+/g, '').trim(); /* V694: 清理识别断句空格（"今天吃啥 菜。"→"今天吃啥菜。"） */
             state.voiceStatus = 'ready';
             updateInputButtons(scope);
             showVoiceTip(`✅ 识别完成：${input.value}`);
@@ -80408,6 +80409,10 @@ async function startVoiceRecognition(scope) {
             alert('请允许浏览器访问麦克风权限');
         } else if (error === 'no-speech') {
             showVoiceTip('🔇 没有检测到语音，请重试');
+        } else if (error === 'network') {
+            /* V694: 语音服务连不上（微信/国内浏览器通病）——中文化提示并记住，本会话不再重试 */
+            try { sessionStorage.setItem('_wsrNetFail', '1'); } catch (e) {}
+            showVoiceTip('❌ 语音服务连不上（网络限制），请改用文字输入');
         } else {
             showVoiceTip(`❌ 语音识别失败：${error}`);
         }
