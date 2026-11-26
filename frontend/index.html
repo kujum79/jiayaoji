@@ -16742,6 +16742,66 @@ if (typeof DEFAULT_DIET_KNOWLEDGE !== 'undefined' && DEFAULT_DIET_KNOWLEDGE.leng
         try { lsSet('dietKnowledge', JSON.stringify(dietKnowledge)); } catch(e) {}
     }
 }
+// V703: 食方文章自动重挂细分类——category="食方" 的老文章按标题关键词迁移到新的三级子分类
+// 只在迁移标记不存在时执行一次
+(function __migrateShiyangArticles() {
+    try {
+        if (localStorage.getItem('__v703_shiyang_migrated')) return; // 已迁过
+        var dk = JSON.parse(lsGet('dietKnowledge') || '[]');
+        var migrated = 0;
+        // 关键词→新分类路径（一级/二级/三级，多个|分隔）
+        var rules = [
+            { kw: /失眠|安神|睡眠/, path: 'shiyang/内科食方/失眠安神' },
+            { kw: /抑郁|焦虑|情绪/, path: 'shiyang/内科食方/养心安神' },
+            { kw: /脾胃|健脾|消化|养胃|胃痛/, path: 'shiyang/内科食方/脾胃调理' },
+            { kw: /肺|润.*肺|咳嗽|哮喘|痰|支气管炎|呼吸/, path: 'shiyang/内科食方/润肺养阴' },
+            { kw: /肝|疏肝|肝郁|胆|利胆/, path: 'shiyang/内科食方/疏肝理气' },
+            { kw: /肾|补肾|肾虚|腰酸|夜尿|温阳/, path: 'shiyang/内科食方/补肾温阳' },
+            { kw: /感冒|发烧|发热|流感|新冠|解表|散寒/, path: 'shiyang/内科食方/解表散寒' },
+            { kw: /糖.*尿|糖尿病|血糖/, path: 'shiyang/慢病调理/糖尿病饮食' },
+            { kw: /高血压|血压高|降压/, path: 'shiyang/慢病调理/高血压饮食' },
+            { kw: /血脂|胆固醇|降脂|高血脂/, path: 'shiyang/慢病调理/高血脂饮食' },
+            { kw: /痛风|尿酸|嘌呤/, path: 'shiyang/慢病调理/痛风饮食' },
+            { kw: /肾.*病|肾功能|水肿/, path: 'shiyang/慢病调理/肾病饮食' },
+            { kw: /肝.*病|肝炎|肝损伤/, path: 'shiyang/慢病调理/肝病饮食' },
+            { kw: /产后|下奶|催乳|哺乳/, path: 'shiyang/产后调理/催乳下奶' },
+            { kw: /补气血|气血虚|贫血|面色苍白/, path: 'shiyang/产后调理/补气血' },
+            { kw: /孕.*妇|孕期|孕早|孕中|孕晚|孕.*营/, path: 'shiyang/特殊人群配餐/孕妇营养' },
+            { kw: /婴儿|辅食|宝宝.*吃|月龄|肉泥|菜泥/, path: 'shiyang/特殊人群配餐/婴儿辅食' },
+            { kw: /老年|老人|高龄|低盐|软食/, path: 'shiyang/特殊人群配餐/老年食养' },
+            { kw: /健身|增肌|减脂|低卡|高蛋白|健身餐/, path: 'shiyang/特殊人群配餐/健身餐' },
+            { kw: /职场|上班族|快手|便当|白领/, path: 'shiyang/特殊人群配餐/职场营养' },
+            { kw: /青少年|中学|高中|学生|补钙|长个/, path: 'shiyang/特殊人群配餐/青少年营养' },
+            { kw: /春.*养|春.*食|春.*补|养肝.*春/, path: 'shiyang/季节食养/春季养阳' },
+            { kw: /夏.*养|夏.*食|夏.*补|养心.*夏|暑/, path: 'shiyang/季节食养/夏季养心' },
+            { kw: /秋.*养|秋.*食|秋.*补|润肺.*秋|燥/, path: 'shiyang/季节食养/秋季润肺' },
+            { kw: /冬.*养|冬.*食|冬.*补|进补|羊肉|暖身/, path: 'shiyang/季节食养/冬季进补' }
+        ];
+        dk.forEach(function(a) {
+            var oldCat = a.category;
+            var title = a.title || '';
+            var tags = (a.tags || []).join(',');
+            var text = title + ' ' + tags;
+            // 已挂正确细分类的不动
+            if (oldCat && oldCat.indexOf('shiyang/') === 0 && oldCat.split('/').length >= 2) return;
+            // 匹配规则
+            for (var i = 0; i < rules.length; i++) {
+                if (rules[i].kw.test(text)) {
+                    a.category = rules[i].path;
+                    if (oldCat !== a.category) migrated++;
+                    break;
+                }
+            }
+        });
+        if (migrated > 0) {
+            lsSet('dietKnowledge', JSON.stringify(dk));
+            dietKnowledge = dk;
+            console.log('[V703] 食方文章重挂细分类：' + migrated + ' 篇已迁移');
+        }
+        localStorage.setItem('__v703_shiyang_migrated', '1');
+    } catch(e) { console.warn('__migrateShiyangArticles error:', e); }
+})();
+
 // 迁移：给已有 dietKnowledge 条目补 nutrition/suitableFor（必须在 dietKnowledge 初始化后执行）
 migrateNutritionToKnowledge();
 // 迁移：食材条目数据结构 V1（aliases/knowledge/funFact/nutrition/pairings/imagePrompt，只执行一次）
@@ -55295,6 +55355,21 @@ function _mergeDefaultSubCategories(kc) {
     ['public', 'family'].forEach(function(layer) {
         var tree = kc[layer] && kc[layer].tree;
         if (!tree || !Array.isArray(tree)) return;
+        // V703: 食方根节点下清理老空壳——id="食方" 且 children 为空（新节点 id 是"内科食方"）
+        var shiyang = null;
+        for (var i = 0; i < tree.length; i++) { if (tree[i].id === 'shiyang') { shiyang = tree[i]; break; } }
+        if (shiyang && shiyang.children) {
+            var before = shiyang.children.length;
+            shiyang.children = shiyang.children.filter(function(c) {
+                var isOldEmpty = (c.id === '食方' || (c.name === '内科食方' && c.id !== '内科食方'))
+                                  && (!c.children || !c.children.length);
+                if (isOldEmpty) { changed = true; return false; }
+                return true;
+            });
+            if (shiyang.children.length !== before) {
+                console.log('[V703] 食方去重：清理了', before - shiyang.children.length, '个老空壳子分类');
+            }
+        }
         DEFAULT_CATEGORY_TREE.forEach(function(defMain) {
             var main = null;
             for (var i = 0; i < tree.length; i++) { if (tree[i].id === defMain.id) { main = tree[i]; break; } }
