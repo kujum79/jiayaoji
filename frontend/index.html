@@ -16745,32 +16745,64 @@ if (typeof DEFAULT_DIET_KNOWLEDGE !== 'undefined' && DEFAULT_DIET_KNOWLEDGE.leng
 // V703: 食方文章自动重挂细分类 + 老空壳去重（一次性迁移）
 (function __migrateShiyangArticles() {
     try {
-        // 先跑空壳去重（必须在文章迁移前，避免 category 还挂在老空壳下）
-        var _kcs = ['knowledgeCategories', 'BHDVWN36_knowledgeCategories'];
-        var _deduped = 0;
+        // ========== Step 0: 找所有 knowledgeCategories key ==========
+        var _kcs = ['knowledgeCategories'];
+        for (var _k in localStorage) { if (_k.indexOf('_knowledgeCategories') !== -1) _kcs.push(_k); }
+
+        // 老子分类黑名单（历史版本有、新种子没有的，全部删掉）
+        var _LEGACY_SUBS = ['体质食养', '日常食养', '食养原则', '食养食谱', '节气食养'];
+        // 老子分类 id 黑名单（id 层面也要清）
+        var _LEGACY_IDS = ['食养', '体质食养', '日常食养', '食养原则', '食养食谱', '节气食养', '特殊人群配餐'];
+
+        var _totalFix = 0;
         _kcs.forEach(function(_key) {
             var _raw = localStorage.getItem(_key);
             if (!_raw) return;
             var _kc = null;
             try { _kc = JSON.parse(_raw); } catch(e) { return; }
+            var _changed = false;
             ['public', 'family'].forEach(function(_layer) {
                 var _tree = _kc[_layer] && _kc[_layer].tree;
                 if (!_tree) return;
+                // 先找 shiyang 节点（新版 id）
                 var _sf = null;
                 for (var _i = 0; _i < _tree.length; _i++) { if (_tree[_i].id === 'shiyang') { _sf = _tree[_i]; break; } }
+                // 再找 食养 节点（老版 id），合并/改名
+                if (!_sf) {
+                    for (var _i2 = 0; _i2 < _tree.length; _i2++) { if (_tree[_i2].id === '食养') {
+                        _sf = _tree[_i2];
+                        _sf.id = 'shiyang';     // 改 id
+                        _sf.name = '食方';       // 改名字
+                        _sf.icon = _sf.icon || '🥣';
+                        _changed = true;
+                        console.log('[V703d] 发现老 id=食养 → 改名为 shiyang/食方');
+                        break;
+                    }}
+                }
                 if (!_sf || !_sf.children) return;
+
+                // 清老空壳（V703b 逻辑）
                 var _before = _sf.children.length;
                 _sf.children = _sf.children.filter(function(_c) {
-                    var _isOld = (_c.id === '食方' || (_c.name === '内科食方' && _c.id !== '内科食方'))
-                                 && (!_c.children || !_c.children.length);
-                    return !_isOld;
+                    // 1. 老 id="食方" 空壳
+                    if ((_c.id === '食方' || (_c.name === '内科食方' && _c.id !== '内科食方'))
+                        && (!_c.children || !_c.children.length)) return false;
+                    // 2. 老子分类黑名单
+                    if (_LEGACY_SUBS.indexOf(_c.name) !== -1 || _LEGACY_IDS.indexOf(_c.id) !== -1) return false;
+                    return true;
                 });
-                if (_sf.children.length !== _before) { _deduped += (_before - _sf.children.length); }
+                // 改名：特殊人群配餐 → 特殊人群
+                _sf.children.forEach(function(_c) {
+                    if (_c.id === '特殊人群配餐') { _c.id = '特殊人群配餐'; _c.name = '特殊人群'; _changed = true; }
+                });
+                if (_sf.children.length !== _before || _changed) {
+                    _totalFix += Math.abs(_sf.children.length - _before);
+                }
             });
             localStorage.setItem(_key, JSON.stringify(_kc));
         });
-        if (_deduped > 0) {
-            console.log('[V703b] 食方去重：清理了 ' + _deduped + ' 个老空壳子分类');
+        if (_totalFix > 0) {
+            console.log('[V703d] 食方节点归一 + 老残留清理：共处理 ' + _kcs.length + ' 个 key，清理/改名 ' + _totalFix + ' 个子分类');
         }
 
         if (localStorage.getItem('__v703_shiyang_migrated')) return; // 文章分类已迁过
