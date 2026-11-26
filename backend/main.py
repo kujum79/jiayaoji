@@ -294,7 +294,9 @@ def _xfyun_iat_url() -> str:
     ).decode()
     auth = (f'api_key="{XFYUN_API_KEY}", algorithm="hmac-sha256", '
             f'headers="host date request-line", signature="{signature}"')
-    return f"wss://{host}{path}?" + urlencode({"authorization": auth, "host": host, "date": date})
+    # V702 修复：authorization 参数本身需要 base64 编码（官方示例 auth 字段就是 base64 后的字符串）
+    auth_b64 = base64.b64encode(auth.encode()).decode()
+    return f"wss://{host}{path}?" + urlencode({"authorization": auth_b64, "host": host, "date": date})
 
 
 @app.post("/api/asr")
