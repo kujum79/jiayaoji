@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V692-20261126';
+        var APP_VER = 'V693-20261126';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -31,8 +31,8 @@
     </script>
     <script>
     /* V685: 适老化字体引擎——运行时全站放大字号（样式表+内联+动态渲染内容）
-       V690 重定档：normal 标准 / large 大（默认：正文16/卡片标题19）/ xlarge 特大（正文17/卡片标题20）
-       分级映射表，页面标题封顶 20/21，≥19px 展示字/图标不动；正则兼容小数号
+       V693 重定档：normal 标准 / large 大（默认：正文17/卡片标题20）/ xlarge 特大（正文18/卡片标题21）
+       分级映射表，≥19px 展示字/图标不动；正则兼容小数号
        升级机制：仅 elderFontUserSet（手动选过档）者按其档位，其余一律默认"大"；引擎不回写默认值
        幂等保护：已处理元素打 data-ef 标记，MutationObserver 跳过，业务改 style 不会二次放大 */
     (function () {
@@ -44,9 +44,9 @@
         if (mode !== 'normal' && mode !== 'xlarge') mode = 'large';
         if (mode === 'normal') return;
         var EF_MAP = mode === 'xlarge'
-            ? { 9: 13, 10: 14, 11: 15, 12: 16, 13: 17, 14: 18, 15: 19, 16: 20, 17: 20, 18: 21 }
-            : { 9: 12, 10: 13, 11: 14, 12: 15, 13: 16, 14: 17, 15: 18, 16: 19, 17: 19, 18: 20 };
-        function mapFs(v) { v = parseInt(v, 10); if (isNaN(v)) return v; if (v >= 19) return v; if (v <= 9) return mode === 'xlarge' ? 13 : 12; return EF_MAP[v]; }
+            ? { 9: 14, 10: 15, 11: 16, 12: 17, 13: 18, 14: 19, 15: 20, 16: 21, 17: 22, 18: 22 }
+            : { 9: 13, 10: 14, 11: 15, 12: 16, 13: 17, 14: 18, 15: 19, 16: 20, 17: 20, 18: 21 };
+        function mapFs(v) { v = parseInt(v, 10); if (isNaN(v)) return v; if (v >= 19) return v; if (v <= 9) return mode === 'xlarge' ? 14 : 13; return EF_MAP[v]; }
         function mapLh(v) { return mapFs(v); }
         function scaleText(css) {
             /* V689b: 正则兼容小数号（12.5px×28 处等 57 处此前漏网），parseInt 向下取整查表 */
@@ -269,8 +269,8 @@
             transition: color 0.2s;
         }
         .home-tab-item .ht-icon { font-size: 20px; line-height: 1.2; }
-        html[data-ef="large"] .home-tabbar { height: 64px; } /* V690: 大档=V689特大映射，底栏 64 */
-        html[data-ef="xlarge"] .home-tabbar { height: 68px; }
+        html[data-ef="large"] .home-tabbar { height: 68px; } /* V693: 大档=V690特大映射（正文17），底栏 68 */
+        html[data-ef="xlarge"] .home-tabbar { height: 72px; }
         .home-tab-item:active { color: #F97316; }
 
         /* ====== 首页顶部（V40）：LOGO+品牌名居左上，右侧上=导航按钮行 下=品牌名+广告语（底对齐） ====== */
