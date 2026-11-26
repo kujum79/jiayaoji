@@ -55447,21 +55447,58 @@ function _mergeDefaultSubCategories(kc) {
     ['public', 'family'].forEach(function(layer) {
         var tree = kc[layer] && kc[layer].tree;
         if (!tree || !Array.isArray(tree)) return;
-        // V703: 食方根节点下清理老空壳——id="食方" 且 children 为空（新节点 id 是"内科食方"）
+
+        // ========== V703d2: 老版本节点归一化 ==========
+        // 历史版本：根节点 id="食养"（现改为 "shiyang"）
+        // 历史残留子分类：体质食养/日常食养/食养原则/食养食谱/节气食养/食方（空壳）
+        var _LEGACY_SUBS = ['体质食养', '日常食养', '食养原则', '食养食谱', '节气食养'];
+        var _LEGACY_IDS = ['食养', '体质食养', '日常食养', '食养原则', '食养食谱', '节气食养'];
+
+        // 1. 把 id="食养" 的根节点改名为 "shiyang"/"食方"
+        var _sfOldIdx = -1, _sfIdx = -1;
+        for (var _i = 0; _i < tree.length; _i++) {
+            if (tree[_i].id === '食养') _sfOldIdx = _i;
+            if (tree[_i].id === 'shiyang') _sfIdx = _i;
+        }
+        if (_sfOldIdx !== -1) {
+            if (_sfIdx !== -1) {
+                // 两个都存在 → 合并 children 到新版，删老版
+                var _old = tree[_sfOldIdx], _new = tree[_sfIdx];
+                (_old.children || []).forEach(function(_c) {
+                    if (!_new.children.some(function(_x){ return _x.id === _c.id; })) _new.children.push(_c);
+                });
+                tree.splice(_sfOldIdx, 1);
+                console.log('[V703d2] 食养→shiyang：合并老节点到新节点，删除老节点');
+            } else {
+                // 只有老版 → 直接改名
+                tree[_sfOldIdx].id = 'shiyang';
+                tree[_sfOldIdx].name = '食方';
+                tree[_sfOldIdx].icon = tree[_sfOldIdx].icon || '🥣';
+                console.log('[V703d2] 食养→shiyang：直接改名');
+            }
+            changed = true;
+        }
+
+        // 2. 清老子分类 + 空壳
         var shiyang = null;
         for (var i = 0; i < tree.length; i++) { if (tree[i].id === 'shiyang') { shiyang = tree[i]; break; } }
         if (shiyang && shiyang.children) {
             var before = shiyang.children.length;
             shiyang.children = shiyang.children.filter(function(c) {
+                // 空壳：id="食方" 或 name="内科食方" 但 id 不匹配 且 无子
                 var isOldEmpty = (c.id === '食方' || (c.name === '内科食方' && c.id !== '内科食方'))
                                   && (!c.children || !c.children.length);
-                if (isOldEmpty) { changed = true; return false; }
+                if (isOldEmpty) return false;
+                // 老残留子分类
+                if (_LEGACY_SUBS.indexOf(c.name) !== -1 || _LEGACY_IDS.indexOf(c.id) !== -1) return false;
                 return true;
             });
             if (shiyang.children.length !== before) {
-                console.log('[V703] 食方去重：清理了', before - shiyang.children.length, '个老空壳子分类');
+                console.log('[V703d2] 清理老残留子分类：', before, '→', shiyang.children.length);
+                changed = true;
             }
         }
+
         DEFAULT_CATEGORY_TREE.forEach(function(defMain) {
             var main = null;
             for (var i = 0; i < tree.length; i++) { if (tree[i].id === defMain.id) { main = tree[i]; break; } }
