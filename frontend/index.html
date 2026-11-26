@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V686-20261126';
+        var APP_VER = 'V687-20261126';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -332,7 +332,7 @@
             line-height: 1.3;
             margin-top: 0; /* V134: 家肴记移到 LOGO 右边后去掉上边距 */
         }
-        .home-topnav-right { flex: 1; display: flex; flex-direction: column; justify-content: center; height: 48px; margin-left: 14px; min-width: 0; } /* V59: LOGO 图右缘 16px 起排（容器 52 宽含 4px 余量） */
+        .home-topnav-right { flex: 1; display: flex; flex-direction: column; justify-content: flex-start; height: auto; margin-left: 14px; min-width: 0; } /* V687: 去掉 V59 遗留的 48px 固定高，图标行自然顶对齐，消除顶栏悬空 */
         .home-topnav-row1 { display: flex; align-items: center; width: 100%; justify-content: flex-end; gap: 12px; } /* V134: 📚 紧贴 👤/家庭名 左侧（原左聚） */
         .home-nav-btn .hn-small { display: none; } /* V44: 去掉"秋分/本周"小字（保留元素防节气脚本空引用） */
         .home-brand {
@@ -4462,7 +4462,7 @@ async function _submitFeedback() {
     <!-- ====== 首页 ====== -->
     <div class="page-home" id="pageHome">
         <!-- 顶部（V134）：LOGO+家肴记 横排左列；右侧=[📚][👤/家庭名] 靠右（📚 紧贴家庭名左侧） -->
-        <div id="homeTopNav" style="display:flex;align-items:flex-start;padding:8px 4px 0 0;width:100%;max-width:430px;margin:0 auto;">
+        <div id="homeTopNav" style="display:flex;align-items:flex-start;padding:6px 4px 0 0;width:100%;max-width:430px;margin:0 auto;">
             <!-- 左列：LOGO + 品牌名 -->
             <div class="home-brand-col" onclick="switchHomePage()" title="点击回到首页" style="cursor:pointer;">
                 <!-- V675: 做减法——去掉图标与文字的圆角背景方块，透明底锅图形+纯白"家肴记"大字直接浮在橙色渐变上；副标题随文字图一并移除 -->
@@ -4498,7 +4498,7 @@ async function _submitFeedback() {
         <!-- 内容滚动区（V38）：食材卡/食记卡，固定高度内滚动，不与输入框/底部导航重叠 -->
         <div class="home-scroll" id="homeScroll">
         <!-- 食材卡片（V45）：标题+食谱推荐下拉（替代三按钮）+ 纯文本食材列表（数据源 fridgeItems） -->
-        <div class="home-card" id="homeFridgeCard" style="margin-top:8px;">
+        <div class="home-card" id="homeFridgeCard" style="margin-top:6px;">
             <div class="home-card-title" style="display:flex;align-items:center;gap:4px;">
                 <span>家中食材</span>
                 <!-- V463: ＋ 移到「家中食材」标题右侧 -->
