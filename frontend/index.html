@@ -16781,6 +16781,39 @@ if (typeof DEFAULT_DIET_KNOWLEDGE !== 'undefined' && DEFAULT_DIET_KNOWLEDGE.leng
                 }
                 if (!_sf || !_sf.children) return;
 
+                // ========== V703d 新增：用 DEFAULT_CATEGORY_TREE 源重建 children ==========
+                // （之前 _mergeDefaultSubCategories 跑的时候节点还是 id=食养，对不上没 merge）
+                var _defShiyang = null;
+                try { if (typeof DEFAULT_CATEGORY_TREE !== 'undefined') {
+                    for (var _d = 0; _d < DEFAULT_CATEGORY_TREE.length; _d++) {
+                        if (DEFAULT_CATEGORY_TREE[_d].id === 'shiyang') { _defShiyang = DEFAULT_CATEGORY_TREE[_d]; break; }
+                    }
+                }} catch(e) {}
+                if (_defShiyang && _defShiyang.children) {
+                    // 用 DEFAULT 的 children 做源，保留用户已有的但 DEFAULT 没有的（用户自定义分类）
+                    var _existingUserIds = {};
+                    _sf.children.forEach(function(_c) {
+                        if (_LEGACY_SUBS.indexOf(_c.name) === -1 && _LEGACY_IDS.indexOf(_c.id) === -1) {
+                            _existingUserIds[_c.id] = _c;
+                        }
+                    });
+                    var _newChildren = _defShiyang.children.map(function(_def) {
+                        // DEFAULT 定义的直接用
+                        return JSON.parse(JSON.stringify(_def));
+                    });
+                    // 保留 DEFAULT 里没有的（用户自定义的）
+                    var _newIds = {};
+                    _newChildren.forEach(function(_c) { _newIds[_c.id] = true; });
+                    Object.keys(_existingUserIds).forEach(function(_uid) {
+                        if (!_newIds[_uid]) _newChildren.push(_existingUserIds[_uid]);
+                    });
+                    if (_newChildren.length !== _sf.children.length) {
+                        console.log('[V703d] 用 DEFAULT 重建食方子分类：' + _sf.children.length + ' → ' + _newChildren.length);
+                        _sf.children = _newChildren;
+                        _changed = true;
+                    }
+                }
+
                 // 清老空壳（V703b 逻辑）
                 var _before = _sf.children.length;
                 _sf.children = _sf.children.filter(function(_c) {
