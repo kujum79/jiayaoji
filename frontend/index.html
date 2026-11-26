@@ -14016,7 +14016,8 @@ async function cloudBackupPush() {
 // 触发时机：cloudBackupPush 成功后（≥ 30 分钟间隔）+ 定时器兜底（每 6 小时）
 async function _tryServerBackup() {
     try {
-        var code = localStorage.getItem('currentFamilyCode');
+        // 用系统 getFamilyId() 取家庭码（currentFamilyCode key 不存在）
+        var code = (typeof getFamilyId === 'function') ? getFamilyId() : '';
         if (!code || window.__demoMode) return;
         var now = Date.now();
         var last = parseInt(localStorage.getItem('_lastServerBackupAt') || '0', 10);
@@ -14027,18 +14028,16 @@ async function _tryServerBackup() {
         var bytes = 0;
         for (var i = 0; i < keys.length; i++) {
             var k = keys[i];
-            var v = null;
             try {
                 // familyKey 加家庭码前缀再查；同时兼容无前缀的公共键
                 var famPrefixed = code + '_' + k;
                 var raw = localStorage.getItem(famPrefixed) || localStorage.getItem(k);
                 if (!raw) continue;
-                v = raw;  // 已经是字符串（JSON.stringify 后存的）
+                if (typeof raw === 'string' && raw.length > 0) {
+                    data[k] = raw;
+                    bytes += raw.length;
+                }
             } catch(e) { continue; }
-            if (typeof v === 'string' && v.length > 0) {
-                data[k] = v;
-                bytes += v.length;
-            }
         }
         if (Object.keys(data).length === 0) return;
         // POST 给后端 save 端点
