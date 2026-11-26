@@ -14040,11 +14040,11 @@ async function _tryServerBackup() {
             } catch(e) { continue; }
         }
         if (Object.keys(data).length === 0) return;
-        // POST 给后端 save 端点
+        // POST 给后端 save 端点（V698c: force=true 绕过缩水守卫——自动备份是正常存快照，不应被"默认数据覆盖"拦截）
         var resp = await fetch('/api/family-backup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ familyId: code, data: data })
+            body: JSON.stringify({ familyId: code, data: data, force: true })
         });
         var j = await resp.json();
         if (j && j.ok) {
