@@ -36148,7 +36148,7 @@ function _dtRenderCard(tip) {
         // V683: 摘要按 3 行容量截断（约 50 字），保证行内「往期寻味」始终显示在第 3 行末尾不被裁掉
         rIntro = String(rIntro || '').replace(/\s+/g, ' ').trim();
         if (rIntro.length > 50) rIntro = rIntro.slice(0, 50) + '…';
-        // V413: 左图右文——左侧缩略图，右侧「标题 / 摘要」；V414：图片 80×80，标签贴图片左上角；V683：「往期寻味」纯文字内联摘要第 3 行末尾
+        // V709d: 「往期寻味」独立 flex 右侧，不参与摘要截断，始终可见可点
         recipeCard = '<div class="dt-recipe-row" onclick="_fhOpenCardRecipe()">'
             + '<div class="dt-recipe-thumb-box">'
             + (recipe.coverImage
@@ -36158,7 +36158,10 @@ function _dtRenderCard(tip) {
             + '</div>'
             + '<div class="dt-recipe-info">'
             + '<div class="dt-recipe-title">' + escapeHtml(recipe.title) + '</div>'
-            + '<div class="dt-recipe-summary">' + escapeHtml(rIntro) + '<span class="dt-recipe-more" onclick="event.stopPropagation();_fhOpenRecipeArchive()">往期寻味 ›</span></div>'
+            + '<div style="display:flex;align-items:flex-end;gap:4px;margin-top:3px;">'
+            + '<div class="dt-recipe-summary" style="flex:1;min-width:0;overflow:hidden;">' + escapeHtml(rIntro) + '</div>'
+            + '<span style="flex-shrink:0;font-size:11px;color:#EA580C;font-weight:600;cursor:pointer;white-space:nowrap;" onclick="event.stopPropagation();_fhOpenRecipeArchive()">往期寻味 ›</span>'
+            + '</div>'
             + '</div></div>';
     } else {
         recipeCard = '<div style="border-radius:14px;padding:11px 12px;background:#FFFBF3;border:1px dashed #FDE7C8;">'
@@ -36305,11 +36308,11 @@ function _fhRecipeFromArticle(a) {
     };
 }
 function _fhRecipeOfDay() {
-    // V709d: 超管手动换篇优先（覆盖 AI 生成/归档/本地轮取）
-    if (_fhSuperForcedRecipe) return _fhSuperForcedRecipe;
-    // 1) 今日服务端精选食谱
+    // 1) 今日服务端精选食谱（优先！🔄 超管换篇不覆盖正常寻味散文）
     var t = _fhTrackOf('recipe_article');
     if (t && t.title) return _fhRecipeFromArticle(t);
+    // V709d: 无服务端内容时，超管手动换篇优先（轮播本地）
+    if (_fhSuperForcedRecipe) return _fhSuperForcedRecipe;
     // 2) 本地/服务端归档最近一篇食谱
     try {
         var arc = (_fhArchiveAll() || []).filter(function (a) { return a && a.title && a.contentType === 'recipe_article'; });
@@ -36324,9 +36327,15 @@ function _fhRecipeOfDay() {
     out._fallback = true;
     return out;
 }
-// V709d: 超管手动换寻味天下——🔄 按钮触发，从 _FHR_RECIPES 轮取下一篇并强制覆盖
+// V709d: 超管手动换寻味天下——仅当 AI 服务不可用时才有效；AI 有内容时提示
 var _fhSuperForcedRecipe = null;
 function _fhSuperSwapRecipe() {
+    // 有正常的服务端寻味内容时，提示不能覆盖（保持散文式寻味）
+    var t = _fhTrackOf('recipe_article');
+    if (t && t.title && !_fhSuperForcedRecipe) {
+        showToast('✅ 已有今日寻味散文，🔄 仅在 AI 不可用时切换本地食谱');
+        return;
+    }
     if (!_FHR_RECIPES || !_FHR_RECIPES.length) { showToast('暂无可切换的食谱'); return; }
     var curId = (_fhSuperForcedRecipe && _fhSuperForcedRecipe.id) || '';
     if (!curId && _fhCardRecipe && _fhCardRecipe.id) curId = _fhCardRecipe.id;
@@ -36338,11 +36347,8 @@ function _fhSuperSwapRecipe() {
     Object.keys(r).forEach(function (k) { out[k] = r[k]; });
     out._superForced = true;
     _fhSuperForcedRecipe = out;
-    showToast('🔄 已换成：' + r.title);
-    // 强制覆盖服务端返回的 recipe_article（让下次渲染也不取 AI 那篇）
-    try {
-        _fhTracks.recipe_article = null;
-    } catch(e) {}
+    showToast('🔄 已切换：' + r.title + '（AI 恢复后自动换回）');
+    // 不再清 _fhTracks.recipe_article！让 AI 内容随时能接管
     _dtRenderCard(window._dtServerTip || null);
 }
 function _fhDietOfDay(tip) { return _fhArticleList(tip)[0] || null; }
