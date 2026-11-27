@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710l-20261128';
+        var APP_VER = 'V710m-20261128';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -22765,18 +22765,14 @@ function renderFridgeRecView() {
             const nameDisplay = r.extra
                 ? `${n} <span style="color:#D97706;font-size:12px;">[手动]</span>`
                 : n;
-            const partialOwnedHint = (!r.alreadyHave && Number(r.availableQty) > 0)
-                ? ` <span class="prep-have-partial" style="color:#15803D;font-size:12px;font-weight:400;">（已有${_fmtQty(r.availableQty)}${escapeHtml(r.availableUnit || r.needBuyUnit || '')}）</span>`
-                : '';
+            // V710l: 去掉 partialOwnedHint（太占空间），改为静默
+            const partialOwnedHint = '';
             const _catHideClass = prep._collapsedCats && prep._collapsedCats[r.category] ? ' style="display:none;"' : '';
 
+            // V710l: 已有行不再渲染 —— 节省空间给采购行 + 实际列
+            if (r.alreadyHave) continue;
             let needCell, unitCell, priceCell, actualCell;
-            if (r.alreadyHave) {
-                needCell = `<span class="prep-have-tag">已有</span>`;
-                unitCell = `<span style="color:#9CA3AF;">—</span>`;
-                priceCell = `<span style="color:#9CA3AF;">—</span>`;
-                actualCell = `<span style="color:#9CA3AF;">—</span>`;
-            } else {
+            {
                 const unitLabel = unit || '份';
                 const needUnitLabel = unit || '份';
                 const upVal = unitPrice.toFixed(1);
@@ -22961,12 +22957,12 @@ function renderFridgeRecView() {
         html += `<table class="prep-shop-table">
             <thead>
                 <tr>
-                    <th style="width:32px;">☑</th>
-                    <th>食材</th>
-                    <th>单价</th>
-                    <th>购量</th>
-                    <th style="text-align:left;">预估(元)</th>
-                    <th style="text-align:left;width:56px;">实际</th>
+                    <th style="width:28px;">☑</th>
+                    <th style="width:62px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">食材</th>
+                    <th style="width:50px;text-align:left;">单价</th>
+                    <th style="width:54px;text-align:left;">购量</th>
+                    <th style="width:56px;text-align:left;">预估</th>
+                    <th style="width:60px;text-align:left;">实际</th>
                 </tr>
             </thead>
             <tbody>
