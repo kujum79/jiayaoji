@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V705k-20261127';
+        var APP_VER = 'V705L-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -55252,14 +55252,34 @@ var DEFAULT_CATEGORY_TREE = [
         { id: '饮料', name: '饮料', order: 8, children: [{ id: '谷物饮品', name: '谷物饮品', order: 1 }, { id: '果蔬汁', name: '果蔬汁', order: 2 }, { id: '茶饮原料', name: '茶饮原料', order: 3 }] },
         { id: '中草药', name: '中草药', order: 9, children: [{ id: '常用药材', name: '常用药材', order: 1 }, { id: '药食同源', name: '药食同源', order: 2 }] }
     ] },
-    { id: 'recipe', name: '食谱', icon: '📖', order: 2, children: [
-        { id: '家常', name: '家常', order: 1, children: [{ id: '家常菜', name: '家常菜', order: 1 }, { id: '北方家常', name: '北方家常', order: 2 }, { id: '南方家常', name: '南方家常', order: 3 }, { id: '中式家常', name: '中式家常', order: 4 }, { id: '川菜', name: '川菜', order: 5 }, { id: '粤菜', name: '粤菜', order: 6 }, { id: '湘菜', name: '湘菜', order: 7 }, { id: '东北菜', name: '东北菜', order: 8 }, { id: '西餐', name: '西餐', order: 9 }, { id: '日料', name: '日料', order: 10 }] },
-        { id: '家宴', name: '家宴', order: 2, children: [{ id: '中式家常', name: '中式家常', order: 1 }, { id: '苏帮菜', name: '苏帮菜', order: 2 }, { id: '粤菜', name: '粤菜', order: 3 }, { id: '川菜', name: '川菜', order: 4 }, { id: '淮扬菜', name: '淮扬菜', order: 5 }, { id: '本帮菜', name: '本帮菜', order: 6 }, { id: '浙菜', name: '浙菜', order: 7 }, { id: '汤羹', name: '汤羹', order: 8 }, { id: '烘焙甜品', name: '烘焙甜品', order: 9 }] },
-        { id: '中式', name: '中式', order: 3, children: [{ id: '中式家常', name: '中式家常', order: 1 }, { id: '粤菜', name: '粤菜', order: 2 }, { id: '川菜', name: '川菜', order: 3 }, { id: '北方菜', name: '北方菜', order: 4 }, { id: '江南菜', name: '江南菜', order: 5 }, { id: '汤羹粥品', name: '汤羹粥品', order: 6 }, { id: '中式甜品', name: '中式甜品', order: 7 }] },
-        { id: '食养', name: '食养', type: 'knowledge', order: 4, children: [{ id: '春季', name: '春季', order: 1 }, { id: '夏季', name: '夏季', order: 2 }, { id: '秋季', name: '秋季', order: 3 }, { id: '冬季', name: '冬季', order: 4 }, { id: '人群食养', name: '人群食养', order: 5 }] },
-        { id: '季节食养', name: '季节食养', type: 'knowledge', order: 10, icon: '🍂', children: [ // V704: 从 shiyang 移过来
-            { id: '春季养阳', name: '春季养阳', order: 1 }, { id: '夏季养心', name: '夏季养心', order: 2 },
-            { id: '秋季润肺', name: '秋季润肺', order: 3 }, { id: '冬季进补', name: '冬季进补', order: 4 }
+    { id: 'recipe', name: '食谱', icon: '📖', order: 2, children: [ // V705k: 重构——零重叠双维度
+        { id: '快手菜', name: '快手菜', order: 1, children: [
+            { id: '小炒', name: '小炒', order: 1 }, { id: '快手汤', name: '快手汤', order: 2 }, { id: '快手面', name: '快手面', order: 3 },
+            { id: '沙拉', name: '沙拉', order: 4 }, { id: '便当', name: '便当', order: 5 }
+        ] },
+        { id: '宴客菜', name: '宴客菜', order: 2, children: [
+            { id: '凉菜', name: '凉菜', order: 1 }, { id: '热菜', name: '热菜', order: 2 }, { id: '鱼菜', name: '鱼菜', order: 3 },
+            { id: '宴客汤', name: '宴客汤', order: 4 }, { id: '甜品', name: '甜品', order: 5 }
+        ] },
+        { id: '中式菜', name: '中式菜', order: 3, children: [
+            { id: '川菜', name: '川菜', order: 1 }, { id: '粤菜', name: '粤菜', order: 2 }, { id: '湘菜', name: '湘菜', order: 3 },
+            { id: '鲁菜', name: '鲁菜', order: 4 }, { id: '江浙菜', name: '江浙菜', order: 5 }, { id: '京菜', name: '京菜', order: 6 },
+            { id: '东北菜', name: '东北菜', order: 7 }, { id: '闽菜', name: '闽菜', order: 8 }, { id: '徽菜', name: '徽菜', order: 9 }
+        ] },
+        { id: '海外风', name: '海外风', order: 4, children: [
+            { id: '西餐', name: '西餐', order: 1 }, { id: '日料', name: '日料', order: 2 }, { id: '韩餐', name: '韩餐', order: 3 },
+            { id: '东南亚', name: '东南亚', order: 4 }, { id: '意式', name: '意式', order: 5 }, { id: '美式', name: '美式', order: 6 }
+        ] },
+        { id: '汤羹粥', name: '汤羹粥', order: 5, children: [
+            { id: '炖汤', name: '炖汤', order: 1 }, { id: '煲粥', name: '煲粥', order: 2 }, { id: '羹汤', name: '羹汤', order: 3 },
+            { id: '甜汤', name: '甜汤', order: 4 }, { id: '清汤', name: '清汤', order: 5 }
+        ] },
+        { id: '烘焙点', name: '烘焙点', order: 6, children: [
+            { id: '面包', name: '面包', order: 1 }, { id: '蛋糕', name: '蛋糕', order: 2 }, { id: '饼干', name: '饼干', order: 3 },
+            { id: '中式糕', name: '中式糕', order: 4 }
+        ] },
+        { id: '地域食', name: '地域食', order: 7, children: [
+            { id: '寻味', name: '寻味', order: 1 }, { id: '夜市', name: '夜市', order: 2 }, { id: '小吃', name: '小吃', order: 3 }
         ] }
     ] },
     { id: 'shiyang', name: '食方', icon: '🥣', order: 3, type: 'knowledge', children: [ // V663: 食养→食方，仅超管可见；家庭层不含此主分类
@@ -55316,6 +55336,10 @@ var DEFAULT_CATEGORY_TREE = [
         { id: '食育', name: '食育', type: 'knowledge', order: 11, icon: '📚', children: [
             { id: '儿童食育', name: '儿童食育', order: 1 }, { id: '家庭餐桌礼仪', name: '家庭餐桌礼仪', order: 2 },
             { id: '节气食育', name: '节气食育', order: 3 }
+        ] },
+        { id: '季节食养', name: '季节食养', type: 'knowledge', order: 12, icon: '🍂', children: [
+            { id: '春季养阳', name: '春季养阳', order: 1 }, { id: '夏季养心', name: '夏季养心', order: 2 },
+            { id: '秋季润肺', name: '秋季润肺', order: 3 }, { id: '冬季进补', name: '冬季进补', order: 4 }
         ] }
     ] },
     { id: 'cooking', name: '烹饪', icon: '🍳', order: 4, children: [
@@ -55511,8 +55535,8 @@ function _mergeDefaultSubCategories(kc) {
             // 构建 DEFAULT 白名单（shiyang 在 DEFAULT 里的 children ids）
             var _defShiyang = DEFAULT_CATEGORY_TREE.find(function(t){ return t.id === 'shiyang'; });
             var _whiteIds = (_defShiyang && _defShiyang.children || []).map(function(c){ return c.id; });
-            // 已知主动移走的节点（V705：季节食养移到 recipe 下了）
-            var _removedIds = ['季节食养'];
+            // V705k: 季节食养已回归食方 DEFAULT，不再是主动移走
+            var _removedIds = [];
             shiyang.children = shiyang.children.filter(function(c) {
                 // 空壳：id="食方" 或 name="内科食方" 但 id 不匹配 且 无子
                 var isOldEmpty = (c.id === '食方' || (c.name === '内科食方' && c.id !== '内科食方'))
@@ -55529,6 +55553,88 @@ function _mergeDefaultSubCategories(kc) {
                 changed = true;
             }
         }
+
+        // 2b. recipe 老子分类清理（V705k 重构：家常/家宴/中式/食养/季节食养 → 新7个）
+        var recipe = null;
+        for (var i = 0; i < tree.length; i++) { if (tree[i].id === 'recipe') { recipe = tree[i]; break; } }
+        if (recipe && recipe.children) {
+            var _OLD_RECIPE_SUBS = ['家常', '家宴', '中式', '食养', '季节食养'];
+            var before2 = recipe.children.length;
+            recipe.children = recipe.children.filter(function(c) { return _OLD_RECIPE_SUBS.indexOf(c.id) === -1 && _OLD_RECIPE_SUBS.indexOf(c.name) === -1; });
+            if (recipe.children.length !== before2) {
+                console.log('[V705k] recipe 老子分类清理：', before2, '→', recipe.children.length);
+                changed = true;
+            }
+        }
+
+        // 2c. recipe 文章自动迁移（V705k 重构）
+        var _recipeMigrated = 0;
+        try {
+            var _kcList = (typeof dietKnowledge !== 'undefined' && dietKnowledge) ? dietKnowledge : [];
+            var _changed = false;
+            _kcList.forEach(function(k) {
+                if (!k || k.mainCategory !== 'recipe') return;
+                var _oldSub = k.subCategory || '';
+                var _oldLeaf = k.leafCategory || '';
+                var _newSub = _oldSub, _newLeaf = _oldLeaf, _newMain = k.mainCategory;
+
+                // 季节食养 27 篇 → 食方/季节食养/对应季节 (mainCategory 改成 shiyang)
+                if (_oldSub === '季节食养') {
+                    _newMain = 'shiyang';
+                    _newSub = '季节食养';
+                    // leafCategory: 冬季进补 → 冬季进补（不变）；秋季润肺 → 秋季润肺（不变）
+                    // 但要确保 leafCategory 匹配新的 DEFAULT
+                    if (_oldLeaf === '冬季进补' || _oldLeaf === '秋季润肺' || _oldLeaf === '春季养阳' || _oldLeaf === '夏季养心') {
+                        _newLeaf = _oldLeaf; // 已经和食方/季节食养下的细分类一致
+                    } else if (_oldLeaf === '冬季') { _newLeaf = '冬季进补'; }
+                    else if (_oldLeaf === '秋季') { _newLeaf = '秋季润肺'; }
+                    else if (_oldLeaf === '春季') { _newLeaf = '春季养阳'; }
+                    else if (_oldLeaf === '夏季') { _newLeaf = '夏季养心'; }
+                    _changed = true;
+                }
+                // 食养 14 篇 → 食谱/快手菜
+                else if (_oldSub === '食养') {
+                    _newSub = '快手菜';
+                    _newLeaf = ''; // 这些都是综述，直属快手菜
+                    _changed = true;
+                }
+                // 家宴 10 篇 → 食谱/宴客菜
+                else if (_oldSub === '家宴') {
+                    _newSub = '宴客菜';
+                    _newLeaf = '';
+                    _changed = true;
+                }
+                // gdfc 17 篇（寻味天下）→ 食谱/地域食/寻味
+                else if (_oldSub === 'gdfc' || _oldSub === '寻味天下') {
+                    _newSub = '地域食';
+                    _newLeaf = '寻味';
+                    _changed = true;
+                }
+                // 家常 / 中式（空壳）→ 食谱/快手菜
+                else if (_oldSub === '家常' || _oldSub === '中式') {
+                    _newSub = '快手菜';
+                    _newLeaf = '';
+                    _changed = true;
+                }
+                // 肉食 1 篇 → 食谱/快手菜
+                else if (_oldSub === '肉食') {
+                    _newSub = '快手菜';
+                    _newLeaf = '';
+                    _changed = true;
+                }
+
+                if (_changed && (_newMain !== k.mainCategory || _newSub !== (k.subCategory || '') || _newLeaf !== (k.leafCategory || ''))) {
+                    k.mainCategory = _newMain;
+                    k.subCategory = _newSub;
+                    if (_newLeaf) k.leafCategory = _newLeaf; else delete k.leafCategory;
+                    _recipeMigrated++;
+                }
+            });
+            if (_recipeMigrated > 0) {
+                console.log('[V705k] recipe 文章自动迁移：' + _recipeMigrated + ' 篇');
+                changed = true;
+            }
+        } catch(e) { console.error('[V705k] recipe 迁移异常:', e); }
 
         DEFAULT_CATEGORY_TREE.forEach(function(defMain) {
             var main = null;
