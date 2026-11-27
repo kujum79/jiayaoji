@@ -57981,16 +57981,32 @@ function _kbBrRowsHtml(nodes, parentKey, depth, pool) {
     });
     return html;
 }
-// 左栏（约 148px 可滚动）：公共文库分组 + 🏆 食榜 + 家庭文库分组（默认展开，显示 dining-out）
+// 左栏（约 148px 可滚动）：公共文库分组 + 🏆 食榜（可展开4子榜）+ 家庭文库分组（默认展开）
 function _kbBrTreeHtml(pool) {
-    // 家庭文库选中 key 前缀：'__family__' + 真实 key
-    var famOpen = true; // V709b: 家庭文库默认展开（用户痛点就是看不到！）
+    var famOpen = true; // V709b: 家庭文库默认展开
     var famRoots = _kbBrFamRoots();
-    var famKey = famOpen ? _KB_FAM_KEY + '|' : ''; // 家庭分组内节点 key 前缀
+    var famKey = famOpen ? _KB_FAM_KEY + '|' : '';
+    // V709c: 食榜子榜 key 前缀 + 展开态
+    var sbTabs = _SB_LIB_TABS.filter(function (t) { return isModuleEnabled(t.key); });
+    var sbOpen = !!(_kbBrOpen && _kbBrOpen[_KB_BR_SB]);
+    var sbBranchHtml = '';
+    // 食榜子榜行（展开时显示）
+    if (sbOpen) {
+        sbBranchHtml = sbTabs.map(function (t) {
+            var childKey = _KB_BR_SB + '|' + t.key;
+            var sel = _kbBrSel === childKey || (_kbBrSel === _KB_BR_SB && _helpActiveTab === t.key);
+            return '<div class="sad-row' + (sel ? ' sel' : '') + '" data-key="' + childKey + '" style="padding-left:19px"><span style="width:9px;flex:0 0 9px;"></span><span>' + t.icon + ' ' + t.label + '</span></div>';
+        }).join('');
+    }
+    var sbSel = _kbBrSel === _KB_BR_SB || sbTabs.some(function (t) { return _kbBrSel === _KB_BR_SB + '|' + t.key; });
     var html = '<div class="sad-tree" id="kbBrTree" style="width:148px;max-width:148px;align-self:stretch;overflow-y:auto;">'
         + '<div class="sad-tree-head"><span>公共文库</span></div>'
         + _kbBrRowsHtml(_kbBrRoots(), '', 0, pool)
-        + '<div class="sad-row' + (_kbBrSel === _KB_BR_SB ? ' sel' : '') + '" data-key="' + _KB_BR_SB + '" style="padding-left:7px"><span style="width:9px;flex:0 0 9px;"></span><span>🏆 食榜</span></div>';
+        // V709c: 食榜改成可展开分支（▶/▼ 三角 + 子榜缩进）
+        + '<div class="sad-row' + (sbSel ? ' sel' : '') + '" data-key="' + _KB_BR_SB + '" style="padding-left:7px">'
+        + '<span class="sad-chev' + (sbOpen ? ' open' : '') + '">&#9656;</span>'
+        + '<span>🏆 食榜</span></div>'
+        + sbBranchHtml;
     // V709b: 家庭文库分组（默认展开，紧贴食榜下方）
     html += '<div class="sad-tree-head" style="margin-top:4px;"><span>家庭文库</span></div>';
     if (famRoots.length) {
@@ -58019,15 +58035,21 @@ function _kbBrRestoreBody() {
     if (header) header.insertAdjacentElement('afterend', body);
     else view.appendChild(body);
 }
-// 右栏渲染：食榜→现有榜单（#libShibangArea + _renderHelpMain，带自带子榜 Tab 栏）；
+// 右栏渲染：食榜→现有榜单（子榜 Tab 已移到左侧，hideTabs=true）；
 // 食文树→现有食文卡片视图（body 搬入右栏后走 renderCategoryView('article')）；普通节点→只读卡片列表
 function _kbBrRenderMain() {
     var main = document.getElementById('kbBrMain');
     if (!main) return;
     _kbBrRestoreBody();
-    if (_kbBrSel === _KB_BR_SB) {
+    // V709c: 子榜 key 处理——自动切换 _helpActiveTab
+    var isSbChild = String(_kbBrSel).indexOf(_KB_BR_SB + '|') === 0;
+    if (_kbBrSel === _KB_BR_SB || isSbChild) {
+        if (isSbChild) {
+            _helpActiveTab = String(_kbBrSel).substring((_KB_BR_SB + '|').length);
+        }
         main.innerHTML = '<div id="libShibangArea"></div>';
-        try { _renderHelpMain('libShibangArea', true, false); } catch (e) {}
+        // hideTabs=true：子榜 Tab 已移左侧，右栏只渲染榜单内容
+        try { _renderHelpMain('libShibangArea', true, true); } catch (e) {}
         return;
     }
     if (_kbBrIsArticleNode(_kbBrSel)) {
