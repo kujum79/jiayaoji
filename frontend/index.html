@@ -4182,6 +4182,19 @@ body.demo-mode .phone-frame { height: 100%; }
         <div id="famInfoId" style="padding:10px 14px;font-size:13px;color:#6B7280;background:#F9FAFB;border:1px solid #F3F4F6;border-radius:10px;margin-bottom:10px;word-break:break-all;"></div>
         <div style="font-size:12px;color:#9A3412;font-weight:600;margin-bottom:4px;">家庭帐号</div>
         <div id="famInfoAccounts" style="margin-bottom:12px;"></div>
+        <!-- V708: 食方可选开关（默认隐藏，家庭成员按需开启） -->
+        <div style="margin-bottom:12px;padding:10px 12px;background:#FFFBEB;border:1px solid #FED7AA;border-radius:10px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <div>
+                    <div style="font-size:13px;font-weight:600;color:#9A3412;">🥣 显示专业食方分类</div>
+                    <div style="font-size:11px;color:#B45309;line-height:1.5;margin-top:2px;">开启后，家庭文库将显示内科食方、慢病调理、药膳等专业内容</div>
+                </div>
+                <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;">
+                    <input type="checkbox" id="familyShiyangToggle" onchange="toggleFamilyShiyang(this)" style="opacity:0;width:0;height:0;" />
+                    <span style="position:absolute;cursor:pointer;inset:0;background:#D1D5DB;border-radius:24px;transition:.3s;" id="familyShiyangSlider"></span>
+                </label>
+            </div>
+        </div>
         <button onclick="saveFamilyInfo()" style="width:100%;padding:14px;font-size:16px;font-weight:700;color:#fff;background:#EA580C;border:none;border-radius:12px;cursor:pointer;">保存</button>
         <div id="famInfoErr" style="display:none;margin-top:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:13px;color:#DC2626;text-align:center;"></div>
         <div onclick="closeFamilyInfoModal()" style="font-size:13px;color:#9CA3AF;margin-top:12px;text-align:center;cursor:pointer;text-decoration:underline;">关闭</div>
@@ -7153,6 +7166,34 @@ function openFamilyInfoModal() {
     if (ab) ab.innerHTML = _familyAccountsHtml();
     var eb = document.getElementById('famInfoErr');
     if (eb) { eb.textContent = ''; eb.style.display = 'none'; }
+    // V708: 初始化食方开关状态
+    var _showSY = false;
+    try { _showSY = (lsGet('familyShowShiyang') === '1'); } catch(e) {}
+    var _toggle = document.getElementById('familyShiyangToggle');
+    var _slider = document.getElementById('familyShiyangSlider');
+    if (_toggle) _toggle.checked = _showSY;
+    if (_slider) {
+        _slider.style.background = _showSY ? '#10B981' : '#D1D5DB';
+        _slider.innerHTML = _showSY ? '<span style="position:absolute;height:18px;width:18px;right:3px;bottom:3px;background:white;border-radius:50%;transition:.3s;"></span>' : '<span style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.3s;"></span>';
+    }
+}
+
+// V708: 食方开关切换（存 localStorage → 触发 merge 刷新分类树 → 刷新 UI）
+function toggleFamilyShiyang(cb) {
+    var on = !!cb.checked;
+    try { lsSet('familyShowShiyang', on ? '1' : '0'); } catch(e) {}
+    // 刷新 toggle 滑块样式
+    var _slider = document.getElementById('familyShiyangSlider');
+    if (_slider) {
+        _slider.style.background = on ? '#10B981' : '#D1D5DB';
+        _slider.innerHTML = on ? '<span style="position:absolute;height:18px;width:18px;right:3px;bottom:3px;background:white;border-radius:50%;transition:.3s;"></span>' : '<span style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.3s;"></span>';
+    }
+    // 触发 merge → 分类树更新
+    getKnowledgeCategories();
+    // 刷新相关 UI
+    try { renderCategoryTree(); } catch(e) {}
+    try { renderCatalogManager(); } catch(e) {}
+    showToast(on ? '✅ 家庭文库已显示专业食方分类' : '✅ 家庭文库已隐藏专业食方分类');
 }
 // V293: 家庭帐号卡片（家庭信息弹窗内直接渲染；超管文库「家庭帐号」弹窗复用同一渲染）
 function _familyAccountsHtml() {
@@ -48926,14 +48967,20 @@ function renderKnowledgeCategorySide(activeId) {
     side.style.display = 'none';
     side.innerHTML = '';
 }
-// V664: 浏览态分类单一数据源——读取文库管理现行公共分类树
+// V664/V708: 浏览态分类数据源——先查 public 层，没找到再查 family 层（family 专属 dining-out 等）
 function _kbLiveCatNode(catId) {
     try {
         var kc = getKnowledgeCategories();
-        var tree = (kc && kc.public && kc.public.tree) || [];
         var name = CATEGORY_LABELS[catId];
         var node = null;
-        tree.forEach(function (m) { if (!node && m && (m.id === catId || (name && m.name === name))) node = m; });
+        // 1. 先查 public 层
+        var pubTree = (kc && kc.public && kc.public.tree) || [];
+        pubTree.forEach(function (m) { if (!node && m && (m.id === catId || (name && m.name === name))) node = m; });
+        // 2. 没找到 → 查 family 层（family 专属分类如 dining-out）
+        if (!node) {
+            var famTree = (kc && kc.family && kc.family.tree) || [];
+            famTree.forEach(function (m) { if (!node && m && (m.id === catId || (name && m.name === name))) node = m; });
+        }
         return node;
     } catch (e) { return null; }
 }
@@ -48947,8 +48994,13 @@ function _kbLiveTreeRows(catId) {
     }).filter(Boolean);
 }
 function renderCategoryView(catId) {
-    // V663: 「食方」主分类（原食养）仅超管可见
-    if (catId === 'shiyang' && (typeof isSuperAdmin !== 'function' || !isSuperAdmin())) catId = 'ingredient';
+    // V663/V708: 食方可见性——公共层仅超管可见；家庭层由开关控制（开关打开时家庭成员也能看）
+    if (catId === 'shiyang') {
+        var _kc = getKnowledgeCategories();
+        var _famHasSY = (_kc && _kc.family && _kc.family.tree && _kc.family.tree.some(function(m) { return m.id === 'shiyang'; }));
+        var _isSA = (typeof isSuperAdmin === 'function' && isSuperAdmin());
+        if (!_isSA && !_famHasSY) catId = 'ingredient';
+    }
     window._lastCatId = catId;
     currentCategoryId = catId;
     currentCategorySub = null;
@@ -55803,31 +55855,46 @@ function _mergeDefaultSubCategories(kc) {
             // 只有 type='knowledge'（食方）不自动复活——用户可能特意删掉不想看见
             if (!main) {
                 if (defMain.type !== 'knowledge') {
-                    tree.push(JSON.parse(JSON.stringify(defMain)));
+                    var _newMain = JSON.parse(JSON.stringify(defMain));
+                    _newMain.locked = true; // V708: 默认分类锁定
+                    tree.push(_newMain);
                     tree.sort(function(a, b) { return (a.order || 999) - (b.order || 999); });
                     console.log('[V705d] 补缺失主分类：' + defMain.id + '（' + defMain.name + '）');
                     changed = true;
                 }
                 return;
             }
+            main.locked = true; // V708: DEFAULT 里的主分类统一标记 locked
             main.children = main.children || [];
             (defMain.children || []).forEach(function(defSub) {
                 var existing = main.children.find(function(c) { return (c.id || c.name) === defSub.id; });
                 if (!existing) {
-                    main.children.push(JSON.parse(JSON.stringify(defSub)));
+                    var _newSub = JSON.parse(JSON.stringify(defSub));
+                    _newSub.locked = true; // V708
+                    main.children.push(_newSub);
                     changed = true;
-                } else if (defSub.children && defSub.children.length) {
-                    // 已存在的子分类也要补齐缺失的默认细分类（旧树可能只有部分细分类）
-                    existing.children = existing.children || [];
-                    defSub.children.forEach(function(defFine) {
-                        var fineExists = existing.children.some(function(c) { return (c.id || c.name) === defFine.id; });
-                        if (!fineExists) {
-                            existing.children.push(JSON.parse(JSON.stringify(defFine)));
-                            changed = true;
-                        }
-                    });
-                    // 三级细分类也 sort
-                    existing.children.sort(function(a, b) { return (a.order || 999) - (b.order || 999); });
+                } else {
+                    existing.locked = true; // V708: DEFAULT 里的子分类统一标记 locked
+                    if (defSub.children && defSub.children.length) {
+                        // 已存在的子分类也要补齐缺失的默认细分类（旧树可能只有部分细分类）
+                        existing.children = existing.children || [];
+                        defSub.children.forEach(function(defFine) {
+                            var fineExists = existing.children.some(function(c) { return (c.id || c.name) === defFine.id; });
+                            if (!fineExists) {
+                                var _newFine = JSON.parse(JSON.stringify(defFine));
+                                _newFine.locked = true; // V708
+                                existing.children.push(_newFine);
+                                changed = true;
+                            } else {
+                                // V708: DEFAULT 里的细分类统一标记 locked
+                                existing.children.forEach(function(ef) {
+                                    if ((ef.id || ef.name) === (defFine.id || defFine.name)) ef.locked = true;
+                                });
+                            }
+                        });
+                        // 三级细分类也 sort
+                        existing.children.sort(function(a, b) { return (a.order || 999) - (b.order || 999); });
+                    }
                 }
             });
             // 所有 children 都强制同步 DEFAULT 的 order 和 name（不管之前有没有），然后统一 sort
@@ -55841,6 +55908,59 @@ function _mergeDefaultSubCategories(kc) {
             main.children.sort(function(a, b) { return (a.order || 999) - (b.order || 999); });
             if (_changed2) { console.log('[V705g] 补子分类 order：' + defMain.id); changed = true; }
         });
+
+        // ====== V708: 方案2 — family 层差异化处理（继承+叠加模型） ======
+        // 1. family 层默认排除食方（专业内容），由用户开关决定是否显示
+        // 2. family 层追加专属 dining-out 主分类（方案 A 5 场景子分类）
+        if (layer === 'family') {
+            // 1a. 食方可选开关：默认隐藏（除非用户显式打开）
+            var _showShiyang = false;
+            try { _showShiyang = (lsGet('familyShowShiyang') === '1'); } catch(e) {}
+            if (!_showShiyang) {
+                // 开关未开 → 从 family 树移除 shiyang（如果存在）
+                var _syBefore = tree.length;
+                tree = tree.filter(function(m) { return m.id !== 'shiyang'; });
+                kc[layer].tree = tree;
+                if (tree.length !== _syBefore) {
+                    console.log('[V708] 家庭文库：食方已隐藏（开关关闭）');
+                    changed = true;
+                }
+            } else {
+                // 开关已开 → 确保 family 层有 shiyang（从 DEFAULT 复制）
+                var _hasSY = tree.some(function(m) { return m.id === 'shiyang'; });
+                if (!_hasSY) {
+                    var _defSY = DEFAULT_CATEGORY_TREE.find(function(d) { return d.id === 'shiyang'; });
+                    if (_defSY) {
+                        var _syNode = JSON.parse(JSON.stringify(_defSY));
+                        tree.push(_syNode);
+                        tree.sort(function(a, b) { return (a.order || 999) - (b.order || 999); });
+                        console.log('[V708] 家庭文库：食方已显示（开关开启）');
+                        changed = true;
+                    }
+                }
+            }
+
+            // 1b. 追加 dining-out（family 专属默认主分类，方案 A 5 场景子分类）
+            var _hasDO = tree.some(function(m) { return m.id === 'dining-out'; });
+            if (!_hasDO) {
+                var _diningOutNode = {
+                    id: 'dining-out', name: '在外就餐', icon: '🍽️', order: 98,
+                    locked: true, isDefaultFamily: true,
+                    children: [
+                        { id: '日常吃', name: '日常吃', order: 1, locked: true, isDefaultFamily: true, children: [] },
+                        { id: '约聚餐', name: '约聚餐', order: 2, locked: true, isDefaultFamily: true, children: [] },
+                        { id: '宴请席', name: '宴请席', order: 3, locked: true, isDefaultFamily: true, children: [] },
+                        { id: '咖啡甜', name: '咖啡甜', order: 4, locked: true, isDefaultFamily: true, children: [] },
+                        { id: '夜宵场', name: '夜宵场', order: 5, locked: true, isDefaultFamily: true, children: [] }
+                    ]
+                };
+                tree.push(_diningOutNode);
+                tree.sort(function(a, b) { return (a.order || 999) - (b.order || 999); });
+                kc[layer].tree = tree;
+                console.log('[V708] 家庭文库：追加在外就餐主分类（5 场景子分类）');
+                changed = true;
+            }
+        }
     });
     if (changed) { try { lsSet('knowledgeCategories', JSON.stringify(kc)); } catch(e) {} }
     return kc;
@@ -59408,18 +59528,26 @@ function renderCatNodeRow(node, level, depth, dietData, parentMain, parentSub) {
     var pl = 10 + depth * 24;
     var bg = level === 'main' ? 'white' : (level === 'sub' ? '#FAFAF9' : '#F5F5F4');
     var fw = level === 'main' ? '700' : (level === 'sub' ? '600' : '500');
+    var isLocked = !!node.locked; // V708: 默认分类锁定
     var toggle = level !== 'leaf'
         ? '<span onclick="toggleCatMgr(\'' + escapeHtml(node.id) + '\')" style="cursor:pointer;flex-shrink:0;">' + (isOpen ? '📂' : '📁') + '</span>'
         : '<span style="flex-shrink:0;color:#CBD5E1;">·</span>';
+    var lockedBadge = isLocked ? '<span style="font-size:10px;color:#94A3B8;margin-left:2px;">🔒默认</span>' : '';
     var html = '<div style="display:flex;align-items:center;gap:5px;padding:7px 10px 7px ' + pl + 'px;background:' + bg + ';border:1px solid #F3F4F6;border-radius:8px;margin-bottom:4px;">'
         + toggle
         + '<span style="flex:1;min-width:0;font-size:13.5px;font-weight:' + fw + ';color:#1E293B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
         + escapeHtml((node.icon ? node.icon + ' ' : '') + node.name)
+        + lockedBadge
         + ' <span style="font-size:11px;font-weight:400;color:#94A3B8;">(' + count + ' 条)</span></span>'
         + '<button onclick="catMgrMove(\'' + escapeHtml(node.id) + '\',-1)" title="上移" style="' + _catBtnStyle('#6B7280') + '">↑</button>'
-        + '<button onclick="catMgrMove(\'' + escapeHtml(node.id) + '\',1)" title="下移" style="' + _catBtnStyle('#6B7280') + '">↓</button>'
-        + '<button onclick="catMgrEdit(\'' + escapeHtml(node.id) + '\')" title="编辑" style="' + _catBtnStyle('#1D4ED8') + '">✏️</button>'
-        + '<button onclick="catMgrDelete(\'' + escapeHtml(node.id) + '\')" title="删除" style="' + _catBtnStyle('#DC2626') + '">🗑️</button>';
+        + '<button onclick="catMgrMove(\'' + escapeHtml(node.id) + '\',1)" title="下移" style="' + _catBtnStyle('#6B7280') + '">↓</button>';
+    if (!isLocked) {
+        html += '<button onclick="catMgrEdit(\'' + escapeHtml(node.id) + '\')" title="编辑" style="' + _catBtnStyle('#1D4ED8') + '">✏️</button>'
+            + '<button onclick="catMgrDelete(\'' + escapeHtml(node.id) + '\')" title="删除" style="' + _catBtnStyle('#DC2626') + '">🗑️</button>';
+    } else {
+        // locked 默认分类：编辑/删除按钮隐藏（UI 上不可操作）
+        html += '<span style="flex-shrink:0;width:24px;height:24px;"></span><span style="flex-shrink:0;width:24px;height:24px;"></span>';
+    }
     if (level === 'main') html += '<button onclick="catMgrAddSub(\'' + escapeHtml(node.id) + '\')" title="添加子分类" style="' + _catBtnStyle('#C2410C') + ';width:auto;padding:0 6px;">＋子</button>';
     if (level === 'sub') html += '<button onclick="catMgrAddLeaf(\'' + escapeHtml(parentMain.id) + '\',\'' + escapeHtml(node.id) + '\')" title="添加细分类" style="' + _catBtnStyle('#C2410C') + ';width:auto;padding:0 6px;">＋细</button>';
     return html + '</div>';
@@ -59613,16 +59741,18 @@ function catMgrEdit(id) {
     var kc = getKnowledgeCategories();
     var node = findCategoryNode(kc[catMgrLayer].tree, id);
     if (!node) return showToast('分类不存在');
+    if (node.locked) return showToast('默认分类不可编辑'); // V708: 默认分类锁定
     openCatEditDialog({ mode: 'edit', layer: catMgrLayer, node: node });
 }
 
-// 删除校验：有子分类 → 先删子分类；有关联知识条目 → 先移走
+// 删除校验：有子分类 → 先删子分类；有关联知识条目 → 先移走；locked 节点不可删（V708 默认分类锁定）
 function canDeleteCategory(categoryId, layer) {
     var kc = getKnowledgeCategories();
     var tree = (kc[layer] && kc[layer].tree) || [];
     var node = findCategoryNode(tree, categoryId);
     if (!node) return { ok: false, msg: '分类不存在' };
     if (node.id === 'uncategorized') return { ok: false, msg: '系统"未分类"节点不可删除' };
+    if (node.locked) return { ok: false, msg: '默认分类不可删除（可在其下添加自定义子分类）' };
     if (node.children && node.children.length) return { ok: false, msg: '请先删除子分类' };
     var diet = JSON.parse(lsGet('dietKnowledge') || '[]');
     var isMain = tree.some(function(t) { return t.id === categoryId; });
