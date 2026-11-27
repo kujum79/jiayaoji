@@ -13071,6 +13071,26 @@ function _closeSystemMonitor() {
     document.body.style.overflow = '';
 }
 
+// V709j8: 超管扫码面板——把首页 URL 生成二维码，手机微信扫即开
+function _openQrPanel() {
+    var _url = location.origin + location.pathname;
+    // 用 api.qrserver.com 生成（免费、无需 key、稳定）
+    var _qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=10&ecc=M&data=' + encodeURIComponent(_url);
+    var ov = document.createElement('div');
+    ov.id = 'qrPanelOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:18px;padding:24px 28px 20px;text-align:center;max-width:340px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">'
+        + '<div style="font-size:18px;font-weight:700;color:#9A3412;margin-bottom:4px;">📱 扫码打开家肴记</div>'
+        + '<div style="font-size:12px;color:#9CA3AF;margin-bottom:14px;">微信扫一扫 → 打开网页，关闭后重新扫即可触发版本刷新</div>'
+        + '<img src="' + _qrUrl + '" alt="二维码" style="width:280px;height:280px;border-radius:12px;border:1px solid #F3F4F6;background:#fff;" onload="this.style.opacity=1" onerror="this.alt=\'二维码加载失败\'"/>'
+        + '<div style="margin-top:12px;font-size:11px;color:#9CA3AF;word-break:break-all;line-height:1.5;">' + _url + '</div>'
+        + '<div style="display:flex;gap:8px;margin-top:14px;">'
+        + '<button onclick="document.getElementById(\'qrPanelOv\').remove()" style="flex:1;border:1px solid #E5E7EB;background:#fff;color:#6B7280;font-size:14px;font-weight:600;border-radius:10px;padding:10px;cursor:pointer;">关闭</button>'
+        + '<button onclick="navigator.clipboard.writeText(\'' + _url + '\');showToast(\'链接已复制\')" style="flex:1;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#fff;font-size:14px;font-weight:700;border-radius:10px;padding:10px;cursor:pointer;">复制链接</button>'
+        + '</div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function(e) { if (e.target === ov) ov.remove(); });
+}
 async function _openSystemMonitor() {
     if (typeof isSuperAdmin === 'function' && !isSuperAdmin()) {
         showToast('仅超管可访问系统监控');
@@ -43144,6 +43164,9 @@ function renderFamily() {
                     </button>
                     <button type="button" onclick="_openCommunityTradePanel()" style="flex:1;box-sizing:border-box;padding:9px 6px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:12px;font-weight:600;color:#9A3412;cursor:pointer;">
                         💰 社区交易与风控
+                    </button>
+                    <button type="button" onclick="_openQrPanel()" style="flex:0 0 auto;box-sizing:border-box;padding:9px 10px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;font-size:12px;font-weight:600;color:#9A3412;cursor:pointer;">
+                        📱 扫码
                     </button>
                 </div>
             `);
