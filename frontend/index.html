@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710d-20261128';
+        var APP_VER = 'V710e-20261128';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -146,6 +146,9 @@
     /* V137: 双击打开（file:// 协议）时相对路径 fetch 必然失败（Failed to fetch），
        统一为后端 API 绝对地址；http/https 打开（同源部署）保持相对路径不变 */
     var API_BASE = (location.protocol === 'http:' || location.protocol === 'https:') ? '' : 'http://127.0.0.1:8012'; // V138: 换8012端口——旧8011 URL缓存问题，同8010→8011原理
+    // V710b: 分类排序 + emoji 映射（提升到全局，避免多函数各自 const 导致 TDZ）
+    var CATEGORY_ORDER = ['蔬菜','肉蛋奶','主粮','水果','水产','调味品','干货药材','饮料零食','冷冻','方便食品','其他'];
+    var CAT_EMOJI = {'蔬菜':'🥬','肉蛋奶':'🥩','主粮':'🍚','水果':'🍎','水产':'🐟','调味品':'🧂','干货药材':'🌿','饮料零食':'🥤','冷冻':'❄️','方便食品':'🥟','其他':'📦'};
     /* V195: 家庭备份键清单必须在所有启动期迁移之前初始化——migrateStripPlainRice / migrateFamilyRoles 等
        在脚本更早位置就会调用 lsSet，若此处尚未赋值，_isBackupKey 全部返回 false，
        演示模式只读拦截与游客态写键拦截都会被绕过（实测演示日历被改写为 24590 字节）。 */
@@ -23557,8 +23560,7 @@ function computeIngredientNeeds(daysList, servings, daysCount) {
     const fridgeItems = JSON.parse(lsGet('fridgeItems') || '[]');
     let buyKinds = 0;
 
-    const CATEGORY_ORDER = ['蔬菜','肉蛋奶','主粮','水果','水产','调味品','干货药材','饮料零食','冷冻','方便食品','其他'];
-    const CAT_EMOJI = {'蔬菜':'🥬','肉蛋奶':'🥩','主粮':'🍚','水果':'🍎','水产':'🐟','调味品':'🧂','干货药材':'🌿','饮料零食':'🥤','冷冻':'❄️','方便食品':'🥟','其他':'📦'};
+    // CATEGORY_ORDER / CAT_EMOJI 已提升为全局变量，此处不再重复定义
     Object.keys(map).forEach(norm => {
         const r = map[norm];
         const sumS = Math.max(0, Math.round(Number(mealSum[norm] || 0)));
