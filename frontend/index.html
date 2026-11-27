@@ -62181,26 +62181,57 @@ function _csScanFiles(files) {
     _csOv(true, '正在识别第 1/' + arr.length + ' 页…');
     (function next() {
         if (i >= arr.length) { _csStructure(pages.join('\n———\n')); return; }
+        // V709j5: 压缩超时 fallback（微信 webview 可能 Canvas 压缩失败导致回调永不触发）
+        var _compressed = false;
+        var _fallbackTimer = setTimeout(function () {
+            if (_compressed) return;
+            console.warn('[csScanFiles] 压缩超时(10s)，用 FileReader 原始 dataUrl fallback');
+            var fr = new FileReader();
+            fr.onload = function () { _compressed = true; _csSendOcr(fr.result); };
+            fr.onerror = function () { _compressed = true; _csSendOcr(null); };
+            fr.readAsDataURL(arr[i]);
+        }, 10000);
         _dtCompressImg(arr[i], function (dataUrl) {
+            if (_compressed) return;
+            _compressed = true;
+            clearTimeout(_fallbackTimer);
+            _csSendOcr(dataUrl);
+        });
+        function _csSendOcr(dataUrl) {
+            if (!dataUrl) {
+                console.warn('[csScanFiles] 无 dataUrl，跳过本页');
+                pages.push(''); i++; next(); return;
+            }
+            console.log('[csScanFiles] sending OCR for page', i+1, 'dataUrl length=', dataUrl.length);
             fetch('/ai/vision', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     user_prompt: '这是养生食疗书籍的一页扫描图。请逐字转录本页全部中文文字，保留标题、编号与方名，按原文顺序输出；忽略页码与页眉。无法辨认的字用〔?〕标注。只输出转录文本，不要任何解释。',
                     image_data_url: dataUrl, max_tokens: 3000, task_type: 'shifang_ocr'
                 })
-            }).then(function (r) { return r.json(); }).then(function (j) {
+            }).then(function (r) {
+                var _ct = r.headers.get('content-type') || '';
+                return r.text().then(function (txt) {
+                    console.log('[csScanFiles] OCR HTTP', r.status, 'content-type=', _ct, 'body length=', txt.length);
+                    try { return JSON.parse(txt); } catch(e) {
+                        console.warn('[csScanFiles] OCR response NOT JSON! body preview:', txt.slice(0, 300));
+                        return { response: txt }; // 兜底：把原始文本当作 response
+                    }
+                });
+            }).then(function (j) {
                 var _pageText = String((j && j.response) || '');
-                console.log('[csScanFiles] OCR page', i+1, 'status=', j ? Object.keys(j).join(',') : 'null', 'text length=', _pageText.length);
+                console.log('[csScanFiles] OCR page', i+1, '→ text length=', _pageText.length, 'preview:', _pageText.slice(0, 100));
                 if (!_pageText) console.warn('[csScanFiles] OCR returned EMPTY! full response:', JSON.stringify(j).slice(0, 500));
                 pages.push(_pageText);
                 i++;
                 _csOv(true, i >= arr.length ? 'AI 整理食方结构中…' : '正在识别第 ' + (i + 1) + '/' + arr.length + ' 页…');
                 next();
             }).catch(function (e) {
+                console.error('[csScanFiles] OCR FETCH ERROR:', e);
                 _csOv(false);
                 showToast('第 ' + (i + 1) + ' 页识别失败：' + (e.message || '网络错误'));
             });
-        });
+        }
     })();
 }
 async function _csStructure(raw) {
