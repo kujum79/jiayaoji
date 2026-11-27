@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V705N-20261127';
+        var APP_VER = 'V705P-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -55482,7 +55482,7 @@ function _mergeDefaultSubCategories(kc) {
         '糖尿病饮食':'糖尿病','高血压饮食':'高血压','高血脂饮食':'高血脂',
         '痛风饮食':'痛风','肾病饮食':'肾病','肝病饮食':'肝病',
         // 食方-产后
-        '催乳下奶':'催乳','优质蛋白恢复':'蛋白恢复','产后脾胃':'产后胃',
+        '催乳下奶':'催乳','优质蛋白恢复':'蛋白补','蛋白恢复':'蛋白补','产后脾胃':'产后胃',
         // 食方-儿科
         '小儿厌食':'厌食','小儿疳积':'疳积','小儿咳嗽':'咳嗽','小儿腹泻':'腹泻','小儿过敏':'过敏','发育迟缓':'发育慢',
         // 食方-药膳菜（去掉"药膳"后缀）
@@ -55546,6 +55546,28 @@ function _mergeDefaultSubCategories(kc) {
         });
     });
     if (_treeCompressed) { console.log('[V705M] 已存 tree leaf 压缩完成'); changed = true; }
+
+    // V705N: 压缩后去重——同一 parent 下 name/id 重复的 leaf 只留第一个
+    var _deduped = false;
+    ['public', 'family'].forEach(function(layer) {
+        var _tree = kc[layer] && kc[layer].tree;
+        if (!_tree) return;
+        _tree.forEach(function(m) {
+            (m.children || []).forEach(function(s) {
+                var _seen = {};
+                var _newList = (s.children || []).filter(function(l) {
+                    var _k = l.id || l.name;
+                    if (!_k || _seen[_k]) return false;
+                    _seen[_k] = true; return true;
+                });
+                if (_newList.length !== (s.children || []).length) {
+                    _deduped = true;
+                    s.children = _newList;
+                }
+            });
+        });
+    });
+    if (_deduped) { console.log('[V705N] leaf 去重完成'); changed = true; }
 
     // 迁移文章 leafCategory（老 name → 新短名）
     var _leafMigrated = 0;
