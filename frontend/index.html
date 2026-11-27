@@ -70592,9 +70592,11 @@ function openDiningOutPlanModal() {
             </div>
         </div>
 
-        <!-- V137/V709: 话筒图标(纯emoji)紧贴手动添加餐厅左，整体靠右 -->
+        <!-- V137/V709b: 左提示语 + flex撑满 + 右按钮组（话筒紧贴手动添加） -->
         <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:10px;margin-bottom:10px;">
-            <div style="display:flex;justify-content:flex-end;align-items:center;gap:4px;margin-bottom:6px;">
+            <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px;">
+                <span style="font-size:12px;color:#3B82F6;font-weight:600;white-space:nowrap;">加餐厅：</span>
+                <span style="flex:1;"></span>
                 <button onclick="startDiningOutVoice()" id="diningOutVoiceBtn" title="语音添加餐厅" style="background:transparent;border:none;font-size:20px;cursor:pointer;padding:2px 4px;line-height:1;border-radius:4px;">🎤</button>
                 <button onclick="openRestaurantModalForPlan()" style="background:#3B82F6;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">手动添加餐厅</button>
             </div>
