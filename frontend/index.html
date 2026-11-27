@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V707A-20261127';
+        var APP_VER = 'V707B-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -55347,24 +55347,8 @@ var DEFAULT_CATEGORY_TREE = [
         { id: '烹饪技巧', name: '烹饪技巧', order: 1, children: [] },
         { id: '食品安全', name: '食品安全', order: 2, children: [] }
     ] },
-    { id: 'dining-out', name: '在外就餐', icon: '🍽️', order: 5, children: [
-        { id: '日常吃', name: '日常吃', order: 1, children: [
-            { id: '快餐', name: '快餐', order: 1 }, { id: '小馆', name: '小馆', order: 2 }, { id: '食堂', name: '食堂', order: 3 }, { id: '外卖', name: '外卖', order: 4 }
-        ] },
-        { id: '约聚餐', name: '约聚餐', order: 2, children: [
-            { id: '约会', name: '约会', order: 1 }, { id: '朋友聚', name: '朋友聚', order: 2 }, { id: '家庭聚', name: '家庭聚', order: 3 }
-        ] },
-        { id: '宴请席', name: '宴请席', order: 3, children: [
-            { id: '家宴', name: '家宴', order: 1 }, { id: '商务', name: '商务', order: 2 }, { id: '寿宴', name: '寿宴', order: 3 }, { id: '喜宴', name: '喜宴', order: 4 }
-        ] },
-        { id: '咖啡甜', name: '咖啡甜', order: 4, children: [
-            { id: '咖啡', name: '咖啡', order: 1 }, { id: '茶馆', name: '茶馆', order: 2 }, { id: '甜品', name: '甜品', order: 3 }, { id: '面包', name: '面包', order: 4 }
-        ] },
-        { id: '夜宵场', name: '夜宵场', order: 5, children: [
-            { id: '烧烤', name: '烧烤', order: 1 }, { id: '夜市', name: '夜市', order: 2 }, { id: '小吃', name: '小吃', order: 3 }
-        ] }
-    ] },
-    { id: 'article', name: '食文', icon: '📖', order: 6, type: 'article', children: [
+    // V707A: dining-out 移到家庭文库（公共文库只放全球通用知识）
+    { id: 'article', name: '食文', icon: '📖', order: 5, type: 'article', children: [
         { id: '名家食话', name: '名家食话', type: 'article', order: 1, children: [{ id: '古代文人', name: '古代文人', type: 'article', order: 1 }, { id: '近现代名家', name: '近现代名家', type: 'article', order: 2 }, { id: '当代食评', name: '当代食评', type: 'article', order: 3 }] },
         { id: '地域风味', name: '地域风味', type: 'article', order: 2, children: [{ id: '川湘', name: '川湘', type: 'article', order: 1 }, { id: '粤闽', name: '粤闽', type: 'article', order: 2 }, { id: '江浙', name: '江浙', type: 'article', order: 3 }, { id: '北方', name: '北方', type: 'article', order: 4 }, { id: '西北', name: '西北', type: 'article', order: 5 }] },
         { id: '街头小吃', name: '街头小吃', type: 'article', order: 3, children: [{ id: '早餐', name: '早餐', type: 'article', order: 1 }, { id: '夜宵', name: '夜宵', type: 'article', order: 2 }, { id: '地方点心', name: '地方点心', type: 'article', order: 3 }, { id: '市井味道', name: '市井味道', type: 'article', order: 4 }] },
@@ -55709,17 +55693,13 @@ function _mergeDefaultSubCategories(kc) {
             }
         }
 
-        // 2a2. dining-out 老子分类清理（V706B 重构：附近/本市/其他 → 5个场景）
-        var dine = null;
-        for (var i = 0; i < tree.length; i++) { if (tree[i].id === 'dining-out') { dine = tree[i]; break; } }
-        if (dine && dine.children) {
-            var _OLD_DINE = ['附近', '本市', '其他'];
-            var _before = dine.children.length;
-            dine.children = dine.children.filter(function(c) { return _OLD_DINE.indexOf(c.id) === -1 && _OLD_DINE.indexOf(c.name) === -1; });
-            if (dine.children.length !== _before) {
-                console.log('[V706B] dining-out 老子分类清理：', _before, '→', dine.children.length);
-                changed = true;
-            }
+        // 2a2. dining-out 主分类整体移除（V707A 公共文库只留全球通用知识，在外就餐移到家庭文库）
+        var _mainRemoved = ['dining-out'];
+        var _beforeMain = tree.length;
+        tree = tree.filter(function(m) { return _mainRemoved.indexOf(m.id) === -1; });
+        if (tree.length !== _beforeMain) {
+            console.log('[V707A] 公共文库主分类清理：', _beforeMain, '→', tree.length, '(移除 dining-out)');
+            changed = true;
         }
 
         // 2b. recipe 老子分类清理（V705k 重构：家常/家宴/中式/食养/季节食养 → 新7个）
