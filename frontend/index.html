@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V707C-20261127';
+        var APP_VER = 'V707D-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -70479,9 +70479,8 @@ function openDiningOutPlanModal() {
 
         <div id="libraryAddSection" style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:10px;margin-bottom:10px;">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-                <!-- V137: 餐厅库标题已去掉；从食知添加餐厅 放到搜索框左边 -->
-                <button onclick="focusLibrarySearch()" style="background:#10B981;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">从食知添加餐厅</button>
-                <input type="text" id="knowledgeSearchInput" placeholder="搜索食知文库…" style="flex:1;min-width:0;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:12px;" oninput="searchKnowledgeRestaurants(this.value)">
+                <button onclick="focusLibrarySearch()" style="background:#10B981;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">🏠 从家庭餐厅选</button>
+                <input type="text" id="knowledgeSearchInput" placeholder="搜家庭餐厅…" style="flex:1;min-width:0;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:12px;" oninput="searchKnowledgeRestaurants(this.value)">
             </div>
             <div id="knowledgeRestaurantList" style="max-height:150px;overflow-y:auto;"></div>
         </div>
@@ -71213,19 +71212,17 @@ function removeKnRecommendation(idx) {
 function searchKnowledgeRestaurants(query) {
     var list = document.getElementById('knowledgeRestaurantList');
     if (!list) return;
-    // V137: 空查询 → 显示全部（空字符串 filter 恒真），不再提前 return
     var q = (query || '').toLowerCase();
-    // V138: 显示食知文库「就餐」分类全部条目（含用户添加的附近餐厅；手动新加的也在「手动添加餐厅」版块同步显示）
+    // V707D: 搜家庭餐厅库（type==='restaurant' 的条目；手动添加时自动存的）
     var kb = (dietKnowledge || []).filter(function(k) {
-        if (k.mainCategory !== 'dining-out') return false;
+        if (k.type !== 'restaurant') return false;
         return (k.title || '').toLowerCase().indexOf(q) >= 0 ||
-               (k.leafCategory || '').toLowerCase().indexOf(q) >= 0 ||
                (k.location || '').toLowerCase().indexOf(q) >= 0;
     });
     var results = kb.map(function(k) { return { src: 'kb', k: k }; });
     diningOutPlanData._libSearchResults = results;
     if (!results.length) {
-        list.innerHTML = '<div style="font-size:12px;color:#9CA3AF;text-align:center;padding:8px;">未找到匹配餐厅<br><span style="font-size:11px;">可点上方「手动添加餐厅」录入</span></div>';
+        list.innerHTML = '<div style="font-size:12px;color:#9CA3AF;text-align:center;padding:8px;">还没存过餐厅<br><span style="font-size:11px;">点上方「手动添加餐厅」录一次，下次直接选</span></div>';
         return;
     }
     var html = '';
@@ -71312,6 +71309,7 @@ function addManualRestaurant() {
         });
     }
 
+    // 先设为当前选中
     diningOutPlanData.selectedRestaurant = {
         name: name,
         address: '',
@@ -71321,10 +71319,46 @@ function addManualRestaurant() {
     };
     renderSelectedRestaurant();
 
+    // V707D: 自动存家庭餐厅库（下次规划直接搜到选）
+    try {
+        var _dk = dietKnowledge || [];
+        var _exist = _dk.find(function(k){ return k.type === 'restaurant' && (k.title || '').trim() === name; });
+        if (!_exist) {
+            var familyId = getFamilyId();
+            var _entry = {
+                id: 'rest_' + Date.now(),
+                type: 'restaurant',
+                layer: 'family',
+                sourceLayer: 'family',
+                familyId: familyId,
+                title: name,
+                content: '',
+                mainCategory: 'dining-out',
+                subCategory: '日常吃',
+                leafCategory: '',
+                location: '',
+                signatureDishes: dishes,
+                priceLevel: price > 0 ? price : null,
+                visits: 1,
+                createdAt: Date.now(),
+                updatedAt: Date.now()
+            };
+            _dk.push(_entry);
+            dietKnowledge = _dk;
+            if (window._dietKnowledgeSaveTimer) clearTimeout(window._dietKnowledgeSaveTimer);
+            window._dietKnowledgeSaveTimer = setTimeout(function() {
+                try { saveDietKnowledge(); } catch(e) {}
+            }, 300);
+            console.log('[V707D] 餐厅已存入家庭餐厅库：', name);
+            showToast('已添加并存入家庭餐厅库');
+        } else {
+            showToast('已添加：' + name);
+        }
+    } catch(e) { console.warn('存家庭餐厅库失败', e); }
+
     document.getElementById('manualRestaurant').value = '';
     document.getElementById('manualDish').value = '';
     document.getElementById('manualPrice').value = '';
-    showToast('已添加：' + name);
 }
 
 // === 外出就餐语音录入功能 ===
