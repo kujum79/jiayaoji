@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V705e-20261127';
+        var APP_VER = 'V705f-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -55283,7 +55283,37 @@ var DEFAULT_CATEGORY_TREE = [
             { id: '催乳下奶', name: '催乳下奶', order: 1 }, { id: '补气血', name: '补气血', order: 2 },
             { id: '优质蛋白恢复', name: '优质蛋白恢复', order: 3 }, { id: '产后脾胃', name: '产后脾胃', order: 4 }
         ] },
-        { id: '食育', name: '食育', type: 'knowledge', order: 10, icon: '📚', children: [
+        { id: '药膳菜', name: '药膳菜', type: 'knowledge', order: 5, icon: '🍲', children: [
+            { id: '补气药膳', name: '补气药膳', order: 1 }, { id: '养血药膳', name: '养血药膳', order: 2 },
+            { id: '滋阴药膳', name: '滋阴药膳', order: 3 }, { id: '温阳药膳', name: '温阳药膳', order: 4 },
+            { id: '健脾药膳', name: '健脾药膳', order: 5 }, { id: '润肺药膳', name: '润肺药膳', order: 6 },
+            { id: '安神药膳', name: '安神药膳', order: 7 }, { id: '祛湿药膳', name: '祛湿药膳', order: 8 }
+        ] },
+        { id: '药膳制品', name: '药膳制品', type: 'knowledge', order: 6, icon: '🧴', children: [
+            { id: '膏方', name: '膏方', order: 1 }, { id: '药茶饮', name: '药茶饮', order: 2 },
+            { id: '药膳粥', name: '药膳粥', order: 3 }, { id: '药膳酒', name: '药膳酒', order: 4 },
+            { id: '药膳糕', name: '药膳糕', order: 5 }, { id: '滋补丸', name: '滋补丸', order: 6 }
+        ] },
+        { id: '外科食方', name: '外科食方', type: 'knowledge', order: 7, icon: '🔪', children: [
+            { id: '术后恢复', name: '术后恢复', order: 1 }, { id: '伤口愈合', name: '伤口愈合', order: 2 },
+            { id: '骨科食养', name: '骨科食养', order: 3 }, { id: '肛肠食养', name: '肛肠食养', order: 4 }
+        ] },
+        { id: '儿科食方', name: '儿科食方', type: 'knowledge', order: 8, icon: '👶', children: [
+            { id: '小儿厌食', name: '小儿厌食', order: 1 }, { id: '小儿疳积', name: '小儿疳积', order: 2 },
+            { id: '小儿咳嗽', name: '小儿咳嗽', order: 3 }, { id: '小儿腹泻', name: '小儿腹泻', order: 4 },
+            { id: '小儿过敏', name: '小儿过敏', order: 5 }, { id: '发育迟缓', name: '发育迟缓', order: 6 }
+        ] },
+        { id: '五官食方', name: '五官食方', type: 'knowledge', order: 9, icon: '👁️', children: [
+            { id: '护眼食养', name: '护眼食养', order: 1 }, { id: '润喉食养', name: '润喉食养', order: 2 },
+            { id: '健鼻食养', name: '健鼻食养', order: 3 }, { id: '聪耳食养', name: '聪耳食养', order: 4 },
+            { id: '口腔食养', name: '口腔食养', order: 5 }
+        ] },
+        { id: '肿瘤食方', name: '肿瘤食方', type: 'knowledge', order: 10, icon: '🎗️', children: [
+            { id: '术前营养', name: '术前营养', order: 1 }, { id: '术后康复', name: '术后康复', order: 2 },
+            { id: '化疗期饮食', name: '化疗期饮食', order: 3 }, { id: '放疗期饮食', name: '放疗期饮食', order: 4 },
+            { id: '免疫增强', name: '免疫增强', order: 5 }, { id: '对症调理', name: '对症调理', order: 6 }
+        ] },
+        { id: '食育', name: '食育', type: 'knowledge', order: 11, icon: '📚', children: [
             { id: '儿童食育', name: '儿童食育', order: 1 }, { id: '家庭餐桌礼仪', name: '家庭餐桌礼仪', order: 2 },
             { id: '节气食育', name: '节气食育', order: 3 }
         ] }
