@@ -58122,11 +58122,11 @@ document.addEventListener('click', function (e) {
     if (row && area.contains(row)) {
         var key = row.getAttribute('data-key');
         if (!key) return;
-        if (key !== _KB_BR_SB) {
-            var node = _saLibFindNode(key);
-            if (node && node.children && node.children.length) {
-                if (_kbBrOpen[key]) delete _kbBrOpen[key]; else _kbBrOpen[key] = true;
-            }
+        // V709c: 食榜也参与展开/折叠（它是可展开分支）；子榜 key（__shibang__|xxx）无子节点，跳过展开
+        var node = _saLibFindNode(key);
+        var isSb = key === _KB_BR_SB;
+        if ((node && node.children && node.children.length) || isSb) {
+            if (_kbBrOpen[key]) delete _kbBrOpen[key]; else _kbBrOpen[key] = true;
         }
         _kbBrSel = key;
         _kbBrRender();
