@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V705j-20261127';
+        var APP_VER = 'V705k-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -57323,10 +57323,10 @@ function _saLibItemsForPath(key, poolOverride) { // V668: poolOverride=浏览态
     var m = function (val, id, name) { return val === id || (!!name && val === name); };
     return all.filter(function (k) {
         if (!m(_saLibMainOf(k), mainId, mainName)) return false;
-        // V644: 文件夹语义——点某级只显示该级直属条目，子分类内容只在点子分类时才显示
-        if (!subId) return !_saLibSubOf(k);
-        if (!leafId) return (m(_saLibSubOf(k), subId, subName) && !_saLibLeafOf(k)) || m(_saLibLeafOf(k), subId, subName);
-        return m(_saLibSubOf(k), leafId, leafName) || (m(_saLibSubOf(k), subId, subName) && m(_saLibLeafOf(k), leafId, leafName));
+        // V705j: 严格直属筛选——点哪级只显示哪级自己的条目，绝不汇总下级
+        if (!subId) return !_saLibSubOf(k) && !_saLibLeafOf(k);                  // 主分类：只有 main，没有 sub/leaf
+        if (!leafId) return m(_saLibSubOf(k), subId, subName) && !_saLibLeafOf(k);  // 子分类：main+sub 匹配，没有 leaf
+        return m(_saLibSubOf(k), subId, subName) && m(_saLibLeafOf(k), leafId, leafName); // 细分类：main+sub+leaf 全匹配
     });
 }
 // 双栏样式（只注入一次，仿 syTreeStyle）
@@ -57526,15 +57526,8 @@ function _kbBrArticleCount(key) {
 function _kbBrItemsForNode(key) {
     var pool = _kbBrPool();
     var direct = _saLibItemsForPath(key, pool);
-    if (direct.length) return { items: direct, fellBack: false };
-    var node = _saLibFindNode(key);
-    if (!node) return { items: [], fellBack: false };
-    var out = [], seen = {};
-    (function walk(n, k) {
-        _saLibItemsForPath(k, pool).forEach(function (it) { if (!seen[it.id]) { seen[it.id] = true; out.push(it); } });
-        (n.children || []).forEach(function (c) { walk(c, k + '|' + c.id); });
-    })(node, key);
-    return { items: out, fellBack: out.length > 0 };
+    // V705j: 永远只返回直属条目，不汇总子分类内容（主分类放主分类、子分类放子分类、细分类放细分类）
+    return { items: direct, fellBack: false };
 }
 // 只读条目卡片：📎+标题+摘要+标签，无编辑/上传/AI按钮；点击进详情（与现有浏览态一致 showKnowledgeDetail）
 function _kbBrItemHtml(k) {
@@ -57625,7 +57618,6 @@ function _kbBrRenderMain() {
     var names = _saLibPathNames(_kbBrSel);
     var res = _kbBrItemsForNode(_kbBrSel);
     var html = '<div class="sad-crumb">📂 ' + (names.length ? escapeHtml(names.join(' / ')) : '全部条目') + ' <span style="color:#C2410C;font-weight:700;">(' + res.items.length + ')</span></div>';
-    if (res.fellBack) html += '<div style="font-size:11.5px;color:#A18A6D;margin:-2px 0 8px;">该级暂无直属条目，已汇总其子分类内容</div>';
     if (!res.items.length) {
         html += '<div style="padding:26px 10px;text-align:center;font-size:13px;color:#A18A6D;background:#FBF6EF;border:1px dashed #EADFD0;border-radius:12px;">该分类暂无内容</div>';
     } else {
