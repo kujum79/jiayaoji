@@ -4141,7 +4141,7 @@ CREATE TABLE IF NOT EXISTS diet_knowledge (
 CREATE INDEX IF NOT EXISTS idx_dk_updated ON diet_knowledge(updated_at);
 """
 def _dk_conn():
-    conn = get_fh_conn()
+    conn = _fh_db()
     conn.executescript(_DK_SQL_INIT)
     return conn
 
