@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710k-20261128';
+        var APP_VER = 'V710l-20261128';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -22779,8 +22779,8 @@ function renderFridgeRecView() {
             } else {
                 const unitLabel = unit || '份';
                 const needUnitLabel = unit || '份';
-                const upVal = unitPrice.toFixed(2);
-                const qVal = Number(needQty.toFixed(2)).toString();
+                const upVal = unitPrice.toFixed(1);
+                const qVal = Number(needQty.toFixed(1)).toString();
                 const epVal = estPrice.toFixed(1);
                 const apVal = (actualPrice !== null) ? actualPrice.toFixed(1) : '';
                 unitCell = `<div class="prep-inline-wrap prep-inline-unit-price">
@@ -22795,7 +22795,6 @@ function renderFridgeRecView() {
                 priceCell = `<div class="prep-inline-wrap prep-inline-est">
                     <input class="prep-inline-input" type="number" min="0" step="0.1" value="${epVal}"
                         data-n="${n}" data-f="estPrice" onchange="onPrepInlineEdit(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
-                    <span class="prep-inline-unit">元</span>
                 </div><button class="prep-row-del" data-n="${n}" onclick="openPrepDelConfirm(this.dataset.n)" title="删除此行">×</button>`;
                 // V710b: 实际花费——空则等于是"没填"，会 fallback 到预估
                 actualCell = `<div class="prep-inline-wrap prep-inline-actual">
@@ -22965,7 +22964,7 @@ function renderFridgeRecView() {
                     <th style="width:32px;">☑</th>
                     <th>食材</th>
                     <th>单价</th>
-                    <th>需购量</th>
+                    <th>购量</th>
                     <th style="text-align:left;">预估(元)</th>
                     <th style="text-align:left;width:56px;">实际</th>
                 </tr>
