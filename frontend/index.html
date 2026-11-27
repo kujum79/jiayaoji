@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V707B-20261127';
+        var APP_VER = 'V707C-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -55696,7 +55696,8 @@ function _mergeDefaultSubCategories(kc) {
         // 2a2. dining-out 主分类整体移除（V707A 公共文库只留全球通用知识，在外就餐移到家庭文库）
         var _mainRemoved = ['dining-out'];
         var _beforeMain = tree.length;
-        tree = tree.filter(function(m) { return _mainRemoved.indexOf(m.id) === -1; });
+        kc[layer].tree = tree.filter(function(m) { return _mainRemoved.indexOf(m.id) === -1; });
+        tree = kc[layer].tree; // 同步引用
         if (tree.length !== _beforeMain) {
             console.log('[V707A] 公共文库主分类清理：', _beforeMain, '→', tree.length, '(移除 dining-out)');
             changed = true;
