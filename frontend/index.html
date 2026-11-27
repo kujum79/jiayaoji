@@ -71213,9 +71213,10 @@ function searchKnowledgeRestaurants(query) {
     var list = document.getElementById('knowledgeRestaurantList');
     if (!list) return;
     var q = (query || '').toLowerCase();
-    // V707D: 搜家庭餐厅库（type==='restaurant' 的条目；手动添加时自动存的）
+    // V707D: 搜家庭餐厅库（mainCategory=dining-out + layer=family；手动添加时自动存的）
+    // 注：不用 type 字段（会被 stampKnowledgePermissions 覆盖成 layer 值）
     var kb = (dietKnowledge || []).filter(function(k) {
-        if (k.type !== 'restaurant') return false;
+        if (k.mainCategory !== 'dining-out' || k.layer !== 'family') return false;
         return (k.title || '').toLowerCase().indexOf(q) >= 0 ||
                (k.location || '').toLowerCase().indexOf(q) >= 0;
     });
@@ -71322,20 +71323,22 @@ function addManualRestaurant() {
     // V707D: 自动存家庭餐厅库（下次规划直接搜到选）
     try {
         var _dk = dietKnowledge || [];
-        var _exist = _dk.find(function(k){ return k.type === 'restaurant' && (k.title || '').trim() === name; });
+        var _exist = _dk.find(function(k){
+            return k.mainCategory === 'dining-out' && k.layer === 'family' &&
+                   (k.title || '').trim() === name;
+        });
         if (!_exist) {
             var familyId = getFamilyId();
             var _entry = {
                 id: 'rest_' + Date.now(),
-                type: 'restaurant',
+                mainCategory: 'dining-out',
+                subCategory: '日常吃',
+                leafCategory: '',
                 layer: 'family',
                 sourceLayer: 'family',
                 familyId: familyId,
                 title: name,
                 content: '',
-                mainCategory: 'dining-out',
-                subCategory: '日常吃',
-                leafCategory: '',
                 location: '',
                 signatureDishes: dishes,
                 priceLevel: price > 0 ? price : null,
