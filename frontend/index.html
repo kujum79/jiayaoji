@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710e-20261128';
+        var APP_VER = 'V710f-20261128';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -3995,7 +3995,7 @@
         .mp-manual-title-placeholder { flex-shrink: 0; visibility: hidden; font-size: 14px; font-weight: 700; }
         .mp-manual-item { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
         .mp-manual-label { font-size: 11px; font-weight: 600; color: #1d1b20; flex-shrink: 0; white-space: nowrap; width: 32px; }
-        .mp-manual-input { flex: 1; min-width: 0; height: 22px; border: 1.5px solid #e0e0e0; border-radius: 6px; padding: 0 6px; font-size: 13px; outline: none; box-sizing: border-box; }
+        .mp-manual-input { flex: 1; min-width: 0; height: 32px; border: 1.5px solid #e0e0e0; border-radius: 6px; padding: 0 8px; font-size: 14px; outline: none; box-sizing: border-box; }
         .mp-manual-input:focus { border-color: #6750A4; }
         .mp-manual-checkbox { width: 16px; height: 16px; accent-color: #6750A4; cursor: pointer; flex-shrink: 0; }
         .mp-manual-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
@@ -4011,11 +4011,11 @@
         .mp-kn-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
         .mp-kn-cb { display: flex; align-items: center; gap: 2px; font-size: 12px; color: #1d1b20; cursor: pointer; }
         .mp-kn-cb input { width: 13px; height: 13px; accent-color: #6750A4; }
-        .mp-kn-select { height: 22px; border: 1.5px solid #e0e0e0; border-radius: 6px; padding: 0 6px; font-size: 12px; outline: none; background: #fff; max-width: 80px; box-sizing: border-box; }
+        .mp-kn-select { height: 32px; border: 1.5px solid #e0e0e0; border-radius: 6px; padding: 0 6px; font-size: 13px; outline: none; background: #fff; max-width: 90px; box-sizing: border-box; }
         .mp-kn-search-wrap { display: flex; gap: 4px; flex: 1; min-width: 0; }
-        .mp-kn-search { flex: 1; height: 22px; border: 1.5px solid #e0e0e0; border-radius: 6px; padding: 0 8px; font-size: 12px; outline: none; box-sizing: border-box; }
+        .mp-kn-search { flex: 1; height: 32px; border: 1.5px solid #e0e0e0; border-radius: 6px; padding: 0 8px; font-size: 14px; outline: none; box-sizing: border-box; }
         .mp-kn-search:focus { border-color: #6750A4; }
-        .mp-kn-clear { height: 22px; padding: 0 8px; background: #f0f0f0; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; color: #666; box-sizing: border-box; }
+        .mp-kn-clear { height: 32px; padding: 0 10px; background: #f0f0f0; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; color: #666; box-sizing: border-box; }
         .mp-kn-results { max-height: 180px; overflow-y: auto; margin-top: 6px; }
         .mp-kn-item { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 13px; border-bottom: 1px solid #f5f5f5; cursor: pointer; }
         .mp-kn-item:last-child { border-bottom: none; }
@@ -4043,11 +4043,11 @@
         .mp-snack-rec-empty { font-size: 12px; color: #9CA3AF; padding: 8px 4px; text-align: center; }
         .mp-snack-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
         .mp-snack-label { font-size: 12px; font-weight: 600; color: #4B5563; flex-shrink: 0; min-width: 34px; }
-        .mp-snack-input { height: 22px; border: 1.5px solid #FED7AA; border-radius: 6px; padding: 0 6px; font-size: 12px; outline: none; box-sizing: border-box; background: #fff; }
-        .mp-snack-input-select { height: 22px; border: 1.5px solid #FED7AA; border-radius: 6px; padding: 0 2px; font-size: 12px; outline: none; box-sizing: border-box; background: #fff; }
+        .mp-snack-input { height: 32px; border: 1.5px solid #FED7AA; border-radius: 6px; padding: 0 8px; font-size: 14px; outline: none; box-sizing: border-box; background: #fff; }
+        .mp-snack-input-select { height: 32px; border: 1.5px solid #FED7AA; border-radius: 6px; padding: 0 2px; font-size: 14px; outline: none; box-sizing: border-box; background: #fff; }
         .mp-snack-check { width: 16px; height: 16px; accent-color: #FB923C; cursor: pointer; }
         .mp-up-dd { position: relative; }
-        .mp-up-dd-trigger { height: 22px; border: 1.5px solid #FED7AA; border-radius: 6px; padding: 0 6px; font-size: 12px; box-sizing: border-box; background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+        .mp-up-dd-trigger { height: 32px; border: 1.5px solid #FED7AA; border-radius: 6px; padding: 0 8px; font-size: 14px; box-sizing: border-box; background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 4px; }
         .mp-up-dd-arrow { font-size: 8px; color: #9CA3AF; transition: transform 0.2s; }
         .mp-up-dd.open .mp-up-dd-arrow { transform: rotate(180deg); }
         .mp-up-dd-options { position: absolute; bottom: calc(100% + 2px); left: 0; right: 0; background: #fff; border: 1.5px solid #FED7AA; border-radius: 6px; box-shadow: 0 -4px 12px rgba(0,0,0,0.1); z-index: 1000; display: none; max-height: 150px; overflow-y: auto; }
@@ -5199,7 +5199,7 @@ async function _submitFeedback() {
                     <div class="record-meal-type-btn active" data-meal="早餐">🌅 早餐</div>
                     <div class="record-meal-type-btn" data-meal="午餐">☀️ 午餐</div>
                     <div class="record-meal-type-btn" data-meal="晚餐">🌙 晚餐</div>
-                    <div class="record-meal-type-btn" data-meal="加餐">🍪 加餐</div>
+                    <div class="record-meal-type-btn" data-meal="加餐">加餐</div>
                 </div>
             </div>
             <!-- 菜品列表区域 -->
