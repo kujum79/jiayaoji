@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710j-20261128';
+        var APP_VER = 'V710k-20261128';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -57876,8 +57876,10 @@ function _aiUsageFmtCost(y) { return (y || 0) >= 1 ? '¥' + Number(y).toFixed(2)
 function _aiUsageFmtNum(n) { return String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function _aiUsageFmtTime(ts) { try { var d = new Date((ts || 0) * 1000); return String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); } catch (e) { return ''; } }
 
-// V132: AI 服务异常实时监控（仅超级管理员）——每 90 秒检查一次，发现新错误弹提示
-function initAiErrorWatcher() {
+// V132: AI 服务异常监控 —— V710j 关闭自动 90s 轮询弹窗（太骚扰），超管可手动在「我家→系统监控」里看
+// initAiErrorWatcher 函数保留但不再自动启动，需要时手动调用 initAiErrorWatcher(true) 或打开监控面板
+function initAiErrorWatcher(_force) {
+    if (!_force) return;  // 默认不自动启动
     if (!(typeof isSuperAdmin === 'function' && isSuperAdmin())) return;
     if (window.__aiErrorWatcherOn) return;
     window.__aiErrorWatcherOn = true;
@@ -57892,12 +57894,14 @@ function initAiErrorWatcher() {
             var newest = errs[0];
             if ((newest.timestamp || 0) > seen) {
                 localStorage.setItem('jj_aiErrorSeenTs', String(newest.timestamp || 0));
-                showToast('⚠️ AI服务异常：' + _aiUsageProviderName(newest.provider) + ' ' + _aiUsageTaskName(newest.task) + '（已自动降级下一家）');
+                console.warn('[AIErrorWatcher]', newest.provider, newest.task, newest.message);
+                // V710j: 不再 showToast 弹窗 —— 太频繁太骚扰，改 console.warn 静默记录
             }
         } catch (e) {}
     }, 90000);
 }
-setTimeout(initAiErrorWatcher, 8000);
+// V710j: 关闭自动启动 —— 手动在「我家→系统监控」页面启动
+// setTimeout(initAiErrorWatcher, 8000);
 
 async function openAiUsagePanel() {
     var old = document.getElementById('aiUsageOverlay');
