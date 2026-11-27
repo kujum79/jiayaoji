@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V705c-20261127';
+        var APP_VER = 'V705d-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -55418,9 +55418,9 @@ function _mergeDefaultSubCategories(kc) {
 
         // ========== V703d2: 老版本节点归一化 ==========
         // 历史版本：根节点 id="食养"（现改为 "shiyang"）
-        // 历史残留子分类：体质食养/日常食养/食养原则/食养食谱/节气食养/食方（空壳）
-        var _LEGACY_SUBS = ['体质食养', '日常食养', '食养原则', '食养食谱', '节气食养'];
-        var _LEGACY_IDS = ['食养', '体质食养', '日常食养', '食养原则', '食养食谱', '节气食养'];
+        // 历史残留子分类：体质食养/日常食养/食养原则/食养食谱/节气食养 + V298补的当季食材/烹饪技巧/饮食文化
+        var _LEGACY_SUBS = ['体质食养', '日常食养', '食养原则', '食养食谱', '节气食养', '当季食材', '烹饪技巧', '饮食文化'];
+        var _LEGACY_IDS = ['食养', '体质食养', '日常食养', '食养原则', '食养食谱', '节气食养', '当季食材', '烹饪技巧', '饮食文化'];
 
         // 1. 把 id="食养" 的根节点改名为 "shiyang"/"食方"
         var _sfOldIdx = -1, _sfIdx = -1;
@@ -55444,6 +55444,11 @@ function _mergeDefaultSubCategories(kc) {
                 tree[_sfOldIdx].icon = tree[_sfOldIdx].icon || '🥣';
                 console.log('[V703d2] 食养→shiyang：直接改名');
             }
+            changed = true;
+        } else if (_sfIdx !== -1 && tree[_sfIdx].name === '食养') {
+            // V705d: id 已是 shiyang 但 name 还叫"食养" → 强制改名
+            tree[_sfIdx].name = '食方';
+            console.log('[V705d] shiyang 强制改名：食养→食方');
             changed = true;
         }
 
