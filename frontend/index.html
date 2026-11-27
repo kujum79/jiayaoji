@@ -70592,11 +70592,11 @@ function openDiningOutPlanModal() {
             </div>
         </div>
 
-        <!-- V137: 手动添加餐厅版块移到餐厅库上方 -->
+        <!-- V137/V708: 话筒按钮(左) + 手动添加餐厅(右) -->
         <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:10px;margin-bottom:10px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+                <button onclick="startDiningOutVoice()" id="diningOutVoiceBtn" title="语音添加餐厅" style="background:#3B82F6;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;white-space:nowrap;">🎤 话筒</button>
                 <button onclick="openRestaurantModalForPlan()" style="background:#3B82F6;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">手动添加餐厅</button>
-                <button onclick="startDiningOutVoice()" id="diningOutVoiceBtn" style="background:#3B82F6;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;white-space:nowrap;">语音添加餐厅</button>
             </div>
             <!-- V137: 手动添加的餐厅显示在此按钮下方 -->
             <div id="manualRestaurantList" style="margin-top:2px;"></div>
@@ -70609,8 +70609,8 @@ function openDiningOutPlanModal() {
 
         <div id="libraryAddSection" style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:10px;margin-bottom:10px;">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-                <button onclick="focusLibrarySearch()" style="background:#10B981;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">🏠 从家庭餐厅选</button>
                 <input type="text" id="knowledgeSearchInput" placeholder="搜家庭餐厅…" style="flex:1;min-width:0;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:12px;" oninput="searchKnowledgeRestaurants(this.value)">
+                <button onclick="focusLibrarySearch()" style="background:#10B981;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">🏠 从家庭餐厅选</button>
             </div>
             <div id="knowledgeRestaurantList" style="max-height:150px;overflow-y:auto;"></div>
         </div>
@@ -71533,7 +71533,7 @@ function startDiningOutVoice() {
     };
 
     diningOutVoiceRecognition.onend = function() {
-        btn.textContent = '🎤 语音录入';
+        btn.textContent = '🎤 话筒';
         btn.style.background = '#3B82F6';
         hint.style.display = 'none';
     };
