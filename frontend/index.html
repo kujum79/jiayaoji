@@ -62189,7 +62189,10 @@ function _csScanFiles(files) {
                     image_data_url: dataUrl, max_tokens: 3000, task_type: 'shifang_ocr'
                 })
             }).then(function (r) { return r.json(); }).then(function (j) {
-                pages.push(String((j && j.response) || ''));
+                var _pageText = String((j && j.response) || '');
+                console.log('[csScanFiles] OCR page', i+1, 'status=', j ? Object.keys(j).join(',') : 'null', 'text length=', _pageText.length);
+                if (!_pageText) console.warn('[csScanFiles] OCR returned EMPTY! full response:', JSON.stringify(j).slice(0, 500));
+                pages.push(_pageText);
                 i++;
                 _csOv(true, i >= arr.length ? 'AI 整理食方结构中…' : '正在识别第 ' + (i + 1) + '/' + arr.length + ' 页…');
                 next();
@@ -62213,14 +62216,22 @@ async function _csStructure(raw) {
             + '【转录文本】\n' + raw;
         var result = await aiChatMultiProvider('你是家庭膳食知识编辑，擅长把书稿整理为结构化食方。', prompt, { maxTokens: 3000, temperature: 0.3, taskType: 'knowledge' });
         var reply = (result && result.choices && result.choices[0] && result.choices[0].message) ? String(result.choices[0].message.content || '') : '';
+        // V709j4: 调试日志——完整打印 AI 原始返回 + parse 结果
+        console.log('[csStructure] raw reply length:', reply.length);
+        console.log('[csStructure] raw reply preview (first 500):', reply.slice(0, 500));
         // V709j: 更鲁棒的 JSON 提取（AI 可能输出 think 块/解释文字/markdown 包裹）
         reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/i, '').trim();
+        console.log('[csStructure] cleaned reply preview:', reply.slice(0, 500));
         var d = _csExtractJson(reply);
+        console.log('[csStructure] _csExtractJson result:', d);
         if (!d || typeof d !== 'object') {
+            console.warn('[csStructure] ALL PARSE FAILED! fallback to overview');
             // parse 失败 → 尽力从原始 reply 提取症状名+正文
             d = { sym: '', overview: reply, principles: [], recipes: [], note: '' };
             var _symM = reply.match(/"sym"\s*:\s*"([^"]+)"/);
             if (_symM) d.sym = _symM[1].trim();
+        } else {
+            console.log('[csStructure] parsed OK: sym=' + d.sym + ' overview length=' + String(d.overview || '').length + ' recipes count=' + (d.recipes ? d.recipes.length : 0));
         }
         _csOv(false);
         _csOpenPreview(d);
