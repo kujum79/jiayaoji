@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V706C-20261127';
+        var APP_VER = 'V707A-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -70434,52 +70434,50 @@ function openDiningOutPlanModal() {
             <div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center;">
                 <select id="planScene" style="width:80px;max-width:80px;min-width:0;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:12px;flex-shrink:0;">
                     <option value="">场景</option>
-                    <option value="家庭聚餐" ${existingPlan.scene==='家庭聚餐'?'selected':''}>家庭聚餐</option>
-                    <option value="朋友聚会" ${existingPlan.scene==='朋友聚会'?'selected':''}>朋友聚会</option>
-                    <option value="情侣约会" ${existingPlan.scene==='情侣约会'?'selected':''}>情侣约会</option>
-                    <option value="商务宴请" ${existingPlan.scene==='商务宴请'?'selected':''}>商务宴请</option>
-                    <option value="亲子餐" ${existingPlan.scene==='亲子餐'?'selected':''}>亲子餐</option>
-                    <option value="生日宴" ${existingPlan.scene==='生日宴'?'selected':''}>生日宴</option>
-                    <option value="日常简餐" ${existingPlan.scene==='日常简餐'?'selected':''}>日常简餐</option>
+                    <option value="日常吃" ${existingPlan.scene==='日常吃'?'selected':''}>日常吃</option>
+                    <option value="约聚餐" ${existingPlan.scene==='约聚餐'?'selected':''}>约聚餐</option>
+                    <option value="宴请席" ${existingPlan.scene==='宴请席'?'selected':''}>宴请席</option>
+                    <option value="咖啡甜" ${existingPlan.scene==='咖啡甜'?'selected':''}>咖啡甜</option>
+                    <option value="夜宵场" ${existingPlan.scene==='夜宵场'?'selected':''}>夜宵场</option>
                 </select>
-                <select id="planLocation" style="width:52px;max-width:52px;min-width:0;padding:4px 4px 4px 4px;border:1px solid #E5E7EB;border-radius:6px;font-size:12px;flex-shrink:0;">
+                <select id="planLocation" style="width:60px;max-width:60px;min-width:0;padding:4px 4px;border:1px solid #E5E7EB;border-radius:6px;font-size:12px;flex-shrink:0;">
                     <option value="">位置</option>
-                    <option value="附近" ${(existingPlan.location==='附近' || (!existingPlan.location && familyHomeAddress))?'selected':''}>附近</option>
-                    <option value="本区" ${existingPlan.location==='本区'?'selected':''}>本区</option>
-                    <option value="本市" ${existingPlan.location==='本市'?'selected':''}>本市</option>
-                    <option value="其他" ${existingPlan.location==='其他'?'selected':''}>其他</option>
+                    <option value="家附近" ${(existingPlan.location==='家附近' || (!existingPlan.location && familyHomeAddress))?'selected':''}>附近</option>
+                    <option value="本地区" ${existingPlan.location==='本地区'?'selected':''}>本地区</option>
+                    <option value="外地" ${existingPlan.location==='外地'?'selected':''}>外地</option>
                 </select>
                 <select id="planCuisine" style="width:76px;max-width:76px;min-width:0;padding:4px 4px;border:1px solid #E5E7EB;border-radius:6px;font-size:12px;flex-shrink:0;">
-                    <option value="">菜系偏好</option>
-                    <option value="中餐" ${existingPlan.cuisine==='中餐'?'selected':''}>中餐</option>
+                    <option value="">菜系</option>
                     <option value="川菜" ${existingPlan.cuisine==='川菜'?'selected':''}>川菜</option>
                     <option value="粤菜" ${existingPlan.cuisine==='粤菜'?'selected':''}>粤菜</option>
                     <option value="湘菜" ${existingPlan.cuisine==='湘菜'?'selected':''}>湘菜</option>
+                    <option value="鲁菜" ${existingPlan.cuisine==='鲁菜'?'selected':''}>鲁菜</option>
                     <option value="江浙菜" ${existingPlan.cuisine==='江浙菜'?'selected':''}>江浙菜</option>
                     <option value="火锅" ${existingPlan.cuisine==='火锅'?'selected':''}>火锅</option>
+                    <option value="西餐" ${existingPlan.cuisine==='西餐'?'selected':''}>西餐</option>
                     <option value="日料" ${existingPlan.cuisine==='日料'?'selected':''}>日料</option>
                     <option value="韩餐" ${existingPlan.cuisine==='韩餐'?'selected':''}>韩餐</option>
-                    <option value="西餐" ${existingPlan.cuisine==='西餐'?'selected':''}>西餐</option>
-                    <option value="东南亚菜" ${existingPlan.cuisine==='东南亚菜'?'selected':''}>东南亚菜</option>
+                    <option value="东南亚" ${existingPlan.cuisine==='东南亚'?'selected':''}>东南亚</option>
+                    <option value="中东" ${existingPlan.cuisine==='中东'?'selected':''}>中东</option>
+                    <option value="非洲" ${existingPlan.cuisine==='非洲'?'selected':''}>非洲</option>
                     <option value="不限" ${existingPlan.cuisine==='不限'?'selected':''}>不限</option>
                 </select>
                 <select id="planTaste" style="width:76px;max-width:76px;min-width:0;padding:4px 4px;border:1px solid #E5E7EB;border-radius:6px;font-size:12px;flex-shrink:0;">
-                    <option value="">口味偏好</option>
+                    <option value="">口味</option>
                     <option value="清淡" ${existingPlan.taste==='清淡'?'selected':''}>清淡</option>
                     <option value="微辣" ${existingPlan.taste==='微辣'?'selected':''}>微辣</option>
                     <option value="重辣" ${existingPlan.taste==='重辣'?'selected':''}>重辣</option>
                     <option value="偏甜" ${existingPlan.taste==='偏甜'?'selected':''}>偏甜</option>
                     <option value="偏咸" ${existingPlan.taste==='偏咸'?'selected':''}>偏咸</option>
-                    <option value="综合家庭口味" ${existingPlan.taste==='综合家庭口味'?'selected':''}>综合家庭口味</option>
+                    <option value="综合口味" ${existingPlan.taste==='综合口味'?'selected':''}>综合口味</option>
                 </select>
-                <!-- V137: AI推荐餐厅 放到口味偏好右边 -->
-                <button id="aiRecommendBtn" onclick="generateDiningOutAIRecommendation()" style="background:#F97316;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">AI推荐餐厅</button>
+                <button id="aiRecommendBtn" onclick="generateDiningOutAIRecommendation()" style="background:#F97316;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">AI推荐</button>
             </div>
         </div>
 
         <div style="background:#FFFBEB;border:1px solid #FED7AA;border-radius:10px;padding:10px;margin-bottom:10px;">
             <div id="aiRecommendArea" style="font-size:12px;color:#6B7280;min-width:0;line-height:1.8;">
-                点击「AI推荐餐厅」，AI将根据就餐信息推荐1-3家餐厅
+                点击「AI推荐」，AI将根据就餐信息推荐1-3家餐厅
             </div>
         </div>
 
