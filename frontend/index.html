@@ -55776,6 +55776,29 @@ function _mergeDefaultSubCategories(kc) {
                 if (_removedIds.indexOf(c.id) !== -1 && _whiteIds.indexOf(c.id) === -1) return false;
                 return true;
             });
+            // V709e: 按 name 去重——手机老版本可能残留同 name 不同 id 的重复节点
+            // 保留第一个（通常是 DEFAULT 的），后面的（有数据的残留）合并条目到第一个然后删除
+            var _seenNames = {};
+            var _deduped = [];
+            shiyang.children.forEach(function(c) {
+                if (!c) return;
+                if (_seenNames[c.name]) {
+                    // 重复：把子分类条目合并到第一个（防止丢失数据）
+                    var _first = _seenNames[c.name];
+                    if (c.children && c.children.length) {
+                        _first.children = (_first.children || []).concat(c.children);
+                    }
+                    changed = true;
+                } else {
+                    _seenNames[c.name] = c;
+                    _deduped.push(c);
+                }
+            });
+            if (_deduped.length !== shiyang.children.length) {
+                console.log('[V709e] shiyang 子分类 name 去重：', shiyang.children.length, '→', _deduped.length);
+                changed = true;
+            }
+            shiyang.children = _deduped;
             if (shiyang.children.length !== before) {
                 console.log('[V703d2] 清理老残留子分类：', before, '→', shiyang.children.length);
                 changed = true;
@@ -55999,6 +56022,35 @@ function _mergeDefaultSubCategories(kc) {
             }
         }
     });
+    // V709e: 通用去重——遍历所有层级，同 name 只保留第一个
+    // 手机老版本迭代后可能残留同 name 不同 id 的重复节点（比如内科食方出现两次）
+    (function _dedupTree(nodes) {
+        if (!nodes || !nodes.length) return;
+        var _seen = {}, _out = [], _dup = 0;
+        nodes.forEach(function(n) {
+            if (!n) return;
+            var _k = n.name || n.id;
+            if (_seen[_k]) {
+                // 重复：合并子节点（防止丢失数据）
+                var _first = _seen[_k];
+                if (n.children && n.children.length) {
+                    _first.children = (_first.children || []).concat(n.children);
+                }
+                _dup++;
+            } else {
+                _seen[_k] = n;
+                _out.push(n);
+            }
+        });
+        if (_dup > 0) {
+            console.log('[V709e] 去重 ' + _dup + ' 个同 name 节点');
+            changed = true;
+        }
+        // 递归下一层
+        _out.forEach(function(n) { if (n.children && n.children.length) _dedupTree(n.children); });
+        nodes.length = 0;
+        _out.forEach(function(n) { nodes.push(n); });
+    })(tree);
     if (changed) { try { lsSet('knowledgeCategories', JSON.stringify(kc)); } catch(e) {} }
     return kc;
 }
