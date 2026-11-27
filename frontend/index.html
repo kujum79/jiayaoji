@@ -56021,36 +56021,33 @@ function _mergeDefaultSubCategories(kc) {
                 changed = true;
             }
         }
-    });
-    // V709e: 通用去重——遍历所有层级，同 name 只保留第一个
-    // 手机老版本迭代后可能残留同 name 不同 id 的重复节点（比如内科食方出现两次）
-    (function _dedupTree(nodes) {
-        if (!nodes || !nodes.length) return;
-        var _seen = {}, _out = [], _dup = 0;
-        nodes.forEach(function(n) {
-            if (!n) return;
-            var _k = n.name || n.id;
-            if (_seen[_k]) {
-                // 重复：合并子节点（防止丢失数据）
-                var _first = _seen[_k];
-                if (n.children && n.children.length) {
-                    _first.children = (_first.children || []).concat(n.children);
+        // V709e: 通用去重——对每个 layer 的 tree 分别跑！之前错误放在 forEach 外面导致 tree 变量已消失
+        (function _dedupTree(nodes) {
+            if (!nodes || !nodes.length) return;
+            var _seen = {}, _out = [], _dup = 0;
+            nodes.forEach(function(n) {
+                if (!n) return;
+                var _k = n.name || n.id;
+                if (_seen[_k]) {
+                    var _first = _seen[_k];
+                    if (n.children && n.children.length) {
+                        _first.children = (_first.children || []).concat(n.children);
+                    }
+                    _dup++;
+                } else {
+                    _seen[_k] = n;
+                    _out.push(n);
                 }
-                _dup++;
-            } else {
-                _seen[_k] = n;
-                _out.push(n);
+            });
+            if (_dup > 0) {
+                console.log('[V709e] ' + layer + '层去重 ' + _dup + ' 个同 name 节点');
+                changed = true;
             }
-        });
-        if (_dup > 0) {
-            console.log('[V709e] 去重 ' + _dup + ' 个同 name 节点');
-            changed = true;
-        }
-        // 递归下一层
-        _out.forEach(function(n) { if (n.children && n.children.length) _dedupTree(n.children); });
-        nodes.length = 0;
-        _out.forEach(function(n) { nodes.push(n); });
-    })(tree);
+            _out.forEach(function(n) { if (n.children && n.children.length) _dedupTree(n.children); });
+            nodes.length = 0;
+            _out.forEach(function(n) { nodes.push(n); });
+        })(tree);
+    });
     if (changed) { try { lsSet('knowledgeCategories', JSON.stringify(kc)); } catch(e) {} }
     return kc;
 }
