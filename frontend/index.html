@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710i-20261128';
+        var APP_VER = 'V710j-20261128';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -2616,8 +2616,8 @@
     .fi-add-more-btn { width:100%; margin-top:8px; padding:10px; background:#E8DEF8; color:#6750A4; border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; }
     .fi-add-more-btn:active { background:#D9C7F5; }
     /* ===== 食材准备（采购准备中心） ===== */
-    .prep-card { background:#fff; border-radius:12px; margin:10px 12px; padding:12px; border:1px solid #F3F4F6; box-sizing:border-box; overflow:hidden; }
-    .prep-shop-card { overflow-x:hidden; overflow-y:visible; }
+    .prep-card { background:#fff; border-radius:12px; margin:10px 12px; padding:12px; border:1px solid #F3F4F6; box-sizing:border-box; overflow-x:visible; overflow-y:hidden; }
+    .prep-shop-card { overflow-x:auto; overflow-y:visible; -webkit-overflow-scrolling:touch; }
     .prep-title-label { font-size:14px; font-weight:600; color:#6B7280; margin:10px 12px 4px; }
     .prep-overview { background:#fff; border-radius:12px; margin:8px 12px 12px; padding:10px 12px; border:1px solid #F3F4F6; font-size:13px; line-height:1.8; }
     .prep-overview-cat { margin-bottom:4px; }
@@ -2675,7 +2675,7 @@
     .prep-summary-row .left b { color:#C2410C; }
     .prep-summary-row .right { font-size:14px; color:#374151; }
     .prep-summary-row .right b { color:#DC2626; }
-    .prep-shop-table { width:100%; max-width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; }
+    .prep-shop-table { width:100%; max-width:100%; border-collapse:collapse; font-size:13px; table-layout:auto; }
     .prep-shop-table th { text-align:left; padding:6px 2px; color:#6B7280; font-weight:600; border-bottom:1px solid #E5E7EB; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .prep-shop-table th:nth-child(1) { width:28px; }
     .prep-shop-table th:nth-child(2) { width:74px; }
@@ -2723,7 +2723,7 @@
     .prep-inline-actual .prep-inline-input:focus { background:#fff; border-color:#2563EB; }
     /* V710c: 适老化表格容器——允许横向滚动兜底（6列在特大屏手机上可能略宽） */
     .prep-shop-card { overflow-x:auto; -webkit-overflow-scrolling:touch; }
-    .prep-shop-card table { min-width:320px; }
+    .prep-shop-card table { min-width:340px; }
 
     /* V710d: 适老化字体适配——列宽/输入框同步放大，不让字体变大后挤压 */
     /* 注意：不要在这些覆盖里写 font-size！适老化引擎会二次放大 */
@@ -22967,7 +22967,7 @@ function renderFridgeRecView() {
                     <th>单价</th>
                     <th>需购量</th>
                     <th style="text-align:left;">预估(元)</th>
-                    <th style="text-align:left;">实际(元)</th>
+                    <th style="text-align:left;width:56px;">实际</th>
                 </tr>
             </thead>
             <tbody>
