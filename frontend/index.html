@@ -16742,6 +16742,38 @@ if (typeof DEFAULT_DIET_KNOWLEDGE !== 'undefined' && DEFAULT_DIET_KNOWLEDGE.leng
         try { lsSet('dietKnowledge', JSON.stringify(dietKnowledge)); } catch(e) {}
     }
 }
+// V704: 食方文章三级同步 + mainCategory 修正（V703 只改 category，漏了 subCategory/leafCategory/mainCategory）
+(function __migrateShiyangArticlesV2() {
+    try {
+        if (localStorage.getItem('__v704_shiyang_synced')) return;
+        var dk = JSON.parse(lsGet('dietKnowledge') || '[]');
+        var fixed = 0;
+        dk.forEach(function(a) {
+            var cat = a.category || '';
+            if (cat.indexOf('shiyang/') === 0) {
+                var parts = cat.split('/');
+                // 同步 mainCategory
+                if (a.mainCategory !== 'shiyang') { a.mainCategory = 'shiyang'; fixed++; }
+                // 同步 subCategory = 第二段
+                if (parts.length >= 2) {
+                    var newSub = parts[1]; // 如 "内科食方"
+                    if (a.subCategory !== newSub) { a.subCategory = newSub; fixed++; }
+                }
+                // 同步 leafCategory = 第三段
+                if (parts.length >= 3) {
+                    var newLeaf = parts[2]; // 如 "失眠安神"
+                    if (a.leafCategory !== newLeaf) { a.leafCategory = newLeaf; fixed++; }
+                }
+            }
+        });
+        if (fixed > 0) {
+            lsSet('dietKnowledge', JSON.stringify(dk));
+            dietKnowledge = dk;
+            console.log('[V704] 食方文章三级同步：' + fixed + ' 个字段已修正（sub/leaf/mainCat）');
+        }
+        localStorage.setItem('__v704_shiyang_synced', '1');
+    } catch(e) { console.warn('__migrateShiyangArticlesV2 error:', e); }
+})();
 // V703: 食方文章自动重挂细分类（一次性迁移；树归一全由 _mergeDefaultSubCategories 负责）
 (function __migrateShiyangArticles() {
     try {
