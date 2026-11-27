@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710a-20261127';
+        var APP_VER = 'V710b-20261128';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -22514,8 +22514,18 @@ function renderFridgeRecView() {
     // buyKinds 减去 deleted 中原来 counted 的部分（粗略保持一致：上面循环已经跳过deleted，所以 buyKinds 是正确值）
 
     if (rowsRendered.length === 0) {
-        listHtml = `<tr><td colspan="5" style="padding:30px 12px;text-align:center;color:#9CA3AF;font-size:14px;">暂无可计算食材，请先确认食谱计划</td></tr>`;
+        listHtml = `<tr><td colspan="6" style="padding:30px 12px;text-align:center;color:#9CA3AF;font-size:14px;">暂无可计算食材，请先确认食谱计划</td></tr>`;
     } else {
+        // V710b: 预统计每个分类的需购食材数（用于分类标题的徽章显示）
+        const catNeedCount = {};
+        rowsRendered.forEach(function(r) {
+            if (r.alreadyHave || prep.deleted[r.name]) return;
+            const ov = prep.overrides[r.name] || {};
+            let _nq;
+            if (typeof ov.needQty === 'number' && !isNaN(ov.needQty)) _nq = ov.needQty;
+            else _nq = r.needBuyQty > 0 ? r.needBuyQty : (r.totalQty <= 0 ? 1 : 0);
+            if (_nq > 0) catNeedCount[r.category] = (catNeedCount[r.category] || 0) + 1;
+        });
         rowsRendered.forEach(r => {
             const ov = prep.overrides[r.name] || {};
             const unit = r.needBuyUnit || r.totalUnit || '';
@@ -22538,7 +22548,6 @@ function renderFridgeRecView() {
                 const est1 = estimatePrepPrice(r.name, oneUnit, unit);
                 unitPrice = needQty > 0 ? est1 : (r.estPrice > 0 && needQty === 0 ? r.estPrice : est1);
                 if (needQty > 0 && r.estPrice > 0) {
-                    // 优先反推：unitPrice = estPrice / needQty
                     unitPrice = Number((r.estPrice / needQty).toFixed(2));
                 }
             }
@@ -22549,9 +22558,18 @@ function renderFridgeRecView() {
             } else {
                 estPrice = Number((unitPrice * needQty).toFixed(1));
             }
-            // 分类分组
+            // 实际花费（记账）
+            let actualPrice = null;
+            if (typeof ov.actualPrice === 'number' && !isNaN(ov.actualPrice) && ov.actualPrice >= 0) {
+                actualPrice = Number(ov.actualPrice);
+            }
+            // V710b: 分类分组——加 emoji 图标 + 需购数量徽章 + 点击折叠
             if (r.category !== lastCat) {
-                listHtml += `<tr class="prep-shop-cat-row"><td colspan="5">${escapeHtml(r.category || '其他')}</td></tr>`;
+                const _catName = r.category || '其他';
+                const _emoji = CAT_EMOJI[_catName] || '📦';
+                const _cCount = catNeedCount[_catName] || 0;
+                listHtml += `<tr class="prep-shop-cat-row" onclick="togglePrepCat('${_catName}')">
+                    <td colspan="6" style="cursor:pointer;">${_emoji} <b>${escapeHtml(_catName)}</b>${_cCount > 0 ? ` <span style="background:#FEF3C7;color:#92400E;font-size:11px;border-radius:8px;padding:0 6px;margin-left:4px;">需购 ${_cCount}</span>` : ''} <span class="prep-cat-arrow" id="prepCatArrow_${_catName}" style="float:right;font-size:11px;color:#9CA3AF;">▼</span></td></tr>`;
                 lastCat = r.category;
             }
             const haveClass = r.alreadyHave ? ' prep-row-have' : '';
@@ -22562,24 +22580,24 @@ function renderFridgeRecView() {
             const nameDisplay = r.extra
                 ? `${n} <span style="color:#D97706;font-size:12px;">[手动]</span>`
                 : n;
-            // V172: 部分覆盖——需购买但家中已有部分库存，标注"已有X单位"
             const partialOwnedHint = (!r.alreadyHave && Number(r.availableQty) > 0)
                 ? ` <span class="prep-have-partial" style="color:#15803D;font-size:12px;font-weight:400;">（已有${_fmtQty(r.availableQty)}${escapeHtml(r.availableUnit || r.needBuyUnit || '')}）</span>`
                 : '';
-            const isEditable = !r.alreadyHave;
+            const _catHideClass = prep._collapsedCats && prep._collapsedCats[r.category] ? ' style="display:none;"' : '';
 
-            let needCell, unitCell, priceCell;
+            let needCell, unitCell, priceCell, actualCell;
             if (r.alreadyHave) {
                 needCell = `<span class="prep-have-tag">已有</span>`;
                 unitCell = `<span style="color:#9CA3AF;">—</span>`;
                 priceCell = `<span style="color:#9CA3AF;">—</span>`;
+                actualCell = `<span style="color:#9CA3AF;">—</span>`;
             } else {
                 const unitLabel = unit || '份';
                 const needUnitLabel = unit || '份';
                 const upVal = unitPrice.toFixed(2);
                 const qVal = Number(needQty.toFixed(2)).toString();
                 const epVal = estPrice.toFixed(1);
-                // 三列均改为直接<input type=number>显示与编辑，无需点✎笔；onchange写overrides+重渲染（避免WebView prompt/confirm黑屏）
+                const apVal = (actualPrice !== null) ? actualPrice.toFixed(1) : '';
                 unitCell = `<div class="prep-inline-wrap prep-inline-unit-price">
                     <input class="prep-inline-input" type="number" min="0" step="0.01" value="${upVal}"
                         data-n="${n}" data-f="unitPrice" onchange="onPrepInlineEdit(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
@@ -22594,13 +22612,20 @@ function renderFridgeRecView() {
                         data-n="${n}" data-f="estPrice" onchange="onPrepInlineEdit(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
                     <span class="prep-inline-unit">元</span>
                 </div><button class="prep-row-del" data-n="${n}" onclick="openPrepDelConfirm(this.dataset.n)" title="删除此行">×</button>`;
+                // V710b: 实际花费——空则等于是"没填"，会 fallback 到预估
+                actualCell = `<div class="prep-inline-wrap prep-inline-actual">
+                    <input class="prep-inline-input prep-inline-actual-input" type="number" min="0" step="0.1" placeholder="${epVal}" value="${apVal}"
+                        data-n="${n}" data-f="actualPrice" onchange="onPrepInlineEdit(this)" onfocus="if(this.value===''){this.placeholder='';}" onblur="if(this.value===''){this.placeholder='${epVal}';}">
+                    <span class="prep-inline-unit">元</span>
+                </div>`;
             }
-            listHtml += `<tr class="${haveClass}">
+            listHtml += `<tr class="${haveClass}"${_catHideClass}>
                 <td style="width:32px;text-align:center;"><input type="checkbox" ${cbDisabled}${checked} onchange="onTogglePrepItem('${n.replace(/'/g,'\\\'')}', this.checked)"></td>
                 <td style="font-weight:600;">${nameDisplay}${partialOwnedHint}</td>
                 <td>${unitCell}</td>
                 <td>${needCell}</td>
                 <td style="text-align:left;">${priceCell}</td>
+                <td style="text-align:left;">${actualCell}</td>
             </tr>`;
         });
     }
@@ -22644,7 +22669,8 @@ function renderFridgeRecView() {
         : '💡 周末买好，洗好切好冷冻，工作日下班直接下锅。';
 
     // 4) 底部按钮文案统计：当前所有非已有+非deleted+已勾选的 项数 / 金额
-    let selectedCount = 0, selectedTotal = 0;
+    // V710b: 优先用实际花费（actualPrice），没填 fallback 到预估（estPrice）
+    let selectedCount = 0, selectedTotal = 0, selectedActualCount = 0;
     rowsRendered.forEach(r => {
         if (r.alreadyHave) return;
         const ov = prep.overrides[r.name] || {};
@@ -22663,8 +22689,14 @@ function renderFridgeRecView() {
             else unitPrice = estimatePrepPrice(r.name, 1, unit);
             estPrice = Number((unitPrice * needQty).toFixed(1));
         }
+        // 实际花费优先（>= 0 视为有效，空/null/undefined/负数 都 fallback）
+        let usePrice = estPrice;
+        if (typeof ov.actualPrice === 'number' && !isNaN(ov.actualPrice) && ov.actualPrice >= 0) {
+            usePrice = Number(ov.actualPrice);
+            selectedActualCount++;
+        }
         selectedCount++;
-        selectedTotal += estPrice;
+        selectedTotal += usePrice;
     });
 
     // V172: 缓存采购行，供"全选/购买渠道"在点击时实时读取勾选状态
@@ -22747,7 +22779,8 @@ function renderFridgeRecView() {
                     <th>食材</th>
                     <th>单价</th>
                     <th>需购量</th>
-                    <th style="text-align:left;">预估价格(元)</th>
+                    <th style="text-align:left;">预估(元)</th>
+                    <th style="text-align:left;">实际(元)</th>
                 </tr>
             </thead>
             <tbody>
@@ -22760,7 +22793,7 @@ function renderFridgeRecView() {
                 <button class="prep-add-item-btn" onclick="openPrepAddItemModal()" style="width:auto;margin:0;padding:8px 16px;">添加食材</button>
                 <button type="button" onclick="prepSelectAllShopping(true)" style="padding:8px 14px;border:1px solid #FDBA74;background:#fff;color:#C2410C;border-radius:10px;font-size:13px;cursor:pointer;">全选</button>
             </span>
-            <button class="prep-btn-confirm" onclick="openPrepConfirmModal()" style="max-width:62%;">确认采购 <span style="font-size:13px;opacity:0.9;">¥${selectedTotal.toFixed(1)}</span></button>
+            <button class="prep-btn-confirm" onclick="openPrepConfirmModal()" style="max-width:62%;">确认采购 · 一键入库 <span style="font-size:13px;opacity:0.9;">¥${selectedTotal.toFixed(1)}${selectedActualCount > 0 ? '(实)' : '(估)'}</span></button>
         </div>
         <div id="prepChannelBarSlot">${(typeof prepChannelButtonsHtml === 'function') ? prepChannelButtonsHtml() : ''}</div>
     </div>`;
@@ -23344,6 +23377,7 @@ function computeIngredientNeeds(daysList, servings, daysCount) {
     let buyKinds = 0;
 
     const CATEGORY_ORDER = ['蔬菜','肉蛋奶','主粮','水果','水产','调味品','干货药材','饮料零食','冷冻','方便食品','其他'];
+    const CAT_EMOJI = {'蔬菜':'🥬','肉蛋奶':'🥩','主粮':'🍚','水果':'🍎','水产':'🐟','调味品':'🧂','干货药材':'🌿','饮料零食':'🥤','冷冻':'❄️','方便食品':'🥟','其他':'📦'};
     Object.keys(map).forEach(norm => {
         const r = map[norm];
         const sumS = Math.max(0, Math.round(Number(mealSum[norm] || 0)));
@@ -23596,6 +23630,15 @@ function togglePrepShopList() {
             : '点击展开 <span class="prep-shop-toggle-arrow">▼</span>';
     } catch(e) {}
 }
+// V710b: 分类折叠——点击分类行切换该分类的显示/隐藏
+function togglePrepCat(catName) {
+    try {
+        var prep = window._prep || (window._prep = {});
+        if (!prep._collapsedCats) prep._collapsedCats = {};
+        prep._collapsedCats[catName] = !prep._collapsedCats[catName];
+        renderFridgeRecView();
+    } catch(e) {}
+}
 
 // 勾选状态切换
 function onTogglePrepItem(name, checked) {
@@ -23659,6 +23702,22 @@ function onPrepInlineEdit(inputEl) {
         const prep = window._prep;
         const str = inputEl.value;
         const num = parseFloat(str);
+        // V710b: actualPrice 允许清空 → 表示"没填，fallback 到预估"
+        if (field === 'actualPrice') {
+            if (!str || str.trim() === '') {
+                // 清空：删除 overrides 里的 actualPrice
+                const cur = prep.overrides[name] || {};
+                delete cur.actualPrice;
+                _setPrepOverride(name, cur);
+                renderFridgeRecView();
+                return;
+            }
+            if (isNaN(num) || num < 0) { showToast('请输入有效的金额（或清空表示未填写）'); renderFridgeRecView(); return; }
+            _setPrepOverride(name, { actualPrice: Number(num.toFixed(1)) });
+            showToast(`${name} 实际花费已记录`);
+            renderFridgeRecView();
+            return;
+        }
         if (isNaN(num) || num < 0) { showToast('请输入有效的数字'); renderFridgeRecView(); return; }
         if (field === 'unitPrice') _setPrepOverride(name, { unitPrice: Number(num.toFixed(2)) });
         else if (field === 'needQty') _setPrepOverride(name, { needQty: Math.max(0, num) });
@@ -26505,12 +26564,18 @@ function openPrepConfirmModal() {
         let estPrice;
         if (typeof ov.estPrice === 'number' && !isNaN(ov.estPrice)) estPrice = Number(ov.estPrice);
         else estPrice = Number((unitPrice * needQty).toFixed(1));
+        // V710b: 带 actualPrice（实际花费），允许为 null
+        let actualPrice = null;
+        if (typeof ov.actualPrice === 'number' && !isNaN(ov.actualPrice) && ov.actualPrice >= 0) {
+            actualPrice = Number(ov.actualPrice);
+        }
         items.push({
             name: r.name, category: r.category,
             qty: Number(needQty.toFixed(2)),
             unit: unit,
             unitPrice: Number(unitPrice.toFixed(2)),
             estPrice: Number(estPrice.toFixed(2)),
+            actualPrice: actualPrice,
             emoji: ''
         });
     });
@@ -26530,22 +26595,57 @@ function renderPrepConfirmList() {
         return;
     }
     let html = '';
-    let total = 0;
+    let total = 0, actualCount = 0;
     items.forEach((it, idx) => {
-        total += it.estPrice;
-        html += `<div class="prep-confirm-item">
+        // V710b: 实际花费优先算总额
+        let usePrice = it.estPrice;
+        const hasActual = it.actualPrice !== null && it.actualPrice !== undefined && !isNaN(it.actualPrice);
+        if (hasActual) { usePrice = Number(it.actualPrice); actualCount++; }
+        total += usePrice;
+        const apVal = hasActual ? Number(it.actualPrice).toFixed(1) : '';
+        html += `<div class="prep-confirm-item" style="flex-wrap:wrap;">
             <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
                 <span style="font-weight:600;color:#1F2937;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(it.name)}</span>
                 <span style="color:#6B7280;font-size:14px;flex-shrink:0;">${it.qty}${escapeHtml(it.unit || '')}</span>
             </div>
             <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
-                <span style="color:#DC2626;font-weight:700;">¥${it.estPrice.toFixed(1)}</span>
+                <span style="color:#9CA3AF;font-size:12px;">估¥${it.estPrice.toFixed(1)}</span>
+                <input type="number" min="0" step="0.1" placeholder="${it.estPrice.toFixed(1)}" value="${apVal}"
+                    data-idx="${idx}" onchange="onConfirmActualPrice(this)"
+                    style="width:70px;padding:4px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:13px;text-align:right;">
+                <span style="color:#DC2626;font-weight:700;">¥${usePrice.toFixed(1)}</span>
                 <span class="prep-confirm-item-del" onclick="deletePrepConfirmItem(${idx})" title="删除此项">×</span>
             </div>
         </div>`;
     });
     body.innerHTML = html;
-    if (totalEl) totalEl.innerHTML = `共 ${items.length} 项 · 合计 <b style="color:#DC2626;font-size:15px;">¥${total.toFixed(1)}</b>`;
+    // V710b: 显示预估总额 + 实际总额（如果有实际花费的话）
+    const estTotal = items.reduce((s, i) => s + i.estPrice, 0);
+    if (totalEl) {
+        if (actualCount > 0) {
+            totalEl.innerHTML = `共 ${items.length} 项 · 预估 <span style="color:#9CA3AF;">¥${estTotal.toFixed(1)}</span> → 实际 <b style="color:#DC2626;font-size:15px;">¥${total.toFixed(1)}</b> (${actualCount}项已记账)`;
+        } else {
+            totalEl.innerHTML = `共 ${items.length} 项 · 合计 <b style="color:#DC2626;font-size:15px;">¥${total.toFixed(1)}</b>（可填右侧实际花费覆盖）`;
+        }
+    }
+}
+// V710b: 确认弹窗里修改实际花费 → 写回 items 数组 + 重渲染
+function onConfirmActualPrice(inputEl) {
+    try {
+        const idx = parseInt(inputEl.dataset.idx, 10);
+        if (isNaN(idx)) return;
+        const items = window._prep.pendingBuyItems || [];
+        if (idx < 0 || idx >= items.length) return;
+        const val = inputEl.value.trim();
+        if (!val) {
+            items[idx].actualPrice = null;
+        } else {
+            const num = parseFloat(val);
+            if (isNaN(num) || num < 0) { showToast('请输入有效金额'); return; }
+            items[idx].actualPrice = Number(num.toFixed(1));
+        }
+        renderPrepConfirmList();
+    } catch(e) {}
 }
 function deletePrepConfirmItem(idx) {
     if (!requireLogin('删除采购确认项')) return;
@@ -26570,7 +26670,12 @@ function finalizePrepPurchase() {
     const endDate = new Date(today); endDate.setDate(endDate.getDate() + (prep.cycleDays - 1));
     const dateRange = `${dateStr} 至 ${endDate.toISOString().slice(0, 10)}`;
     const itemCount = items.length;
-    const totalAmount = Number(items.reduce((s, i) => s + i.estPrice, 0).toFixed(2));
+    // V710b: 总额优先用实际花费（actualPrice），没填 fallback 到预估
+    const totalAmount = Number(items.reduce((s, i) => {
+        if (i.actualPrice !== null && i.actualPrice !== undefined && !isNaN(i.actualPrice)) return s + Number(i.actualPrice);
+        return s + i.estPrice;
+    }, 0).toFixed(2));
+    const actualCount = items.filter(i => i.actualPrice !== null && i.actualPrice !== undefined && !isNaN(i.actualPrice)).length;
     const history = JSON.parse(lsGet('purchaseHistory') || '[]');
     const rec = {
         id: 'PH' + ts,
@@ -26581,7 +26686,8 @@ function finalizePrepPurchase() {
         servings: prep.servings,
         items: items.map(i => ({ ...i })),
         itemCount,
-        totalAmount
+        totalAmount,
+        hasActualPrice: actualCount > 0
     };
     history.push(rec);
     lsSet('purchaseHistory', JSON.stringify(history));
@@ -26632,7 +26738,11 @@ function finalizePrepPurchase() {
     window._prep.selectedItems = {};
 
     closePrepConfirmModal();
-    showToast(`采购已完成：${itemCount}项 · ¥${totalAmount.toFixed(1)}，已入库`);
+    // V710b: 清空 actualPrice overrides（确认采购后这些实际花费就不需要再算了）
+    if (prep.overrides) {
+        Object.keys(prep.overrides).forEach(function(n) { delete prep.overrides[n].actualPrice; });
+    }
+    showToast(`✅ 采购完成：${itemCount}项 · ¥${totalAmount.toFixed(1)} ${actualCount > 0 ? '(含实际记账)' : ''}，已一键入库！`);
     renderFridgeRecView();
 }
 
