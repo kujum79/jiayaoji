@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V705d-20261127';
+        var APP_VER = 'V705e-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -55452,17 +55452,26 @@ function _mergeDefaultSubCategories(kc) {
             changed = true;
         }
 
-        // 3. recipe 主节点 id 归一（老家庭树里 id 是"食谱"，DEFAULT 是 "recipe"）
-        var _recipeOldIdx = -1, _recipeIdx = -1;
-        for (var _r = 0; _r < tree.length; _r++) {
-            if (tree[_r].id === '食谱' || tree[_r].name === '食谱') _recipeOldIdx = _r;
-            if (tree[_r].id === 'recipe') _recipeIdx = _r;
-        }
-        if (_recipeOldIdx !== -1 && _recipeIdx === -1) {
-            tree[_recipeOldIdx].id = 'recipe';
-            console.log('[V705b] 食谱→recipe：id 归一化');
-            changed = true;
-        }
+        // 3. 所有 DEFAULT 主分类 id 归一（老家庭树里可能是中文 id）
+        //    recipe: 食谱→recipe, ingredient: 食材→ingredient, cooking: 烹饪→cooking, dining-out: 在外就餐→dining-out
+        DEFAULT_CATEGORY_TREE.forEach(function(_defMain) {
+            var _defId = _defMain.id;
+            var _defName = _defMain.name;
+            // 跳过 shiyang（已在前面单独处理过老 id=食养→shiyang）
+            if (_defId === 'shiyang') return;
+            var _hasId = tree.some(function(t){ return t.id === _defId; });
+            if (_hasId) return; // 已经是正确英文 id，跳过
+            // 找中文 id 的节点
+            var _hit = null;
+            for (var _h = 0; _h < tree.length; _h++) {
+                if (tree[_h].id === _defName || tree[_h].name === _defName) { _hit = _h; break; }
+            }
+            if (_hit !== null) {
+                tree[_hit].id = _defId;
+                console.log('[V705d] 主分类归一：' + _defName + ' → ' + _defId);
+                changed = true;
+            }
+        });
 
         // 2. 清老子分类 + 空壳（shiyang 专用）
         var shiyang = null;
@@ -55494,11 +55503,13 @@ function _mergeDefaultSubCategories(kc) {
         DEFAULT_CATEGORY_TREE.forEach(function(defMain) {
             var main = null;
             for (var i = 0; i < tree.length; i++) { if (tree[i].id === defMain.id) { main = tree[i]; break; } }
-            // 文章型主分类（食文）：老用户树里缺失时自动补入（知识型主分类用户删掉的不复活）
+            // 主分类缺失时自动补入：article/ingredient/recipe/cooking/dining-out/uncategorized 都补；
+            // 只有 type='knowledge'（食方）不自动复活——用户可能特意删掉不想看见
             if (!main) {
-                if (defMain.type === 'article') {
+                if (defMain.type !== 'knowledge') {
                     tree.push(JSON.parse(JSON.stringify(defMain)));
                     tree.sort(function(a, b) { return (a.order || 999) - (b.order || 999); });
+                    console.log('[V705d] 补缺失主分类：' + defMain.id + '（' + defMain.name + '）');
                     changed = true;
                 }
                 return;
