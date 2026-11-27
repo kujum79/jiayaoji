@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710b-20261128';
+        var APP_VER = 'V710c-20261128';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -19792,6 +19792,137 @@ function buildFridgeWasteBannerHtml(items) {
         + '</div>';
 }
 
+// V710c: 快用完预警——识别调料/常备品中数量偏小的食材
+function getFridgeLowStockItems(items) {
+    var results = [];
+    if (!Array.isArray(items)) return results;
+    items.forEach(function (it) {
+        if (!it) return;
+        if (it.usedUp || it.status === 'usedUp' || it.status === 'used_up') return;
+        const cat = String(it.category || '');
+        // 进入预警的条件：调味品（油盐酱醋等）或 isStaple 常备品
+        const isCondiment = cat === '调味品';
+        const isStapleItem = it.isStaple === true;
+        if (!isCondiment && !isStapleItem) return;
+        // 估算剩余量
+        let qv = null;
+        try {
+            qv = (typeof it.quantityValue === 'number' && !isNaN(it.quantityValue)) ? it.quantityValue : null;
+            if (qv === null && it.quantity) {
+                const p = parseQuantity(it.quantity);
+                qv = p && !isNaN(p.value) ? p.value : null;
+            }
+        } catch(e) {}
+        if (qv === null || qv <= 0) return;
+        // 快用完判断（启发式）：
+        let isLow = false;
+        let reason = '';
+        const unit = String(it.quantityUnit || '');
+        // 按单位类型分别判断
+        if (/ml|毫升|mL/i.test(unit)) { if (qv < 150) { isLow = true; reason = '剩余约' + qv + 'ml'; } }
+        else if (/g|克|G/i.test(unit)) { if (qv < 100) { isLow = true; reason = '剩余约' + qv + 'g'; } }
+        else if (/个|包|瓶|罐|袋|盒/.test(unit) || !unit) {
+            if (qv <= 1) { isLow = true; reason = '只剩' + qv + (unit || '份'); }
+            else if (isCondiment && qv < 3) { isLow = true; reason = '约' + qv + (unit || '份'); }
+        }
+        else if (/勺|匙/i.test(unit)) { if (qv < 10) { isLow = true; reason = '约' + qv + unit; } }
+        else { if (qv < 50) { isLow = true; reason = '约' + qv + unit; } }
+        if (isLow) results.push({ item: it, qtyValue: qv, unit: unit, reason: reason });
+    });
+    // 排序：isStaple 优先 + 数量最少优先
+    results.sort(function (a, b) {
+        const sa = (a.item.isStaple === true) ? 0 : 1;
+        const sb = (b.item.isStaple === true) ? 0 : 1;
+        if (sa !== sb) return sa - sb;
+        return a.qtyValue - b.qtyValue;
+    });
+    return results;
+}
+
+// V710c: 「快没了」按钮点击 → 加入采购清单
+function markFridgeItemLow(name) {
+    if (!name) return;
+    try {
+        // 1) 加入 extraItems（如果还没在食谱里出现过）
+        const prep = window._prep || (window._prep = {});
+        if (!prep.extraItems) prep.extraItems = [];
+        if (!prep.overrides) prep.overrides = {};
+        if (!prep.selectedItems) prep.selectedItems = {};
+        // 检查是否已在 extraItems
+        if (!prep.extraItems.find(function (e) { return e && e.name === name; })) {
+            // 从 fridgeItems 找对应条目，带上 category
+            let fridge = [];
+            try { fridge = JSON.parse(lsGet('fridgeItems') || '[]') || []; } catch(e) {}
+            const fi = fridge.find(function (f) { return f && f.name === name; });
+            const unit = (fi && (fi.quantityUnit || '')) || '';
+            const cat = (fi && fi.category) || guessFoodCategory(name);
+            const unitPrice = estimatePrepPrice(name, 1, unit);
+            prep.extraItems.push({ name: name, qty: 1, unit: unit, unitPrice: unitPrice, category: cat });
+        }
+        // 2) 确保 selected 为 true
+        prep.selectedItems[name] = true;
+        showToast('✅ ' + name + ' 已加入采购清单');
+        renderFridgeRecView();
+    } catch (e) {
+        showToast('加入失败：' + (e.message || e));
+    }
+}
+
+// V710c: 快用完预警横幅 HTML（叠加在 buildFridgeWasteBannerHtml 旁边）
+function buildFridgeLowStockBannerHtml(items) {
+    const lows = getFridgeLowStockItems(items);
+    if (!lows.length) return '';
+    // 最多展示 4 条预警，更多显示"+N"
+    const display = lows.slice(0, 4);
+    const more = lows.length > 4 ? `<span style="font-size:13px;color:#92400E;margin-left:2px;">等 ${lows.length} 种</span>` : '';
+    let itemsHtml = display.map(function (l) {
+        const nm = String(l.item.name || '').replace(/'/g, "\\'");
+        return '<span style="display:inline-flex;align-items:center;gap:4px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;padding:2px 6px;margin:1px 0;font-size:13px;">'
+            + '<span style="color:#92400E;font-weight:600;">' + escapeHtml(l.item.name) + '</span>'
+            + '<span style="color:#B45309;font-size:11px;">(' + l.reason + ')</span>'
+            + '<button type="button" onclick="markFridgeItemLow(\'' + nm + '\')" style="border:none;background:#F59E0B;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;cursor:pointer;line-height:14px;">加入采购</button>'
+            + '</span>';
+    }).join('<span style="margin:0 2px;color:#FCD34D;">|</span>');
+    return '<div style="margin:8px 10px 0;padding:8px 10px;background:#FEF9C3;border:1px solid #FDE047;border-radius:12px;display:flex;align-items:center;flex-wrap:wrap;column-gap:4px;row-gap:4px;">'
+        + '<span style="font-size:13px;font-weight:700;color:#854D0E;white-space:nowrap;">🛒 常备品快用完：</span>'
+        + itemsHtml + more
+        + '<button type="button" onclick="markAllLowStock()" style="margin-left:auto;padding:4px 12px;background:#CA8A04;color:#fff;border:none;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">全部加入</button>'
+        + '</div>';
+}
+// V710c: 一键把所有快用完的常备品加进采购清单
+function markAllLowStock() {
+    try {
+        let fridge = [];
+        try { fridge = JSON.parse(lsGet('fridgeItems') || '[]') || []; } catch(e) {}
+        const lows = getFridgeLowStockItems(fridge);
+        if (!lows.length) { showToast('没有快用完的食材'); return; }
+        const prep = window._prep || (window._prep = {});
+        if (!prep.extraItems) prep.extraItems = [];
+        if (!prep.selectedItems) prep.selectedItems = {};
+        let added = 0;
+        lows.forEach(function (l) {
+            const nm = String(l.item.name || '').trim();
+            if (!nm) return;
+            if (!prep.extraItems.find(function (e) { return e && e.name === nm; })) {
+                const unit = String(l.unit || (l.item.quantityUnit || ''));
+                prep.extraItems.push({
+                    name: nm, qty: 1, unit: unit,
+                    unitPrice: estimatePrepPrice(nm, 1, unit),
+                    category: l.item.category || guessFoodCategory(nm)
+                });
+                prep.selectedItems[nm] = true;
+                added++;
+            } else {
+                prep.selectedItems[nm] = true;
+            }
+        });
+        showToast('✅ 已将 ' + (lows.length) + ' 种快用完食材加入采购清单' + (added ? '（新增 ' + added + ' 种）' : ''));
+        renderFridgeRecView();
+    } catch (e) {
+        showToast('批量加入失败：' + (e.message || e));
+    }
+}
+
 // 统一进入"食材管理"页（替代旧的"家中食材"紧凑视图）；tab 可选 expiring/storage/category/shopping
 function enterFridgeManage(tab) {
     try {
@@ -22416,8 +22547,9 @@ function renderFridgeRecView() {
     if (!prep.deleted) prep.deleted = {};
     fridgeItems = _fridgeLoadV553();
 
-    // 1) 现有食材标签（蔬菜/肉蛋奶/方便食品）—— 去图标、去分号
-    const overviewCats = ['蔬菜', '肉蛋奶', '方便食品'];
+    // 1) 现有食材标签（蔬菜/肉蛋奶/方便食品/调味品）—— 去图标、去分号
+    // V710c: 新增调味品分类，每个 tag 旁边加「快没了」小按钮
+    const overviewCats = ['蔬菜', '肉蛋奶', '方便食品', '调味品'];
     let tagsHtml = '';
     overviewCats.forEach((cat, ci) => {
         // V344: 排除已用完（usedUp / status 标记）的食材，避免概览把 0 库存当现有食材（D7-02）
@@ -22443,8 +22575,13 @@ function renderFridgeRecView() {
                     }
                 } catch(e) { qStr = ''; }
                 const qtyStr = qStr ? `×${escapeHtml(qStr)}` : '';
-                tagsHtml += `<span class="prep-tag" onclick="enterFridgeManage('category')" title="点击在食材管理中查看">${escapeHtml(item.name)}${qtyStr}</span>`;
-                if (ii < catItems.slice(0, 6).length - 1) tagsHtml += ' ';
+                const nm = String(item.name).replace(/'/g, "\\'");
+                const catTag = item.isStaple ? ' ⭐' : '';
+                tagsHtml += `<span style="display:inline-flex;align-items:center;gap:4px;margin:1px 0;">
+                    <span class="prep-tag" onclick="enterFridgeManage('category')" title="点击在食材管理中查看">${escapeHtml(item.name)}${qtyStr}${catTag}</span>
+                    <button type="button" onclick="markFridgeItemLow('${nm}')" title="快没了→加入采购清单" style="font-size:10px;padding:0 5px;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;border-radius:6px;line-height:14px;cursor:pointer;white-space:nowrap;">快没了</button>
+                </span>`;
+                if (ii < catItems.slice(0, 6).length - 1) tagsHtml += '<span style="width:2px;"></span>';
             });
             if (catItems.length > 6) tagsHtml += `<span style="color:#9CA3AF;font-size:13px;margin-left:4px;">+${catItems.length - 6}</span>`;
         }
@@ -22705,6 +22842,8 @@ function renderFridgeRecView() {
     let html = '';
     // 🥬 食材浪费提醒横幅：有食材存放超过5天且今天未点"忽略"时，置顶显示
     html += buildFridgeWasteBannerHtml(fridgeItems);
+    // 🛒 V710c: 常备品快用完预警横幅（调味品/油盐酱醋数量偏小）
+    html += buildFridgeLowStockBannerHtml(fridgeItems);
     // 现有食材（部分）：仅下方卡片展示一次（去掉上方右侧的重复标签）
     html += `<div class="prep-overview" style="margin:12px;"><b style="color:#374151;font-size:14px;font-weight:600;">现有食材（部分）：</b>${tagsHtml}</div>`;
 
