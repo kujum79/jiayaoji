@@ -36092,6 +36092,10 @@ function _dtRenderCard(tip) {
             + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:6px;" onclick="event.stopPropagation(); _fhReviewAuto(\'' + (tip.date || '') + '\',\'confirm\')">保留</button>'
             + '<button class="dt-btn" style="padding:2px 8px;font-size:10px;margin-right:8px;color:#B91C1C;" onclick="event.stopPropagation(); _fhReviewAuto(\'' + (tip.date || '') + '\',\'withdraw\')">换篇</button>';
     }
+    // V709d: 超管始终可见的「🔄 换寻味天下」按钮——不管内容状态都能手动轮播换一篇
+    if (_fhAdmin) {
+        adminCtl += '<button class="dt-btn" style="padding:2px 6px;font-size:10px;margin-right:4px;" title="超管：手动换一篇寻味天下" onclick="event.stopPropagation(); _fhSuperSwapRecipe()">🔄</button>';
+    }
     var _subState = (typeof _subTierState === 'function') ? _subTierState() : 'none';
     var _subMeta = (typeof _subBtnMeta === 'function') ? _subBtnMeta(_subState) : { text: '订阅', style: '' };
     var subBtnHtml = '<button class="dt-btn" data-substate="' + _subState + '" style="white-space:nowrap;line-height:1.3;font-size:11px;padding:3px 9px;border-radius:9px;margin-left:4px;' + _subMeta.style + '"'
@@ -36301,6 +36305,8 @@ function _fhRecipeFromArticle(a) {
     };
 }
 function _fhRecipeOfDay() {
+    // V709d: 超管手动换篇优先（覆盖 AI 生成/归档/本地轮取）
+    if (_fhSuperForcedRecipe) return _fhSuperForcedRecipe;
     // 1) 今日服务端精选食谱
     var t = _fhTrackOf('recipe_article');
     if (t && t.title) return _fhRecipeFromArticle(t);
@@ -36317,6 +36323,27 @@ function _fhRecipeOfDay() {
     Object.keys(r).forEach(function (k) { out[k] = r[k]; });
     out._fallback = true;
     return out;
+}
+// V709d: 超管手动换寻味天下——🔄 按钮触发，从 _FHR_RECIPES 轮取下一篇并强制覆盖
+var _fhSuperForcedRecipe = null;
+function _fhSuperSwapRecipe() {
+    if (!_FHR_RECIPES || !_FHR_RECIPES.length) { showToast('暂无可切换的食谱'); return; }
+    var curId = (_fhSuperForcedRecipe && _fhSuperForcedRecipe.id) || '';
+    if (!curId && _fhCardRecipe && _fhCardRecipe.id) curId = _fhCardRecipe.id;
+    var idx = -1;
+    for (var i = 0; i < _FHR_RECIPES.length; i++) { if (_FHR_RECIPES[i].id === curId) { idx = i; break; } }
+    var nextIdx = (idx + 1) % _FHR_RECIPES.length;
+    var r = _FHR_RECIPES[nextIdx];
+    var out = {};
+    Object.keys(r).forEach(function (k) { out[k] = r[k]; });
+    out._superForced = true;
+    _fhSuperForcedRecipe = out;
+    showToast('🔄 已换成：' + r.title);
+    // 强制覆盖服务端返回的 recipe_article（让下次渲染也不取 AI 那篇）
+    try {
+        _fhTracks.recipe_article = null;
+    } catch(e) {}
+    _dtRenderCard(window._dtServerTip || null);
 }
 function _fhDietOfDay(tip) { return _fhArticleList(tip)[0] || null; }
 // V402: 食养堂食谱列表 = 今日精选食谱 + 归档食谱 + 内置经典食谱（按标题去重）
