@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V705L-20261127';
+        var APP_VER = 'V705M-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -55466,6 +55466,77 @@ function getKnowledgeCategories() {
 function _mergeDefaultSubCategories(kc) {
     if (!kc || typeof kc !== 'object') return kc;
     var changed = false;
+
+    // V705L: DEFAULT 三级节点 name 统一压缩到 ≤3 字（同时改 id 保持一致）
+    var _LEAF_SHORT = {
+        // 食材
+        '热带水果':'热带果','咸味调料':'咸调料','甜味调料':'甜调料',
+        '菌菇干货':'菌菇干','海产干货':'海产干','豆类干货':'豆类干',
+        '谷物饮品':'谷物饮','茶饮原料':'茶饮料','常用药材':'常用药','药食同源':'同源药',
+        // 食方-特殊人群
+        '孕妇营养':'孕妇食','婴儿辅食':'婴儿食','青少年营养':'青少年','职场营养':'职场食','老年食养':'老年食',
+        // 食方-内科
+        '脾胃调理':'脾胃调','润肺养阴':'润肺','失眠安神':'失眠','养心安神':'养心',
+        '疏肝理气':'疏肝','补肾温阳':'补肾','止咳化痰':'止咳','解表散寒':'解表',
+        // 食方-慢病
+        '糖尿病饮食':'糖尿病','高血压饮食':'高血压','高血脂饮食':'高血脂',
+        '痛风饮食':'痛风','肾病饮食':'肾病','肝病饮食':'肝病',
+        // 食方-产后
+        '催乳下奶':'催乳','优质蛋白恢复':'蛋白恢复','产后脾胃':'产后胃',
+        // 食方-儿科
+        '小儿厌食':'厌食','小儿疳积':'疳积','小儿咳嗽':'咳嗽','小儿腹泻':'腹泻','小儿过敏':'过敏','发育迟缓':'发育慢',
+        // 食方-药膳菜（去掉"药膳"后缀）
+        '补气药膳':'补气','养血药膳':'养血','滋阴药膳':'滋阴','温阳药膳':'温阳',
+        '健脾药膳':'健脾','润肺药膳':'润肺','安神药膳':'安神','祛湿药膳':'祛湿',
+        // 食方-外科
+        '术后恢复':'术后','伤口愈合':'伤口','骨科食养':'骨科','肛肠食养':'肛肠',
+        // 食方-五官
+        '护眼食养':'护眼','润喉食养':'润喉','健鼻食养':'健鼻','聪耳食养':'聪耳','口腔食养':'口腔',
+        // 食方-肿瘤
+        '术前营养':'术前','术后康复':'术后','化疗期饮食':'化疗','放疗期饮食':'放疗','免疫增强':'免疫','对症调理':'对症',
+        // 食方-食育
+        '儿童食育':'儿童','家庭餐桌礼仪':'餐桌礼','节气食育':'节气',
+        // 食方-季节食养（4字→3字）
+        '春季养阳':'春养阳','夏季养心':'夏养心','秋季润肺':'秋润肺','冬季进补':'冬进补',
+        // 食文-名家食话
+        '古代文人':'古代','近现代名家':'近现代','当代食评':'当代',
+        // 食文-街头小吃
+        '地方点心':'地方','市井味道':'市井',
+        // 食文-时令食俗
+        '节气食俗':'节气','节日食俗':'节日','人生礼仪':'人生礼',
+        // 食文-食事随笔
+        '食器与礼仪':'食器','饮食考证':'考证','杂谈评论':'杂谈',
+        // 食文-汉字食事
+        '汉字中的餐具':'餐具','汉字与美食':'美食','汉字与烹饪':'烹饪','汉字与食材':'食材','饮食成语典故':'成语典',
+        // 食文-食事诗话
+        '田园食趣':'田园','宴饮酬唱':'宴饮','节令食诗':'节令','思乡食味':'思乡','茶酒诗话':'茶酒','食诗赏析':'食诗'
+    };
+
+    // 先对 DEFAULT_CATEGORY_TREE 也压缩（让 merge 能匹配）
+    (function compressDef() {
+        DEFAULT_CATEGORY_TREE.forEach(function(m) {
+            (m.children || []).forEach(function(s) {
+                (s.children || []).forEach(function(l) {
+                    var _new = _LEAF_SHORT[l.name] || _LEAF_SHORT[l.id];
+                    if (_new && _new !== l.name) { l.name = _new; l.id = _new; }
+                });
+            });
+        });
+    })();
+
+    // 迁移文章 leafCategory（老 name → 新短名）
+    var _leafMigrated = 0;
+    try {
+        var _kcList = (typeof dietKnowledge !== 'undefined' && dietKnowledge) ? dietKnowledge : [];
+        _kcList.forEach(function(k) {
+            if (!k) return;
+            var _old = k.leafCategory || '';
+            var _new = _LEAF_SHORT[_old];
+            if (_new) { k.leafCategory = _new; _leafMigrated++; }
+        });
+        if (_leafMigrated > 0) { console.log('[V705L] leafCategory 迁移：' + _leafMigrated + ' 篇'); changed = true; }
+    } catch(e) {}
+
     ['public', 'family'].forEach(function(layer) {
         var tree = kc[layer] && kc[layer].tree;
         if (!tree || !Array.isArray(tree)) return;
