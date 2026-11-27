@@ -55447,7 +55447,19 @@ function _mergeDefaultSubCategories(kc) {
             changed = true;
         }
 
-        // 2. 清老子分类 + 空壳
+        // 3. recipe 主节点 id 归一（老家庭树里 id 是"食谱"，DEFAULT 是 "recipe"）
+        var _recipeOldIdx = -1, _recipeIdx = -1;
+        for (var _r = 0; _r < tree.length; _r++) {
+            if (tree[_r].id === '食谱' || tree[_r].name === '食谱') _recipeOldIdx = _r;
+            if (tree[_r].id === 'recipe') _recipeIdx = _r;
+        }
+        if (_recipeOldIdx !== -1 && _recipeIdx === -1) {
+            tree[_recipeOldIdx].id = 'recipe';
+            console.log('[V705b] 食谱→recipe：id 归一化');
+            changed = true;
+        }
+
+        // 2. 清老子分类 + 空壳（shiyang 专用）
         var shiyang = null;
         for (var i = 0; i < tree.length; i++) { if (tree[i].id === 'shiyang') { shiyang = tree[i]; break; } }
         if (shiyang && shiyang.children) {
