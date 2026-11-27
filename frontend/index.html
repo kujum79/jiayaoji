@@ -57667,28 +57667,38 @@ function _saLibTree() {
     return (kc && kc.public && kc.public.tree) || [];
 }
 // 按 key 在树中定位节点
+// V709b: 家庭 key 辅助——家庭节点 key 带 '__family__|' 前缀
+function _kbBrIsFamKey(key) { return String(key || '').indexOf(_KB_FAM_KEY) === 0; }
+function _kbBrStripFamKey(key) { return String(key || '').replace(/^__family__\|/, ''); }
+function _kbBrFamTree() { var kc = getKnowledgeCategories(); return (kc && kc.family && kc.family.tree) || []; }
+
 function _saLibFindNode(key) {
-    var segs = String(key || '').split('|').filter(Boolean);
+    var isFam = _kbBrIsFamKey(key);
+    var realKey = _kbBrStripFamKey(key);
+    var segs = realKey.split('|').filter(Boolean);
     if (!segs.length) return null;
-    var level = _saLibTree(), node = null;
+    var tree = isFam ? _kbBrFamTree() : _saLibTree();
+    var node = null;
     for (var i = 0; i < segs.length; i++) {
         node = null;
-        for (var j = 0; j < (level || []).length; j++) { if (level[j].id === segs[i]) { node = level[j]; break; } }
+        for (var j = 0; j < (tree || []).length; j++) { if (tree[j].id === segs[i]) { node = tree[j]; break; } }
         if (!node) return null;
-        level = node.children || [];
+        tree = node.children || [];
     }
     return node;
 }
 // 选中路径的各级显示名（面包屑）
 function _saLibPathNames(key) {
-    var segs = String(key || '').split('|').filter(Boolean);
-    var names = [], level = _saLibTree(), node = null;
+    var isFam = _kbBrIsFamKey(key);
+    var realKey = _kbBrStripFamKey(key);
+    var segs = realKey.split('|').filter(Boolean);
+    var names = [], tree = isFam ? _kbBrFamTree() : _saLibTree(), node = null;
     for (var i = 0; i < segs.length; i++) {
         node = null;
-        for (var j = 0; j < (level || []).length; j++) { if (level[j].id === segs[i]) { node = level[j]; break; } }
+        for (var j = 0; j < (tree || []).length; j++) { if (tree[j].id === segs[i]) { node = tree[j]; break; } }
         if (!node) break;
         names.push(node.name || node.id);
-        level = node.children || [];
+        tree = node.children || [];
     }
     return names;
 }
@@ -57700,8 +57710,12 @@ function _saLibLeafOf(k) { return String(k.leafCategory || k.leafCategoryId || '
 // V635: 条目 sub/leaf 字段存的可能是名称（添加表单/审核流程按名称存），而自定义分类节点 id 是 cat_<时间戳>——
 // 各级同时接受 id 与显示名两种值比对（id/名称双兼容），否则自定义分类恒显示 0 篇
 function _saLibItemsForPath(key, poolOverride) { // V668: poolOverride=浏览态可见条目池（缺省仍为管理态公共层口径）
-    var segs = String(key || '').split('|').filter(Boolean);
+    var isFam = _kbBrIsFamKey(key);
+    var realKey = _kbBrStripFamKey(key);
+    var segs = realKey.split('|').filter(Boolean);
     var all = poolOverride || (typeof dietKnowledge !== 'undefined' && dietKnowledge ? dietKnowledge : []).filter(function (k) { return k && (k.layer === 'public' || _kbTreatAsPublic(k)); });
+    // V709b: 家庭 key 只保留 family 层条目
+    if (isFam) all = all.filter(function (k) { return k && String(k.layer || '') === 'family'; });
     if (!segs.length) return all;
     var names = _saLibPathNames(key); // 各级显示名（节点缺失时可能短于 segs）
     var mainId = segs[0], subId = segs[1] || '', leafId = segs[2] || '';
@@ -57887,10 +57901,27 @@ function _kbBrPool() {
     }
 }
 function _kbBrIsSuper() { return (typeof isSuperAdmin === 'function' && isSuperAdmin()); }
-// 树根：公共分类树全部主分类（食方 id='shiyang' 仅超管显示；order 排序由 sortByOrder 负责）
+// 树根：公共分类树全部主分类（食方 id='shiyang' 仅超管显示；order 排序由 sortByOrder 负责；移除 uncategorized 节点）
 function _kbBrRoots() {
     var sup = _kbBrIsSuper();
-    return _saLibTree().filter(function (m) { return m && (sup || m.id !== 'shiyang'); });
+    return _saLibTree().filter(function (m) {
+        if (!m) return false;
+        if (!sup && m.id === 'shiyang') return false;
+        if (m.id === 'uncategorized') return false; // V709b: 侧栏隐藏未分类
+        return true;
+    });
+}
+// V709b: 家庭文库树根（从 family 层树取主分类，dining-out 必在；shiyang 由开关控制）
+var _KB_FAM_KEY = '__family__'; // 家庭文库分组节点 key（非真实分类）
+function _kbBrFamRoots() {
+    var kc = getKnowledgeCategories();
+    var famTree = (kc && kc.family && kc.family.tree) || [];
+    var showSY = false;
+    try { showSY = (lsGet('familyShowShiyang') === '1'); } catch(e) {}
+    // 与公共文库完全独立的家庭层主分类
+    var exclude = ['uncategorized']; // 未分类也在家庭侧栏隐藏
+    if (!showSY) exclude.push('shiyang');
+    return famTree.filter(function (m) { return m && exclude.indexOf(m.id) === -1; });
 }
 function _kbBrIsArticleNode(key) { return key === 'article' || String(key || '').indexOf('article|') === 0; }
 // 食文节点徽标：数据源 foodArticles（非 dietKnowledge），子级按 subCategoryId/leafCategoryId 计数；名家食话细分类按 authorType
@@ -57950,13 +57981,25 @@ function _kbBrRowsHtml(nodes, parentKey, depth, pool) {
     });
     return html;
 }
-// 左栏（约 148px 可滚动）+ 末尾「🏆 食榜」特殊节点（无子节点、无徽标）
+// 左栏（约 148px 可滚动）：公共文库分组 + 🏆 食榜 + 家庭文库分组（默认展开，显示 dining-out）
 function _kbBrTreeHtml(pool) {
-    return '<div class="sad-tree" id="kbBrTree" style="width:148px;max-width:148px;align-self:stretch;overflow-y:auto;">'
-        + '<div class="sad-tree-head"><span>🗂️ 目录</span></div>'
+    // 家庭文库选中 key 前缀：'__family__' + 真实 key
+    var famOpen = true; // V709b: 家庭文库默认展开（用户痛点就是看不到！）
+    var famRoots = _kbBrFamRoots();
+    var famKey = famOpen ? _KB_FAM_KEY + '|' : ''; // 家庭分组内节点 key 前缀
+    var html = '<div class="sad-tree" id="kbBrTree" style="width:148px;max-width:148px;align-self:stretch;overflow-y:auto;">'
+        + '<div class="sad-tree-head"><span>公共文库</span></div>'
         + _kbBrRowsHtml(_kbBrRoots(), '', 0, pool)
-        + '<div class="sad-row' + (_kbBrSel === _KB_BR_SB ? ' sel' : '') + '" data-key="' + _KB_BR_SB + '" style="padding-left:7px"><span style="width:9px;flex:0 0 9px;"></span><span>🏆 食榜</span></div>'
-        + '</div>';
+        + '<div class="sad-row' + (_kbBrSel === _KB_BR_SB ? ' sel' : '') + '" data-key="' + _KB_BR_SB + '" style="padding-left:7px"><span style="width:9px;flex:0 0 9px;"></span><span>🏆 食榜</span></div>';
+    // V709b: 家庭文库分组（默认展开，紧贴食榜下方）
+    html += '<div class="sad-tree-head" style="margin-top:4px;"><span>家庭文库</span></div>';
+    if (famRoots.length) {
+        html += _kbBrRowsHtml(famRoots, famKey, 0, pool);
+    } else {
+        html += '<div style="padding:4px 7px;font-size:11px;color:#9CA3AF;">暂无家庭分类</div>';
+    }
+    html += '</div>';
+    return html;
 }
 // 双栏整体结构
 function _kbBrPaneHtml() {
