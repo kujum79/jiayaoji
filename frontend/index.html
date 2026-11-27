@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710f-20261128';
+        var APP_VER = 'V710g-20261128';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -75495,28 +75495,27 @@ function _renderMealPlanBody() {
 
 function _renderKnowledgeSection() {
     var html = '<div class="mp-kn-block">';
-    // 第一行：标题 + 三餐选择框 + 搜索 + 清除（同一行）
+    // 第一行：标题 + 三餐选择框 + 搜索(缩短) + 清除（同一行）
     html += '<div class="mp-kn-title-row">';
     html += '<span class="mp-kn-title" style="margin:0;flex-shrink:0;">从食知补菜</span>';
     html += '<select class="mp-kn-select" id="mpKnMeal" onchange="searchKnowledgeItems()"><option value="breakfast">早餐</option><option value="lunch" selected>午餐</option><option value="dinner">晚餐</option></select>';
     html += '<div class="mp-kn-search-wrap">';
-    html += '<input type="text" class="mp-kn-search" id="mpKnSearch" placeholder="搜索知识标题、内容或标签" oninput="searchKnowledgeItems()">';
-    html += '<button class="mp-kn-clear" onclick="clearKnSearch()">✕</button>';
+    // V710g: 搜索框 max-width 限制，防止把 ✕ 按钮挤出屏幕
+    html += '<input type="text" class="mp-kn-search" id="mpKnSearch" placeholder="搜索标题、内容或标签" oninput="searchKnowledgeItems()" style="max-width:160px;min-width:0;">';
+    html += '<button class="mp-kn-clear" onclick="clearKnSearch()" style="flex-shrink:0;">✕</button>';
     html += '</div>';
     html += '</div>';
-    // 第二行：知识库范围 + 三级分类（主分类默认「食谱」；个人勾选框已移除，个人层默认始终包含）
-    var mainCats = '<option value="">主分类</option>';
-    if (typeof getKnowledgeCatalog === 'function') {
-        getKnowledgeCatalog().mains.forEach(function(c){ mainCats += '<option value="'+c.id+'"'+(c.id==='recipe'?' selected':'')+'>'+c.label+'</option>'; });
-    }
+    // 第二行：范围勾选 + 固定「食谱」标签 + 子分类 + 细分类（全部一行）
+    // V710g: 主分类固定为"食谱"，不再下拉 —— 保留 hidden select 让 _getFilteredKnowledge/updateKnSubCats 取值逻辑继续工作
     html += '<div class="mp-kn-row">';
     html += '<label class="mp-kn-cb"><input type="checkbox" id="mpKnFamily" checked onchange="searchKnowledgeItems()"> 家庭</label>';
     html += '<label class="mp-kn-cb"><input type="checkbox" id="mpKnPublic" checked onchange="searchKnowledgeItems()"> 公共</label>';
-    html += '<select class="mp-kn-select" id="mpKnMainCat" onchange="updateKnSubCats()">'+mainCats+'</select>';
+    html += '<span style="font-size:12px;color:#6750A4;font-weight:600;background:#E8DEF8;border-radius:4px;padding:2px 6px;white-space:nowrap;">食谱</span>';
+    html += '<select id="mpKnMainCat" style="display:none;"><option value="recipe" selected></option></select>';
     html += '<select class="mp-kn-select" id="mpKnSubCat" onchange="updateKnDetailCats()"><option value="">子分类</option></select>';
     html += '<select class="mp-kn-select" id="mpKnDetailCat" onchange="searchKnowledgeItems()"><option value="">细分类</option></select>';
     html += '</div>';
-    // 搜索结果 - 默认隐藏，选择所有筛选条件后才显示
+    // 搜索结果 - 默认隐藏
     html += '<div class="mp-kn-results" id="mpKnResults" style="display:none;"></div>';
     html += '</div>';
     return html;
