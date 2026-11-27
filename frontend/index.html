@@ -55452,6 +55452,11 @@ function _mergeDefaultSubCategories(kc) {
         for (var i = 0; i < tree.length; i++) { if (tree[i].id === 'shiyang') { shiyang = tree[i]; break; } }
         if (shiyang && shiyang.children) {
             var before = shiyang.children.length;
+            // 构建 DEFAULT 白名单（shiyang 在 DEFAULT 里的 children ids）
+            var _defShiyang = DEFAULT_CATEGORY_TREE.find(function(t){ return t.id === 'shiyang'; });
+            var _whiteIds = (_defShiyang && _defShiyang.children || []).map(function(c){ return c.id; });
+            // 已知主动移走的节点（V705：季节食养移到 recipe 下了）
+            var _removedIds = ['季节食养'];
             shiyang.children = shiyang.children.filter(function(c) {
                 // 空壳：id="食方" 或 name="内科食方" 但 id 不匹配 且 无子
                 var isOldEmpty = (c.id === '食方' || (c.name === '内科食方' && c.id !== '内科食方'))
@@ -55459,6 +55464,8 @@ function _mergeDefaultSubCategories(kc) {
                 if (isOldEmpty) return false;
                 // 老残留子分类
                 if (_LEGACY_SUBS.indexOf(c.name) !== -1 || _LEGACY_IDS.indexOf(c.id) !== -1) return false;
+                // DEFAULT 已移除（主动移走）且不在白名单里
+                if (_removedIds.indexOf(c.id) !== -1 && _whiteIds.indexOf(c.id) === -1) return false;
                 return true;
             });
             if (shiyang.children.length !== before) {
