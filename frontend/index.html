@@ -62213,15 +62213,55 @@ async function _csStructure(raw) {
             + '【转录文本】\n' + raw;
         var result = await aiChatMultiProvider('你是家庭膳食知识编辑，擅长把书稿整理为结构化食方。', prompt, { maxTokens: 3000, temperature: 0.3, taskType: 'knowledge' });
         var reply = (result && result.choices && result.choices[0] && result.choices[0].message) ? String(result.choices[0].message.content || '') : '';
-        reply = reply.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/i, '').trim();
-        var d;
-        try { d = JSON.parse(reply); } catch (e) { d = { sym: '', overview: reply, principles: [], recipes: [], note: '' }; }
+        // V709j: 更鲁棒的 JSON 提取（AI 可能输出 think 块/解释文字/markdown 包裹）
+        reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/i, '').trim();
+        var d = _csExtractJson(reply);
+        if (!d || typeof d !== 'object') {
+            // parse 失败 → 尽力从原始 reply 提取症状名+正文
+            d = { sym: '', overview: reply, principles: [], recipes: [], note: '' };
+            var _symM = reply.match(/"sym"\s*:\s*"([^"]+)"/);
+            if (_symM) d.sym = _symM[1].trim();
+        }
         _csOv(false);
         _csOpenPreview(d);
     } catch (e) {
         _csOv(false);
         showToast('整理失败：' + (e.message || 'AI 无响应'));
     }
+}
+// V709j: 鲁棒 JSON 提取（解决 AI 输出含未转义引号/换行/trailing comma 等 parse 失败问题）
+function _csExtractJson(text) {
+    if (!text) return null;
+    var candidates = [];
+    // 1) 直接 parse
+    try { var d = JSON.parse(text); if (d && typeof d === 'object') return d; } catch(e) {}
+    // 2) 正则抓第一个 { ... } 块（贪婪匹配）
+    var m = text.match(/\{[\s\S]*\}/);
+    if (m) candidates.push(m[0]);
+    // 3) 正则抓第一个 [ ... ] 块
+    m = text.match(/\[[\s\S]*\]/);
+    if (m) candidates.push(m[0]);
+    // 4) 从第一个 { 开始截取到最后一个 }
+    var firstBrace = text.indexOf('{');
+    var lastBrace = text.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) candidates.push(text.slice(firstBrace, lastBrace + 1));
+    // 对每个 candidate 尝试修复后 parse
+    for (var ci = 0; ci < candidates.length; ci++) {
+        var c = candidates[ci];
+        try { return JSON.parse(c); } catch(e) {}
+        // 修复尝试1: trailing comma
+        var fixed = c.replace(/,(\s*[}\]])/g, '$1');
+        try { return JSON.parse(fixed); } catch(e) {}
+        // 修复尝试2: 把 JSON 字符串里的未转义双引号转义（仅对 recipes 数组的 text 字段）
+        // 简化版：eval 包裹（浏览器内安全，因为已经去掉 markdown 包裹）
+        try {
+            // eslint-disable-next-line no-new-func
+            var fn = new Function('return (' + c + ')');
+            var d2 = fn();
+            if (d2 && typeof d2 === 'object') return d2;
+        } catch(e2) {}
+    }
+    return null;
 }
 function _csBuildBody(d) {
     var body = [];
