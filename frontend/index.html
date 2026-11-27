@@ -16809,6 +16809,20 @@ if (typeof DEFAULT_DIET_KNOWLEDGE !== 'undefined' && DEFAULT_DIET_KNOWLEDGE.leng
                 merged.push(k); _localOnly++;
             });
             merged.forEach(function(k) { if (!k.layer) k.layer = (k.familyId) ? 'family' : 'public'; });
+            // V709i: 通用去重（手机上可能已因循环保存导致重复）
+            var _beforeDedup = merged.length;
+            var _seenKeys = new Set();
+            merged = merged.filter(function(k) {
+                if (!k) return false;
+                // key = layer + mainCat + subCat + title（家庭层按 familyId 区分）
+                var _k = String(k.layer || '') + '|' + String(k.mainCategory || '') + '|' + String(k.subCategory || '') + '|' + String(k.title || '');
+                if (k.layer === 'family') _k += '|' + String(k.familyId || '');
+                if (_seenKeys.has(_k)) return false;
+                _seenKeys.add(_k);
+                return true;
+            });
+            var _deduped = _beforeDedup - merged.length;
+            if (_deduped > 0) console.log(_tag, '启动去重：', _deduped, '条重复（失眠等循环保存导致）');
             lsSet('dietKnowledge', JSON.stringify(merged));
             dietKnowledge = merged;
             console.log(_tag, '合并完成：服务器', _serverWins, '+ 本地独有', _localOnly, '→ 总计', merged.length);
@@ -62052,13 +62066,24 @@ function _csStripLocal() {
 }
 function _csMergeItems(items) {
     // V592: 记录云端条目症状名——同名种子食方（shifang_xxx）让位云端版，保证超管编辑后全端一致
+    // V709i: 同时按 title/sym 做通用去重（DietSync 拉的种子条目 shifangKey 格式可能不统一）
     var cloudSyms = {};
     (items || []).forEach(function (it) { if (it && String(it.sym || '').trim()) cloudSyms[String(it.sym).trim()] = 1; });
+    var cloudTitles = {};
+    (items || []).forEach(function (it) { if (it && String(it.title || '').trim()) cloudTitles[String(it.title).trim()] = 1; });
     var kept = dietKnowledge.filter(function (k) {
         if (!k) return true;
         var key = String(k.shifangKey || '');
+        // 1) 先按 shifangKey 精确匹配
         if (key.indexOf('cloudshifang_') === 0) return false;
         if (key.indexOf('shifang_') === 0 && cloudSyms[key.slice(8).trim()]) return false;
+        // 2) V709i: 通用 sym 去重（DietSync 拉的种子条目可能没有 shifangKey）
+        var _ksym = String(k.sym || '').trim();
+        if (!_ksym && k.tags && k.tags.length > 1 && k.tags[0] === '食方') _ksym = String(k.tags[1] || '').trim();
+        if (!_ksym && k.title) _ksym = String(k.title).split('·')[0].trim();
+        if (_ksym && cloudSyms[_ksym]) return false; // 症状名相同 → 让位云端
+        // 3) 按 title 去重（种子条目的 title 可能和云端新条目的 title 一致）
+        if (k.title && cloudTitles[String(k.title).trim()]) return false;
         return true;
     });
     var now = Date.now(), added = 0;
@@ -62070,10 +62095,38 @@ function _csMergeItems(items) {
     return added;
 }
 // V592: 云端条目 → dietKnowledge 条目构造（合并与编辑保存共用）
+// V709i: 根据症状名智能匹配食方子分类（新 DEFAULT_CATEGORY_TREE）
+function _csGuessShiyangSub(sym) {
+    var s = String(sym || '').trim();
+    if (!s) return '内科食方';
+    // 特殊人群（孕/产/婴/少/老）
+    if (/孕|怀|胎|产|哺|乳|坐月子|月子|更年/.test(s)) return '产后调理';
+    if (/婴|幼|儿|童|宝宝|孩/.test(s)) return '儿科食方';
+    if (/少|青|年|初中|高中/.test(s)) return '特殊人群';
+    if (/老|年|银发|更年/.test(s)) return '特殊人群';
+    // 慢病
+    if (/糖|血.*糖|糖尿|高血压|血压|脂|血.*脂|冠|心脏.*病|肺.*病|肝.*硬|癌|瘤|肿/.test(s)) return '慢病调理';
+    // 五官
+    if (/眼|目|视|耳|听|鼻|喉|咽|口腔|牙|舌/.test(s)) return '五官食方';
+    // 外科
+    if (/伤|手|术|外|创|骨|扭|跌|烧/.test(s)) return '外科食方';
+    // 内科细分
+    if (/脾|胃|消化|腹|胀|泻|便秘|肠/.test(s)) return '内科食方';
+    if (/肺|咳|喘|嗽|痰|呼吸/.test(s)) return '内科食方';
+    if (/心|失.*眠|睡|悸|慌|焦虑|郁/.test(s)) return '内科食方';
+    if (/肝|胆|眼|怒|疏肝/.test(s)) return '内科食方';
+    if (/肾|腰|精|生殖|尿/.test(s)) return '内科食方';
+    if (/补|虚|气|血|阴|阳|汗|寒|热|火|湿|痰|燥/.test(s)) return '内科食方';
+    // 兜底
+    return '内科食方';
+}
 function _csBuildItem(it, now) {
     var sym = String(it.sym || '').trim();
+    var _sub = _csGuessShiyangSub(sym);
+    // V709i: 保留传入的原始 id（云端已有 id='csxxx' 时不要覆盖成 nextKnowledgeId++）
+    var _origId = it && it.id ? it.id : (nextKnowledgeId++);
     var item = {
-        id: nextKnowledgeId++,
+        id: _origId,
         type: 'shiyang',
         title: String(it.title || (sym ? sym + ' · 食疗方精选' : '食方')),
         source: String(it.source || '扫描录入'),
@@ -62083,8 +62136,8 @@ function _csBuildItem(it, now) {
         sceneTags: [],
         createdAt: Number(it.updatedAt) || now,
         sourceType: 'import', sourceUrl: '',
-        mainCategory: 'shiyang', category: '食方', subCategory: '食方',
-        leafCategory: '', subCategory3: '',
+        mainCategory: 'shiyang', category: '食方', subCategory: _sub,
+        leafCategory: sym, subCategory3: '',
         layer: 'public', visibility: 'public', auditStatus: 'ok', scope: 'family',
         stats: { ref: 0, replication: 0, download: 0 },
         shifangKey: 'cloudshifang_' + it.id
