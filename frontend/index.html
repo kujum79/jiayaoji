@@ -16783,6 +16783,48 @@ if (typeof DEFAULT_DIET_KNOWLEDGE !== 'undefined' && DEFAULT_DIET_KNOWLEDGE.leng
         try { lsSet('dietKnowledge', JSON.stringify(dietKnowledge)); } catch(e) {}
     }
 }
+// V709h: 从后端拉取公共层 dietKnowledge → 与本地合并（服务器优先）
+(function __syncDietKnowledgeFromServer() {
+    if (!window.fetch) return;
+    var _tag = '[DietSync]';
+    fetch('/api/diet-knowledge/public', { method: 'GET', headers: { 'Cache-Control': 'no-store' } })
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(data) {
+            if (!data || !data.success || !Array.isArray(data.items)) { console.log(_tag, '后端无公共条目'); return; }
+            var serverItems = data.items;
+            console.log(_tag, '后端返回公共条目:', serverItems.length);
+            var local = JSON.parse(lsGet('dietKnowledge') || '[]');
+            var merged = [], _serverWins = 0, _localOnly = 0;
+            serverItems.forEach(function(s) {
+                var clean = {};
+                Object.keys(s).forEach(function(k) { if (k !== '_serverUpdatedAt') clean[k] = s[k]; });
+                clean.layer = 'public';
+                merged.push(clean); _serverWins++;
+            });
+            var serverIds = new Set(serverItems.map(function(s) { return String(s.id); }));
+            local.forEach(function(k) {
+                if (!k || !k.id) return;
+                if (k.layer !== 'public') { merged.push(k); return; }
+                if (serverIds.has(String(k.id))) return;
+                merged.push(k); _localOnly++;
+            });
+            merged.forEach(function(k) { if (!k.layer) k.layer = (k.familyId) ? 'family' : 'public'; });
+            lsSet('dietKnowledge', JSON.stringify(merged));
+            dietKnowledge = merged;
+            console.log(_tag, '合并完成：服务器', _serverWins, '+ 本地独有', _localOnly, '→ 总计', merged.length);
+            if (_localOnly > 0 && typeof isSuperAdmin === 'function' && isSuperAdmin()) {
+                var newOnes = local.filter(function(k) { return k && k.layer === 'public' && !serverIds.has(String(k.id)); });
+                if (newOnes.length > 0) {
+                    fetch('/api/diet-knowledge/public', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ items: newOnes }) })
+                      .then(function(r) { return r.json(); })
+                      .then(function(r) { console.log(_tag, '超管回写:', r.saved, '条'); })
+                      .catch(function(e) { console.warn(_tag, '回写失败:', e); });
+                }
+            }
+        })
+        .catch(function(e) { console.log(_tag, '后端拉取失败（首次部署正常）:', e.message); });
+})();
 // V705: 季节食养整体从食方移到食谱（种子已搬，文章跟着搬）
 (function __migrateShijiToRecipe() {
     try {
