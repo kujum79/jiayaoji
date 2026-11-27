@@ -60211,17 +60211,29 @@ function switchKnowledgeVisibility(vis) {
 
 // V269: 进入超管「文库管理」统一入口（切换后二次确认视图状态，避免被后续渲染覆盖）
 function openSuperLibraryManager() {
+    // V709e: 修复超管面板标题被中间态覆盖成"饮食问答"
+    // 原代码：先 switchView('library') → 此时 visibility 还没切 admin
+    // → updateKnowledgeSubHeader('library') fallback "饮食问答"
+    // 正确序：先切 tab + visibility → 再统一切视图（不经过中间态）
     switchTab('knowledge');
-    switchKnowledgeView('library');
     switchKnowledgeVisibility('admin');
+    // 不再先 switchKnowledgeView('library')——80ms 后 _kbAdminLibOpen() 会切 'libtab'
     setTimeout(function() {
         if (currentKnowledgeVisibility !== 'admin') return;
         _applyAdminKnowledgeChrome();
-        // V625: 直接落到「饮食文库」层级浏览视图（等效自动展开），工具条注入其顶部；
-        // V632: 顶栏 📚 改为「管理态 ⇄ 纯浏览态」切换（_onLibraryBtnClick），进入默认=管理态双栏主视图
-        _libCurTab = 'ingredient'; // V628: 进入文库管理默认落「食材」根（双栏主体）
-        _saLibSyMode = false; // V632: 重置食养 sy 子模式
+        _libCurTab = 'ingredient'; // V628: 进入文库管理默认落「食材」根
+        _saLibSyMode = false;
         try { _kbAdminLibOpen(); } catch (e) {}
+        // V709e: 最后强制确保标题是"文库管理"（_kbAdminLibOpen 里 visibility 被改成 public 了）
+        setTimeout(function() {
+            if (topTitle && currentTab === 'knowledge') {
+                // 此时 visibility 可能已是 public（_kbAdminLibOpen 里改的），
+                // 但 body class kb-admin-lib 仍在 → 按 body class 判断更准
+                if (document.body.classList.contains('kb-admin-lib')) {
+                    topTitle.textContent = '文库管理';
+                }
+            }
+        }, 50);
     }, 80);
 }
 
