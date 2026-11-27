@@ -4131,6 +4131,88 @@ def _register_api_prefix_aliases() -> None:
 _register_api_prefix_aliases()
 
 
+# ========== V709h: dietKnowledge 公共层后端化（必须在 catch-all /{path:path} 之前注册！） ==========
+_DK_SQL_INIT = """
+CREATE TABLE IF NOT EXISTS diet_knowledge (
+    id           TEXT PRIMARY KEY,
+    content      TEXT NOT NULL,
+    updated_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_dk_updated ON diet_knowledge(updated_at);
+"""
+def _dk_conn():
+    conn = get_fh_conn()
+    conn.executescript(_DK_SQL_INIT)
+    return conn
+
+@app.get("/api/diet-knowledge/public")
+def _api_dk_public_get():
+    """拉取公共层 dietKnowledge（所有设备同步种子/超管更新）"""
+    try:
+        conn = _dk_conn()
+        rows = conn.execute("SELECT id, content, updated_at FROM diet_knowledge ORDER BY updated_at DESC").fetchall()
+        items = []
+        for r in rows:
+            try:
+                import json as _j
+                item = _j.loads(r[1]) if r[1] else {}
+                item['_serverUpdatedAt'] = r[2]
+                items.append(item)
+            except Exception:
+                continue
+        return {"success": True, "items": items, "count": len(items)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}, 500
+
+@app.post("/api/diet-knowledge/public")
+def _api_dk_public_upsert(req: dict):
+    """超管把本地 public 层条目 POST 到后端（upsert，按 id 合并）"""
+    try:
+        import json as _j
+        items = (req or {}).get("items") or []
+        if not items:
+            return {"success": False, "error": "items empty"}, 400
+        conn = _dk_conn()
+        now = int(time.time())
+        saved, skipped = 0, 0
+        for it in items:
+            if not it or not isinstance(it, dict):
+                skipped += 1; continue
+            _id = str(it.get("id") or "").strip()
+            if not _id or _id == "null" or _id == "undefined":
+                skipped += 1; continue
+            it["layer"] = "public"
+            it["ownerId"] = it.get("ownerId") or "system"
+            it["ownerName"] = it.get("ownerName") or "系统"
+            content_json = _j.dumps(it, ensure_ascii=False)
+            conn.execute(
+                "INSERT INTO diet_knowledge(id, content, updated_at) VALUES(?,?,?) "
+                "ON CONFLICT(id) DO UPDATE SET content=excluded.content, updated_at=excluded.updated_at",
+                (_id, content_json, now)
+            )
+            saved += 1
+        conn.commit()
+        return {"success": True, "saved": saved, "skipped": skipped}
+    except Exception as e:
+        return {"success": False, "error": str(e)}, 500
+
+@app.delete("/api/diet-knowledge/public")
+def _api_dk_public_delete(req: dict):
+    """超管删除某条公共 dietKnowledge"""
+    try:
+        ids = (req or {}).get("ids") or [(req or {}).get("id")]
+        ids = [str(i) for i in ids if i]
+        if not ids:
+            return {"success": False, "error": "no ids"}, 400
+        conn = _dk_conn()
+        placeholders = ",".join("?" * len(ids))
+        conn.execute(f"DELETE FROM diet_knowledge WHERE id IN ({placeholders})", ids)
+        conn.commit()
+        return {"success": True, "deleted": len(ids)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}, 500
+
+
 # ========== 前端静态文件托管（用于 TRAE 预览面板直接打开 APP） ==========
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -4577,90 +4659,6 @@ async def verify_sms(req: VerifySmsRequest) -> Dict[str, Any]:
     token = uuid.uuid4().hex
     _SMS_TOKENS[token] = {"phone": phone, "expireAt": now + _SMS_TOKEN_TTL_SECONDS}
     return {"success": True, "token": token, "phone": phone}
-
-
-# ========== V709h: dietKnowledge 公共层后端化（解决各设备数据量不一致） ==========
-_DK_SQL_INIT = """
-CREATE TABLE IF NOT EXISTS diet_knowledge (
-    id           TEXT PRIMARY KEY,
-    content      TEXT NOT NULL,
-    updated_at   INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_dk_updated ON diet_knowledge(updated_at);
-"""
-def _dk_conn():
-    conn = get_fh_conn()
-    conn.executescript(_DK_SQL_INIT)
-    return conn
-
-@app.get("/api/diet-knowledge/public")
-def _api_dk_public_get():
-    """拉取公共层 dietKnowledge（所有设备同步种子/超管更新）"""
-    try:
-        conn = _dk_conn()
-        rows = conn.execute("SELECT id, content, updated_at FROM diet_knowledge ORDER BY updated_at DESC").fetchall()
-        items = []
-        for r in rows:
-            try:
-                import json as _j
-                item = _j.loads(r[1]) if r[1] else {}
-                item['_serverUpdatedAt'] = r[2]
-                items.append(item)
-            except Exception:
-                continue
-        return {"success": True, "items": items, "count": len(items)}
-    except Exception as e:
-        return {"success": False, "error": str(e)}, 500
-
-@app.post("/api/diet-knowledge/public")
-def _api_dk_public_upsert(req: dict):
-    """超管把本地 public 层条目 POST 到后端（upsert，按 id 合并）"""
-    try:
-        import json as _j
-        items = (req or {}).get("items") or []
-        if not items:
-            return {"success": False, "error": "items empty"}, 400
-        conn = _dk_conn()
-        now = int(time.time())
-        saved, skipped = 0, 0
-        for it in items:
-            if not it or not isinstance(it, dict):
-                skipped += 1; continue
-            _id = str(it.get("id") or "").strip()
-            if not _id or _id == "null" or _id == "undefined":
-                skipped += 1; continue
-            # 强制 layer=public，防止 family 条目误入
-            it["layer"] = "public"
-            it["ownerId"] = it.get("ownerId") or "system"
-            it["ownerName"] = it.get("ownerName") or "系统"
-            content_json = _j.dumps(it, ensure_ascii=False)
-            conn.execute(
-                "INSERT INTO diet_knowledge(id, content, updated_at) VALUES(?,?,?) "
-                "ON CONFLICT(id) DO UPDATE SET content=excluded.content, updated_at=excluded.updated_at",
-                (_id, content_json, now)
-            )
-            saved += 1
-        conn.commit()
-        return {"success": True, "saved": saved, "skipped": skipped}
-    except Exception as e:
-        return {"success": False, "error": str(e)}, 500
-
-@app.delete("/api/diet-knowledge/public")
-def _api_dk_public_delete(req: dict):
-    """超管删除某条公共 dietKnowledge"""
-    try:
-        ids = (req or {}).get("ids") or [(req or {}).get("id")]
-        ids = [str(i) for i in ids if i]
-        if not ids:
-            return {"success": False, "error": "no ids"}, 400
-        conn = _dk_conn()
-        placeholders = ",".join("?" * len(ids))
-        conn.execute(f"DELETE FROM diet_knowledge WHERE id IN ({placeholders})", ids)
-        conn.commit()
-        return {"success": True, "deleted": len(ids)}
-    except Exception as e:
-        return {"success": False, "error": str(e)}, 500
-
 
 @app.post("/api/daily-tip", dependencies=[Depends(check_ai_quota)])
 async def daily_tip(req: DailyTipRequest) -> Dict[str, Any]:
