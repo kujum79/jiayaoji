@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V705M-20261127';
+        var APP_VER = 'V705N-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -55512,7 +55512,7 @@ function _mergeDefaultSubCategories(kc) {
         '田园食趣':'田园','宴饮酬唱':'宴饮','节令食诗':'节令','思乡食味':'思乡','茶酒诗话':'茶酒','食诗赏析':'食诗'
     };
 
-    // 先对 DEFAULT_CATEGORY_TREE 也压缩（让 merge 能匹配）
+    // 先对 DEFAULT_CATEGORY_TREE 压缩（让 merge 能匹配）
     (function compressDef() {
         DEFAULT_CATEGORY_TREE.forEach(function(m) {
             (m.children || []).forEach(function(s) {
@@ -55523,6 +55523,29 @@ function _mergeDefaultSubCategories(kc) {
             });
         });
     })();
+
+    // V705M: 对当前 tree 的所有 layer（public/family）里已存的 leaf 节点也强制压缩
+    // （merge 的 "已存在节点不覆盖 name" 会让老数据里的 4 字节点残留，这里主动覆盖）
+    var _treeCompressed = false;
+    ['public', 'family'].forEach(function(layer) {
+        var _tree = kc[layer] && kc[layer].tree;
+        if (!_tree) return;
+        _tree.forEach(function(m) {
+            (m.children || []).forEach(function(s) {
+                (s.children || []).forEach(function(l) {
+                    var _new = _LEAF_SHORT[l.name] || _LEAF_SHORT[l.id];
+                    if (_new && _new !== l.name) {
+                        var _oldId = l.id;
+                        l.name = _new; l.id = _new; l.order = l.order || 999;
+                        _treeCompressed = true;
+                    }
+                });
+                // 同时 sort 三级
+                (s.children || []).sort(function(a, b) { return (a.order || 999) - (b.order || 999); });
+            });
+        });
+    });
+    if (_treeCompressed) { console.log('[V705M] 已存 tree leaf 压缩完成'); changed = true; }
 
     // 迁移文章 leafCategory（老 name → 新短名）
     var _leafMigrated = 0;
