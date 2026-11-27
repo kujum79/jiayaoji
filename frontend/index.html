@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710g-20261128';
+        var APP_VER = 'V710h-20261128';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -5196,9 +5196,9 @@ async function _submitFeedback() {
             <div class="record-form-group">
                 <label>餐次</label>
                 <div class="record-meal-types" id="recordMealTypes">
-                    <div class="record-meal-type-btn active" data-meal="早餐">🌅 早餐</div>
-                    <div class="record-meal-type-btn" data-meal="午餐">☀️ 午餐</div>
-                    <div class="record-meal-type-btn" data-meal="晚餐">🌙 晚餐</div>
+                    <div class="record-meal-type-btn active" data-meal="早餐">早餐</div>
+                    <div class="record-meal-type-btn" data-meal="午餐">午餐</div>
+                    <div class="record-meal-type-btn" data-meal="晚餐">晚餐</div>
                     <div class="record-meal-type-btn" data-meal="加餐">加餐</div>
                 </div>
             </div>
@@ -75332,7 +75332,7 @@ function _renderMealPlanBody() {
         var active = (i===_mealPlanState.currentStyle)?' active':'';
         html += '<div class="mp-card'+active+'" onclick="switchMealPlanStyle('+i+')"><div class="mp-card-label">'+(s.name||_mealPlanStyleNames[i])+'</div></div>';
     }
-    html += '<div class="mp-snack-card" onclick="focusSnackInput()"><div class="mp-card-label">'+(_mealPlanState.snackBlockVisible ? '🚫 不加餐' : '🍪 加餐')+'</div></div>';
+    html += '<div class="mp-snack-card" onclick="focusSnackInput()"><div class="mp-card-label">'+(_mealPlanState.snackBlockVisible ? '不加餐' : '加餐')+'</div></div>';
     html += '</div></div>';
     var style = _mealPlanState.styles[_mealPlanState.currentStyle];
     var sel = _mealPlanState.selectedDishes[_mealPlanState.currentStyle];
@@ -75353,8 +75353,8 @@ function _renderMealPlanBody() {
             var dishName = d.name||d;
             html += '<div class="mp-dish'+ck+'" onclick="toggleMealPlanDish(\''+mk+'\','+di+')"><div class="mp-check">'+cm+'</div><div style="flex:1;min-width:0;"><span class="mp-dish-name">'+escapeHtml(dishName)+'</span></div></div>';
         }
-        html += '<button class="mp-change-btn" onclick="changeMealPlanDish(\''+mk+'\')">🔄 换一道</button>';
-        html += '<button class="mp-change-btn" onclick="toggleMealReason(this,\''+mk+'\')" style="margin-left:6px;">💡 推荐理由</button>';
+        html += '<button class="mp-change-btn" onclick="changeMealPlanDish(\''+mk+'\')">换一道</button>';
+        html += '<button class="mp-change-btn" onclick="toggleMealReason(this,\''+mk+'\')" style="margin-left:6px;">推荐理由</button>';
         html += '</div></div>';
         // 营养概览：已选 AI 推荐菜品 + 手动添加菜品
         var mDishes = (_mealPlanState.manualDishes && _mealPlanState.manualDishes[mk]) ? _mealPlanState.manualDishes[mk] : [];
@@ -75415,9 +75415,9 @@ function _renderMealPlanBody() {
 
             html += '<div class="mp-snack-block">';
         html += '<div class="mp-snack-header">';
-        html += '<span class="mp-snack-title">🍪 加餐/水果/零食</span>';
+        html += '<span class="mp-snack-title">加餐/水果/零食</span>';
         html += '<div class="mp-snack-actions">';
-        html += '<button class="mp-snack-btn ghost" onclick="refreshMpSnackRecommendation()">🔄 AI推荐</button>';
+        html += '<button class="mp-snack-btn ghost" onclick="refreshMpSnackRecommendation()">AI推荐</button>';
         html += '<button class="mp-snack-btn" onclick="openPlanSnackAddModal()">＋ 手动添加</button>';
         html += '</div></div>';
 
@@ -75727,7 +75727,7 @@ function toggleMealReason(btn, mealKey) {
     if (!wrap) return;
     var isHidden = wrap.style.display === 'none';
     wrap.style.display = isHidden ? 'block' : 'none';
-    btn.textContent = isHidden ? '💡 收起推荐' : '💡 推荐理由';
+    btn.textContent = isHidden ? '收起推荐' : '推荐理由';
 }
 
 function changeMealPlanDish(mealKey) {
