@@ -36308,11 +36308,14 @@ function _fhRecipeFromArticle(a) {
     };
 }
 function _fhRecipeOfDay() {
-    // 1) 今日服务端精选食谱（优先！🔄 超管换篇不覆盖正常寻味散文）
+    // 1) 今日服务端精选食谱（优先！有就用，不被本地覆盖）
     var t = _fhTrackOf('recipe_article');
     if (t && t.title) return _fhRecipeFromArticle(t);
-    // V709d: 无服务端内容时，超管手动换篇优先（轮播本地）
-    if (_fhSuperForcedRecipe) return _fhSuperForcedRecipe;
+    // V709d: 无服务端内容时，超管手动换篇优先（轮播本地；每天自动过期）
+    var todayKey = _dtTodayKey();
+    var forcedDate = '';
+    try { forcedDate = lsGet('_fhForcedDate') || ''; } catch(e) {}
+    if (_fhSuperForcedRecipe && forcedDate === todayKey) return _fhSuperForcedRecipe;
     // 2) 本地/服务端归档最近一篇食谱
     try {
         var arc = (_fhArchiveAll() || []).filter(function (a) { return a && a.title && a.contentType === 'recipe_article'; });
