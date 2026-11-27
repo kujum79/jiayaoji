@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V705h-20261127';
+        var APP_VER = 'V705i-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -55564,12 +55564,12 @@ function _mergeDefaultSubCategories(kc) {
                     existing.children.sort(function(a, b) { return (a.order || 999) - (b.order || 999); });
                 }
             });
-            // 老 children 缺失 order/name 时从 DEFAULT 补，然后统一 sort
+            // 所有 children 都强制同步 DEFAULT 的 order 和 name（不管之前有没有），然后统一 sort
             var _changed2 = false;
             main.children.forEach(function(c) {
                 var _d = (defMain.children || []).find(function(x) { return (x.id || x.name) === (c.id || c.name); });
                 if (!_d) return;
-                if (c.order === undefined) { c.order = _d.order; _changed2 = true; }
+                if (_d.order !== undefined && c.order !== _d.order) { c.order = _d.order; _changed2 = true; }
                 if (_d.name && c.name !== _d.name) { c.name = _d.name; _changed2 = true; }
             });
             main.children.sort(function(a, b) { return (a.order || 999) - (b.order || 999); });
