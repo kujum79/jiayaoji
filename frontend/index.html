@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V709k-20261127';
+        var APP_VER = 'V710a-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -5995,6 +5995,7 @@ async function aiChatMultiProvider(systemContent, userPrompt, opts) {
     // V199/V202: 订阅用户的 plan 类请求，把 subscriptionPlan 带给后端追加专属 Prompt
     var subPlan = null;
     try { subPlan = _subTier(); } catch (e) {}
+    var _lastErr = null;
     try {
         var postBody = { system_prompt: systemContent, user_prompt: userPrompt, max_tokens: maxTokens, task_type: taskType };
         if (subPlan && taskType.indexOf('plan') >= 0) postBody.subscriptionPlan = subPlan;
@@ -6003,12 +6004,16 @@ async function aiChatMultiProvider(systemContent, userPrompt, opts) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(postBody)
         });
-        if (proxyRes.ok) {
-            var proxyData = await proxyRes.json();
-            if (proxyData && proxyData.response) return { choices: [{ message: { content: proxyData.response } }] };
-        }
-    } catch (e) { console.warn('后端/plan调用失败:', e); }
-    return {};
+        var _bodyText = await proxyRes.text();
+        var _errDetail = '';
+        try { _errDetail = (JSON.parse(_bodyText) || {}).detail || ''; } catch(e) { _errDetail = _bodyText.slice(0, 200); }
+        if (!proxyRes.ok) throw new Error('HTTP ' + proxyRes.status + ': ' + _errDetail);
+        var proxyData = JSON.parse(_bodyText || '{}');
+        var _resp = (proxyData && proxyData.response) || '';
+        if (!_resp.trim()) throw new Error('AI 返回空内容');
+        return { choices: [{ message: { content: _resp } }] };
+    } catch (e) { _lastErr = e; console.warn('后端/plan调用失败:', e); }
+    throw new Error('AI 服务暂不可用：' + (_lastErr && _lastErr.message || '未知错误'));
 }
 
 // 当前登录用户与家庭信息（缓存在 localStorage）
@@ -62242,9 +62247,14 @@ function _csScanFiles(files) {
                     }
                 });
             }).then(function (j) {
-                var _pageText = String((j && j.response) || '');
+                var _pageText = String((j && j.response) || '').trim();
                 console.log('[csScanFiles] OCR page', i+1, '→ text length=', _pageText.length, 'preview:', _pageText.slice(0, 100));
-                if (!_pageText) console.warn('[csScanFiles] OCR returned EMPTY! full response:', JSON.stringify(j).slice(0, 500));
+                if (!_pageText || _pageText.length < 10) {
+                    console.warn('[csScanFiles] OCR returned TOO SHORT! length=', _pageText.length);
+                    _csOv(false);
+                    showToast('第 ' + (i + 1) + ' 页未识别到有效文字，请确认图片清晰后重试');
+                    return;
+                }
                 pages.push(_pageText);
                 i++;
                 _csOv(true, i >= arr.length ? 'AI 整理食方结构中…' : '正在识别第 ' + (i + 1) + '/' + arr.length + ' 页…');
@@ -62259,7 +62269,8 @@ function _csScanFiles(files) {
 }
 async function _csStructure(raw) {
     try {
-        if (!String(raw || '').trim()) throw new Error('未识别到文字');
+        var _cleanRaw = String(raw || '').replace(/[—\s]+/g, '').trim();
+        if (_cleanRaw.length < 20) throw new Error('未识别到足够文字（仅 ' + _cleanRaw.length + ' 字符）');
         var prompt = '以下是养生食疗书籍扫描页的转录文本（可能含错字与页眉页码）。请整理为一条「症状食疗方」知识条目，只输出严格 JSON（不要 markdown 代码块）：\n'
             + '{"sym":"症状名(2~6字)","overview":"概述","principles":["饮食原则1","饮食原则2"],"recipes":[{"n":1,"text":"方名：组成用量与做法全文"}],"note":"按语"}\n'
             + '【要求】\n1. 食疗方逐则完整保留组成、用量与做法，不得省略；\n'
@@ -62270,22 +62281,17 @@ async function _csStructure(raw) {
             + '【转录文本】\n' + raw;
         var result = await aiChatMultiProvider('你是家庭膳食知识编辑，擅长把书稿整理为结构化食方。', prompt, { maxTokens: 3000, temperature: 0.3, taskType: 'knowledge' });
         var reply = (result && result.choices && result.choices[0] && result.choices[0].message) ? String(result.choices[0].message.content || '') : '';
-        // V709j4: 调试日志——完整打印 AI 原始返回 + parse 结果
-        console.log('[csStructure] raw reply length:', reply.length);
-        console.log('[csStructure] raw reply preview (first 500):', reply.slice(0, 500));
-        // V709j: 更鲁棒的 JSON 提取（AI 可能输出 think 块/解释文字/markdown 包裹）
         reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/i, '').trim();
-        console.log('[csStructure] cleaned reply preview:', reply.slice(0, 500));
+        if (!reply || reply.length < 20) throw new Error('AI 整理返回内容过短');
         var d = _csExtractJson(reply);
-        console.log('[csStructure] _csExtractJson result:', d);
-        if (!d || typeof d !== 'object') {
-            console.warn('[csStructure] ALL PARSE FAILED! fallback to overview');
-            // parse 失败 → 尽力从原始 reply 提取症状名+正文
-            d = { sym: '', overview: reply, principles: [], recipes: [], note: '' };
-            var _symM = reply.match(/"sym"\s*:\s*"([^"]+)"/);
-            if (_symM) d.sym = _symM[1].trim();
-        } else {
-            console.log('[csStructure] parsed OK: sym=' + d.sym + ' overview length=' + String(d.overview || '').length + ' recipes count=' + (d.recipes ? d.recipes.length : 0));
+        if (!d || typeof d !== 'object' || !d.sym) {
+            // parse 失败或缺少关键字段
+            throw new Error('AI 输出格式异常，请重试');
+        }
+        d.recipes = d.recipes || [];
+        d.principles = d.principles || [];
+        if (d.recipes.length === 0 && !d.overview) {
+            throw new Error('AI 未能有效整理食疗内容（无方名也无概述）');
         }
         _csOv(false);
         _csOpenPreview(d);

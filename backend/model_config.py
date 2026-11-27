@@ -296,9 +296,9 @@ async def route_vision(
                     max_tokens=max_tokens, timeout=timeout,
                 )
                 content = data["choices"][0]["message"]["content"]
-                if content:
+                if content and str(content).strip():
                     log_ai_call(name, model, {"task_type": task_type}, data)
-                    return content, name
+                    return str(content), name
                 last_err = "返回空内容"
             except AIServiceBusy:
                 raise
