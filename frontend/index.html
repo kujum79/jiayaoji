@@ -16742,6 +16742,35 @@ if (typeof DEFAULT_DIET_KNOWLEDGE !== 'undefined' && DEFAULT_DIET_KNOWLEDGE.leng
         try { lsSet('dietKnowledge', JSON.stringify(dietKnowledge)); } catch(e) {}
     }
 }
+// V705: 季节食养整体从食方移到食谱（种子已搬，文章跟着搬）
+(function __migrateShijiToRecipe() {
+    try {
+        if (localStorage.getItem('__v705_shiji_moved')) return;
+        var dk = JSON.parse(lsGet('dietKnowledge') || '[]');
+        var moved = 0;
+        dk.forEach(function(a) {
+            var oldCat = a.category || '';
+            // category 三级路径：shiyang/季节食养/xxx → recipe/季节食养/xxx
+            if (oldCat.indexOf('shiyang/季节食养/') === 0) {
+                a.category = 'recipe' + oldCat.substring(7); // 把 shiyang 换成 recipe
+                a.mainCategory = 'recipe';
+                moved++;
+            }
+            // category 只有一级/二级的也要处理
+            if (oldCat === 'shiyang/季节食养' || oldCat === 'shiyang/季节食养/') {
+                a.category = oldCat.replace('shiyang', 'recipe');
+                a.mainCategory = 'recipe';
+                moved++;
+            }
+        });
+        if (moved > 0) {
+            lsSet('dietKnowledge', JSON.stringify(dk));
+            dietKnowledge = dk;
+            console.log('[V705] 季节食养迁移到食谱：' + moved + ' 篇文章');
+        }
+        localStorage.setItem('__v705_shiji_moved', '1');
+    } catch(e) { console.warn('__migrateShijiToRecipe error:', e); }
+})();
 // V704: 食方文章三级同步 + mainCategory 修正（V703 只改 category，漏了 subCategory/leafCategory/mainCategory）
 (function __migrateShiyangArticlesV2() {
     try {
@@ -55227,7 +55256,11 @@ var DEFAULT_CATEGORY_TREE = [
         { id: '家常', name: '家常', order: 1, children: [{ id: '家常菜', name: '家常菜', order: 1 }, { id: '北方家常', name: '北方家常', order: 2 }, { id: '南方家常', name: '南方家常', order: 3 }, { id: '中式家常', name: '中式家常', order: 4 }, { id: '川菜', name: '川菜', order: 5 }, { id: '粤菜', name: '粤菜', order: 6 }, { id: '湘菜', name: '湘菜', order: 7 }, { id: '东北菜', name: '东北菜', order: 8 }, { id: '西餐', name: '西餐', order: 9 }, { id: '日料', name: '日料', order: 10 }] },
         { id: '家宴', name: '家宴', order: 2, children: [{ id: '中式家常', name: '中式家常', order: 1 }, { id: '苏帮菜', name: '苏帮菜', order: 2 }, { id: '粤菜', name: '粤菜', order: 3 }, { id: '川菜', name: '川菜', order: 4 }, { id: '淮扬菜', name: '淮扬菜', order: 5 }, { id: '本帮菜', name: '本帮菜', order: 6 }, { id: '浙菜', name: '浙菜', order: 7 }, { id: '汤羹', name: '汤羹', order: 8 }, { id: '烘焙甜品', name: '烘焙甜品', order: 9 }] },
         { id: '中式', name: '中式', order: 3, children: [{ id: '中式家常', name: '中式家常', order: 1 }, { id: '粤菜', name: '粤菜', order: 2 }, { id: '川菜', name: '川菜', order: 3 }, { id: '北方菜', name: '北方菜', order: 4 }, { id: '江南菜', name: '江南菜', order: 5 }, { id: '汤羹粥品', name: '汤羹粥品', order: 6 }, { id: '中式甜品', name: '中式甜品', order: 7 }] },
-        { id: '食养', name: '食养', type: 'knowledge', order: 4, children: [{ id: '春季', name: '春季', order: 1 }, { id: '夏季', name: '夏季', order: 2 }, { id: '秋季', name: '秋季', order: 3 }, { id: '冬季', name: '冬季', order: 4 }, { id: '人群食养', name: '人群食养', order: 5 }] }
+        { id: '食养', name: '食养', type: 'knowledge', order: 4, children: [{ id: '春季', name: '春季', order: 1 }, { id: '夏季', name: '夏季', order: 2 }, { id: '秋季', name: '秋季', order: 3 }, { id: '冬季', name: '冬季', order: 4 }, { id: '人群食养', name: '人群食养', order: 5 }] },
+        { id: '季节食养', name: '季节食养', type: 'knowledge', order: 10, icon: '🍂', children: [ // V704: 从 shiyang 移过来
+            { id: '春季养阳', name: '春季养阳', order: 1 }, { id: '夏季养心', name: '夏季养心', order: 2 },
+            { id: '秋季润肺', name: '秋季润肺', order: 3 }, { id: '冬季进补', name: '冬季进补', order: 4 }
+        ] }
     ] },
     { id: 'shiyang', name: '食方', icon: '🥣', order: 3, type: 'knowledge', children: [ // V663: 食养→食方，仅超管可见；家庭层不含此主分类
         { id: '特殊人群配餐', name: '特殊人群', type: 'knowledge', order: 1, children: [
@@ -55249,10 +55282,6 @@ var DEFAULT_CATEGORY_TREE = [
         { id: '产后调理', name: '产后调理', type: 'knowledge', order: 4, icon: '🤱', children: [
             { id: '催乳下奶', name: '催乳下奶', order: 1 }, { id: '补气血', name: '补气血', order: 2 },
             { id: '优质蛋白恢复', name: '优质蛋白恢复', order: 3 }, { id: '产后脾胃', name: '产后脾胃', order: 4 }
-        ] },
-        { id: '季节食养', name: '季节食养', type: 'knowledge', order: 5, icon: '🍂', children: [
-            { id: '春季养阳', name: '春季养阳', order: 1 }, { id: '夏季养心', name: '夏季养心', order: 2 },
-            { id: '秋季润肺', name: '秋季润肺', order: 3 }, { id: '冬季进补', name: '冬季进补', order: 4 }
         ] },
         { id: '食育', name: '食育', type: 'knowledge', order: 10, icon: '📚', children: [
             { id: '儿童食育', name: '儿童食育', order: 1 }, { id: '家庭餐桌礼仪', name: '家庭餐桌礼仪', order: 2 },
