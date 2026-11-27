@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V706A-20261127';
+        var APP_VER = 'V706B-20261127';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -55268,7 +55268,8 @@ var DEFAULT_CATEGORY_TREE = [
         ] },
         { id: '海外风', name: '海外风', order: 4, children: [
             { id: '西餐', name: '西餐', order: 1 }, { id: '日料', name: '日料', order: 2 }, { id: '韩餐', name: '韩餐', order: 3 },
-            { id: '东南亚', name: '东南亚', order: 4 }, { id: '意式', name: '意式', order: 5 }, { id: '美式', name: '美式', order: 6 }
+            { id: '东南亚', name: '东南亚', order: 4 }, { id: '中东', name: '中东', order: 5 },
+            { id: '非洲', name: '非洲', order: 6 }, { id: '意式', name: '意式', order: 7 }, { id: '美式', name: '美式', order: 8 }
         ] },
         { id: '汤羹粥', name: '汤羹粥', order: 5, children: [
             { id: '炖汤', name: '炖汤', order: 1 }, { id: '煲粥', name: '煲粥', order: 2 }, { id: '羹汤', name: '羹汤', order: 3 },
@@ -55569,6 +55570,32 @@ function _mergeDefaultSubCategories(kc) {
     });
     if (_deduped) { console.log('[V705N] leaf 去重完成'); changed = true; }
 
+    // V706A: 通用三级细分类白名单清理——对所有 layer/sub，只保留 DEFAULT 里有的 leaf
+    // （清手机上的老残留如"中东非洲"、"各地美食"细分类等）
+    var _leafPruned = false;
+    ['public', 'family'].forEach(function(layer) {
+        var _tree = kc[layer] && kc[layer].tree;
+        if (!_tree) return;
+        _tree.forEach(function(m) {
+            var _defMain = DEFAULT_CATEGORY_TREE.find(function(d){ return d.id === m.id; });
+            if (!_defMain) return;
+            (m.children || []).forEach(function(s) {
+                var _defSub = (_defMain.children || []).find(function(ds){ return (ds.id || ds.name) === (s.id || s.name); });
+                if (!_defSub) return; // 子分类本身就是老残留的会被 recipe/shiyang 黑名单清
+                var _white = (_defSub.children || []).map(function(l){ return l.id || l.name; });
+                var _before = (s.children || []).length;
+                s.children = (s.children || []).filter(function(l) {
+                    var _k = l.id || l.name;
+                    // 空壳 leaf 也清（无 id/name 的脏数据）
+                    if (!_k) return false;
+                    return _white.indexOf(_k) !== -1;
+                });
+                if (s.children.length !== _before) { _leafPruned = true; }
+            });
+        });
+    });
+    if (_leafPruned) { console.log('[V706A] 三级细分类白名单清理完成'); changed = true; }
+
     // 迁移文章 leafCategory（老 name → 新短名）
     var _leafMigrated = 0;
     try {
@@ -55674,7 +55701,7 @@ function _mergeDefaultSubCategories(kc) {
         var recipe = null;
         for (var i = 0; i < tree.length; i++) { if (tree[i].id === 'recipe') { recipe = tree[i]; break; } }
         if (recipe && recipe.children) {
-            var _OLD_RECIPE_SUBS = ['家常', '家宴', '中式', '食养', '季节食养'];
+            var _OLD_RECIPE_SUBS = ['家常', '家宴', '中式', '食养', '季节食养', '各地美食'];
             var before2 = recipe.children.length;
             recipe.children = recipe.children.filter(function(c) { return _OLD_RECIPE_SUBS.indexOf(c.id) === -1 && _OLD_RECIPE_SUBS.indexOf(c.name) === -1; });
             if (recipe.children.length !== before2) {
