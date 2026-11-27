@@ -16812,6 +16812,71 @@ if (typeof DEFAULT_DIET_KNOWLEDGE !== 'undefined' && DEFAULT_DIET_KNOWLEDGE.leng
         localStorage.setItem('__v705_shiji_moved', '1');
     } catch(e) { console.warn('__migrateShijiToRecipe error:', e); }
 })();
+// V709h: 种子 mainCategory/subCategory 旧→新全量迁移
+// 根因：DEFAULT_DIET_KNOWLEDGE 种子用的是旧版 mainCategory id（food-therapy/solar），
+// 但新 DEFAULT_CATEGORY_TREE 用的是 shiyang（没有 food-therapy、没有 solar 主分类），
+// 导致新用户/微信沙箱里种子条目 mainCategory 对不上分类树 → 所有条目被过滤为 0 条！
+(function __migrateSeedCategoriesV709h() {
+    try {
+        if (localStorage.getItem('__v709h_seed_cats_migrated')) return;
+        var dk = JSON.parse(lsGet('dietKnowledge') || '[]');
+        if (!dk.length) { localStorage.setItem('__v709h_seed_cats_migrated', '1'); return; }
+        var fixed = 0;
+        dk.forEach(function(k) {
+            if (!k || typeof k !== 'object') return;
+            var oldMain = k.mainCategory || '';
+            var oldSub = k.subCategory || '';
+            var newMain = oldMain, newSub = oldSub, newLeaf = k.leafCategory || '';
+
+            // 1) food-therapy → shiyang（旧药膳主分类）
+            if (oldMain === 'food-therapy') {
+                newMain = 'shiyang';
+                // 16 种子 subCategory 映射：
+                //   补气血/养胃/润肺/温补 → 内科食方
+                //   营养食疗 → 特殊人群
+                var _herbalSubs = ['补气血','养胃','润肺','温补','护肝','护心','健脾','补肾'];
+                var _nutritionSubs = ['营养食疗','膳食营养','食疗','养生'];
+                if (_herbalSubs.indexOf(oldSub) !== -1) newSub = '内科食方';
+                else if (_nutritionSubs.indexOf(oldSub) !== -1) newSub = '特殊人群';
+                else newSub = '内科食方'; // 兜底
+            }
+            // 2) solar → recipe/季节食养/[节气]（V705P 已把季节食养从 shiyang 迁到 recipe）
+            else if (oldMain === 'solar') {
+                newMain = 'recipe';
+                newSub = '季节食养';
+                if (!newLeaf && oldSub) newLeaf = oldSub; // leaf 存具体节气名
+            }
+            // 3) recipe/家宴 → recipe/宴客菜（子分类旧名修正）
+            else if (oldMain === 'recipe' && oldSub === '家宴') {
+                newSub = '宴客菜';
+            }
+            // 4) disease / mother-baby 旧主分类 → shiyang
+            else if (oldMain === 'disease' || oldMain === 'mother-baby') {
+                newMain = 'shiyang';
+                if (oldMain === 'disease') newSub = '慢病调理';
+                else newSub = '产后调理';
+            }
+            // 5) cook-tech → cooking（旧烹饪技术 id）
+            else if (oldMain === 'cook-tech') {
+                newMain = 'cooking';
+            }
+
+            if (newMain !== oldMain || newSub !== oldSub) {
+                k.mainCategory = newMain;
+                k.subCategory = newSub;
+                if (newLeaf) k.leafCategory = newLeaf;
+                else delete k.leafCategory;
+                fixed++;
+            }
+        });
+        if (fixed > 0) {
+            lsSet('dietKnowledge', JSON.stringify(dk));
+            dietKnowledge = dk;
+            console.log('[V709h] 种子旧分类→新分类迁移：' + fixed + ' 条');
+        }
+        localStorage.setItem('__v709h_seed_cats_migrated', '1');
+    } catch(e) { console.warn('__migrateSeedCategoriesV709h error:', e); }
+})();
 // V704: 食方文章三级同步 + mainCategory 修正（V703 只改 category，漏了 subCategory/leafCategory/mainCategory）
 (function __migrateShiyangArticlesV2() {
     try {
