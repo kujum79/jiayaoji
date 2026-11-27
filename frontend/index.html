@@ -36148,7 +36148,8 @@ function _dtRenderCard(tip) {
         // V683: 摘要按 3 行容量截断（约 50 字），保证行内「往期寻味」始终显示在第 3 行末尾不被裁掉
         rIntro = String(rIntro || '').replace(/\s+/g, ' ').trim();
         if (rIntro.length > 50) rIntro = rIntro.slice(0, 50) + '…';
-        // V709d: 「往期寻味」独立 flex 右侧，不参与摘要截断，始终可见可点
+        // V709d5: 用 position:relative+绝对定位让"往期寻味"浮在右下角，
+        // summary 保持原生 line-clamp:3（flex 子元素会让 -webkit-box 失效导致上面空）
         recipeCard = '<div class="dt-recipe-row" onclick="_fhOpenCardRecipe()">'
             + '<div class="dt-recipe-thumb-box">'
             + (recipe.coverImage
@@ -36158,9 +36159,9 @@ function _dtRenderCard(tip) {
             + '</div>'
             + '<div class="dt-recipe-info">'
             + '<div class="dt-recipe-title">' + escapeHtml(recipe.title) + '</div>'
-            + '<div style="display:flex;align-items:flex-end;gap:4px;margin-top:3px;">'
-            + '<div class="dt-recipe-summary" style="flex:1;min-width:0;overflow:hidden;">' + escapeHtml(rIntro) + '</div>'
-            + '<span style="flex-shrink:0;font-size:11px;color:#EA580C;font-weight:600;cursor:pointer;white-space:nowrap;" onclick="event.stopPropagation();_fhOpenRecipeArchive()">往期寻味 ›</span>'
+            + '<div style="position:relative;margin-top:3px;">'
+            + '<div class="dt-recipe-summary" style="padding-right:4px;">' + escapeHtml(rIntro) + '</div>'
+            + '<span style="position:absolute;bottom:0;right:0;font-size:11px;color:#EA580C;font-weight:600;cursor:pointer;background:linear-gradient(to right,transparent 0%,#FFFBF3 20%,#FFFBF3 100%);padding-left:12px;white-space:nowrap;" onclick="event.stopPropagation();_fhOpenRecipeArchive()">往期寻味 ›</span>'
             + '</div>'
             + '</div></div>';
     } else {
