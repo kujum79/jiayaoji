@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710c-20261128';
+        var APP_VER = 'V710d-20261128';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -2675,16 +2675,18 @@
     .prep-shop-table { width:100%; max-width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; }
     .prep-shop-table th { text-align:left; padding:6px 2px; color:#6B7280; font-weight:600; border-bottom:1px solid #E5E7EB; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .prep-shop-table th:nth-child(1) { width:28px; }
-    .prep-shop-table th:nth-child(2) { width:70px; }
-    .prep-shop-table th:nth-child(3) { width:56px; }
-    .prep-shop-table th:nth-child(4) { width:74px; }
-    .prep-shop-table th:nth-child(5) { width:calc(100% - 28px - 70px - 56px - 74px); min-width:80px; text-align:left; }
+    .prep-shop-table th:nth-child(2) { width:74px; }
+    .prep-shop-table th:nth-child(3) { width:60px; }
+    .prep-shop-table th:nth-child(4) { width:78px; }
+    .prep-shop-table th:nth-child(5) { width:72px; text-align:left; }
+    .prep-shop-table th:nth-child(6) { width:calc(100% - 28px - 74px - 60px - 78px - 72px); min-width:60px; text-align:left; }
     .prep-shop-table td { padding:7px 0; border-bottom:1px solid #F9FAFB; color:#374151; vertical-align:middle; overflow:visible; position:relative; max-width:0; }
     .prep-shop-table td:nth-child(1) { max-width:28px; padding-right:2px; padding-left:4px; }
-    .prep-shop-table td:nth-child(2) { max-width:70px; width:70px; padding-right:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .prep-shop-table td:nth-child(3) { max-width:56px; width:56px; overflow:visible; }
-    .prep-shop-table td:nth-child(4) { max-width:74px; width:74px; overflow:visible; }
-    .prep-shop-table td:nth-child(5) { text-align:left; padding-right:26px; overflow:visible; }
+    .prep-shop-table td:nth-child(2) { max-width:74px; width:74px; padding-right:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .prep-shop-table td:nth-child(3) { max-width:60px; width:60px; overflow:visible; }
+    .prep-shop-table td:nth-child(4) { max-width:78px; width:78px; overflow:visible; }
+    .prep-shop-table td:nth-child(5) { max-width:72px; width:72px; padding-right:26px; overflow:visible; }
+    .prep-shop-table td:nth-child(6) { overflow:visible; padding-right:2px; }
     .prep-shop-cat-row td { font-size:13px; font-weight:700; color:#6B7280; padding:10px 4px 4px; border-top:1px solid #F3F4F6; background:transparent; }
     /* 行内数字输入框（直接显示，无需点✎笔） */
     .prep-inline-input {
@@ -2713,6 +2715,46 @@
     .prep-inline-unit-price { justify-content:flex-start; }
     .prep-inline-need-qty .prep-inline-input { color:#DC2626; }
     .prep-inline-est .prep-inline-input { color:#DC2626; text-align:center; }
+    /* V710b: 实际花费输入框——用稍不同的底色区分（记账项） */
+    .prep-inline-actual .prep-inline-input { color:#2563EB; text-align:center; border-color:#BFDBFE; background:#EFF6FF; }
+    .prep-inline-actual .prep-inline-input:focus { background:#fff; border-color:#2563EB; }
+    /* V710c: 适老化表格容器——允许横向滚动兜底（6列在特大屏手机上可能略宽） */
+    .prep-shop-card { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .prep-shop-card table { min-width:320px; }
+
+    /* V710d: 适老化字体适配——列宽/输入框同步放大，不让字体变大后挤压 */
+    /* 注意：不要在这些覆盖里写 font-size！适老化引擎会二次放大 */
+    /* large 档（默认，13→17px） */
+    [data-ef="large"] .prep-shop-table th:nth-child(1) { width:34px; }
+    [data-ef="large"] .prep-shop-table th:nth-child(2) { width:90px; }
+    [data-ef="large"] .prep-shop-table th:nth-child(3) { width:70px; }
+    [data-ef="large"] .prep-shop-table th:nth-child(4) { width:90px; }
+    [data-ef="large"] .prep-shop-table th:nth-child(5) { width:82px; }
+    [data-ef="large"] .prep-shop-table th:nth-child(6) { width:calc(100% - 34px - 90px - 70px - 90px - 82px); min-width:70px; }
+    [data-ef="large"] .prep-shop-table td:nth-child(1) { max-width:34px; }
+    [data-ef="large"] .prep-shop-table td:nth-child(2) { max-width:90px; width:90px; }
+    [data-ef="large"] .prep-shop-table td:nth-child(3) { max-width:70px; width:70px; }
+    [data-ef="large"] .prep-shop-table td:nth-child(4) { max-width:90px; width:90px; }
+    [data-ef="large"] .prep-shop-table td:nth-child(5) { max-width:82px; width:82px; padding-right:28px; }
+    [data-ef="large"] .prep-inline-input { width:48px; max-width:48px; min-width:48px; padding:4px 2px; }
+    [data-ef="large"] .prep-shop-table th { padding:7px 3px; }
+    [data-ef="large"] .prep-shop-table td { padding:9px 0; }
+
+    /* xlarge 特大档（13→18px） */
+    [data-ef="xlarge"] .prep-shop-table th:nth-child(1) { width:38px; }
+    [data-ef="xlarge"] .prep-shop-table th:nth-child(2) { width:100px; }
+    [data-ef="xlarge"] .prep-shop-table th:nth-child(3) { width:78px; }
+    [data-ef="xlarge"] .prep-shop-table th:nth-child(4) { width:100px; }
+    [data-ef="xlarge"] .prep-shop-table th:nth-child(5) { width:90px; }
+    [data-ef="xlarge"] .prep-shop-table th:nth-child(6) { width:calc(100% - 38px - 100px - 78px - 100px - 90px); min-width:80px; }
+    [data-ef="xlarge"] .prep-shop-table td:nth-child(1) { max-width:38px; }
+    [data-ef="xlarge"] .prep-shop-table td:nth-child(2) { max-width:100px; width:100px; }
+    [data-ef="xlarge"] .prep-shop-table td:nth-child(3) { max-width:78px; width:78px; }
+    [data-ef="xlarge"] .prep-shop-table td:nth-child(4) { max-width:100px; width:100px; }
+    [data-ef="xlarge"] .prep-shop-table td:nth-child(5) { max-width:90px; width:90px; padding-right:30px; }
+    [data-ef="xlarge"] .prep-inline-input { width:56px; max-width:56px; min-width:56px; padding:5px 2px; }
+    [data-ef="xlarge"] .prep-shop-table th { padding:8px 3px; }
+    [data-ef="xlarge"] .prep-shop-table td { padding:10px 0; }
     /* 行内删除（× 绝对定位于单元格右上角，绝不跑出TD边界；×贴最右） */
     .prep-row-del {
         position:absolute; top:50%; right:0; transform:translateY(-50%);
