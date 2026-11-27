@@ -4622,7 +4622,7 @@ def _api_dk_public_upsert(req: dict):
             return {"success": False, "error": "items empty"}, 400
         conn = _dk_conn()
         now = int(time.time())
-        saved = 0, skipped = 0
+        saved, skipped = 0, 0
         for it in items:
             if not it or not isinstance(it, dict):
                 skipped += 1; continue
