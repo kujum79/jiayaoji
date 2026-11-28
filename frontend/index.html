@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710s-20261128-今日一课标签';
+        var APP_VER = 'V710s-20261128-摘要截断对齐';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -36580,15 +36580,19 @@ function _dtRenderCard(tip) {
     // V406: 首页饮食卡不再显示「晨读 / 饮食文章 / 食养教育 / 06:00 已上架 / 会员专享」，标题直接置顶
     var dietCard = '';
     if (diet && diet.title) {
-        dietCard = '<div onclick="_fhOpenCardDiet()" style="position:relative;cursor:pointer;border-radius:14px;padding:11px 12px 24px;background:linear-gradient(135deg,#FFFBF3,#FFF2DF);border:1px solid #FDE7C8;">' /* V710r: 底部 padding 24px 为右下角"往期回顾 ›"留空间 */
+        // V710s: 摘要按 2 行容量截断（约 38 字），保证行内「往期回顾」始终显示在第 2 行末尾不被裁掉
+        var dSummary = String(diet.summary || '').replace(/\s+/g, ' ').trim();
+        if (dSummary.length > 38) dSummary = dSummary.slice(0, 38) + '…';
+        dietCard = '<div onclick="_fhOpenCardDiet()" style="cursor:pointer;border-radius:14px;padding:11px 12px;background:linear-gradient(135deg,#FFFBF3,#FFF2DF);border:1px solid #FDE7C8;">'
             + '<div style="display:flex;align-items:center;gap:6px;">'
-            + '<span style="flex:0 0 auto;font-size:11px;font-weight:700;color:#EA580C;background:#FEF3C7;padding:2px 6px;border-radius:4px;white-space:nowrap;">今日一课</span>' /* V710r: 橙色标签放标题左边 */
+            + '<span style="flex:0 0 auto;font-size:11px;font-weight:700;color:#EA580C;background:#FEF3C7;padding:2px 6px;border-radius:4px;white-space:nowrap;">今日一课</span>'
             + '<div style="flex:1;min-width:0;font-size:15px;font-weight:800;color:#1F2937;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + escapeHtml(diet.title) + '</div>' /* V685: 长标题 2 行截断省略号，防放大后撑破布局 */
             + _aiBadgeHtml(diet)
             + '</div>'
-            + '<div style="font-size:12px;color:#4B5563;line-height:1.65;margin-top:4px;padding-right:2px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(diet.summary || '') + '</div>'
-            + '<span style="position:absolute;bottom:6px;right:10px;font-size:11px;color:#EA580C;font-weight:600;cursor:pointer;background:linear-gradient(to right,transparent 0%,#FFFBF3 20%,#FFFBF3 100%);padding-left:12px;white-space:nowrap;" onclick="event.stopPropagation();_openDailyTipArchive()">往期回顾 ›</span>' /* V710r: 和寻味天下一样的右下角绝对定位 */
-            + '</div>';
+            + '<div style="position:relative;margin-top:4px;">'
+            + '<div style="font-size:12px;color:#4B5563;line-height:1.65;padding-right:2px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;">' + escapeHtml(dSummary) + '</div>'
+            + '<span style="position:absolute;bottom:0;right:0;font-size:11px;color:#EA580C;font-weight:600;cursor:pointer;background:linear-gradient(to right,transparent 0%,#FFFBF3 20%,#FFFBF3 100%);padding-left:12px;white-space:nowrap;" onclick="event.stopPropagation();_openDailyTipArchive()">往期回顾 ›</span>'
+            + '</div></div>';
     } else {
         dietCard = '<div style="border-radius:14px;padding:11px 12px;background:#FFFBF3;border:1px dashed #FDE7C8;">'
             + '<div style="font-size:11px;font-weight:700;color:#EA580C;background:#FEF3C7;padding:2px 6px;border-radius:4px;display:inline-block;margin-bottom:6px;">今日一课</div>'
