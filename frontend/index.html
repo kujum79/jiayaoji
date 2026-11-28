@@ -4563,9 +4563,9 @@ async function _submitFeedback() {
             if (typeof renderHomeCapsules === 'function') renderHomeCapsules();
         })();
         </script>
-        <!-- V710o: 视频横幅卡 —— 首屏自动静音循环播放，X 关闭后本地不再显示 -->
+        <!-- V710q: 视频横幅卡容器（video-banner.js 独立加载） -->
         <div class="home-card" id="homeVideoCard" style="padding:0;border:0;background:linear-gradient(135deg,#FFF7ED 0%,#FEF3C7 100%);position:relative;margin-top:6px;overflow:hidden;">
-            <button onclick="document.getElementById('homeVideoCard').style.display='none';try{lsSet('homeVideoCardHidden','1');}catch(e){}" style="position:absolute;top:6px;right:6px;z-index:10;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.25);color:#fff;border:none;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
+            <button onclick="document.getElementById('homeVideoCard').style.display='none';try{localStorage.setItem('homeVideoCardHidden','1');}catch(e){}" style="position:absolute;top:6px;right:6px;z-index:10;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.25);color:#fff;border:none;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
             <video id="homeVideoEl" autoplay muted loop playsinline preload="metadata"
                    onclick="var v=this;if(v.paused){v.play();}else{v.pause();}"
                    style="width:100%;height:160px;object-fit:cover;cursor:pointer;display:block;">
@@ -36496,7 +36496,6 @@ function _homeOpenLibrary() {
 
 // 首页卡片渲染总入口（init 与首页每次显示时调用）
 function renderHomeCards() {
-    try { _renderHomeVideoCard(); } catch(e) {}
     // V146: 行为统计层——每日首次打开首页自动刷新饮食偏好画像（幂等）
     try { _maybeRefreshBehaviorProfileDaily(); } catch(e) {}
     // V147: 语义提取层——7天缓存过期/缺失时静默自动提炼（约每周一次，不重复调用）
@@ -36512,58 +36511,6 @@ function renderHomeCards() {
     // V307: AI 兜底自动发布——6:50 后若无今日精选，自动从草稿箱捞一篇顶上（只改 isTodayPick/status）
     setTimeout(function () { try { _fhAutoFallback(); } catch (e) {} }, 9000);
     try { _fhStartFallbackTimer(); } catch (e) {}
-}
-
-// V710o: 首页视频横幅卡 —— 检查 localStorage 标记，已关闭则隐藏
-function _renderHomeVideoCard() {
-    var hidden = false;
-    try { hidden = (lsGet('homeVideoCardHidden') === '1'); } catch (e) {}
-    var card = document.getElementById('homeVideoCard');
-    if (!card) return;
-    if (hidden) { card.style.display = 'none'; return; }
-    card.style.display = '';
-    var v = document.getElementById('homeVideoEl');
-    if (v && typeof v.play === 'function') { try { v.play().catch(function(){}); } catch(e){} }
-}
-
-// V710o: 打开视频播放器弹窗
-// n=0 功能介绍版，n=1 一天场景版（用数字避免 innerHTML 引号嵌套）
-function _openVideoPlayer(n) {
-    var isDay = (n === 1);
-    var src = isDay ? '/videos/intro_2.mp4' : '/videos/intro_1.mp4';
-    var title = isDay ? '家肴记 · 一天场景版' : '家肴记 · 功能介绍';
-    var overlay = document.getElementById('__videoPlayerOverlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = '__videoPlayerOverlay';
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;';
-        overlay.onclick = function(e) { if (e.target === overlay) _closeVideoPlayer(); };
-        document.body.appendChild(overlay);
-    }
-    overlay.innerHTML = '';
-    overlay.style.display = 'flex';
-    var head = document.createElement('div');
-    head.style.cssText = 'width:100%;max-width:400px;padding:12px 16px;display:flex;align-items:center;gap:8px;color:#fff;';
-    head.innerHTML = '<span style="font-size:16px;font-weight:700;flex:1;">🎬 ' + title + '</span>'
-        + '<button onclick="_closeVideoPlayer()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;font-size:20px;width:32px;height:32px;border-radius:50%;cursor:pointer;line-height:1;">✕</button>';
-    overlay.appendChild(head);
-    var wrap = document.createElement('div');
-    wrap.style.cssText = 'width:100%;max-width:400px;aspect-ratio:9/16;background:#000;border-radius:12px;overflow:hidden;margin:0 auto;';
-    wrap.innerHTML = '<video id="__videoPlayerVideo" controls playsinline autoplay style="width:100%;height:100%;object-fit:cover;"><source src="' + src + '" type="video/mp4"></video>';
-    overlay.appendChild(wrap);
-    var switcher = document.createElement('div');
-    switcher.style.cssText = 'width:100%;max-width:400px;padding:12px 16px;display:flex;gap:8px;';
-    // 关键：用 0 和 1，没有引号！
-    switcher.innerHTML = '<button onclick="_openVideoPlayer(0)" style="flex:1;padding:10px;background:' + (isDay ? '#374151' : '#F97316') + ';color:#fff;border:none;border-radius:9px;font-weight:700;cursor:pointer;">功能介绍版</button>'
-        + '<button onclick="_openVideoPlayer(1)" style="flex:1;padding:10px;background:' + (isDay ? '#F97316' : '#374151') + ';color:#fff;border:none;border-radius:9px;font-weight:700;cursor:pointer;">一天场景版</button>';
-    overlay.appendChild(switcher);
-}
-function _closeVideoPlayer() {
-    var overlay = document.getElementById('__videoPlayerOverlay');
-    if (!overlay) return;
-    var v = document.getElementById('__videoPlayerVideo');
-    if (v && typeof v.pause === 'function') { try { v.pause(); v.src = ''; v.load(); } catch(e){} }
-    overlay.style.display = 'none';
 }
 
 // ====== V139: 食养堂·今日一课（缓存 daily_tip_${familyId}_${date}） ======
@@ -91360,6 +91307,9 @@ setTimeout(function () { try { _maybeGenerateDailyLesson(); } catch (e) {} }, 80
 
 
 
+
+<!-- V710q: 视频横幅卡 + 播放器 —— 独立脚本，与主业务隔离（即使此文件加载失败也不影响主 APP） -->
+<script src="js/video-banner.js" onerror="console.warn('[video-banner.js] failed to load — 视频功能跳过')"></script>
 
 </body>
 </html>
