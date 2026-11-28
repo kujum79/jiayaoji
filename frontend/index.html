@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710p-20261128';
+        var APP_VER = 'V710q-20261128';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4568,18 +4568,16 @@ async function _submitFeedback() {
             <button onclick="document.getElementById('homeVideoCard').style.display='none';try{lsSet('homeVideoCardHidden','1');}catch(e){}" style="position:absolute;top:6px;right:6px;z-index:10;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.25);color:#fff;border:none;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
             <video id="homeVideoEl" autoplay muted loop playsinline preload="metadata"
                    onclick="var v=this;if(v.paused){v.play();}else{v.pause();}"
-                   poster=""
                    style="width:100%;height:160px;object-fit:cover;cursor:pointer;display:block;">
                 <source src="/videos/intro_1.mp4" type="video/mp4">
-                您的浏览器不支持视频播放
             </video>
             <div style="padding:10px 12px;display:flex;align-items:center;gap:8px;">
                 <span style="font-size:14px;font-weight:700;color:#9A3412;">🎬 家肴记</span>
                 <span style="font-size:12px;color:#78350F;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">让每天吃饭都很温暖 · 15秒快速了解</span>
-                <button onclick="_openVideoPlayer(\'intro\')" style="flex-shrink:0;border:1px solid #F97316;background:#FFF;color:#EA580C;font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px;cursor:pointer;">看完整版</button>
+                <button onclick="_openVideoPlayer(0)" style="flex-shrink:0;border:1px solid #F97316;background:#FFF;color:#EA580C;font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px;cursor:pointer;">看完整版</button>
             </div>
         </div>
-<!-- 内容滚动区（V38）：食材卡/食记卡，固定高度内滚动，不与输入框/底部导航重叠 -->
+        <!-- 内容滚动区（V38）：食材卡/食记卡，固定高度内滚动，不与输入框/底部导航重叠 -->
         <div class="home-scroll" id="homeScroll">
         <!-- 食材卡片（V45）：标题+食谱推荐下拉（替代三按钮）+ 纯文本食材列表（数据源 fridgeItems） -->
         <div class="home-card" id="homeFridgeCard" style="margin-top:6px;">
@@ -36498,7 +36496,7 @@ function _homeOpenLibrary() {
 
 // 首页卡片渲染总入口（init 与首页每次显示时调用）
 function renderHomeCards() {
-    try { _renderHomeVideoCard(); } catch(e) {} // V710o: 视频横幅卡（X 关闭后不再显示）
+    try { _renderHomeVideoCard(); } catch(e) {}
     // V146: 行为统计层——每日首次打开首页自动刷新饮食偏好画像（幂等）
     try { _maybeRefreshBehaviorProfileDaily(); } catch(e) {}
     // V147: 语义提取层——7天缓存过期/缺失时静默自动提炼（约每周一次，不重复调用）
@@ -36524,18 +36522,16 @@ function _renderHomeVideoCard() {
     if (!card) return;
     if (hidden) { card.style.display = 'none'; return; }
     card.style.display = '';
-    // 确保视频 autoplay（有些浏览器需要用户交互后才能播，但 playsinline + muted 通常能自动播）
     var v = document.getElementById('homeVideoEl');
     if (v && typeof v.play === 'function') { try { v.play().catch(function(){}); } catch(e){} }
 }
 
-// V710o: 打开视频播放器弹窗（"我家"快速了解入口也走这里）
-// type: 'intro' = 功能介绍版；'day' = 一天场景版
-function _openVideoPlayer(type) {
-    var isDay = (type === 'day');
+// V710o: 打开视频播放器弹窗
+// n=0 功能介绍版，n=1 一天场景版（用数字避免 innerHTML 引号嵌套）
+function _openVideoPlayer(n) {
+    var isDay = (n === 1);
     var src = isDay ? '/videos/intro_2.mp4' : '/videos/intro_1.mp4';
     var title = isDay ? '家肴记 · 一天场景版' : '家肴记 · 功能介绍';
-    // 复用 APP 里的 overlay 机制
     var overlay = document.getElementById('__videoPlayerOverlay');
     if (!overlay) {
         overlay = document.createElement('div');
@@ -36546,25 +36542,20 @@ function _openVideoPlayer(type) {
     }
     overlay.innerHTML = '';
     overlay.style.display = 'flex';
-
-    // 标题栏
     var head = document.createElement('div');
     head.style.cssText = 'width:100%;max-width:400px;padding:12px 16px;display:flex;align-items:center;gap:8px;color:#fff;';
     head.innerHTML = '<span style="font-size:16px;font-weight:700;flex:1;">🎬 ' + title + '</span>'
         + '<button onclick="_closeVideoPlayer()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;font-size:20px;width:32px;height:32px;border-radius:50%;cursor:pointer;line-height:1;">✕</button>';
     overlay.appendChild(head);
-
-    // 视频容器（9:16 竖屏）
     var wrap = document.createElement('div');
     wrap.style.cssText = 'width:100%;max-width:400px;aspect-ratio:9/16;background:#000;border-radius:12px;overflow:hidden;margin:0 auto;';
     wrap.innerHTML = '<video id="__videoPlayerVideo" controls playsinline autoplay style="width:100%;height:100%;object-fit:cover;"><source src="' + src + '" type="video/mp4"></video>';
     overlay.appendChild(wrap);
-
-    // 切换按钮（两个都能看）
     var switcher = document.createElement('div');
     switcher.style.cssText = 'width:100%;max-width:400px;padding:12px 16px;display:flex;gap:8px;';
-    switcher.innerHTML = '<button onclick="_openVideoPlayer(\'intro\')" style="flex:1;padding:10px;background:' + (isDay ? '#374151' : '#F97316') + ';color:#fff;border:none;border-radius:9px;font-weight:700;cursor:pointer;">功能介绍版</button>'
-        + '<button onclick="_openVideoPlayer(\'day\')" style="flex:1;padding:10px;background:' + (isDay ? '#F97316' : '#374151') + ';color:#fff;border:none;border-radius:9px;font-weight:700;cursor:pointer;">一天场景版</button>';
+    // 关键：用 0 和 1，没有引号！
+    switcher.innerHTML = '<button onclick="_openVideoPlayer(0)" style="flex:1;padding:10px;background:' + (isDay ? '#374151' : '#F97316') + ';color:#fff;border:none;border-radius:9px;font-weight:700;cursor:pointer;">功能介绍版</button>'
+        + '<button onclick="_openVideoPlayer(1)" style="flex:1;padding:10px;background:' + (isDay ? '#F97316' : '#374151') + ';color:#fff;border:none;border-radius:9px;font-weight:700;cursor:pointer;">一天场景版</button>';
     overlay.appendChild(switcher);
 }
 function _closeVideoPlayer() {
@@ -44034,7 +44025,7 @@ window.editMemberCard = function(id) {
                 <span class="fgroup-arrow" style="font-size:13px;color:#9CA3AF;font-weight:400;">▸</span>
             </div>
             <div class="fgroup-body" style="display:none;">
-            <div onclick="_openVideoPlayer(\'intro\')" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
+            <div onclick="_openVideoPlayer(0)" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
                 <span style="font-size:18px;flex:0 0 auto;line-height:1;">🎬</span>
                 <div style="flex:1;min-width:0;">
                     <div style="font-size:14px;color:#4B5563;font-weight:500;">快速了解家肴记</div>
@@ -91372,5 +91363,3 @@ setTimeout(function () { try { _maybeGenerateDailyLesson(); } catch (e) {} }, 80
 
 </body>
 </html>
-
-
