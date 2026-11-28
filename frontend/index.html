@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710o-20261128';
+        var APP_VER = 'V710p-20261128';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -4576,7 +4576,7 @@ async function _submitFeedback() {
             <div style="padding:10px 12px;display:flex;align-items:center;gap:8px;">
                 <span style="font-size:14px;font-weight:700;color:#9A3412;">🎬 家肴记</span>
                 <span style="font-size:12px;color:#78350F;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">让每天吃饭都很温暖 · 15秒快速了解</span>
-                <button onclick="_openVideoPlayer('intro')" style="flex-shrink:0;border:1px solid #F97316;background:#FFF;color:#EA580C;font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px;cursor:pointer;">看完整版</button>
+                <button onclick="_openVideoPlayer(\'intro\')" style="flex-shrink:0;border:1px solid #F97316;background:#FFF;color:#EA580C;font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px;cursor:pointer;">看完整版</button>
             </div>
         </div>
 <!-- 内容滚动区（V38）：食材卡/食记卡，固定高度内滚动，不与输入框/底部导航重叠 -->
@@ -36563,8 +36563,8 @@ function _openVideoPlayer(type) {
     // 切换按钮（两个都能看）
     var switcher = document.createElement('div');
     switcher.style.cssText = 'width:100%;max-width:400px;padding:12px 16px;display:flex;gap:8px;';
-    switcher.innerHTML = '<button onclick="_openVideoPlayer('intro')" style="flex:1;padding:10px;background:' + (isDay ? '#374151' : '#F97316') + ';color:#fff;border:none;border-radius:9px;font-weight:700;cursor:pointer;">功能介绍版</button>'
-        + '<button onclick="_openVideoPlayer('day')" style="flex:1;padding:10px;background:' + (isDay ? '#F97316' : '#374151') + ';color:#fff;border:none;border-radius:9px;font-weight:700;cursor:pointer;">一天场景版</button>';
+    switcher.innerHTML = '<button onclick="_openVideoPlayer(\'intro\')" style="flex:1;padding:10px;background:' + (isDay ? '#374151' : '#F97316') + ';color:#fff;border:none;border-radius:9px;font-weight:700;cursor:pointer;">功能介绍版</button>'
+        + '<button onclick="_openVideoPlayer(\'day\')" style="flex:1;padding:10px;background:' + (isDay ? '#F97316' : '#374151') + ';color:#fff;border:none;border-radius:9px;font-weight:700;cursor:pointer;">一天场景版</button>';
     overlay.appendChild(switcher);
 }
 function _closeVideoPlayer() {
@@ -44034,7 +44034,7 @@ window.editMemberCard = function(id) {
                 <span class="fgroup-arrow" style="font-size:13px;color:#9CA3AF;font-weight:400;">▸</span>
             </div>
             <div class="fgroup-body" style="display:none;">
-            <div onclick="_openVideoPlayer('intro')" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
+            <div onclick="_openVideoPlayer(\'intro\')" style="display:flex;align-items:center;gap:8px;padding:12px 16px 12px 30px;border-top:1px solid #F3F4F6;cursor:pointer;">
                 <span style="font-size:18px;flex:0 0 auto;line-height:1;">🎬</span>
                 <div style="flex:1;min-width:0;">
                     <div style="font-size:14px;color:#4B5563;font-weight:500;">快速了解家肴记</div>
@@ -91372,4 +91372,5 @@ setTimeout(function () { try { _maybeGenerateDailyLesson(); } catch (e) {} }, 80
 
 </body>
 </html>
+
 
