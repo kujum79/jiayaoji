@@ -13,7 +13,7 @@
        （解决部分 webview（如 Simple Browser）无视 no-store 响应头、顽固缓存旧 HTML 的问题）。
        sessionStorage._reloadVer 防死循环：同版本只自动刷一次，若强刷后仍是旧 HTML 则静默停止 */
     (function () {
-        var APP_VER = 'V710q-20261128';
+        var APP_VER = 'V710r-20261128-CONTINUE-FIX';
         console.log('%c家肴记前端版本: ' + APP_VER, 'color:#F97316;font-weight:bold;font-size:14px;');
         try {
             if (localStorage.getItem('_appVer') !== APP_VER && sessionStorage.getItem('_reloadVer') !== APP_VER) {
@@ -22725,7 +22725,7 @@ function renderFridgeRecView() {
             else _nq = r.needBuyQty > 0 ? r.needBuyQty : (r.totalQty <= 0 ? 1 : 0);
             if (_nq > 0) catNeedCount[r.category] = (catNeedCount[r.category] || 0) + 1;
         });
-        rowsRendered.forEach(r => {
+        for (const r of rowsRendered) {
             const ov = prep.overrides[r.name] || {};
             const unit = r.needBuyUnit || r.totalUnit || '';
             let needQty;
@@ -22821,7 +22821,7 @@ function renderFridgeRecView() {
                 <td style="text-align:left;">${priceCell}</td>
                 <td style="text-align:left;">${actualCell}</td>
             </tr>`;
-        });
+        }
     }
 
     // V389: 一人食极简清单——按超市/菜市场动线归并为两列（蔬菜区 / 肉禽蛋区）
